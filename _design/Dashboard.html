@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard · 3 layouts</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.2/dist/apexcharts.min.js"></script>
+<script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --paper: #fafaf9;
+    --paper-2: #f5f5f4;
+    --line-soft: #e7e5e4;
+    --line: #d6d3d1;
+    --muted: #78716c;
+    --ink-2: #44403c;
+    --ink: #1c1917;
+    --accent: #7a1f3d;
+    --accent-strong: #5e1730;
+    --accent-soft: #f5e6ec;
+    --success: #15803d;
+    --success-soft: #dcfce7;
+    --warn: #92400e;
+    --warn-soft: #fef3c7;
+    --danger: #b91c1c;
+    --danger-soft: #fee2e2;
+  }
+
+  * { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  .label-micro { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .label-section { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .card-tight { padding: 12px 14px; }
+  .card-ink { background: var(--ink); color: #fff; border: 1px solid var(--ink); border-radius: 10px; padding: 18px 20px; }
+  .surface-soft { background: var(--paper-2); border: 1px dashed var(--line); border-radius: 8px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 6px;
+    font-size: 13px; font-weight: 500;
+    background: #fff; color: var(--ink);
+    border: 1px solid var(--line);
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .btn:hover { background: var(--paper-2); border-color: var(--ink-2); }
+  .btn-primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn-primary:hover { background: var(--ink-2); border-color: var(--ink-2); }
+  .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: var(--paper-2); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 500;
+    border: 1px solid transparent;
+  }
+  .badge-success { background: var(--success-soft); color: var(--success); border-color: #bbf7d0; }
+  .badge-warning { background: var(--warn-soft); color: var(--warn); border-color: #fde68a; }
+  .badge-accent { background: var(--accent-soft); color: var(--accent); border-color: #f1c4d2; }
+  .badge-muted { background: var(--paper-2); color: var(--muted); border-color: var(--line); }
+
+  .dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+
+  table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  table.tbl th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); background: #fff; }
+  table.tbl td { padding: 11px 10px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); }
+  table.tbl tr:hover td { background: var(--paper-2); cursor: pointer; }
+  table.tbl-dense td { padding: 8px 10px; font-size: 12.5px; }
+
+  .input { padding: 7px 11px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: #fff; }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: #a8a29e; cursor: pointer; }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,0.08); color: #fff; }
+  .nav-item.active .nav-bar { background: var(--accent); }
+  .nav-bar { width: 3px; height: 16px; border-radius: 2px; background: transparent; }
+
+  .sangria-mark { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #b03a5b 0%, var(--accent) 55%, var(--accent-strong) 100%); box-shadow: inset -2px -3px 6px rgba(0,0,0,0.25); flex-shrink: 0; }
+
+  .progress { width: 100%; height: 4px; background: var(--paper-2); border-radius: 999px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--ink); border-radius: 999px; }
+
+  /* Layout shell */
+  .shell { display: grid; grid-template-columns: 56px 1fr; min-height: 720px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--paper); }
+  .shell-expanded { grid-template-columns: 220px 1fr; }
+  aside.side { background: var(--ink); color: #fff; padding: 14px 12px; display: flex; flex-direction: column; gap: 4px; }
+  aside.side.collapsed { padding: 14px 8px; align-items: center; }
+  aside.side.collapsed .nav-item { justify-content: center; padding: 8px; width: 36px; }
+  aside.side.collapsed .nav-text { display: none; }
+  aside.side.collapsed .nav-bar { display: none; }
+  .topbar { padding: 10px 20px; border-bottom: 1px solid var(--line); background: #fff; display: flex; align-items: center; gap: 12px; }
+  .main { padding: 24px; }
+
+  /* Document title block */
+  .layout-pin {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 6px 12px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+
+  /* Annotation strip */
+  .anno-strip {
+    background: var(--paper-2);
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .anno-strip h4 { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .anno-strip li { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+  .anno-strip li b { color: var(--ink); font-weight: 600; }
+
+  /* Sparkline */
+  .spark { display: inline-block; vertical-align: middle; }
+
+  /* Skeleton */
+  @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+  .skeleton { background: linear-gradient(90deg, var(--paper-2) 0%, #ececeb 50%, var(--paper-2) 100%); background-size: 800px 100%; animation: shimmer 1.4s infinite linear; border-radius: 4px; }
+
+  hr.div { border: 0; border-top: 1px dashed var(--line); margin: 0; }
+
+  /* KPI delta colors */
+  .delta-up { color: var(--success); }
+  .delta-down { color: var(--warn); }
+
+  /* Layout C inline mini bar chart */
+  .mini-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 22px; }
+  .mini-bars span { width: 4px; background: var(--ink); border-radius: 1px; }
+</style>
+</head>
+<body>
+
+<div class="max-w-[1380px] mx-auto px-8 py-12">
+
+  <!-- HEADER -->
+  <header class="mb-10">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="sangria-mark"></div>
+      <span class="label-section">Sangria · Project OS</span>
+    </div>
+    <h1 class="text-4xl font-semibold tracking-tight">Dashboard — 3 layouts</h1>
+    <p class="text-[15px] text-stone-600 mt-2 max-w-2xl">Lo-fi con sistema aplicado. Mismos KPIs, misma data, tres distribuciones distintas. Validemos jerarquía y orden de lectura antes de subir fidelidad.</p>
+    <div class="flex flex-wrap gap-2 mt-4 text-xs">
+      <a href="#layout-a" class="btn btn-sm">↓ Layout A · KPIs Hero</a>
+<a href="#layout-c" class="btn btn-sm">↓ Layout C · Tabla protagonista</a>
+      <a href="index.html" class="btn btn-sm btn-ghost">← Foundations</a>
+    </div>
+  </header>
+
+  <!-- =============================================== -->
+  <!-- LAYOUT A: KPIs HERO                              -->
+  <!-- =============================================== -->
+  <section id="layout-a" class="mb-16">
+    <div class="flex items-baseline justify-between mb-4 flex-wrap gap-3">
+      <div>
+        <div class="layout-pin">Layout A · KPIs Hero</div>
+        <h2 class="text-2xl font-semibold tracking-tight mt-3">4 KPIs grandes arriba · chart medio · tabla abajo</h2>
+        <p class="text-sm text-stone-600 mt-1 max-w-2xl">Lectura vertical clásica. Los números financieros lideran. Bueno cuando lo primero que el equipo necesita ver al abrir es "¿cuánto facturamos / cuánto falta?".</p>
+      </div>
+    </div>
+
+    <div class="shell shell-expanded">
+      <!-- Sidebar expandido -->
+      <aside class="side">
+        <div class="flex items-center gap-2 px-2 py-1 mb-3">
+          <div class="sangria-mark"></div>
+          <span class="text-sm font-semibold tracking-tight">Sangria <span class="text-stone-400 font-normal">/ OS</span></span>
+        </div>
+        <div class="nav-item active"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="nav-text">Dashboard</span>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+          <span class="nav-text">Clientes</span>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+          <span class="nav-text">Proyectos</span>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+          <span class="nav-text">Planes de Medios</span>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          <span class="nav-text">Gastos</span>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          <span class="nav-text">Billing</span>
+        </div>
+        <div class="border-t border-stone-700 my-2"></div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83 1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33 2 2 0 11-2.83-2.83 1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82 2 2 0 112.83-2.83 1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33 2 2 0 112.83 2.83 1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          <span class="nav-text">Configuración</span>
+        </div>
+        <div class="mt-auto pt-3 flex items-center gap-2 px-1">
+          <div class="w-7 h-7 rounded-full" style="background:var(--accent)"></div>
+          <div class="text-xs leading-tight"><div class="text-white">A. Méndez</div><div class="text-stone-400">admin</div></div>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <div>
+        <!-- Topbar -->
+        <div class="topbar">
+          <button class="btn btn-ghost btn-sm" title="Toggle sidebar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          </button>
+          <div class="text-sm text-stone-500">Dashboard</div>
+          <div class="ml-auto flex items-center gap-2">
+            <button class="btn btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              Ene — Dic 2026
+            </button>
+            <button class="btn btn-sm">Cliente: Todos
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button class="btn btn-sm">Proyecto: Todos
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button class="btn btn-ghost btn-sm" title="Dark mode">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </button>
+            <div class="w-7 h-7 rounded-full bg-stone-300"></div>
+          </div>
+        </div>
+
+        <div class="main">
+          <!-- Title row -->
+          <div class="flex items-baseline justify-between mb-1">
+            <h3 class="text-2xl font-semibold tracking-tight">Vista general</h3>
+            <span class="text-xs text-stone-500">Actualizado hace 2 min · <a class="underline">refrescar</a></span>
+          </div>
+          <p class="text-sm text-stone-600 mb-5">Año fiscal 2026 · 3 clientes activos · 9 proyectos en curso</p>
+
+          <!-- 4 KPIs grandes -->
+          <div class="grid grid-cols-4 gap-4 mb-6" style="grid-template-columns: repeat(4, 1fr)">
+            <div class="card">
+              <div class="label-micro">Facturado YTD</div>
+              <div class="mono text-3xl font-semibold tracking-tight mt-1">$2.42M</div>
+              <div class="flex items-end justify-between mt-3">
+                <span class="text-xs delta-up font-medium">↑ 12.4% vs Q1</span>
+                <svg width="64" height="22" viewBox="0 0 64 22" class="spark"><polyline points="0,17 9,15 18,16 27,11 36,12 45,7 55,8 64,4" fill="none" stroke="#15803d" stroke-width="1.5"/></svg>
+              </div>
+            </div>
+            <div class="card">
+              <div class="label-micro">Pendiente por facturar</div>
+              <div class="mono text-3xl font-semibold tracking-tight mt-1">$842K</div>
+              <div class="flex items-end justify-between mt-3">
+                <span class="text-xs delta-down font-medium">↓ 4.1% vs Q1</span>
+                <svg width="64" height="22" viewBox="0 0 64 22" class="spark"><polyline points="0,8 9,10 18,9 27,12 36,11 45,14 55,15 64,18" fill="none" stroke="#92400e" stroke-width="1.5"/></svg>
+              </div>
+            </div>
+            <div class="card">
+              <div class="label-micro">Inversión gestionada</div>
+              <div class="mono text-3xl font-semibold tracking-tight mt-1">$5.82M</div>
+              <div class="flex items-end justify-between mt-3">
+                <span class="text-xs delta-up font-medium">↑ 8.2% vs Q1</span>
+                <svg width="64" height="22" viewBox="0 0 64 22" class="spark"><polyline points="0,18 9,16 18,15 27,12 36,10 45,9 55,6 64,5" fill="none" stroke="#15803d" stroke-width="1.5"/></svg>
+              </div>
+            </div>
+            <div class="card-ink">
+              <div class="label-micro" style="color:#a8a29e">Avance del año</div>
+              <div class="mono text-3xl font-semibold tracking-tight mt-1">68.4%</div>
+              <div class="mt-3 h-1.5 rounded-full" style="background:#44403c">
+                <div class="h-1.5 rounded-full" style="width:68%;background:#fff"></div>
+              </div>
+              <div class="text-xs text-stone-400 mt-2 mono">target 75% · proyección 71%</div>
+            </div>
+          </div>
+
+          <!-- Chart -->
+          <div class="card mb-6">
+            <div class="flex items-baseline justify-between mb-1">
+              <div>
+                <h4 class="text-base font-semibold">Facturación mensual</h4>
+                <p class="label-micro mt-0.5">Real vs proyectado · 12 meses</p>
+              </div>
+              <div class="flex gap-1 items-center">
+                <span class="flex items-center gap-1.5 text-xs text-stone-600 mr-3"><span class="w-3 h-3 rounded-sm" style="background:#1c1917"></span>Real</span>
+                <span class="flex items-center gap-1.5 text-xs text-stone-600 mr-3"><span class="w-3 h-3 rounded-sm" style="background:#d6d3d1;background-image:repeating-linear-gradient(45deg, #d6d3d1, #d6d3d1 3px, #fff 3px, #fff 6px)"></span>Proyectado</span>
+                <button class="btn btn-sm">YTD</button>
+                <button class="btn btn-sm btn-primary">12m</button>
+                <button class="btn btn-sm">Custom</button>
+                <button class="btn btn-ghost btn-sm">⬇</button>
+              </div>
+            </div>
+            <div id="chart-a" style="height:260px"></div>
+          </div>
+
+          <!-- Tabla -->
+          <div class="card">
+            <div class="flex items-baseline justify-between mb-3">
+              <div>
+                <h4 class="text-base font-semibold">Resumen por cliente</h4>
+                <p class="label-micro mt-0.5">3 clientes activos</p>
+              </div>
+              <div class="flex gap-2 items-center">
+                <input class="input" placeholder="⌕  buscar…" style="width:200px"/>
+                <button class="btn btn-sm">⚙ columnas</button>
+              </div>
+            </div>
+            <table class="tbl">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th class="text-right">Proyectos</th>
+                  <th class="text-right">Facturado YTD</th>
+                  <th class="text-right">Pendiente</th>
+                  <th>% avance</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div class="flex items-center gap-2"><div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-xs font-semibold text-stone-500">CA</div><div><div class="font-medium text-stone-900">Cliente Aviación</div><div class="text-xs text-stone-500">PA · LATAM</div></div></div></td>
+                  <td class="text-right mono">4</td>
+                  <td class="text-right mono">$1,240,000</td>
+                  <td class="text-right mono">$320,000</td>
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <div class="progress" style="width:120px"><div style="width:78%"></div></div>
+                      <span class="text-xs mono w-9 text-right">78%</span>
+                    </div>
+                  </td>
+                  <td><span class="badge badge-success"><span class="dot" style="background:#15803d"></span>activo</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+                <tr>
+                  <td><div class="flex items-center gap-2"><div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-xs font-semibold text-stone-500">QS</div><div><div class="font-medium text-stone-900">Cliente QSR</div><div class="text-xs text-stone-500">US · Multi-mercado</div></div></div></td>
+                  <td class="text-right mono">2</td>
+                  <td class="text-right mono">$680,000</td>
+                  <td class="text-right mono">$210,000</td>
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <div class="progress" style="width:120px"><div style="width:54%"></div></div>
+                      <span class="text-xs mono w-9 text-right">54%</span>
+                    </div>
+                  </td>
+                  <td><span class="badge badge-success"><span class="dot" style="background:#15803d"></span>activo</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+                <tr>
+                  <td><div class="flex items-center gap-2"><div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-xs font-semibold text-stone-500">EM</div><div><div class="font-medium text-stone-900">Cliente Edu/Media</div><div class="text-xs text-stone-500">US · Digital</div></div></div></td>
+                  <td class="text-right mono">3</td>
+                  <td class="text-right mono">$498,000</td>
+                  <td class="text-right mono">$312,000</td>
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <div class="progress" style="width:120px"><div style="width:42%;background:var(--warn)"></div></div>
+                      <span class="text-xs mono w-9 text-right">42%</span>
+                    </div>
+                  </td>
+                  <td><span class="badge badge-warning"><span class="dot" style="background:#92400e"></span>en revisión</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+                <tr style="background:var(--paper-2)">
+                  <td class="font-semibold">Total</td>
+                  <td class="text-right mono font-semibold">9</td>
+                  <td class="text-right mono font-semibold">$2,418,000</td>
+                  <td class="text-right mono font-semibold">$842,000</td>
+                  <td colspan="3"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Anotaciones Layout A -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+      <div class="anno-strip">
+        <h4>Componentes reutilizados</h4>
+        <ul class="space-y-1">
+          <li>• <b>Sidebar (expanded)</b> · <b>Topbar</b> con filtros globales</li>
+          <li>• <b>KPI Card</b> ×3 + <b>KPI Card / ink</b> ×1 (variante hero)</li>
+          <li>• <b>Panel · con chart</b> (Apex bar group)</li>
+          <li>• <b>Table / default</b> con <b>Progress bar</b> inline + <b>Badge</b></li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Estados a contemplar</h4>
+        <ul class="space-y-1">
+          <li>• <b>Loading</b>: skeleton en cada KPI + skeleton bars en chart + table-shimmer</li>
+          <li>• <b>Vacío global</b>: ilustración pequeña + CTA "crear primer cliente"</li>
+          <li>• <b>Filtro sin resultados</b>: estado vacío sólo en tabla, KPIs en cero</li>
+          <li>• <b>Error</b>: toast en topbar + reintentar por sección</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Microinteracciones</h4>
+        <ul class="space-y-1">
+          <li>• Hover row → preview de proyectos del cliente en sidekick</li>
+          <li>• Click cliente → drill-down (pantalla 2)</li>
+          <li>• Sparklines responden al rango global del topbar</li>
+          <li>• KPI ink con progreso animado al cargar (250ms ease-out)</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="text-xs text-stone-500 mt-3">✓ <b>Pros:</b> jerarquía clara, escaneo top-down, ideal pantalla principal de junta. <b>✗ Contras:</b> mucha altura — el chart y la tabla quedan abajo del fold en pantallas pequeñas.</p>
+  </section>
+
+  <hr class="div" />
+
+  <!-- =============================================== -->
+  <!-- LAYOUT C: TABLA PROTAGONISTA                     -->
+  <!-- =============================================== -->
+  <section id="layout-c" class="my-16">
+    <div class="flex items-baseline justify-between mb-4 flex-wrap gap-3">
+      <div>
+        <div class="layout-pin">Layout C · Tabla protagonista</div>
+        <h2 class="text-2xl font-semibold tracking-tight mt-3">Banda compacta de KPIs · tabla expandida con sparklines inline</h2>
+        <p class="text-sm text-stone-600 mt-1 max-w-2xl">Para uso operativo intenso. Cuando alguien usa este dashboard 8h al día, los KPIs son referencia rápida y la tabla concentra el trabajo. Sidebar arranca colapsada para maximizar canvas.</p>
+      </div>
+    </div>
+
+    <div class="shell">
+      <!-- Sidebar colapsada -->
+      <aside class="side collapsed">
+        <div class="sangria-mark mb-2"></div>
+        <div class="nav-item active"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        </div>
+        <div class="nav-item"><span class="nav-bar"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <div class="mt-auto">
+          <div class="w-7 h-7 rounded-full" style="background:var(--accent)"></div>
+        </div>
+      </aside>
+
+      <div>
+        <div class="topbar">
+          <button class="btn btn-ghost btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          </button>
+          <div class="text-sm text-stone-500">Dashboard</div>
+          <div class="ml-auto flex items-center gap-2">
+            <button class="btn btn-sm">Ene — Dic 2026</button>
+            <button class="btn btn-sm">Cliente: Todos ▾</button>
+            <button class="btn btn-sm">Proyecto: Todos ▾</button>
+            <button class="btn btn-ghost btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </button>
+            <div class="w-7 h-7 rounded-full bg-stone-300"></div>
+          </div>
+        </div>
+
+        <div class="main">
+          <!-- Banda compacta KPIs -->
+          <div class="card mb-4" style="padding:14px 18px">
+            <div class="grid grid-cols-5 gap-6 items-center" style="grid-template-columns: 1fr 1fr 1fr 1fr 1.4fr">
+              <div>
+                <div class="label-micro">Facturado YTD</div>
+                <div class="flex items-baseline gap-2 mt-0.5">
+                  <span class="mono text-xl font-semibold">$2.42M</span>
+                  <span class="text-xs delta-up font-medium">↑12.4%</span>
+                </div>
+              </div>
+              <div class="border-l border-stone-200 pl-6">
+                <div class="label-micro">Pendiente</div>
+                <div class="flex items-baseline gap-2 mt-0.5">
+                  <span class="mono text-xl font-semibold">$842K</span>
+                  <span class="text-xs delta-down font-medium">↓4.1%</span>
+                </div>
+              </div>
+              <div class="border-l border-stone-200 pl-6">
+                <div class="label-micro">Inversión</div>
+                <div class="flex items-baseline gap-2 mt-0.5">
+                  <span class="mono text-xl font-semibold">$5.82M</span>
+                  <span class="text-xs delta-up font-medium">↑8.2%</span>
+                </div>
+              </div>
+              <div class="border-l border-stone-200 pl-6">
+                <div class="label-micro">% avance año</div>
+                <div class="flex items-baseline gap-2 mt-0.5">
+                  <span class="mono text-xl font-semibold">68.4%</span>
+                  <span class="text-xs text-stone-500">/75%</span>
+                </div>
+                <div class="progress mt-1.5" style="width:140px"><div style="width:68%"></div></div>
+              </div>
+              <div class="border-l border-stone-200 pl-6">
+                <div class="label-micro">Facturación mensual</div>
+                <div id="chart-c-mini" style="height:48px;margin-top:4px"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tabla expandida -->
+          <div class="card">
+            <div class="flex items-baseline justify-between mb-3">
+              <div>
+                <h4 class="text-base font-semibold">Clientes y proyectos</h4>
+                <p class="label-micro mt-0.5">9 proyectos · 3 clientes activos</p>
+              </div>
+              <div class="flex gap-2 items-center">
+                <input class="input" placeholder="⌕  buscar cliente o proyecto…" style="width:280px"/>
+                <button class="btn btn-sm">⌥ Filtros</button>
+                <button class="btn btn-sm">⚙ columnas</button>
+                <button class="btn btn-sm btn-primary">+ Nuevo</button>
+              </div>
+            </div>
+            <table class="tbl tbl-dense">
+              <thead>
+                <tr>
+                  <th>Cliente / Proyecto</th>
+                  <th class="text-right">Facturado</th>
+                  <th class="text-right">Pendiente</th>
+                  <th>Tendencia 12m</th>
+                  <th>Mix publishers</th>
+                  <th>% avance</th>
+                  <th>Estado</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Cliente Aviación -->
+                <tr style="background:#fafaf9">
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <span class="text-stone-400 text-xs">▼</span>
+                      <div class="w-6 h-6 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">CA</div>
+                      <span class="font-semibold text-stone-900">Cliente Aviación</span>
+                      <span class="badge badge-muted">4 proyectos</span>
+                    </div>
+                  </td>
+                  <td class="text-right mono font-semibold">$1,240,000</td>
+                  <td class="text-right mono font-semibold">$320,000</td>
+                  <td>
+                    <svg width="100" height="22" viewBox="0 0 100 22"><polyline points="0,18 10,16 20,17 30,12 40,13 50,8 60,9 70,5 80,6 90,4 100,2" fill="none" stroke="#1c1917" stroke-width="1.5"/></svg>
+                  </td>
+                  <td>
+                    <div class="flex items-center gap-1">
+                      <span class="badge badge-muted">YT</span>
+                      <span class="badge badge-muted">Meta</span>
+                      <span class="badge badge-muted">TT</span>
+                    </div>
+                  </td>
+                  <td><div class="flex items-center gap-2"><div class="progress" style="width:80px"><div style="width:78%"></div></div><span class="text-xs mono">78%</span></div></td>
+                  <td><span class="badge badge-success"><span class="dot" style="background:#15803d"></span>activo</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+                <tr>
+                  <td><div class="pl-9 text-stone-700 text-xs">Q2 Brand Always-On</div></td>
+                  <td class="text-right mono text-stone-600">$420,000</td>
+                  <td class="text-right mono text-stone-600">$80,000</td>
+                  <td>
+                    <div class="mini-bars"><span style="height:30%"></span><span style="height:50%"></span><span style="height:40%"></span><span style="height:70%"></span><span style="height:65%"></span><span style="height:80%"></span><span style="height:90%"></span></div>
+                  </td>
+                  <td><div class="flex gap-1"><span class="badge badge-muted">YT</span><span class="badge badge-muted">Meta</span></div></td>
+                  <td><span class="text-xs mono">84%</span></td>
+                  <td><span class="badge badge-success">activo</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+                <tr>
+                  <td><div class="pl-9 text-stone-700 text-xs">Q2 Performance LATAM</div></td>
+                  <td class="text-right mono text-stone-600">$380,000</td>
+                  <td class="text-right mono text-stone-600">$95,000</td>
+                  <td><div class="mini-bars"><span style="height:50%"></span><span style="height:60%"></span><span style="height:55%"></span><span style="height:75%"></span><span style="height:70%"></span><span style="height:85%"></span><span style="height:80%"></span></div></td>
+                  <td><div class="flex gap-1"><span class="badge badge-muted">YT</span><span class="badge badge-muted">TT</span></div></td>
+                  <td><span class="text-xs mono">72%</span></td>
+                  <td><span class="badge badge-success">activo</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+                <tr>
+                  <td><div class="pl-9 text-stone-700 text-xs">Lanzamiento ruta MIA</div></td>
+                  <td class="text-right mono text-stone-600">$280,000</td>
+                  <td class="text-right mono text-stone-600">$120,000</td>
+                  <td><div class="mini-bars"><span style="height:20%"></span><span style="height:40%"></span><span style="height:60%"></span><span style="height:80%"></span><span style="height:75%"></span><span style="height:90%"></span><span style="height:85%"></span></div></td>
+                  <td><div class="flex gap-1"><span class="badge badge-muted">Meta</span></div></td>
+                  <td><span class="text-xs mono">70%</span></td>
+                  <td><span class="badge badge-success">activo</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+                <tr>
+                  <td><div class="pl-9 text-stone-700 text-xs">Cargo · Always-On</div></td>
+                  <td class="text-right mono text-stone-600">$160,000</td>
+                  <td class="text-right mono text-stone-600">$25,000</td>
+                  <td><div class="mini-bars"><span style="height:60%"></span><span style="height:55%"></span><span style="height:65%"></span><span style="height:60%"></span><span style="height:70%"></span><span style="height:75%"></span><span style="height:72%"></span></div></td>
+                  <td><div class="flex gap-1"><span class="badge badge-muted">YT</span></div></td>
+                  <td><span class="text-xs mono">87%</span></td>
+                  <td><span class="badge badge-success">activo</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+
+                <!-- Cliente QSR -->
+                <tr style="background:#fafaf9">
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <span class="text-stone-400 text-xs">▶</span>
+                      <div class="w-6 h-6 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">QS</div>
+                      <span class="font-semibold text-stone-900">Cliente QSR</span>
+                      <span class="badge badge-muted">2 proyectos</span>
+                    </div>
+                  </td>
+                  <td class="text-right mono font-semibold">$680,000</td>
+                  <td class="text-right mono font-semibold">$210,000</td>
+                  <td><svg width="100" height="22" viewBox="0 0 100 22"><polyline points="0,12 10,14 20,11 30,13 40,10 50,12 60,9 70,11 80,8 90,10 100,7" fill="none" stroke="#1c1917" stroke-width="1.5"/></svg></td>
+                  <td><div class="flex items-center gap-1"><span class="badge badge-muted">Meta</span><span class="badge badge-muted">TT</span></div></td>
+                  <td><div class="flex items-center gap-2"><div class="progress" style="width:80px"><div style="width:54%"></div></div><span class="text-xs mono">54%</span></div></td>
+                  <td><span class="badge badge-success"><span class="dot" style="background:#15803d"></span>activo</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+
+                <!-- Cliente Edu/Media -->
+                <tr style="background:#fafaf9">
+                  <td>
+                    <div class="flex items-center gap-2">
+                      <span class="text-stone-400 text-xs">▶</span>
+                      <div class="w-6 h-6 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">EM</div>
+                      <span class="font-semibold text-stone-900">Cliente Edu/Media</span>
+                      <span class="badge badge-muted">3 proyectos</span>
+                    </div>
+                  </td>
+                  <td class="text-right mono font-semibold">$498,000</td>
+                  <td class="text-right mono font-semibold">$312,000</td>
+                  <td><svg width="100" height="22" viewBox="0 0 100 22"><polyline points="0,5 10,7 20,9 30,8 40,11 50,10 60,13 70,12 80,15 90,14 100,16" fill="none" stroke="#92400e" stroke-width="1.5"/></svg></td>
+                  <td><div class="flex items-center gap-1"><span class="badge badge-muted">YT</span><span class="badge badge-muted">Meta</span></div></td>
+                  <td><div class="flex items-center gap-2"><div class="progress" style="width:80px"><div style="width:42%;background:var(--warn)"></div></div><span class="text-xs mono">42%</span></div></td>
+                  <td><span class="badge badge-warning"><span class="dot" style="background:#92400e"></span>en revisión</span></td>
+                  <td class="text-stone-400">›</td>
+                </tr>
+
+                <tr style="background:var(--paper-2)">
+                  <td class="font-semibold">Total · 3 clientes / 9 proyectos</td>
+                  <td class="text-right mono font-semibold">$2,418,000</td>
+                  <td class="text-right mono font-semibold">$842,000</td>
+                  <td colspan="5"></td>
+                </tr>
+              </tbody>
+            </table>
+            <div class="flex items-center justify-between mt-3 text-xs text-stone-500">
+              <span>Mostrando 9 filas · ordenable · expandible por cliente</span>
+              <div class="flex gap-1"><button class="btn btn-sm">‹</button><button class="btn btn-sm btn-primary">1</button><button class="btn btn-sm">›</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+      <div class="anno-strip">
+        <h4>Componentes reutilizados</h4>
+        <ul class="space-y-1">
+          <li>• <b>Sidebar (collapsed)</b> — el modo por defecto en este layout</li>
+          <li>• <b>KPI band</b> (variante nueva) — KPI Card sin borde, separados por divider vertical</li>
+          <li>• <b>Table / dense</b> con <b>expand row</b> + <b>sparkline</b> y <b>mini-bars</b> inline</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Estados a contemplar</h4>
+        <ul class="space-y-1">
+          <li>• Banda KPI con loading inline (pequeños skeletons)</li>
+          <li>• Tabla con <b>group expanded/collapsed</b> persistido por usuario</li>
+          <li>• Sin-resultados muestra estado vacío inline conservando filtros</li>
+          <li>• Error en sparkline individual no rompe la fila</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Microinteracciones</h4>
+        <ul class="space-y-1">
+          <li>• Click en fila cliente → expande/colapsa proyectos</li>
+          <li>• Click en sparkline → drill-down a Vista de Proyecto</li>
+          <li>• Hover en mini-bar → tooltip con monto del mes</li>
+          <li>• Atajo <span class="mono">/</span> enfoca el buscador</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="text-xs text-stone-500 mt-3">✓ <b>Pros:</b> 3× más data por pantalla. Ideal para uso operativo diario. Sparklines comunican tendencia sin ocupar un chart aparte. <b>✗ Contras:</b> menos "wow" si lo presentás a cliente. Requiere familiaridad.</p>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ===== Decision strip ===== -->
+  <section class="my-12">
+    <div class="card">
+      <h3 class="text-lg font-semibold mb-3">¿Cuál seguimos?</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <div class="badge badge-accent mb-2">A · KPIs Hero</div>
+          <p class="text-stone-700">Si el dashboard se muestra a clientes / management. Lectura clara, jerarquía obvia.</p>
+        </div>
+        <div>
+          <div class="badge badge-accent mb-2">C · Tabla protagonista</div>
+          <p class="text-stone-700">Si el dashboard es el cockpit de uso diario del equipo. Densidad operativa.</p>
+        </div>
+      </div>
+      <p class="text-xs text-stone-500 mt-4">También se puede mezclar: <b>banda compacta KPIs (de C) + chart hero (de B) + tabla con sparklines (de C)</b>. Decime y armo el híbrido.</p>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const real = [180, 195, 210, 198, 225, 240, 218, 235, 260, 248, 0, 0];
+    const proj = [175, 190, 205, 215, 220, 235, 230, 240, 255, 265, 275, 280];
+
+    const baseOpts = (h) => ({
+      chart: { type: 'bar', height: h, toolbar: { show: false }, fontFamily: 'Geist, sans-serif', animations: { speed: 400 } },
+      series: [
+        { name: 'Real', data: real },
+        { name: 'Proyectado', data: proj },
+      ],
+      colors: ['#1c1917', '#d6d3d1'],
+      plotOptions: { bar: { columnWidth: '60%', borderRadius: 2 } },
+      dataLabels: { enabled: false },
+      grid: { borderColor: '#e7e5e4', strokeDashArray: 3 },
+      xaxis: {
+        categories: months,
+        labels: { style: { fontFamily: 'Geist', colors: '#78716c', fontSize: '11px' } },
+        axisBorder: { show: false }, axisTicks: { show: false },
+      },
+      yaxis: { labels: { style: { fontFamily: 'JetBrains Mono', colors: '#78716c', fontSize: '11px' }, formatter: v => '$' + v + 'K' } },
+      legend: { show: false },
+      tooltip: { theme: 'light', style: { fontFamily: 'Geist' }, y: { formatter: v => '$' + v.toLocaleString() + 'K' } },
+    });
+
+    if (window.ApexCharts) {
+      const a = document.querySelector('#chart-a'); if (a) new ApexCharts(a, baseOpts(260)).render();
+      const b = document.querySelector('#chart-b'); if (b) new ApexCharts(b, baseOpts(340)).render();
+
+      // Mini sparkline-style chart for layout C banda
+      const c = document.querySelector('#chart-c-mini');
+      if (c) new ApexCharts(c, {
+        chart: { type: 'area', height: 48, sparkline: { enabled: true }, animations: { speed: 400 } },
+        series: [{ data: real }],
+        colors: ['#1c1917'],
+        stroke: { width: 1.5, curve: 'smooth' },
+        fill: { type: 'gradient', gradient: { shadeIntensity: 0.5, opacityFrom: 0.3, opacityTo: 0.05 } },
+        tooltip: { theme: 'light', style: { fontFamily: 'Geist', fontSize: '11px' }, y: { formatter: v => '$' + v + 'K' }, x: { formatter: i => months[i] } },
+      }).render();
+    }
+  });
+
+  // Tweaks
+  const TWEAKS = /*EDITMODE-BEGIN*/{
+    "accent": "#7a1f3d"
+  }/*EDITMODE-END*/;
+  document.documentElement.style.setProperty('--accent', TWEAKS.accent);
+
+  (function () {
+    let active = false, panel = null;
+    function build() {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;bottom:20px;right:20px;width:280px;background:#fff;border:1px solid #1c1917;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.12);padding:14px;z-index:99999';
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:600;font-size:14px">Tweaks</div>
+          <button id="tw-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#78716c">×</button>
+        </div>
+        <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#78716c;margin-bottom:6px">Accent</div>
+        <div style="display:flex;gap:6px">
+          ${['#7a1f3d','#5e1730','#8b2a52','#1c1917'].map(c => `<button data-c="${c}" style="width:32px;height:32px;border-radius:6px;border:1px solid #d6d3d1;background:${c};cursor:pointer"></button>`).join('')}
+        </div>
+      `;
+      el.querySelector('#tw-close').addEventListener('click', () => { deactivate(); window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); });
+      el.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
+        const c = b.dataset.c;
+        document.documentElement.style.setProperty('--accent', c);
+        window.parent.postMessage({type:'__edit_mode_set_keys', edits:{accent:c}}, '*');
+      }));
+      return el;
+    }
+    function activate() { if (active) return; active = true; panel = build(); document.body.appendChild(panel); }
+    function deactivate() { if (!active) return; active = false; panel && panel.remove(); panel = null; }
+    window.addEventListener('message', (e) => {
+      if (!e.data || !e.data.type) return;
+      if (e.data.type === '__activate_edit_mode') activate();
+      else if (e.data.type === '__deactivate_edit_mode') deactivate();
+    });
+    window.parent.postMessage({type:'__edit_mode_available'}, '*');
+  })();
+</script>
+</body>
+</html>

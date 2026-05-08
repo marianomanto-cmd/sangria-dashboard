@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Vista de Proyecto · 4 tabs</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.2/dist/apexcharts.min.js"></script>
+<script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --paper: #fafaf9; --paper-2: #f5f5f4;
+    --line-soft: #e7e5e4; --line: #d6d3d1;
+    --muted: #78716c; --ink-2: #44403c; --ink: #1c1917;
+    --accent: #7a1f3d; --accent-strong: #5e1730; --accent-soft: #f5e6ec;
+    --success: #15803d; --success-soft: #dcfce7;
+    --warn: #92400e; --warn-soft: #fef3c7;
+    --danger: #b91c1c; --danger-soft: #fee2e2;
+    --info-soft: #e0e7ff; --info: #3730a3;
+  }
+  * { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+  html, body { background: var(--paper); color: var(--ink); font-feature-settings: "ss01", "cv11"; }
+
+  .label-micro { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .label-section { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .card-tight { padding: 12px 14px; }
+  .card-ink { background: var(--ink); color: #fff; border: 1px solid var(--ink); border-radius: 10px; padding: 18px 20px; }
+  .surface-soft { background: var(--paper-2); border: 1px dashed var(--line); border-radius: 8px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; background: #fff; color: var(--ink); border: 1px solid var(--line); cursor: pointer; transition: background .12s; }
+  .btn:hover { background: var(--paper-2); border-color: var(--ink-2); }
+  .btn-primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn-primary:hover { background: var(--ink-2); }
+  .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: var(--paper-2); }
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; border: 1px solid transparent; }
+  .badge-success { background: var(--success-soft); color: var(--success); border-color: #bbf7d0; }
+  .badge-warning { background: var(--warn-soft); color: var(--warn); border-color: #fde68a; }
+  .badge-danger { background: var(--danger-soft); color: var(--danger); border-color: #fecaca; }
+  .badge-accent { background: var(--accent-soft); color: var(--accent); border-color: #f1c4d2; }
+  .badge-muted { background: var(--paper-2); color: var(--muted); border-color: var(--line); }
+  .badge-info { background: var(--info-soft); color: var(--info); border-color: #c7d2fe; }
+  .dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+
+  table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  table.tbl th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); background: #fff; position: sticky; top: 0; }
+  table.tbl td { padding: 9px 10px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); }
+  table.tbl tr:hover td { background: var(--paper-2); }
+  table.tbl-dense td { padding: 7px 10px; font-size: 12.5px; }
+
+  .input { padding: 7px 11px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; background: #fff; }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .input-cell { padding: 4px 8px; border: 1px solid var(--line); border-radius: 4px; font-size: 12.5px; background: #fff; width: 100%; }
+  .input-cell:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .input-cell.editable { background: #fffbea; border-color: #fde68a; }
+
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; font-size: 13px; color: #a8a29e; cursor: pointer; }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,0.08); color: #fff; }
+  .nav-item.active .nav-bar { background: var(--accent); }
+  .nav-bar { width: 3px; height: 16px; border-radius: 2px; background: transparent; }
+  .sangria-mark { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #b03a5b 0%, var(--accent) 55%, var(--accent-strong) 100%); box-shadow: inset -2px -3px 6px rgba(0,0,0,0.25); flex-shrink: 0; }
+
+  .progress { width: 100%; height: 4px; background: var(--paper-2); border-radius: 999px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--ink); border-radius: 999px; }
+
+  .shell { display: grid; grid-template-columns: 56px 1fr; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--paper); }
+  aside.side { background: var(--ink); color: #fff; padding: 14px 8px; display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  aside.side .nav-item { justify-content: center; padding: 8px; width: 36px; }
+  .topbar { padding: 10px 20px; border-bottom: 1px solid var(--line); background: #fff; display: flex; align-items: center; gap: 12px; }
+  .main { padding: 24px; }
+
+  /* Tabs */
+  .tabs { border-bottom: 1px solid var(--line); display: flex; gap: 0; align-items: center; }
+  .tab { padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; cursor: pointer; margin-bottom: -1px; display: flex; align-items: center; gap: 8px; }
+  .tab:hover { color: var(--ink-2); }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .tab .count { background: var(--paper-2); color: var(--muted); padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 500; }
+  .tab.active .count { background: var(--accent-soft); color: var(--accent); }
+
+  /* Diff cells */
+  .diff-add { background: #ecfdf5; color: #065f46; }
+  .diff-rem { background: #fef2f2; color: #991b1b; text-decoration: line-through; }
+  .diff-mod { background: #fffbeb; color: #78350f; }
+
+  .layout-pin { display: inline-flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+  .anno-strip { background: var(--paper-2); border: 1px dashed var(--line); border-radius: 8px; padding: 14px 16px; }
+  .anno-strip h4 { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .anno-strip li { font-size: 13px; color: var(--ink-2); line-height: 1.55; }
+  .anno-strip li b { color: var(--ink); font-weight: 600; }
+
+  hr.div { border: 0; border-top: 1px dashed var(--line); margin: 0; }
+
+  /* Heatmap-ish bars in expense grid */
+  .heat { display: inline-block; width: 8px; height: 8px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+</style>
+</head>
+<body>
+
+<div class="max-w-[1380px] mx-auto px-8 py-12">
+
+  <!-- HEADER -->
+  <header class="mb-10">
+    <div class="flex items-center gap-3 mb-3">
+      <div class="sangria-mark"></div>
+      <span class="label-section">Sangria · Project OS</span>
+    </div>
+    <h1 class="text-4xl font-semibold tracking-tight">Vista de Proyecto · 4 tabs</h1>
+    <p class="text-[15px] text-stone-600 mt-2 max-w-2xl">La pantalla más compleja: header con info del proyecto + plan vigente, y los 4 tabs (Plan de Medios / Gastos Reales / Billing / Histórico). Mostrados como secciones consecutivas para validar todo de un scroll.</p>
+    <div class="flex flex-wrap gap-2 mt-4 text-xs">
+      <a href="#header" class="btn btn-sm">↓ Header</a>
+      <a href="#tab-plan" class="btn btn-sm">↓ Plan de Medios</a>
+      <a href="#tab-gastos" class="btn btn-sm">↓ Gastos Reales</a>
+      <a href="#tab-billing" class="btn btn-sm">↓ Billing</a>
+      <a href="#tab-historico" class="btn btn-sm">↓ Histórico</a>
+      <a href="Dashboard.html" class="btn btn-sm btn-ghost">← Dashboard</a>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- HEADER + tab strip                                            -->
+  <!-- ============================================================ -->
+  <section id="header" class="mb-10">
+    <div class="layout-pin mb-3">Header común a todos los tabs</div>
+
+    <div class="shell">
+      <!-- Sidebar collapsed -->
+      <aside class="side">
+        <div class="sangria-mark mb-2"></div>
+        <div class="nav-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </div>
+        <div class="nav-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+        </div>
+        <div class="nav-item active"><span class="nav-bar" style="position:absolute;left:0"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+        </div>
+        <div class="nav-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
+        </div>
+        <div class="nav-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        </div>
+        <div class="nav-item">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <div class="mt-auto"><div class="w-7 h-7 rounded-full" style="background:var(--accent)"></div></div>
+      </aside>
+
+      <div>
+        <!-- Topbar with breadcrumbs -->
+        <div class="topbar">
+          <div class="text-sm flex items-center gap-2 text-stone-500">
+            <a class="hover:text-stone-900 cursor-pointer">Proyectos</a>
+            <span>/</span>
+            <a class="hover:text-stone-900 cursor-pointer">Cliente Aviación</a>
+            <span>/</span>
+            <span class="text-stone-900 font-medium">Q2 Performance LATAM</span>
+          </div>
+          <div class="ml-auto flex items-center gap-2">
+            <button class="btn btn-sm">⌥ Compartir</button>
+            <button class="btn btn-sm">⬇ Exportar</button>
+            <button class="btn btn-ghost btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </button>
+            <div class="w-7 h-7 rounded-full bg-stone-300"></div>
+          </div>
+        </div>
+
+        <div class="main">
+          <!-- Project header card -->
+          <div class="flex items-start gap-5 mb-5">
+            <div class="w-14 h-14 rounded-lg surface-soft flex items-center justify-center text-lg font-semibold text-stone-500">CA</div>
+            <div class="flex-1">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="label-micro">Cliente Aviación · LATAM</span>
+                <span class="badge badge-success"><span class="dot" style="background:#15803d"></span>Activo</span>
+                <span class="badge badge-muted">Plan v3 · vigente</span>
+              </div>
+              <h2 class="text-2xl font-semibold tracking-tight">Q2 Performance LATAM</h2>
+              <p class="text-sm text-stone-600 mt-1">Always-on performance · LATAM (PA, CO, MX, CR) · Abril – Junio 2026</p>
+              <div class="flex gap-6 mt-3 text-xs text-stone-600">
+                <span><span class="text-stone-400">Owner ·</span> A. Méndez</span>
+                <span><span class="text-stone-400">Aprobado por ·</span> J. Salinas (cliente) · 28 Mar 2026</span>
+                <span><span class="text-stone-400">Drive ·</span> <a class="underline">/clientes/aviacion/q2-performance</a></span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-sm">⋯</button>
+              <button class="btn btn-sm btn-primary">+ Nueva versión</button>
+            </div>
+          </div>
+
+          <!-- 4 KPIs of project -->
+          <div class="grid grid-cols-4 gap-3 mb-5">
+            <div class="card card-tight">
+              <div class="label-micro">Inversión plan</div>
+              <div class="mono text-xl font-semibold mt-0.5">$380,000</div>
+              <div class="text-xs text-stone-500 mt-0.5">NET total · 3 meses</div>
+            </div>
+            <div class="card card-tight">
+              <div class="label-micro">Gastado real (MTD)</div>
+              <div class="mono text-xl font-semibold mt-0.5">$248,200</div>
+              <div class="text-xs text-stone-500 mt-0.5"><span class="delta-up" style="color:var(--success)">65%</span> consumo</div>
+            </div>
+            <div class="card card-tight">
+              <div class="label-micro">Facturado</div>
+              <div class="mono text-xl font-semibold mt-0.5">$285,000</div>
+              <div class="text-xs text-stone-500 mt-0.5">2 de 3 billings emitidos</div>
+            </div>
+            <div class="card card-tight">
+              <div class="label-micro">Pendiente</div>
+              <div class="mono text-xl font-semibold mt-0.5">$95,000</div>
+              <div class="text-xs text-stone-500 mt-0.5">Junio · por emitir</div>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="tabs">
+            <div class="tab active">Plan de Medios <span class="count">4</span></div>
+            <div class="tab">Gastos Reales</div>
+            <div class="tab">Billing <span class="count">3</span></div>
+            <div class="tab">Histórico de versiones <span class="count">5</span></div>
+            <div class="ml-auto text-xs text-stone-400 mr-2">Plan vigente: <span class="mono text-stone-600">v3 · 28 Mar 26</span></div>
+          </div>
+
+          <!-- Tab content placeholder -->
+          <div class="text-center text-stone-400 text-sm py-12 surface-soft mt-4">
+            ↓ Cada tab se muestra en detalle más abajo
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-xs text-stone-500 mt-3"><b>Decisión clave:</b> el header (logo del cliente, nombre del proyecto, KPIs y tabs) se mantiene fijo cuando el usuario hace scroll dentro de cualquier tab. Esto le da contexto permanente y permite saltar entre tabs sin perder de vista los números maestros del proyecto.</p>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ============================================================ -->
+  <!-- TAB 1: PLAN DE MEDIOS                                          -->
+  <!-- ============================================================ -->
+  <section id="tab-plan" class="my-12">
+    <div class="layout-pin mb-3">Tab 1 · Plan de Medios</div>
+    <h2 class="text-2xl font-semibold tracking-tight mb-1">Líneas del plan agrupadas por publisher · totales · fees al cierre</h2>
+    <p class="text-sm text-stone-600 mb-4 max-w-2xl">La fuente de verdad del proyecto. Todo lo demás (gastos, billing) referencia esto. Tabla densa, agrupada por publisher con subtotales, fees como bloque separado al final.</p>
+
+    <div class="card" style="padding:0">
+      <!-- Toolbar interna -->
+      <div class="flex items-center justify-between p-4 border-b border-stone-200">
+        <div class="flex items-center gap-3">
+          <h3 class="text-base font-semibold">Líneas del plan</h3>
+          <span class="badge badge-muted">v3 · vigente desde 28 Mar 26</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <input class="input" placeholder="⌕  buscar línea, placement…" style="width:240px"/>
+          <button class="btn btn-sm">⌥ Filtros</button>
+          <button class="btn btn-sm">⚙ columnas</button>
+          <button class="btn btn-sm">⬇ Excel</button>
+          <button class="btn btn-sm btn-primary">+ Línea manual</button>
+        </div>
+      </div>
+
+      <!-- Tabla -->
+      <div style="overflow-x: auto">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Publisher</th>
+            <th>Fechas</th>
+            <th class="text-right">Días</th>
+            <th class="text-right">Inversión (NET)</th>
+            <th class="text-right">% del plan</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- YouTube — expanded -->
+          <tr x-data="{open:true}" @click="open = !open" style="cursor:pointer">
+            <td>
+              <div class="flex items-center gap-2.5">
+                <span class="text-stone-400 text-xs w-3 inline-block" x-text="open ? '▼' : '▶'"></span>
+                <div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">YT</div>
+                <div>
+                  <div class="font-medium text-stone-900">YouTube</div>
+                  <div class="text-xs text-stone-500">3 placements</div>
+                </div>
+              </div>
+            </td>
+            <td class="mono text-xs text-stone-600">01 Abr — 30 Jun</td>
+            <td class="text-right mono">90</td>
+            <td class="text-right mono font-semibold">$148,000</td>
+            <td class="text-right mono">39%</td>
+            <td class="text-stone-400 text-right">⋯</td>
+          </tr>
+          <tr style="background:#fafaf9">
+            <td style="padding-left:52px"><div class="text-stone-700">In-Stream Skippable · LATAM Brand</div><div class="text-xs text-stone-500">Audiencia 25-44 viajeros · LATAM</div></td>
+            <td class="mono text-xs text-stone-600">01 Abr — 30 Jun</td>
+            <td class="text-right mono text-stone-500">90</td>
+            <td class="text-right mono">$84,000</td>
+            <td class="text-right mono text-stone-400">22%</td>
+            <td></td>
+          </tr>
+          <tr style="background:#fafaf9">
+            <td style="padding-left:52px"><div class="text-stone-700">Bumper Ads · Lanzamiento ruta MIA</div><div class="text-xs text-stone-500">Audiencia 18-54 · LATAM</div></td>
+            <td class="mono text-xs text-stone-600">15 Abr — 15 May</td>
+            <td class="text-right mono text-stone-500">30</td>
+            <td class="text-right mono">$38,000</td>
+            <td class="text-right mono text-stone-400">10%</td>
+            <td></td>
+          </tr>
+          <tr style="background:#fafaf9">
+            <td style="padding-left:52px"><div class="text-stone-700">Discovery · Performance MX/CO</div><div class="text-xs text-stone-500">Audiencia alta intención · MX, CO</div></td>
+            <td class="mono text-xs text-stone-600">01 Abr — 30 Jun</td>
+            <td class="text-right mono text-stone-500">90</td>
+            <td class="text-right mono">$26,000</td>
+            <td class="text-right mono text-stone-400">7%</td>
+            <td></td>
+          </tr>
+
+          <!-- Meta — collapsed (lazy) -->
+          <tr style="cursor:pointer">
+            <td>
+              <div class="flex items-center gap-2.5">
+                <span class="text-stone-400 text-xs w-3 inline-block">▶</span>
+                <div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">M</div>
+                <div>
+                  <div class="font-medium text-stone-900">Meta</div>
+                  <div class="text-xs text-stone-500">3 placements (IG + FB)</div>
+                </div>
+              </div>
+            </td>
+            <td class="mono text-xs text-stone-600">01 Abr — 30 Jun</td>
+            <td class="text-right mono">90</td>
+            <td class="text-right mono font-semibold">$162,000</td>
+            <td class="text-right mono">43%</td>
+            <td class="text-stone-400 text-right">⋯</td>
+          </tr>
+
+          <!-- TikTok — expanded to show date aggregation -->
+          <tr style="cursor:pointer">
+            <td>
+              <div class="flex items-center gap-2.5">
+                <span class="text-stone-400 text-xs w-3 inline-block">▼</span>
+                <div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">TT</div>
+                <div>
+                  <div class="font-medium text-stone-900">TikTok</div>
+                  <div class="text-xs text-stone-500">2 placements</div>
+                </div>
+              </div>
+            </td>
+            <td class="mono text-xs text-stone-600">
+              15 Abr — 15 Jun
+              <span class="text-stone-400 text-[10px] block">rango más amplio</span>
+            </td>
+            <td class="text-right mono">62</td>
+            <td class="text-right mono font-semibold">$48,000</td>
+            <td class="text-right mono">13%</td>
+            <td class="text-stone-400 text-right">⋯</td>
+          </tr>
+          <tr style="background:#fafaf9">
+            <td style="padding-left:52px"><div class="text-stone-700">Brand Top Feed · Lanzamiento ruta MIA</div><div class="text-xs text-stone-500">Audiencia 18-34 · LATAM</div></td>
+            <td class="mono text-xs text-stone-600">15 Abr — 31 May</td>
+            <td class="text-right mono text-stone-500">47</td>
+            <td class="text-right mono">$30,000</td>
+            <td class="text-right mono text-stone-400">8%</td>
+            <td></td>
+          </tr>
+          <tr style="background:#fafaf9">
+            <td style="padding-left:52px"><div class="text-stone-700">Spark Ads · Always-on</div><div class="text-xs text-stone-500">Audiencia 18-44 · PA, CO</div></td>
+            <td class="mono text-xs text-stone-600">01 May — 15 Jun</td>
+            <td class="text-right mono text-stone-500">46</td>
+            <td class="text-right mono">$18,000</td>
+            <td class="text-right mono text-stone-400">5%</td>
+            <td></td>
+          </tr>
+
+          <!-- DV360 — collapsed -->
+          <tr style="cursor:pointer">
+            <td>
+              <div class="flex items-center gap-2.5">
+                <span class="text-stone-400 text-xs w-3 inline-block">▶</span>
+                <div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">DV</div>
+                <div>
+                  <div class="font-medium text-stone-900">Programmatic (DV360)</div>
+                  <div class="text-xs text-stone-500">2 placements</div>
+                </div>
+              </div>
+            </td>
+            <td class="mono text-xs text-stone-600">01 Abr — 30 Jun</td>
+            <td class="text-right mono">90</td>
+            <td class="text-right mono font-semibold">$22,000</td>
+            <td class="text-right mono">5%</td>
+            <td class="text-stone-400 text-right">⋯</td>
+          </tr>
+          <tr style="background:var(--paper-2)">
+            <td class="font-semibold">Total medios (NET) · 4 publishers</td>
+            <td colspan="2"></td>
+            <td class="text-right mono font-semibold">$380,000</td>
+            <td class="text-right mono font-semibold">100%</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+
+      <div class="px-4 py-2.5 bg-stone-50 border-t border-stone-200 text-xs text-stone-600 flex items-center gap-2">
+        <span class="badge badge-info">i</span>
+        <span>Cada publisher es desplegable. La fila resumen muestra <b>la fecha más amplia</b> de los placements (rango envolvente) y la suma de inversión. Click en la fila para expandir/colapsar el detalle.</span>
+      </div>
+
+      <!-- Fees block -->
+      <div class="border-t border-stone-200 bg-stone-50 p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h4 class="text-sm font-semibold tracking-tight">Fees</h4>
+          <span class="label-micro">Calculados sobre NET medios</span>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="card card-tight">
+            <div class="flex justify-between items-baseline">
+              <div class="label-micro">Management Fee</div>
+              <span class="text-xs text-stone-500 mono">10%</span>
+            </div>
+            <div class="mono text-lg font-semibold mt-0.5">$38,000</div>
+            <div class="text-xs text-stone-500 mt-0.5">Mensual · $12,667/mes</div>
+          </div>
+          <div class="card card-tight">
+            <div class="flex justify-between items-baseline">
+              <div class="label-micro">Setup Fee</div>
+              <span class="text-xs text-stone-500 mono">único</span>
+            </div>
+            <div class="mono text-lg font-semibold mt-0.5">$5,000</div>
+            <div class="text-xs text-stone-500 mt-0.5">Cobrado en mes 1</div>
+          </div>
+          <div class="card card-tight">
+            <div class="flex justify-between items-baseline">
+              <div class="label-micro">Reporting Fee</div>
+              <span class="text-xs text-stone-500 mono">$1,500/mes</span>
+            </div>
+            <div class="mono text-lg font-semibold mt-0.5">$4,500</div>
+            <div class="text-xs text-stone-500 mt-0.5">3 meses</div>
+          </div>
+        </div>
+        <!-- Grand total -->
+        <div class="card-ink mt-3 flex items-center justify-between" style="padding:14px 18px">
+          <div>
+            <div class="label-micro" style="color:#a8a29e">Total proyecto (NET medios + fees)</div>
+            <div class="mono text-2xl font-semibold mt-0.5">$427,500</div>
+          </div>
+          <div class="flex gap-3 items-center text-xs text-stone-400">
+            <div class="text-right"><div class="text-stone-400">Medios</div><div class="mono text-white">$380,000</div></div>
+            <span>+</span>
+            <div class="text-right"><div class="text-stone-400">Fees</div><div class="mono text-white">$47,500</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+      <div class="anno-strip">
+        <h4>Componentes reutilizados</h4>
+        <ul class="space-y-1">
+          <li>• <b>Table / dense</b> con grupos expandibles (mismo patrón que Dashboard C)</li>
+          <li>• <b>KPI Card / tight</b> ×3 para fees</li>
+          <li>• <b>Card / ink</b> como total destacado (variante hero)</li>
+          <li>• <b>Badge / muted</b> para tags de formato</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Estados a contemplar</h4>
+        <ul class="space-y-1">
+          <li>• <b>Sin plan vigente</b>: empty state grande con CTA "Cargar plan desde Excel"</li>
+          <li>• <b>Plan en draft</b> (no aprobado): banner amarillo arriba + sello watermark</li>
+          <li>• <b>Plan archivado</b>: read-only con badge "vencido"</li>
+          <li>• <b>Loading</b>: skeleton de 8 filas con misma estructura</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Microinteracciones</h4>
+        <ul class="space-y-1">
+          <li>• Click ⋯ en línea → menú: editar, duplicar, comparar con v anterior</li>
+          <li>• Drag para reordenar líneas dentro de un publisher</li>
+          <li>• Hover en CPM/CPC → tooltip explicando el cálculo</li>
+          <li>• Edición inline: doble click cualquier celda numérica → input</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ============================================================ -->
+  <!-- TAB 2: GASTOS REALES                                           -->
+  <!-- ============================================================ -->
+  <section id="tab-gastos" class="my-12">
+    <div class="layout-pin mb-3">Tab 2 · Gastos Reales</div>
+    <h2 class="text-2xl font-semibold tracking-tight mb-1">Grilla mensual editable · planeado vs real por publisher</h2>
+    <p class="text-sm text-stone-600 mb-4 max-w-2xl">Carga manual mensual. La grilla resalta cuando el real excede lo planeado, permite notas por celda, y guarda con autosave (porque la latencia de Apps Script obliga a evitar guardar al final de un formulario largo).</p>
+
+    <div class="card" style="padding:0">
+      <!-- Toolbar -->
+      <div class="flex items-center justify-between p-4 border-b border-stone-200">
+        <div class="flex items-center gap-3">
+          <h3 class="text-base font-semibold">Gastos reales</h3>
+          <div class="flex items-center gap-1 bg-stone-100 p-0.5 rounded-md">
+            <button class="btn btn-sm" style="background:transparent;border:none">‹</button>
+            <button class="btn btn-sm btn-primary" style="font-weight:500">Mayo 2026</button>
+            <button class="btn btn-sm" style="background:transparent;border:none">›</button>
+          </div>
+          <span class="badge badge-warning">2 publishers exceden plan</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-stone-500 flex items-center gap-1.5">
+            <span class="dot" style="background:var(--success)"></span>
+            Auto-guardado · hace 14s
+          </span>
+          <button class="btn btn-sm">⬆ Importar CSV</button>
+          <button class="btn btn-sm">⬇ Excel</button>
+        </div>
+      </div>
+
+      <!-- Grid -->
+      <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th style="width:30%">Publisher</th>
+            <th class="text-right">Plan total (NET)</th>
+            <th class="text-right">Gastado meses prev.</th>
+            <th class="text-right">Gasto real (Mayo) <span class="text-stone-400 normal-case">editable</span></th>
+            <th class="text-right">% consumo plan</th>
+            <th>Δ vs plan</th>
+            <th>Notas</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="flex items-center gap-2.5">
+                <div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">YT</div>
+                <div class="font-medium">YouTube</div>
+              </div>
+            </td>
+            <td class="text-right mono">$148,000</td>
+            <td class="text-right mono text-stone-500">$48,200</td>
+            <td><input class="input-cell editable mono text-right" value="$32,000" /></td>
+            <td class="text-right mono">54%</td>
+            <td><span class="badge badge-success">on track</span></td>
+            <td><input class="input-cell" placeholder="agregar nota…" /></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="flex items-center gap-2.5">
+                <div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">M</div>
+                <div class="font-medium">Meta</div>
+              </div>
+            </td>
+            <td class="text-right mono">$162,000</td>
+            <td class="text-right mono text-stone-500">$54,800</td>
+            <td><input class="input-cell editable mono text-right" value="$36,500" /></td>
+            <td class="text-right mono">56%</td>
+            <td><span class="badge badge-success">on track</span></td>
+            <td><input class="input-cell" placeholder="agregar nota…" /></td>
+          </tr>
+          <tr style="background:#fff7ed">
+            <td>
+              <div class="flex items-center gap-2.5">
+                <div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">TT</div>
+                <div class="font-medium">TikTok <span class="badge badge-danger ml-1">⚠ exceso</span></div>
+              </div>
+            </td>
+            <td class="text-right mono">$48,000</td>
+            <td class="text-right mono text-stone-500">$18,400</td>
+            <td><input class="input-cell editable mono text-right" value="$22,400" style="border-color:var(--danger);background:#fff1f2" /></td>
+            <td class="text-right mono" style="color:var(--danger);font-weight:600">85%</td>
+            <td><span class="badge badge-danger">+$5,200 sobre plan</span></td>
+            <td><input class="input-cell" value="Cliente aprobó boost lanzamiento ruta MIA" style="border-color:var(--warn)"/></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="flex items-center gap-2.5">
+                <div class="w-7 h-7 rounded surface-soft flex items-center justify-center text-[10px] font-semibold text-stone-500">DV</div>
+                <div class="font-medium">Programmatic (DV360)</div>
+              </div>
+            </td>
+            <td class="text-right mono">$22,000</td>
+            <td class="text-right mono text-stone-500">$7,200</td>
+            <td><input class="input-cell editable mono text-right" value="$5,400" /></td>
+            <td class="text-right mono">57%</td>
+            <td><span class="badge badge-success">on track</span></td>
+            <td><input class="input-cell" placeholder="agregar nota…" /></td>
+          </tr>
+
+          <tr style="background:var(--paper-2)">
+            <td class="font-semibold">Total mes · 4 publishers</td>
+            <td class="text-right mono font-semibold">$380,000</td>
+            <td class="text-right mono font-semibold text-stone-600">$128,600</td>
+            <td class="text-right mono font-semibold">$96,300</td>
+            <td class="text-right mono font-semibold">59%</td>
+            <td><span class="badge badge-warning">$5,200 sobre plan en TikTok</span></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+
+      <!-- Footer del tab -->
+      <div class="flex items-center justify-between p-4 border-t border-stone-200">
+        <div class="text-xs text-stone-500">
+          <b>Mayo 2026</b> · 4 publishers · 1 con exceso · última edición hace 14s por A. Méndez
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-sm">Cerrar mes</button>
+          <button class="btn btn-sm btn-primary">Guardar y generar billing →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+      <div class="anno-strip">
+        <h4>Componentes reutilizados</h4>
+        <ul class="space-y-1">
+          <li>• <b>Table / dense</b> con celdas <b>Input · inline</b> (variante editable amarillo)</li>
+          <li>• <b>Badge / warning</b>, <b>danger</b>, <b>success</b> según delta</li>
+          <li>• <b>Toolbar mes</b>: navegación ‹ Mes › (variante de stepper)</li>
+          <li>• <b>Indicador autosave</b> (texto + dot verde)</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Estados a contemplar</h4>
+        <ul class="space-y-1">
+          <li>• <b>Sin gastos cargados</b>: "no se cargaron gastos para Mayo · empezar"</li>
+          <li>• <b>Mes cerrado</b>: read-only, badge "cerrado el 02 Jun por X"</li>
+          <li>• <b>Saving</b>: dot ámbar pulsante junto al texto</li>
+          <li>• <b>Save error</b>: toast rojo + reintentar; valor pendiente en local</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Microinteracciones</h4>
+        <ul class="space-y-1">
+          <li>• Tab/Enter avanza celda como Excel</li>
+          <li>• Pegado masivo desde Excel detecta filas y mapea por línea</li>
+          <li>• Cualquier exceso en celda dispara confirmación: "¿es esperado?"</li>
+          <li>• Si excede 90% del plan total, badge global rojo arriba</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ============================================================ -->
+  <!-- TAB 3: BILLING                                                 -->
+  <!-- ============================================================ -->
+  <section id="tab-billing" class="my-12">
+    <div class="layout-pin mb-3">Tab 3 · Billing</div>
+    <h2 class="text-2xl font-semibold tracking-tight mb-1">Lista de billings por mes · estado · descarga</h2>
+    <p class="text-sm text-stone-600 mb-4 max-w-2xl">Cada mes genera un billing. Lista lineal por mes con estado (borrador / emitido / cobrado), monto, link al Excel y al PDF firmado. El generador en sí es la pantalla 7.</p>
+
+    <div class="grid grid-cols-3 gap-4 mb-4">
+      <div class="card card-tight">
+        <div class="label-micro">Total facturado proyecto</div>
+        <div class="mono text-xl font-semibold mt-0.5">$285,000</div>
+        <div class="text-xs text-stone-500 mt-0.5">2 billings emitidos · 1 pendiente</div>
+      </div>
+      <div class="card card-tight">
+        <div class="label-micro">Cobrado</div>
+        <div class="mono text-xl font-semibold mt-0.5">$142,500</div>
+        <div class="text-xs text-stone-500 mt-0.5">50% del facturado</div>
+      </div>
+      <div class="card card-tight">
+        <div class="label-micro">Próximo billing</div>
+        <div class="mono text-xl font-semibold mt-0.5">Junio 2026</div>
+        <div class="text-xs text-stone-500 mt-0.5">Estimado · $95,000</div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0">
+      <div class="flex items-center justify-between p-4 border-b border-stone-200">
+        <h3 class="text-base font-semibold">Billings emitidos</h3>
+        <button class="btn btn-sm btn-primary">+ Generar billing nuevo</button>
+      </div>
+
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th>Mes</th>
+            <th>Folio</th>
+            <th class="text-right">Medios</th>
+            <th class="text-right">Mgmt Fee</th>
+            <th class="text-right">Setup</th>
+            <th class="text-right">Reporting</th>
+            <th class="text-right">Total</th>
+            <th>Estado</th>
+            <th>Generado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><div class="font-medium">Abril 2026</div><div class="text-xs text-stone-500">01–30 Abr</div></td>
+            <td class="mono text-xs">SAN-2026-04-001</td>
+            <td class="text-right mono">$98,400</td>
+            <td class="text-right mono">$12,667</td>
+            <td class="text-right mono">$5,000</td>
+            <td class="text-right mono">$1,500</td>
+            <td class="text-right mono font-semibold">$117,567</td>
+            <td><span class="badge badge-success"><span class="dot" style="background:var(--success)"></span>Cobrado</span></td>
+            <td class="text-xs text-stone-500">02 May · A. Méndez</td>
+            <td>
+              <div class="flex gap-1 justify-end">
+                <button class="btn btn-sm" title="Descargar Excel">⬇ xlsx</button>
+                <button class="btn btn-sm" title="Descargar PDF firmado">⬇ pdf</button>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td><div class="font-medium">Mayo 2026</div><div class="text-xs text-stone-500">01–31 May</div></td>
+            <td class="mono text-xs">SAN-2026-05-001</td>
+            <td class="text-right mono">$74,050</td>
+            <td class="text-right mono">$12,667</td>
+            <td class="text-right mono">$0</td>
+            <td class="text-right mono">$1,500</td>
+            <td class="text-right mono font-semibold">$88,217</td>
+            <td><span class="badge badge-info"><span class="dot" style="background:var(--info)"></span>Emitido · esperando pago</span></td>
+            <td class="text-xs text-stone-500">02 Jun · A. Méndez</td>
+            <td>
+              <div class="flex gap-1 justify-end">
+                <button class="btn btn-sm">⬇ xlsx</button>
+                <button class="btn btn-sm">⬇ pdf</button>
+              </div>
+            </td>
+          </tr>
+          <tr style="background:#fffbeb">
+            <td><div class="font-medium">Junio 2026</div><div class="text-xs text-stone-500">01–30 Jun</div></td>
+            <td class="mono text-xs text-stone-400">— · borrador</td>
+            <td class="text-right mono text-stone-400">—</td>
+            <td class="text-right mono text-stone-400">—</td>
+            <td class="text-right mono text-stone-400">—</td>
+            <td class="text-right mono text-stone-400">—</td>
+            <td class="text-right mono text-stone-500">~$95,000</td>
+            <td><span class="badge badge-warning"><span class="dot" style="background:var(--warn)"></span>Borrador</span></td>
+            <td class="text-xs text-stone-500">—</td>
+            <td>
+              <div class="flex gap-1 justify-end">
+                <button class="btn btn-sm btn-primary">Continuar →</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+      <div class="anno-strip">
+        <h4>Componentes reutilizados</h4>
+        <ul class="space-y-1">
+          <li>• <b>KPI Card / tight</b> ×3 arriba</li>
+          <li>• <b>Table / default</b> con <b>Badge</b> de estado en 4 colores</li>
+          <li>• <b>Botón / icon</b> ⬇ xlsx, ⬇ pdf (variante con extensión)</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Estados a contemplar</h4>
+        <ul class="space-y-1">
+          <li>• <b>Sin billings</b>: empty + CTA "Generar primer billing"</li>
+          <li>• <b>Borrador en curso</b>: fila con fondo ámbar y CTA continuar</li>
+          <li>• <b>Cobrado vencido</b>: badge rojo "vencido X días"</li>
+          <li>• <b>Loading descarga</b>: botón con spinner 1-2s</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Microinteracciones</h4>
+        <ul class="space-y-1">
+          <li>• Click en folio → preview del PDF en modal</li>
+          <li>• Click ⬇ pdf con shift → copia link para compartir</li>
+          <li>• Estado clickable cambia a "marcado como cobrado" con confirmación</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ============================================================ -->
+  <!-- TAB 4: HISTÓRICO DE VERSIONES                                  -->
+  <!-- ============================================================ -->
+  <section id="tab-historico" class="my-12">
+    <div class="layout-pin mb-3">Tab 4 · Histórico de versiones</div>
+    <h2 class="text-2xl font-semibold tracking-tight mb-1">Timeline de versiones del plan · diff visual entre dos cualquiera</h2>
+    <p class="text-sm text-stone-600 mb-4 max-w-2xl">Cada plan se versiona en cada modificación aprobada. Vista timeline a la izquierda, diff visual a la derecha mostrando líneas agregadas, removidas y modificadas vs versión anterior.</p>
+
+    <div class="grid grid-cols-12 gap-4">
+      <!-- Timeline lateral -->
+      <div class="col-span-4">
+        <div class="card" style="padding:14px">
+          <div class="flex items-baseline justify-between mb-3">
+            <h4 class="text-sm font-semibold">Versiones</h4>
+            <span class="label-micro">5</span>
+          </div>
+          <div class="space-y-3">
+            <!-- v3 (vigente) -->
+            <div class="border-l-2 pl-3 -ml-1" style="border-color:var(--accent)">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="mono text-sm font-semibold">v3</span>
+                <span class="badge badge-accent">vigente</span>
+              </div>
+              <div class="text-xs text-stone-500">28 Mar 26 · J. Salinas (cliente)</div>
+              <div class="text-xs text-stone-700 mt-1">Reasignación TikTok → Meta · +$8K Discovery</div>
+              <button class="btn btn-sm mt-2" style="font-size:11px;padding:2px 8px">Ver diff vs v2</button>
+            </div>
+            <div class="border-l-2 border-stone-200 pl-3 -ml-1">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="mono text-sm font-semibold text-stone-700">v2</span>
+                <span class="badge badge-muted">archivada</span>
+              </div>
+              <div class="text-xs text-stone-500">14 Mar 26 · J. Salinas</div>
+              <div class="text-xs text-stone-700 mt-1">Ajuste de ventana de campaña</div>
+            </div>
+            <div class="border-l-2 border-stone-200 pl-3 -ml-1">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="mono text-sm font-semibold text-stone-700">v1.2</span>
+                <span class="badge badge-muted">archivada</span>
+              </div>
+              <div class="text-xs text-stone-500">06 Mar 26 · A. Méndez</div>
+              <div class="text-xs text-stone-700 mt-1">Correcciones tras call con cliente</div>
+            </div>
+            <div class="border-l-2 border-stone-200 pl-3 -ml-1">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="mono text-sm font-semibold text-stone-700">v1.1</span>
+                <span class="badge badge-muted">archivada</span>
+              </div>
+              <div class="text-xs text-stone-500">02 Mar 26 · A. Méndez</div>
+              <div class="text-xs text-stone-700 mt-1">Fees actualizados · revisión interna</div>
+            </div>
+            <div class="border-l-2 border-stone-200 pl-3 -ml-1">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="mono text-sm font-semibold text-stone-700">v1</span>
+                <span class="badge badge-muted">draft inicial</span>
+              </div>
+              <div class="text-xs text-stone-500">28 Feb 26 · A. Méndez</div>
+              <div class="text-xs text-stone-700 mt-1">Parseado desde Excel original</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Diff principal -->
+      <div class="col-span-8">
+        <div class="card" style="padding:0">
+          <div class="flex items-center justify-between p-4 border-b border-stone-200">
+            <div class="flex items-center gap-3">
+              <h4 class="text-sm font-semibold">Diff</h4>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-stone-500">Comparar</span>
+                <button class="btn btn-sm">v2 ▾</button>
+                <span class="text-stone-400">→</span>
+                <button class="btn btn-sm">v3 ▾</button>
+              </div>
+            </div>
+            <div class="flex gap-2 items-center text-xs text-stone-600">
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm" style="background:#dcfce7;border:1px solid #bbf7d0"></span>+3 agregadas</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm" style="background:#fee2e2;border:1px solid #fecaca"></span>−1 removida</span>
+              <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-sm" style="background:#fef3c7;border:1px solid #fde68a"></span>~5 modificadas</span>
+            </div>
+          </div>
+
+          <table class="tbl tbl-dense">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Línea</th>
+                <th>Campo</th>
+                <th class="text-right">v2</th>
+                <th class="text-right">v3</th>
+                <th class="text-right">Δ</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="diff-add text-center font-mono">+</td>
+                <td class="diff-add"><b>YouTube</b> · Discovery Performance MX/CO</td>
+                <td class="diff-add">línea nueva</td>
+                <td class="diff-add text-right text-stone-400">—</td>
+                <td class="diff-add text-right mono">$16,065</td>
+                <td class="diff-add text-right mono">+$16,065</td>
+              </tr>
+              <tr>
+                <td class="diff-add text-center font-mono">+</td>
+                <td class="diff-add"><b>Meta</b> · Stories Retargeting</td>
+                <td class="diff-add">línea nueva</td>
+                <td class="diff-add text-right text-stone-400">—</td>
+                <td class="diff-add text-right mono">$11,880</td>
+                <td class="diff-add text-right mono">+$11,880</td>
+              </tr>
+              <tr>
+                <td class="diff-mod text-center font-mono">~</td>
+                <td class="diff-mod"><b>Meta</b> · Reels Brand Always-on</td>
+                <td class="diff-mod">NET</td>
+                <td class="diff-mod text-right mono">$32,000</td>
+                <td class="diff-mod text-right mono">$39,680</td>
+                <td class="diff-mod text-right mono">+$7,680</td>
+              </tr>
+              <tr>
+                <td class="diff-mod text-center font-mono">~</td>
+                <td class="diff-mod"><b>Meta</b> · Reels Brand Always-on</td>
+                <td class="diff-mod">Fechas</td>
+                <td class="diff-mod text-right mono text-xs">15 Abr — 30 Jun</td>
+                <td class="diff-mod text-right mono text-xs">01 Abr — 30 Jun</td>
+                <td class="diff-mod text-right mono">+15d</td>
+              </tr>
+              <tr>
+                <td class="diff-rem text-center font-mono">−</td>
+                <td class="diff-rem"><b>TikTok</b> · Spark Ads Influencers</td>
+                <td class="diff-rem">línea removida</td>
+                <td class="diff-rem text-right mono">$12,000</td>
+                <td class="diff-rem text-right text-stone-400">—</td>
+                <td class="diff-rem text-right mono">−$12,000</td>
+              </tr>
+              <tr>
+                <td class="diff-mod text-center font-mono">~</td>
+                <td class="diff-mod"><b>Programmatic</b> · Display retargeting</td>
+                <td class="diff-mod">CPM</td>
+                <td class="diff-mod text-right mono">$4.20</td>
+                <td class="diff-mod text-right mono">$3.80</td>
+                <td class="diff-mod text-right mono">−$0.40</td>
+              </tr>
+              <tr>
+                <td class="diff-mod text-center font-mono">~</td>
+                <td class="diff-mod"><b>Fees</b> · Management Fee</td>
+                <td class="diff-mod">% sobre NET</td>
+                <td class="diff-mod text-right mono">9%</td>
+                <td class="diff-mod text-right mono">10%</td>
+                <td class="diff-mod text-right mono">+1pp</td>
+              </tr>
+              <tr style="background:var(--paper-2)">
+                <td colspan="2" class="font-semibold">Total proyecto</td>
+                <td></td>
+                <td class="text-right mono">$402,300</td>
+                <td class="text-right mono font-semibold">$427,500</td>
+                <td class="text-right mono font-semibold" style="color:var(--success)">+$25,200</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="p-4 border-t border-stone-200 bg-stone-50 flex items-center justify-between">
+            <div class="text-xs text-stone-600">
+              <b>Aprobado por:</b> J. Salinas (cliente) · 28 Mar 2026, 14:32 · firma digital ✓
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-sm">⬇ Diff PDF</button>
+              <button class="btn btn-sm">↻ Restaurar v2</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+      <div class="anno-strip">
+        <h4>Componentes reutilizados</h4>
+        <ul class="space-y-1">
+          <li>• <b>Timeline list</b> (variante nueva): borde lateral coloreado + meta</li>
+          <li>• <b>Diff table</b>: variante de Table con celdas <b>diff-add/rem/mod</b></li>
+          <li>• <b>Selector v2 → v3</b>: dos botones-dropdown con flecha</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Estados a contemplar</h4>
+        <ul class="space-y-1">
+          <li>• <b>1 sola versión</b>: oculta la columna diff, muestra metadata</li>
+          <li>• <b>Versiones idénticas</b>: empty inline "sin cambios entre estas dos"</li>
+          <li>• <b>Restauración</b>: confirmación destructiva ("crear v4 a partir de v2")</li>
+        </ul>
+      </div>
+      <div class="anno-strip">
+        <h4>Microinteracciones</h4>
+        <ul class="space-y-1">
+          <li>• Click en versión del timeline → seleccionarla en el diff</li>
+          <li>• Hover en celda diff → tooltip con valor crudo</li>
+          <li>• Filtro: solo medios / solo fees / todo</li>
+          <li>• Atajo <span class="mono">D</span> compara vigente vs anterior</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ===== Decisión / siguiente paso ===== -->
+  <section class="my-12">
+    <div class="card">
+      <h3 class="text-lg font-semibold mb-3">Validación y siguientes pasos</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div>
+          <div class="label-micro mb-2">Decisiones que necesito que valides</div>
+          <ul class="space-y-1.5 text-stone-700">
+            <li>• <b>Header sticky</b>: ¿el bloque de proyecto + KPIs + tabs queda fijo al scrollear?</li>
+            <li>• <b>Edición inline en plan</b>: ¿permitida o requiere "modo edición"?</li>
+            <li>• <b>Autosave en gastos</b>: ¿inmediato o cada N segundos?</li>
+            <li>• <b>Aprobación de plan</b>: ¿quién lo aprueba — interno o cliente vía firma digital?</li>
+            <li>• <b>Diff</b>: ¿alcanza la tabla o querés además vista lado-a-lado tipo "split"?</li>
+          </ul>
+        </div>
+        <div>
+          <div class="label-micro mb-2">Pantallas siguientes en orden</div>
+          <ul class="space-y-1.5 text-stone-700">
+            <li>5. <b>Carga de Plan de Medios</b> (parser de Excel + preview + diff)</li>
+            <li>6. <b>Carga de Gastos Reales</b> (variante mensual standalone)</li>
+            <li>7. <b>Generador de Billing</b> (líneas + fees con tracking acumulado)</li>
+            <li>2. <b>Vista de Cliente</b> (drill-down)</li>
+            <li>4. <b>Módulo Clientes</b> (CRUD)</li>
+            <li>8. <b>Vista de Publisher</b> (cross-proyecto)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // Tweaks
+  const TWEAKS = /*EDITMODE-BEGIN*/{
+    "accent": "#7a1f3d"
+  }/*EDITMODE-END*/;
+  document.documentElement.style.setProperty('--accent', TWEAKS.accent);
+
+  (function () {
+    let active = false, panel = null;
+    function build() {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;bottom:20px;right:20px;width:280px;background:#fff;border:1px solid #1c1917;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.12);padding:14px;z-index:99999';
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:600;font-size:14px">Tweaks</div>
+          <button id="tw-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#78716c">×</button>
+        </div>
+        <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#78716c;margin-bottom:6px">Accent</div>
+        <div style="display:flex;gap:6px">
+          ${['#7a1f3d','#5e1730','#8b2a52','#1c1917'].map(c => `<button data-c="${c}" style="width:32px;height:32px;border-radius:6px;border:1px solid #d6d3d1;background:${c};cursor:pointer"></button>`).join('')}
+        </div>
+      `;
+      el.querySelector('#tw-close').addEventListener('click', () => { deactivate(); window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); });
+      el.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
+        const c = b.dataset.c;
+        document.documentElement.style.setProperty('--accent', c);
+        window.parent.postMessage({type:'__edit_mode_set_keys', edits:{accent:c}}, '*');
+      }));
+      return el;
+    }
+    function activate() { if (active) return; active = true; panel = build(); document.body.appendChild(panel); }
+    function deactivate() { if (!active) return; active = false; panel && panel.remove(); panel = null; }
+    window.addEventListener('message', (e) => {
+      if (!e.data || !e.data.type) return;
+      if (e.data.type === '__activate_edit_mode') activate();
+      else if (e.data.type === '__deactivate_edit_mode') deactivate();
+    });
+    window.parent.postMessage({type:'__edit_mode_available'}, '*');
+  })();
+</script>
+</body>
+</html>

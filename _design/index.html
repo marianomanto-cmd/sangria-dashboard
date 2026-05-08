@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Copa Project · Foundations</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.2/dist/apexcharts.min.js"></script>
+<script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    /* Sangría palette — warm stone neutrals + burgundy/violet accent */
+    --paper: #fafaf9;
+    --paper-2: #f5f5f4;
+    --line-soft: #e7e5e4;
+    --line: #d6d3d1;
+    --muted: #78716c;
+    --ink-2: #44403c;
+    --ink: #1c1917;
+
+    --accent: #7a1f3d;        /* sangría / burgundy */
+    --accent-strong: #5e1730;
+    --accent-soft: #f5e6ec;
+    --accent-violet: #8b2a52; /* leans violet */
+
+    --success: #15803d;
+    --success-soft: #dcfce7;
+    --warn: #92400e;
+    --warn-soft: #fef3c7;
+    --danger: #b91c1c;
+    --danger-soft: #fee2e2;
+    --info: #1e40af;
+    --info-soft: #dbeafe;
+  }
+
+  * { font-family: 'Geist', ui-sans-serif, system-ui, sans-serif; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  /* Lo-fi feel without handwriting: muted palette, dashed dividers, light shadows */
+  .surface { background: #fff; border: 1px solid var(--line); border-radius: 8px; }
+  .surface-soft { background: var(--paper-2); border: 1px dashed var(--line); border-radius: 8px; }
+  .surface-ink { background: var(--ink); color: var(--paper); border: 1px solid var(--ink); border-radius: 8px; }
+
+  .label-micro { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  .label-section { font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500;
+    background: var(--paper-2); color: var(--ink-2);
+    border: 1px solid var(--line);
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 6px;
+    font-size: 13px; font-weight: 500;
+    background: #fff; color: var(--ink);
+    border: 1px solid var(--line);
+    transition: background .12s, border-color .12s, transform .06s;
+    cursor: pointer;
+  }
+  .btn:hover { background: var(--paper-2); border-color: var(--ink-2); }
+  .btn:active { transform: translateY(1px); }
+  .btn-primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+  .btn-primary:hover { background: var(--ink-2); border-color: var(--ink-2); }
+  .btn-accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-accent:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: var(--paper-2); }
+  .btn-danger { background: #fff; color: var(--danger); border-color: var(--danger); }
+  .btn-danger:hover { background: var(--danger-soft); }
+
+  .btn-sm { padding: 4px 10px; font-size: 12px; }
+  .btn-lg { padding: 10px 18px; font-size: 14px; }
+
+  /* KPI / cards */
+  .card { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .card-tight { padding: 12px 14px; }
+  .card-ink { background: var(--ink); color: #fff; border: 1px solid var(--ink); border-radius: 10px; padding: 18px 20px; }
+
+  /* Inputs */
+  .input {
+    width: 100%; padding: 7px 11px;
+    border: 1px solid var(--line); border-radius: 6px;
+    font-size: 13px; color: var(--ink);
+    background: #fff;
+    transition: border-color .12s, box-shadow .12s;
+  }
+  .input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .input-error { border-color: var(--danger); }
+  .input-error:focus { box-shadow: 0 0 0 3px var(--danger-soft); }
+
+  /* Badges */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 4px;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.02em;
+    border: 1px solid transparent;
+  }
+  .badge-success { background: var(--success-soft); color: var(--success); border-color: #bbf7d0; }
+  .badge-warning { background: var(--warn-soft); color: var(--warn); border-color: #fde68a; }
+  .badge-danger { background: var(--danger-soft); color: var(--danger); border-color: #fecaca; }
+  .badge-info { background: var(--info-soft); color: var(--info); border-color: #bfdbfe; }
+  .badge-muted { background: var(--paper-2); color: var(--muted); border-color: var(--line); }
+  .badge-accent { background: var(--accent-soft); color: var(--accent); border-color: #f1c4d2; }
+
+  .dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--line); }
+  .tab {
+    padding: 8px 14px; font-size: 13px; font-weight: 500;
+    color: var(--muted); border-bottom: 2px solid transparent;
+    margin-bottom: -1px; cursor: pointer;
+  }
+  .tab:hover { color: var(--ink-2); }
+  .tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+  /* Tables */
+  table.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+  table.tbl th {
+    text-align: left; padding: 8px 10px;
+    font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--muted);
+    border-bottom: 1px solid var(--line);
+    background: #fff;
+  }
+  table.tbl td { padding: 10px; border-bottom: 1px solid var(--line-soft); color: var(--ink-2); }
+  table.tbl tr:hover td { background: var(--paper-2); }
+  table.tbl-dense td { padding: 6px 10px; font-size: 12.5px; }
+  table.tbl-dense th { padding: 6px 10px; }
+
+  /* Sidebar */
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 10px; border-radius: 6px;
+    font-size: 13px; color: var(--muted);
+    cursor: pointer;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+  .nav-item.active { background: rgba(255,255,255,0.08); color: #fff; }
+  .nav-item.active .nav-bar { background: var(--accent); }
+  .nav-bar { width: 3px; height: 16px; border-radius: 2px; background: transparent; }
+
+  /* Image placeholders */
+  .placeholder {
+    background-image:
+      linear-gradient(45deg, var(--paper-2) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--paper-2) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--paper-2) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--paper-2) 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+    background-color: #fff;
+    border: 1px dashed var(--line);
+  }
+
+  /* Section divider */
+  hr.div { border: 0; border-top: 1px dashed var(--line); margin: 0; }
+
+  /* Skeleton shimmer */
+  @keyframes shimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
+  .skeleton {
+    background: linear-gradient(90deg, var(--paper-2) 0%, #ececeb 50%, var(--paper-2) 100%);
+    background-size: 800px 100%;
+    animation: shimmer 1.4s infinite linear;
+    border-radius: 4px;
+  }
+
+  /* Sangría logo mark */
+  .sangria-mark {
+    width: 26px; height: 26px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #b03a5b 0%, var(--accent) 55%, var(--accent-strong) 100%);
+    box-shadow: inset -2px -3px 6px rgba(0,0,0,0.25);
+  }
+
+  /* Helpers */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  @media (max-width: 980px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  }
+
+  .focus-bullet {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--accent); font-weight: 500;
+  }
+  .focus-bullet::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); display: inline-block; }
+</style>
+</head>
+<body>
+
+<div class="max-w-[1380px] mx-auto px-8 py-12">
+
+  <!-- ===== HEADER ===== -->
+  <header class="mb-10">
+    <div class="flex items-end justify-between flex-wrap gap-6">
+      <div>
+        <div class="flex items-center gap-3 mb-3">
+          <div class="sangria-mark"></div>
+          <span class="label-section">Sangria · Project OS</span>
+        </div>
+        <h1 class="text-4xl font-semibold tracking-tight" style="text-wrap:balance">Foundations &amp; System</h1>
+        <p class="text-[15px] text-stone-600 mt-2 max-w-2xl">Round 02 — sistema confirmado. Paleta sangría, Geist, sidebar colapsable, densidad híbrida. Próximo: 3 layouts del Dashboard.</p>
+      </div>
+      <div class="surface-soft p-4 max-w-md">
+        <div class="label-micro mb-2">Decisiones aprobadas</div>
+        <ul class="text-sm space-y-1 text-stone-700">
+          <li>✓ Paleta C orientada a sangría / vino-violeta</li>
+          <li>✓ Geist (UI) + JetBrains Mono (tabular)</li>
+          <li>✓ Sidebar colapsable, expandida ≥1280px</li>
+          <li>✓ Densidad híbrida (aireada para clientes, densa para operativas)</li>
+        </ul>
+      </div>
+    </div>
+  </header>
+
+  <hr class="div" />
+
+  <!-- ===== 01 PALETTE ===== -->
+  <section class="py-10">
+    <div class="flex items-baseline justify-between mb-6">
+      <div>
+        <div class="label-section">01 · Color</div>
+        <h2 class="text-2xl font-semibold mt-1">Paleta sangría</h2>
+        <p class="text-sm text-stone-600 mt-1 max-w-xl">Neutros stone (warm) + acento burgundy/violeta. El acento aparece sólo en CTAs primarios, links activos y elementos de marca; nunca en data-viz (los gráficos usan ink + grises).</p>
+      </div>
+      <div class="pill"><span class="dot" style="background:var(--accent)"></span><span class="mono text-[11px]">accent · #7a1f3d</span></div>
+    </div>
+
+    <!-- Neutrals -->
+    <div class="card mb-4">
+      <div class="label-micro mb-3">Neutros (stone, cálidos)</div>
+      <div class="grid grid-cols-9 gap-2">
+        <div><div class="h-14 rounded border border-stone-200" style="background:#fafaf9"></div><div class="mono text-[10px] mt-1 text-stone-500">paper · 50</div></div>
+        <div><div class="h-14 rounded border border-stone-200" style="background:#f5f5f4"></div><div class="mono text-[10px] mt-1 text-stone-500">100</div></div>
+        <div><div class="h-14 rounded border border-stone-200" style="background:#e7e5e4"></div><div class="mono text-[10px] mt-1 text-stone-500">200 line-soft</div></div>
+        <div><div class="h-14 rounded border border-stone-200" style="background:#d6d3d1"></div><div class="mono text-[10px] mt-1 text-stone-500">300 line</div></div>
+        <div><div class="h-14 rounded" style="background:#a8a29e"></div><div class="mono text-[10px] mt-1 text-stone-500">400</div></div>
+        <div><div class="h-14 rounded" style="background:#78716c"></div><div class="mono text-[10px] mt-1 text-stone-500">500 muted</div></div>
+        <div><div class="h-14 rounded" style="background:#57534e"></div><div class="mono text-[10px] mt-1 text-stone-500">600</div></div>
+        <div><div class="h-14 rounded" style="background:#44403c"></div><div class="mono text-[10px] mt-1 text-stone-500">700 ink-2</div></div>
+        <div><div class="h-14 rounded" style="background:#1c1917"></div><div class="mono text-[10px] mt-1 text-stone-500">900 ink</div></div>
+      </div>
+    </div>
+
+    <!-- Accent + States -->
+    <div class="grid-2">
+      <div class="card">
+        <div class="label-micro mb-3">Acento sangría (burgundy → violeta)</div>
+        <div class="grid grid-cols-5 gap-2">
+          <div><div class="h-14 rounded" style="background:#f5e6ec"></div><div class="mono text-[10px] mt-1 text-stone-500">soft</div></div>
+          <div><div class="h-14 rounded" style="background:#b03a5b"></div><div class="mono text-[10px] mt-1 text-stone-500">light</div></div>
+          <div><div class="h-14 rounded ring-2 ring-stone-900 ring-offset-2" style="background:#7a1f3d"></div><div class="mono text-[10px] mt-1 text-stone-500">base</div></div>
+          <div><div class="h-14 rounded" style="background:#5e1730"></div><div class="mono text-[10px] mt-1 text-stone-500">strong</div></div>
+          <div><div class="h-14 rounded" style="background:#8b2a52"></div><div class="mono text-[10px] mt-1 text-stone-500">violet</div></div>
+        </div>
+        <p class="text-xs text-stone-500 mt-3">Usar el "violet" para hovers/activos sutiles cuando se necesita variar del base sin perder familia.</p>
+      </div>
+      <div class="card">
+        <div class="label-micro mb-3">Estados semánticos</div>
+        <div class="grid grid-cols-4 gap-2">
+          <div><div class="h-14 rounded" style="background:#15803d"></div><div class="mono text-[10px] mt-1 text-stone-500">success</div></div>
+          <div><div class="h-14 rounded" style="background:#92400e"></div><div class="mono text-[10px] mt-1 text-stone-500">warn</div></div>
+          <div><div class="h-14 rounded" style="background:#b91c1c"></div><div class="mono text-[10px] mt-1 text-stone-500">danger</div></div>
+          <div><div class="h-14 rounded" style="background:#1e40af"></div><div class="mono text-[10px] mt-1 text-stone-500">info</div></div>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-3">
+          <span class="badge badge-success"><span class="dot" style="background:#15803d"></span>activo</span>
+          <span class="badge badge-warning"><span class="dot" style="background:#92400e"></span>en revisión</span>
+          <span class="badge badge-danger"><span class="dot" style="background:#b91c1c"></span>vencido</span>
+          <span class="badge badge-info"><span class="dot" style="background:#1e40af"></span>borrador</span>
+          <span class="badge badge-muted"><span class="dot" style="background:#78716c"></span>archivado</span>
+          <span class="badge badge-accent"><span class="dot" style="background:#7a1f3d"></span>vigente</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ===== 02 TYPE ===== -->
+  <section class="py-10">
+    <div class="mb-6">
+      <div class="label-section">02 · Type</div>
+      <h2 class="text-2xl font-semibold mt-1">Geist + JetBrains Mono</h2>
+      <p class="text-sm text-stone-600 mt-1">Geist para todo el chrome y body. Mono para números, KPIs, datos en tablas. Tracking apretado en titulares, balance en bloques largos.</p>
+    </div>
+
+    <div class="card">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="space-y-5">
+          <div>
+            <div class="label-micro mb-1">Display · 36/40 · weight 600</div>
+            <div class="text-4xl font-semibold tracking-tight">Facturado año a la fecha</div>
+          </div>
+          <div>
+            <div class="label-micro mb-1">H1 · 24/28 · 600</div>
+            <div class="text-2xl font-semibold tracking-tight">Vista de proyecto</div>
+          </div>
+          <div>
+            <div class="label-micro mb-1">H2 · 18/24 · 600</div>
+            <div class="text-lg font-semibold">Plan de medios — Q2 2026</div>
+          </div>
+          <div>
+            <div class="label-micro mb-1">Body · 14/20 · 400</div>
+            <p class="text-[14px] leading-[20px] text-stone-700">El plan vigente cubre tres publishers activos con un avance de gasto del 68% sobre lo presupuestado. Los fees de management quedan pendientes para cierre de mes.</p>
+          </div>
+          <div>
+            <div class="label-micro mb-1">Small · 13/18 · 400</div>
+            <p class="text-[13px] text-stone-600">Última actualización hace 2 horas · Versión 2.3 vigente</p>
+          </div>
+          <div>
+            <div class="label-micro mb-1">Micro · 11/14 · uppercase tracking</div>
+            <span class="label-micro">Pendiente por facturar</span>
+          </div>
+        </div>
+
+        <div class="space-y-5">
+          <div>
+            <div class="label-micro mb-1">Tabular numbers (mono)</div>
+            <table class="mono text-sm">
+              <tr><td class="pr-6 text-stone-500">Facturado YTD</td><td class="text-right">$ 2,418,560.00</td></tr>
+              <tr><td class="pr-6 text-stone-500">Pendiente</td><td class="text-right">$&nbsp;&nbsp;&nbsp;842,300.00</td></tr>
+              <tr><td class="pr-6 text-stone-500">Inversión total</td><td class="text-right">$ 5,820,140.00</td></tr>
+              <tr><td class="pr-6 text-stone-500">% avance</td><td class="text-right">68.4 %</td></tr>
+            </table>
+          </div>
+          <div class="surface-soft p-3">
+            <div class="label-micro mb-1">Reglas tipográficas</div>
+            <ul class="text-[13px] text-stone-700 space-y-1">
+              <li>• <b>Pesos</b>: 400 body / 500 énfasis / 600 títulos. No usar 700+.</li>
+              <li>• <b>Tracking</b>: <span class="mono text-xs">-0.02em</span> en h1/h2/display.</li>
+              <li>• <b>Mono</b> en cualquier número que se compare en columna.</li>
+              <li>• <b>Uppercase</b> sólo en labels micro con tracking <span class="mono text-xs">+0.08em</span>.</li>
+              <li>• <b>text-wrap: balance</b> en h1/h2; <span class="mono text-xs">pretty</span> en párrafos.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ===== 03 COMPONENTS ===== -->
+  <section class="py-10">
+    <div class="mb-6">
+      <div class="label-section">03 · Components</div>
+      <h2 class="text-2xl font-semibold mt-1">Sistema de componentes base</h2>
+      <p class="text-sm text-stone-600 mt-1">Cada componente <b>una sola definición</b>. Variantes nombradas explícitamente.</p>
+    </div>
+
+    <!-- Buttons -->
+    <div class="card mb-4">
+      <div class="flex items-baseline justify-between mb-4">
+        <h3 class="text-lg font-semibold">Button</h3>
+        <span class="label-micro">jerarquía · tamaños · estados</span>
+      </div>
+      <div class="grid-3">
+        <div>
+          <div class="label-micro mb-2">Jerarquía</div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <button class="btn btn-primary">Primary</button>
+            <button class="btn">Secondary</button>
+            <button class="btn btn-accent">Accent</button>
+            <button class="btn btn-ghost">Ghost</button>
+            <button class="btn btn-danger">Destructive</button>
+          </div>
+          <p class="text-xs text-stone-500 mt-3">Primary = ink (acción dominante). Accent = sangría (uso reservado: CTAs de marca, links activos). 1 primary por pantalla.</p>
+        </div>
+        <div>
+          <div class="label-micro mb-2">Tamaños</div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <button class="btn btn-sm btn-primary">Small</button>
+            <button class="btn btn-primary">Medium</button>
+            <button class="btn btn-lg btn-primary">Large</button>
+          </div>
+          <div class="label-micro mt-4 mb-2">Estados</div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <button class="btn btn-primary opacity-50 cursor-not-allowed">Disabled</button>
+            <button class="btn btn-primary">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="animate-spin"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+              Loading…
+            </button>
+          </div>
+        </div>
+        <div>
+          <div class="label-micro mb-2">Con icono</div>
+          <div class="flex flex-wrap gap-2 items-center">
+            <button class="btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+              Nuevo cliente
+            </button>
+            <button class="btn btn-primary">
+              Generar billing
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+            </button>
+            <button class="btn btn-ghost">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+            </button>
+            <button class="btn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5l5 5 5-5M5 21h14"/></svg>
+              Excel
+            </button>
+          </div>
+          <p class="text-xs text-stone-500 mt-3">Loading visible es <b style="color:var(--accent)">crítico</b>: latencia google.script.run 200ms-2s.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Inputs -->
+    <div class="card mb-4">
+      <div class="flex items-baseline justify-between mb-4">
+        <h3 class="text-lg font-semibold">Input · Select · Search</h3>
+        <span class="label-micro">default · focused · error · disabled</span>
+      </div>
+      <div class="grid-3">
+        <div>
+          <label class="label-micro mb-1.5 block">Nombre del cliente</label>
+          <input class="input" value="Cliente Aviación" />
+        </div>
+        <div>
+          <label class="label-micro mb-1.5 block">Período</label>
+          <div class="input flex justify-between items-center cursor-pointer">
+            <span>Abril 2026</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+        </div>
+        <div>
+          <label class="label-micro mb-1.5 block">Buscar plan…</label>
+          <div class="input flex gap-2 items-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-stone-400"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <span class="text-stone-400">campaign Q2…</span>
+          </div>
+        </div>
+        <div>
+          <label class="label-micro mb-1.5 block">Inversión real (USD) · focused</label>
+          <input class="input mono" value="$ 24,500.00" style="border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)" />
+        </div>
+        <div>
+          <label class="label-micro mb-1.5 block">CPA estimado · error</label>
+          <input class="input input-error mono" placeholder="—" />
+          <p class="text-xs mt-1" style="color:var(--danger)">Este campo es obligatorio</p>
+        </div>
+        <div>
+          <label class="label-micro mb-1.5 block">Notas</label>
+          <textarea class="input" rows="2" placeholder="Observaciones del plan…"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI cards + chart panel -->
+    <div class="grid-2 mb-4">
+      <div class="card">
+        <div class="flex items-baseline justify-between mb-4">
+          <h3 class="text-lg font-semibold">KPI Card</h3>
+          <span class="label-micro">default · ink · empty · skeleton</span>
+        </div>
+        <div class="grid-2">
+          <div class="card card-tight">
+            <div class="label-micro">Facturado YTD</div>
+            <div class="mono text-3xl font-semibold tracking-tight mt-1">$2.4M</div>
+            <div class="flex items-end justify-between mt-2">
+              <span class="text-xs font-medium" style="color:var(--success)">↑ 12.4%</span>
+              <svg width="64" height="20" viewBox="0 0 64 20"><polyline points="0,15 10,12 20,14 30,8 40,10 50,5 64,3" fill="none" stroke="#15803d" stroke-width="1.5"/></svg>
+            </div>
+          </div>
+          <div class="card-ink">
+            <div class="label-micro" style="color:#a8a29e">% avance año</div>
+            <div class="mono text-3xl font-semibold tracking-tight mt-1">68%</div>
+            <div class="mt-3 h-1.5 rounded-full" style="background:#44403c">
+              <div class="h-1.5 rounded-full" style="width:68%;background:#fff"></div>
+            </div>
+          </div>
+          <div class="card card-tight" style="border-style:dashed;background:var(--paper-2)">
+            <div class="label-micro text-stone-400">— sin datos —</div>
+            <div class="mono text-3xl font-semibold text-stone-300 mt-1">— —</div>
+            <p class="text-xs text-stone-500 mt-2">Sin datos para el rango.</p>
+          </div>
+          <div class="card card-tight">
+            <div class="skeleton h-3 w-24 mb-2"></div>
+            <div class="skeleton h-8 w-32 mb-2"></div>
+            <div class="skeleton h-3 w-20"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flex items-baseline justify-between mb-1">
+          <h3 class="text-lg font-semibold">Panel · con chart</h3>
+          <div class="flex gap-1">
+            <button class="btn btn-sm">YTD</button>
+            <button class="btn btn-sm btn-primary">12m</button>
+            <button class="btn btn-sm">Custom</button>
+          </div>
+        </div>
+        <p class="label-micro mb-3">Inversión por publisher</p>
+        <div id="chart-publishers" style="height:200px"></div>
+        <div class="flex flex-wrap gap-4 text-xs text-stone-600 mt-2 pt-3 border-t border-dashed border-stone-200">
+          <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm" style="background:#1c1917"></span>YouTube</span>
+          <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm" style="background:#78716c"></span>Meta</span>
+          <span class="flex items-center gap-2"><span class="w-3 h-3 rounded-sm" style="background:#d6d3d1"></span>TikTok</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tables -->
+    <div class="card mb-4">
+      <div class="flex items-baseline justify-between mb-4">
+        <h3 class="text-lg font-semibold">Table</h3>
+        <span class="label-micro">default · dense · editable · totals</span>
+      </div>
+      <div class="grid-2">
+        <div>
+          <p class="label-micro mb-2">Default (presentable, ~40px row)</p>
+          <table class="tbl">
+            <thead><tr><th>Cliente</th><th>Facturado</th><th>% avance</th><th>Estado</th></tr></thead>
+            <tbody>
+              <tr><td>Cliente Aviación</td><td class="mono">$1,240,000</td><td>78%</td><td><span class="badge badge-success">activo</span></td></tr>
+              <tr><td>Cliente QSR</td><td class="mono">$680,000</td><td>54%</td><td><span class="badge badge-success">activo</span></td></tr>
+              <tr><td>Cliente Edu/Media</td><td class="mono">$480,000</td><td>42%</td><td><span class="badge badge-warning">en revisión</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <p class="label-micro mb-2">Dense (operativa, ~28px row)</p>
+          <table class="tbl tbl-dense">
+            <thead><tr><th>Publisher</th><th>Placement</th><th>NET</th><th>Real</th><th>%</th></tr></thead>
+            <tbody>
+              <tr><td>YouTube</td><td class="text-stone-500">Bumper Ads</td><td class="mono">$24,500</td><td class="mono">$22,180</td><td>91%</td></tr>
+              <tr><td>YouTube</td><td class="text-stone-500">Trueview</td><td class="mono">$18,200</td><td class="mono">$19,540</td><td style="color:var(--warn)">107%</td></tr>
+              <tr><td>Meta</td><td class="text-stone-500">Feed</td><td class="mono">$12,400</td><td class="mono">$11,820</td><td>95%</td></tr>
+              <tr><td>Meta</td><td class="text-stone-500">Reels</td><td class="mono">$8,600</td><td class="mono">$7,940</td><td>92%</td></tr>
+              <tr><td>TikTok</td><td class="text-stone-500">In-Feed</td><td class="mono">$6,800</td><td class="mono">$6,210</td><td>91%</td></tr>
+              <tr style="background:var(--paper-2)"><td><b>Total</b></td><td></td><td class="mono"><b>$70,500</b></td><td class="mono"><b>$67,690</b></td><td><b>96%</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <p class="text-xs text-stone-500 mt-4">Variantes: <span class="focus-bullet">default</span> · <span class="focus-bullet">dense</span> · <span class="focus-bullet">editable cells</span> · <span class="focus-bullet">expand row</span>. Mismo header style en todas.</p>
+    </div>
+
+    <!-- Tabs / Badges / Toasts -->
+    <div class="grid-3 mb-4">
+      <div class="card">
+        <h3 class="text-lg font-semibold mb-3">Tabs</h3>
+        <div class="tabs">
+          <div class="tab active">Plan de Medios</div>
+          <div class="tab">Gastos Reales</div>
+          <div class="tab">Billing</div>
+          <div class="tab">Histórico</div>
+        </div>
+        <div class="placeholder h-16 mt-3 rounded"></div>
+        <p class="text-xs text-stone-500 mt-2">Underline en sangría sobre la tab activa. Hover sutil sin underline.</p>
+      </div>
+
+      <div class="card">
+        <h3 class="text-lg font-semibold mb-3">Badge</h3>
+        <div class="flex flex-wrap gap-2">
+          <span class="badge badge-success"><span class="dot" style="background:#15803d"></span>activo</span>
+          <span class="badge badge-warning"><span class="dot" style="background:#92400e"></span>revisión</span>
+          <span class="badge badge-danger"><span class="dot" style="background:#b91c1c"></span>vencido</span>
+          <span class="badge badge-info"><span class="dot" style="background:#1e40af"></span>borrador</span>
+          <span class="badge badge-muted"><span class="dot" style="background:#78716c"></span>archivado</span>
+          <span class="badge badge-accent"><span class="dot" style="background:#7a1f3d"></span>v2.3 vigente</span>
+        </div>
+        <div class="flex flex-wrap gap-2 mt-2">
+          <span class="badge badge-muted">YouTube</span>
+          <span class="badge badge-muted">Meta</span>
+          <span class="badge badge-muted">TikTok</span>
+          <span class="badge badge-muted">+2</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="text-lg font-semibold mb-3">Toast</h3>
+        <div class="space-y-2">
+          <div class="surface px-3 py-2.5 flex gap-3 items-start" style="border-left:3px solid var(--success)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#15803d" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium">Billing generado</div>
+              <div class="text-xs text-stone-500">Abril 2026 · Cliente Aviación · <a class="underline" style="color:var(--accent)">descargar</a></div>
+            </div>
+            <span class="text-stone-400 text-sm cursor-pointer">×</span>
+          </div>
+          <div class="surface px-3 py-2.5 flex gap-3 items-start" style="border-left:3px solid var(--danger);background:#fef9f9">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#b91c1c" stroke-width="2.5"><path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            <div class="flex-1">
+              <div class="text-sm font-medium">Error al parsear Excel</div>
+              <div class="text-xs text-stone-500">Línea 23: columna "NET TOTAL" vacía</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading / Empty / Error -->
+    <div class="grid-3 mb-4">
+      <div class="card">
+        <h3 class="text-lg font-semibold mb-3">Loading skeleton</h3>
+        <div class="skeleton h-3 w-2/3 mb-2"></div>
+        <div class="skeleton h-8 w-1/2 mb-2"></div>
+        <div class="skeleton h-3 w-1/3 mb-3"></div>
+        <div class="skeleton h-20 w-full"></div>
+        <p class="text-xs text-stone-500 mt-3">Mismo footprint que el contenido final, sin layout shift.</p>
+      </div>
+      <div class="card flex flex-col items-center justify-center text-center" style="min-height:200px">
+        <div class="w-10 h-10 rounded-full surface-soft flex items-center justify-center mb-2">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-stone-400"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 9h6v6H9z"/></svg>
+        </div>
+        <h3 class="text-base font-semibold">Sin planes cargados</h3>
+        <p class="text-sm text-stone-500 mb-3 mt-1">Subí un Excel desde la carpeta de Drive del proyecto.</p>
+        <button class="btn btn-primary btn-sm">＋ Cargar plan</button>
+      </div>
+      <div class="card flex flex-col items-center justify-center text-center" style="min-height:200px;background:#fef9f9;border-color:#fecaca">
+        <div class="w-10 h-10 rounded-full flex items-center justify-center mb-2" style="background:#fecaca">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#991b1b" stroke-width="2.5"><path d="M12 9v4m0 4h.01"/><circle cx="12" cy="12" r="10"/></svg>
+        </div>
+        <h3 class="text-base font-semibold" style="color:#991b1b">No pudimos conectar con Supabase</h3>
+        <p class="text-sm text-stone-600 mb-3 mt-1">Reintentá en unos segundos.</p>
+        <button class="btn btn-sm">↻ Reintentar</button>
+      </div>
+    </div>
+
+    <!-- Modal -->
+    <div class="card">
+      <div class="flex items-baseline justify-between mb-4">
+        <h3 class="text-lg font-semibold">Modal · destructiva</h3>
+        <span class="label-micro">requiere confirmación tipeada</span>
+      </div>
+      <div class="rounded-lg p-6" style="background:var(--ink)">
+        <div class="card max-w-md mx-auto">
+          <h4 class="text-base font-semibold mb-1">¿Eliminar Cliente Aviación?</h4>
+          <p class="text-sm text-stone-600 mb-4">Esta acción borra <b>4 proyectos</b>, <b>12 planes vigentes</b> y <b>38 billings históricos</b>. No se puede deshacer.</p>
+          <div class="surface-soft p-2.5 mb-4">
+            <p class="text-xs text-stone-600 mb-1">Escribí <span class="mono font-medium" style="color:var(--ink)">eliminar</span> para confirmar</p>
+            <input class="input mono text-sm" placeholder="eliminar" />
+          </div>
+          <div class="flex justify-end gap-2">
+            <button class="btn">Cancelar</button>
+            <button class="btn btn-danger">Sí, eliminar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ===== 04 SIDEBAR APPLIED ===== -->
+  <section class="py-10">
+    <div class="mb-6">
+      <div class="label-section">04 · Navigation</div>
+      <h2 class="text-2xl font-semibold mt-1">Sidebar colapsable + topbar</h2>
+      <p class="text-sm text-stone-600 mt-1">Aplicado con la paleta sangría. Estado expandido (≥1280px) y colapsado (icon-only).</p>
+    </div>
+
+    <div class="grid-2">
+      <!-- Expanded -->
+      <div class="surface overflow-hidden">
+        <div class="px-3 py-2 border-b border-stone-200 flex items-center justify-between text-xs text-stone-500">
+          <span>Estado expandido · 240px</span>
+          <span class="mono">≥ 1280px</span>
+        </div>
+        <div class="flex" style="height:380px">
+          <aside class="flex flex-col p-3" style="width:200px;background:var(--ink);color:#fff">
+            <div class="flex items-center gap-2 px-2 py-2">
+              <div class="sangria-mark" style="width:22px;height:22px"></div>
+              <span class="text-sm font-semibold tracking-tight">Sangria <span class="text-stone-400 font-normal">/ OS</span></span>
+            </div>
+            <nav class="space-y-0.5 mt-3">
+              <div class="nav-item active"><span class="nav-bar"></span> Dashboard</div>
+              <div class="nav-item"><span class="nav-bar"></span> Clientes</div>
+              <div class="nav-item"><span class="nav-bar"></span> Proyectos</div>
+              <div class="nav-item"><span class="nav-bar"></span> Planes de Medios</div>
+              <div class="nav-item"><span class="nav-bar"></span> Gastos</div>
+              <div class="nav-item"><span class="nav-bar"></span> Billing</div>
+            </nav>
+            <div class="border-t border-stone-700 my-3"></div>
+            <div class="nav-item"><span class="nav-bar"></span> Configuración</div>
+            <div class="mt-auto pt-3">
+              <div class="flex items-center gap-2 px-1 py-1">
+                <div class="w-7 h-7 rounded-full bg-stone-600"></div>
+                <div class="text-xs leading-tight">Tu nombre<br/><span class="text-stone-400">admin</span></div>
+              </div>
+            </div>
+          </aside>
+          <div class="flex-1 p-3 surface-soft m-3 ml-2 rounded">
+            <div class="placeholder h-10 rounded mb-2"></div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="placeholder h-16 rounded"></div>
+              <div class="placeholder h-16 rounded"></div>
+              <div class="placeholder h-16 rounded"></div>
+            </div>
+            <div class="placeholder h-32 rounded mt-2"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Collapsed -->
+      <div class="surface overflow-hidden">
+        <div class="px-3 py-2 border-b border-stone-200 flex items-center justify-between text-xs text-stone-500">
+          <span>Estado colapsado · 56px (preferencia persistida)</span>
+          <span class="mono">&lt; 1280px</span>
+        </div>
+        <div class="flex" style="height:380px">
+          <aside class="flex flex-col items-center py-3 gap-1" style="width:56px;background:var(--ink);color:#fff">
+            <div class="sangria-mark" style="width:22px;height:22px"></div>
+            <div class="mt-3 space-y-1 w-full px-2">
+              <div class="h-8 rounded flex items-center justify-center" style="background:rgba(255,255,255,0.08)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+              </div>
+              <div class="h-8 rounded flex items-center justify-center text-stone-400">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2M16 11l2 2 4-4"/></svg>
+              </div>
+              <div class="h-8 rounded flex items-center justify-center text-stone-400">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14M22 4L12 14.01l-3-3"/></svg>
+              </div>
+              <div class="h-8 rounded flex items-center justify-center text-stone-400">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+              </div>
+              <div class="h-8 rounded flex items-center justify-center text-stone-400">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+              </div>
+              <div class="h-8 rounded flex items-center justify-center text-stone-400">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+              </div>
+            </div>
+            <div class="mt-auto space-y-2">
+              <div class="text-stone-400">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              </div>
+              <div class="w-7 h-7 rounded-full bg-stone-600"></div>
+            </div>
+          </aside>
+          <div class="flex-1 p-3 surface-soft m-3 ml-2 rounded">
+            <div class="placeholder h-10 rounded mb-2"></div>
+            <div class="grid grid-cols-4 gap-2">
+              <div class="placeholder h-16 rounded"></div>
+              <div class="placeholder h-16 rounded"></div>
+              <div class="placeholder h-16 rounded"></div>
+              <div class="placeholder h-16 rounded"></div>
+            </div>
+            <div class="placeholder h-32 rounded mt-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Topbar -->
+    <div class="card mt-4">
+      <div class="flex items-baseline justify-between mb-4">
+        <h3 class="text-lg font-semibold">Topbar</h3>
+        <span class="label-micro">breadcrumbs · filtros globales · dark · avatar</span>
+      </div>
+      <div class="surface px-4 py-2.5 flex items-center gap-3 flex-wrap">
+        <button class="btn btn-ghost btn-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+        </button>
+        <div class="text-sm text-stone-500 flex items-center gap-1.5">
+          <span>Clientes</span>
+          <span class="text-stone-300">/</span>
+          <span>Cliente Aviación</span>
+          <span class="text-stone-300">/</span>
+          <span class="text-stone-900 font-medium">Q2 2026 · Plan</span>
+        </div>
+        <div class="ml-auto flex items-center gap-2">
+          <button class="btn btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            Abr — Jun 2026
+          </button>
+          <button class="btn btn-sm">
+            Cliente: Todos
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm" title="Dark mode">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+          </button>
+          <div class="w-7 h-7 rounded-full" style="background:var(--accent)"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ===== 05 NAV FLOW ===== -->
+  <section class="py-10">
+    <div class="mb-6">
+      <div class="label-section">05 · Flow</div>
+      <h2 class="text-2xl font-semibold mt-1">Mapa de las 8 pantallas</h2>
+    </div>
+
+    <div class="card">
+      <svg viewBox="0 0 1280 400" class="w-full" style="height:420px">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+            <path d="M0,0 L10,5 L0,10 z" fill="#78716c"/>
+          </marker>
+        </defs>
+
+        <!-- 1. Dashboard -->
+        <g transform="translate(40,160)">
+          <rect width="180" height="80" rx="8" fill="#fff" stroke="#1c1917"/>
+          <text x="90" y="30" text-anchor="middle" font-size="13" font-weight="600" font-family="Geist">1 · Dashboard</text>
+          <text x="90" y="52" text-anchor="middle" font-size="11" fill="#78716c" font-family="Geist">KPIs · barras</text>
+          <text x="90" y="68" text-anchor="middle" font-size="11" fill="#78716c" font-family="Geist">tabla por cliente</text>
+        </g>
+
+        <!-- 2. Cliente -->
+        <g transform="translate(290,80)">
+          <rect width="170" height="74" rx="8" fill="#fff" stroke="#1c1917"/>
+          <text x="85" y="30" text-anchor="middle" font-size="13" font-weight="600" font-family="Geist">2 · Cliente</text>
+          <text x="85" y="52" text-anchor="middle" font-size="11" fill="#78716c" font-family="Geist">drill-down</text>
+          <text x="85" y="66" text-anchor="middle" font-size="11" fill="#78716c" font-family="Geist">+ proyectos</text>
+        </g>
+
+        <!-- 3. Proyecto -->
+        <g transform="translate(530,160)">
+          <rect width="200" height="80" rx="8" fill="#fff" stroke="#7a1f3d" stroke-width="2"/>
+          <text x="100" y="28" text-anchor="middle" font-size="13" font-weight="600" font-family="Geist">3 · Proyecto</text>
+          <text x="100" y="48" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">Plan · Gastos · Billing</text>
+          <text x="100" y="62" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">· Histórico</text>
+          <text x="100" y="76" text-anchor="middle" font-size="11" fill="#7a1f3d" font-weight="600" font-family="Geist">★ más complejo</text>
+        </g>
+
+        <!-- 8. Publisher -->
+        <g transform="translate(290,260)">
+          <rect width="170" height="74" rx="8" fill="#fff" stroke="#1c1917" stroke-dasharray="4,3"/>
+          <text x="85" y="30" text-anchor="middle" font-size="13" font-weight="600" font-family="Geist">8 · Publisher</text>
+          <text x="85" y="52" text-anchor="middle" font-size="11" fill="#78716c" font-family="Geist">drawer lateral</text>
+          <text x="85" y="66" text-anchor="middle" font-size="11" fill="#78716c" font-family="Geist">desde tabla</text>
+        </g>
+
+        <!-- 5. Carga Plan -->
+        <g transform="translate(800,40)">
+          <rect width="190" height="72" rx="8" fill="#fff" stroke="#1c1917"/>
+          <text x="95" y="28" text-anchor="middle" font-size="13" font-weight="600" font-family="Geist">5 · Carga Plan</text>
+          <text x="95" y="48" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">parsear Excel</text>
+          <text x="95" y="62" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">diff vs versión</text>
+        </g>
+
+        <!-- 6. Gastos -->
+        <g transform="translate(800,135)">
+          <rect width="190" height="72" rx="8" fill="#fff" stroke="#1c1917"/>
+          <text x="95" y="28" text-anchor="middle" font-size="13" font-weight="600" font-family="Geist">6 · Gastos Reales</text>
+          <text x="95" y="48" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">grilla mensual</text>
+          <text x="95" y="62" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">editable</text>
+        </g>
+
+        <!-- 7. Billing -->
+        <g transform="translate(800,230)">
+          <rect width="190" height="72" rx="8" fill="#fff" stroke="#1c1917"/>
+          <text x="95" y="28" text-anchor="middle" font-size="13" font-weight="600" font-family="Geist">7 · Generador Billing</text>
+          <text x="95" y="48" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">líneas + fees</text>
+          <text x="95" y="62" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">preview Excel</text>
+        </g>
+
+        <!-- 4. Clientes CRUD -->
+        <g transform="translate(800,320)">
+          <rect width="190" height="60" rx="8" fill="#fff" stroke="#1c1917"/>
+          <text x="95" y="26" text-anchor="middle" font-size="13" font-weight="600" font-family="Geist">4 · Clientes (CRUD)</text>
+          <text x="95" y="46" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">cards · modal</text>
+        </g>
+
+        <!-- Sidebar -->
+        <g transform="translate(1060,160)">
+          <rect width="160" height="80" rx="8" fill="#fafaf9" stroke="#78716c" stroke-dasharray="3,3"/>
+          <text x="80" y="32" text-anchor="middle" font-size="13" font-weight="600" fill="#78716c" font-family="Geist">sidebar</text>
+          <text x="80" y="52" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">acceso directo</text>
+          <text x="80" y="66" text-anchor="middle" font-size="10" fill="#78716c" font-family="Geist">a 4/5/6/7</text>
+        </g>
+
+        <!-- Arrows -->
+        <path stroke="#78716c" fill="none" stroke-width="1.5" marker-end="url(#arr)" d="M220 190 C 250 130, 270 110, 290 110"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" marker-end="url(#arr)" d="M460 110 C 500 130, 510 160, 530 180"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" marker-end="url(#arr)" d="M220 200 L 290 290"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" marker-end="url(#arr)" d="M730 180 C 770 100, 780 80, 800 75"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" marker-end="url(#arr)" d="M730 195 L 800 165"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" marker-end="url(#arr)" d="M730 220 L 800 255"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" marker-end="url(#arr)" d="M460 290 L 530 220"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)" d="M1060 195 L 990 175"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)" d="M1060 205 L 990 250"/>
+        <path stroke="#78716c" fill="none" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)" d="M1060 215 L 990 350"/>
+
+        <text x="240" y="135" font-size="10" fill="#78716c" font-family="Geist">click cliente</text>
+        <text x="475" y="135" font-size="10" fill="#78716c" font-family="Geist">click proyecto</text>
+        <text x="345" y="240" font-size="10" fill="#78716c" font-family="Geist">click publisher</text>
+        <text x="755" y="100" font-size="10" fill="#78716c" font-family="Geist">tab Plan</text>
+        <text x="755" y="155" font-size="10" fill="#78716c" font-family="Geist">tab Gastos</text>
+        <text x="755" y="245" font-size="10" fill="#78716c" font-family="Geist">tab Billing</text>
+      </svg>
+    </div>
+  </section>
+
+  <hr class="div" />
+
+  <!-- ===== NEXT ===== -->
+  <section class="py-10 pb-20">
+    <div class="mb-6">
+      <div class="label-section">Next</div>
+      <h2 class="text-2xl font-semibold mt-1">Próximo entregable</h2>
+    </div>
+    <div class="card">
+      <p class="text-[15px] text-stone-700">Con el sistema confirmado, sigue el <b>Dashboard principal</b> en lo-fi con 3 layouts distintos (jerarquía de KPIs · ubicación del chart · ordenamiento de la tabla por cliente). Ya con paleta sangría, Geist y sidebar colapsable aplicados.</p>
+      <div class="grid-3 mt-4">
+        <div class="surface-soft p-3">
+          <span class="badge badge-accent mb-2">Layout A</span>
+          <p class="text-sm text-stone-700"><b>KPIs hero</b> — 4 KPIs grandes arriba ocupando todo el ancho, gráfico debajo, tabla al final.</p>
+        </div>
+        <div class="surface-soft p-3">
+          <span class="badge badge-accent mb-2">Layout B</span>
+          <p class="text-sm text-stone-700"><b>Split</b> — 4 KPIs en columna izquierda + chart grande dominante a la derecha; tabla full-width abajo.</p>
+        </div>
+        <div class="surface-soft p-3">
+          <span class="badge badge-accent mb-2">Layout C</span>
+          <p class="text-sm text-stone-700"><b>Tabla protagonista</b> — KPIs compactos en banda + tabla por cliente expandida con sparklines inline.</p>
+        </div>
+      </div>
+      <p class="text-xs text-stone-500 mt-4">Para cada layout: estados (loading / vacío / error), componentes reutilizados, anotaciones de microinteracciones.</p>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // Persist tweaks (only accent for this file)
+  const TWEAKS = /*EDITMODE-BEGIN*/{
+    "accent": "#7a1f3d",
+    "clientsVariant": "marquee"
+  }/*EDITMODE-END*/;
+  document.documentElement.style.setProperty('--accent', TWEAKS.accent);
+
+  // Tweaks panel
+  (function () {
+    let active = false, panel = null;
+    function build() {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;bottom:20px;right:20px;width:280px;background:#fff;border:1px solid #1c1917;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.12);padding:14px;z-index:99999;font-family:Geist,sans-serif';
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-weight:600;font-size:14px">Tweaks</div>
+          <button id="tw-close" style="background:none;border:none;font-size:18px;cursor:pointer;color:#78716c">×</button>
+        </div>
+        <div style="font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#78716c;margin-bottom:6px">Accent</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px">
+          ${['#7a1f3d','#5e1730','#8b2a52','#1c1917','#1e40af'].map(c => `<button data-c="${c}" style="width:32px;height:32px;border-radius:6px;border:1px solid #d6d3d1;background:${c};cursor:pointer"></button>`).join('')}
+        </div>
+        <div style="font-size:11px;color:#a8a29e">Cambia el acento global. Propio de este archivo de foundations.</div>
+      `;
+      el.querySelector('#tw-close').addEventListener('click', () => { deactivate(); window.parent.postMessage({type:'__edit_mode_dismissed'}, '*'); });
+      el.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
+        const c = b.dataset.c;
+        document.documentElement.style.setProperty('--accent', c);
+        window.parent.postMessage({type:'__edit_mode_set_keys', edits:{accent:c}}, '*');
+      }));
+      return el;
+    }
+    function activate() { if (active) return; active = true; panel = build(); document.body.appendChild(panel); }
+    function deactivate() { if (!active) return; active = false; panel && panel.remove(); panel = null; }
+    window.addEventListener('message', (e) => {
+      if (!e.data || !e.data.type) return;
+      if (e.data.type === '__activate_edit_mode') activate();
+      else if (e.data.type === '__deactivate_edit_mode') deactivate();
+    });
+    window.parent.postMessage({type:'__edit_mode_available'}, '*');
+  })();
+
+  // Chart
+  document.addEventListener('DOMContentLoaded', () => {
+    const opt = {
+      chart: { type: 'bar', stacked: true, height: 200, toolbar: { show: false }, fontFamily: 'Geist, sans-serif', animations: { speed: 400 } },
+      series: [
+        { name: 'YouTube', data: [12, 18, 15, 22, 28, 24, 30, 26, 32, 28, 34, 38] },
+        { name: 'Meta', data: [8, 10, 14, 12, 16, 18, 14, 20, 18, 22, 20, 24] },
+        { name: 'TikTok', data: [4, 6, 5, 8, 10, 9, 12, 14, 11, 13, 16, 18] },
+      ],
+      colors: ['#1c1917', '#78716c', '#d6d3d1'],
+      plotOptions: { bar: { columnWidth: '55%', borderRadius: 2 } },
+      dataLabels: { enabled: false },
+      grid: { borderColor: '#e7e5e4', strokeDashArray: 3 },
+      xaxis: {
+        categories: ['M','A','M','J','J','A','S','O','N','D','E','F'],
+        labels: { style: { fontFamily: 'Geist', colors: '#78716c', fontSize: '11px' } },
+        axisBorder: { show: false }, axisTicks: { show: false },
+      },
+      yaxis: { labels: { style: { fontFamily: 'JetBrains Mono', colors: '#78716c', fontSize: '11px' }, formatter: v => '$' + v + 'K' } },
+      legend: { show: false },
+      tooltip: { theme: 'light', style: { fontFamily: 'Geist' } },
+    };
+    const target = document.querySelector('#chart-publishers');
+    if (target && window.ApexCharts) new ApexCharts(target, opt).render();
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,1244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Copa Project — Foundations & System</title>
+
+<!-- Stack real del producto -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/apexcharts@3.45.2/dist/apexcharts.min.js"></script>
+<script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+<!-- Fonts: handwritten para anotaciones, opciones de UI para preview -->
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Kalam:wght@300;400;700&family=Inter:wght@300;400;500;600;700&family=Geist:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --ink: #1c1917;
+    --paper: #fafaf9;
+    --line: #292524;
+    --muted: #78716c;
+    --grid: #e7e5e4;
+    --accent: #3a86ff;
+  }
+
+  html, body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Kalam', 'Caveat', cursive;
+  }
+
+  /* Subtle paper texture */
+  body {
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(28,25,23,0.05) 1px, transparent 0);
+    background-size: 18px 18px;
+  }
+
+  .ink { color: var(--ink); }
+  .muted { color: var(--muted); }
+
+  .hand { font-family: 'Kalam', cursive; }
+  .scribble { font-family: 'Caveat', cursive; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* Sketchy borders — slightly hand-drawn feel */
+  .sk {
+    border: 1.5px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 2px 2px 0 0 rgba(28,25,23,0.08);
+    position: relative;
+  }
+  .sk-soft {
+    border: 1.5px dashed var(--line);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.6);
+  }
+  .sk-thick {
+    border: 2px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 3px 3px 0 0 rgba(28,25,23,0.1);
+  }
+
+  /* Wobble — apply rotation per element to feel hand-drawn */
+  .wobble-1 { transform: rotate(-0.3deg); }
+  .wobble-2 { transform: rotate(0.4deg); }
+  .wobble-3 { transform: rotate(-0.2deg); }
+
+  /* Section anchor labels — like margin notes */
+  .pin {
+    position: absolute;
+    top: -14px; left: 16px;
+    background: var(--paper);
+    padding: 0 8px;
+    font-family: 'Caveat', cursive;
+    font-size: 18px;
+    color: var(--muted);
+  }
+
+  /* Annotation arrow */
+  .anno {
+    font-family: 'Caveat', cursive;
+    color: var(--muted);
+    font-size: 18px;
+    line-height: 1.1;
+  }
+
+  /* Color swatch with chip + label */
+  .swatch {
+    aspect-ratio: 1.2 / 1;
+    border-radius: 4px;
+    border: 1.5px solid var(--line);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Highlight marker effect */
+  .marker {
+    background: linear-gradient(180deg, transparent 55%, #fde68a 55%, #fde68a 92%, transparent 92%);
+    padding: 0 2px;
+  }
+  .marker-blue { background: linear-gradient(180deg, transparent 55%, #bfdbfe 55%, #bfdbfe 92%, transparent 92%); padding: 0 2px; }
+  .marker-green { background: linear-gradient(180deg, transparent 55%, #bbf7d0 55%, #bbf7d0 92%, transparent 92%); padding: 0 2px; }
+  .marker-pink { background: linear-gradient(180deg, transparent 55%, #fbcfe8 55%, #fbcfe8 92%, transparent 92%); padding: 0 2px; }
+
+  /* Tab style */
+  .tab {
+    border: 1.5px solid var(--line);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: #fff;
+    padding: 6px 14px;
+    font-family: 'Kalam', cursive;
+    cursor: pointer;
+  }
+  .tab.active {
+    background: var(--ink);
+    color: #fafaf9;
+  }
+
+  /* Image placeholder stripes */
+  .stripes {
+    background-image: repeating-linear-gradient(
+      135deg,
+      #f5f5f4 0,
+      #f5f5f4 8px,
+      #e7e5e4 8px,
+      #e7e5e4 16px
+    );
+  }
+
+  /* Buttons */
+  .btn {
+    border: 1.5px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 14px;
+    background: #fff;
+    font-family: 'Kalam', cursive;
+    box-shadow: 2px 2px 0 0 rgba(28,25,23,0.15);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: transform 0.08s;
+  }
+  .btn:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0 0 rgba(28,25,23,0.18); }
+  .btn-primary { background: var(--ink); color: #fafaf9; }
+  .btn-accent { background: var(--accent); color: #fff; border-color: var(--ink); }
+  .btn-danger { background: #fff; color: #b91c1c; border-color: #b91c1c; }
+  .btn-ghost { background: transparent; box-shadow: none; }
+
+  /* KPI card */
+  .kpi {
+    border: 1.5px solid var(--line);
+    border-radius: 8px;
+    background: #fff;
+    padding: 14px 16px;
+    box-shadow: 2px 2px 0 0 rgba(28,25,23,0.08);
+  }
+
+  /* Sidebar item */
+  .nav-item {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-family: 'Kalam', cursive;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-item.active {
+    background: var(--ink);
+    color: #fafaf9;
+  }
+  .nav-item:not(.active):hover { background: #f5f5f4; }
+
+  /* Table */
+  table.sk-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-family: 'Kalam', cursive;
+  }
+  table.sk-table th, table.sk-table td {
+    padding: 8px 10px;
+    border-bottom: 1px dashed var(--grid);
+    text-align: left;
+  }
+  table.sk-table th {
+    border-bottom: 1.5px solid var(--line);
+    color: var(--muted);
+    font-weight: 400;
+    font-size: 13px;
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1.5px solid var(--line);
+    background: #fff;
+    font-family: 'Kalam', cursive;
+    font-size: 13px;
+  }
+  .badge-success { background: #dcfce7; border-color: #166534; color: #166534; }
+  .badge-warning { background: #fef3c7; border-color: #92400e; color: #92400e; }
+  .badge-danger { background: #fee2e2; border-color: #991b1b; color: #991b1b; }
+  .badge-info { background: #dbeafe; border-color: #1e40af; color: #1e40af; }
+  .badge-muted { background: #f5f5f4; border-color: var(--muted); color: var(--muted); }
+
+  /* Section divider — torn paper */
+  .torn {
+    height: 24px;
+    background:
+      linear-gradient(45deg, transparent 33%, var(--paper) 33%, var(--paper) 66%, transparent 66%),
+      linear-gradient(-45deg, transparent 33%, var(--paper) 33%, var(--paper) 66%, transparent 66%);
+    background-size: 12px 12px;
+    background-position: 0 0, 0 12px;
+  }
+
+  /* Scoped font preview */
+  .preview-inter * { font-family: 'Inter', sans-serif !important; }
+  .preview-geist * { font-family: 'Geist', sans-serif !important; }
+  .preview-plex * { font-family: 'IBM Plex Sans', sans-serif !important; }
+
+  .arrow {
+    stroke: var(--muted);
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+
+  /* Keep main content readable on smaller screens */
+  @media (max-width: 900px) {
+    .responsive-grid { grid-template-columns: 1fr !important; }
+  }
+
+  /* Tweaks panel container */
+  #tweaks-root { z-index: 9999; }
+</style>
+</head>
+<body>
+
+<!-- ============== HEADER ============== -->
+<header class="max-w-[1400px] mx-auto px-8 pt-10 pb-6">
+  <div class="flex items-end justify-between flex-wrap gap-4">
+    <div>
+      <div class="scribble text-3xl muted">Copa Project Dashboard</div>
+      <h1 class="hand text-5xl mt-1">Foundations &amp; System Exploration</h1>
+      <div class="anno mt-3">round 01 · low-fi · light mode · <span class="marker">decide direction before screens</span></div>
+    </div>
+    <div class="sk-soft px-4 py-3 max-w-md">
+      <div class="scribble text-xl ink">what's in here</div>
+      <ol class="hand text-sm muted list-decimal pl-5 mt-1 space-y-0.5">
+        <li>4 paletas (cálidas y frías)</li>
+        <li>3 pairings tipográficos</li>
+        <li>Componentes base + variantes</li>
+        <li>Densidad: densa vs aireada</li>
+        <li>Sidebar: fija vs colapsable</li>
+        <li>Próximos pasos &amp; preguntas abiertas</li>
+      </ol>
+    </div>
+  </div>
+</header>
+
+<div class="torn"></div>
+
+<!-- ============== 1. PALETTES ============== -->
+<section class="max-w-[1400px] mx-auto px-8 py-10">
+  <div class="flex items-end justify-between mb-6">
+    <div>
+      <div class="scribble text-2xl muted">01</div>
+      <h2 class="hand text-3xl">Paletas — elegí una dirección</h2>
+      <div class="anno mt-1">cuatro opciones. cada una incluye neutros + acento + estados (success/warn/error/info)</div>
+    </div>
+    <div class="anno">→ tu favorita actual: <span class="marker-blue mono text-base">accent #3a86ff</span></div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 responsive-grid">
+
+    <!-- Palette A: Slate Cool (Linear-ish) -->
+    <div class="sk p-5 wobble-1">
+      <span class="pin">A · "slate cool"</span>
+      <div class="flex items-baseline gap-3 mb-3 mt-2">
+        <span class="hand text-2xl">Slate Cool</span>
+        <span class="anno">cool · neutral · azul profundo · $linear-vibe</span>
+      </div>
+      <div class="grid grid-cols-7 gap-2 mb-4">
+        <div class="swatch" style="background:#f8fafc"></div>
+        <div class="swatch" style="background:#f1f5f9"></div>
+        <div class="swatch" style="background:#cbd5e1"></div>
+        <div class="swatch" style="background:#475569"></div>
+        <div class="swatch" style="background:#0f172a"></div>
+        <div class="swatch" style="background:#1d4ed8"></div>
+        <div class="swatch" style="background:#3b82f6;outline:2px solid #1c1917;outline-offset:2px"></div>
+      </div>
+      <div class="flex gap-2 flex-wrap mb-3">
+        <span class="badge badge-success">success</span>
+        <span class="badge badge-warning">warning</span>
+        <span class="badge badge-danger">error</span>
+        <span class="badge badge-info">info</span>
+      </div>
+      <div class="anno">↑ acento azul rey, ink casi negro azulado. Lo más “fintech sobrio”.</div>
+    </div>
+
+    <!-- Palette B: Forest Corporate -->
+    <div class="sk p-5 wobble-2">
+      <span class="pin">B · "forest corporate"</span>
+      <div class="flex items-baseline gap-3 mb-3 mt-2">
+        <span class="hand text-2xl">Forest Corporate</span>
+        <span class="anno">cool · verde corporativo · más “financiero/contable”</span>
+      </div>
+      <div class="grid grid-cols-7 gap-2 mb-4">
+        <div class="swatch" style="background:#fafaf9"></div>
+        <div class="swatch" style="background:#f5f5f4"></div>
+        <div class="swatch" style="background:#d6d3d1"></div>
+        <div class="swatch" style="background:#57534e"></div>
+        <div class="swatch" style="background:#1c1917"></div>
+        <div class="swatch" style="background:#0d6e4f"></div>
+        <div class="swatch" style="background:#10b981;outline:2px solid #1c1917;outline-offset:2px"></div>
+      </div>
+      <div class="flex gap-2 flex-wrap mb-3">
+        <span class="badge" style="background:#dcfce7;border-color:#15803d;color:#15803d">success</span>
+        <span class="badge badge-warning">warning</span>
+        <span class="badge badge-danger">error</span>
+        <span class="badge" style="background:#ccfbf1;border-color:#0f766e;color:#0f766e">info</span>
+      </div>
+      <div class="anno">↑ verdes asociados a $$$ y “up-trend”. Cuidado: el éxito y el acento usan tonos cercanos.</div>
+    </div>
+
+    <!-- Palette C: Warm Stone (Stripe-ish warm) -->
+    <div class="sk p-5 wobble-3">
+      <span class="pin">C · "warm stone"</span>
+      <div class="flex items-baseline gap-3 mb-3 mt-2">
+        <span class="hand text-2xl">Warm Stone</span>
+        <span class="anno">cálido · papel/tinta · acento índigo</span>
+      </div>
+      <div class="grid grid-cols-7 gap-2 mb-4">
+        <div class="swatch" style="background:#fafaf9"></div>
+        <div class="swatch" style="background:#f5f5f4"></div>
+        <div class="swatch" style="background:#d6d3d1"></div>
+        <div class="swatch" style="background:#78716c"></div>
+        <div class="swatch" style="background:#1c1917"></div>
+        <div class="swatch" style="background:#4338ca"></div>
+        <div class="swatch" style="background:#6366f1;outline:2px solid #1c1917;outline-offset:2px"></div>
+      </div>
+      <div class="flex gap-2 flex-wrap mb-3">
+        <span class="badge badge-success">success</span>
+        <span class="badge badge-warning">warning</span>
+        <span class="badge badge-danger">error</span>
+        <span class="badge" style="background:#e0e7ff;border-color:#4338ca;color:#4338ca">info</span>
+      </div>
+      <div class="anno">↑ neutros tibios (stone-50/100). Acento índigo da contraste sin gritar.</div>
+    </div>
+
+    <!-- Palette D: Mono Plus (Vercel-ish) -->
+    <div class="sk p-5 wobble-1">
+      <span class="pin">D · "mono+"</span>
+      <div class="flex items-baseline gap-3 mb-3 mt-2">
+        <span class="hand text-2xl">Mono Plus</span>
+        <span class="anno">casi monocromo · acento mínimo · más “editorial”</span>
+      </div>
+      <div class="grid grid-cols-7 gap-2 mb-4">
+        <div class="swatch" style="background:#ffffff"></div>
+        <div class="swatch" style="background:#f4f4f5"></div>
+        <div class="swatch" style="background:#a1a1aa"></div>
+        <div class="swatch" style="background:#3f3f46"></div>
+        <div class="swatch" style="background:#09090b"></div>
+        <div class="swatch" style="background:#18181b"></div>
+        <div class="swatch" style="background:#3a86ff;outline:2px solid #1c1917;outline-offset:2px"></div>
+      </div>
+      <div class="flex gap-2 flex-wrap mb-3">
+        <span class="badge badge-success">success</span>
+        <span class="badge badge-warning">warning</span>
+        <span class="badge badge-danger">error</span>
+        <span class="badge badge-info">info</span>
+      </div>
+      <div class="anno">↑ casi todo en grises. El azul (o cualquier acento) sólo aparece en CTAs primarios y deltas. Más versátil para mostrar a clientes.</div>
+    </div>
+  </div>
+
+  <div class="anno mt-6 max-w-3xl">
+    <span class="scribble text-xl ink">decisiones que dependen de paleta:</span><br/>
+    color del delta positivo (¿verde o ink?) · color del background del sidebar (¿paper o ink?) · acento aplicado a links + chips activos · <span class="marker-pink">si el dark mode invierte o tiene su propia paleta</span>
+  </div>
+</section>
+
+<div class="torn"></div>
+
+<!-- ============== 2. TYPOGRAPHY ============== -->
+<section class="max-w-[1400px] mx-auto px-8 py-10">
+  <div class="flex items-end justify-between mb-6">
+    <div>
+      <div class="scribble text-2xl muted">02</div>
+      <h2 class="hand text-3xl">Tipografía — 3 pairings</h2>
+      <div class="anno mt-1">UI sans para todo el chrome + mono para tabular numbers (KPIs, tablas financieras)</div>
+    </div>
+    <div class="anno">↓ todas con JetBrains Mono para números</div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Inter -->
+    <div class="sk p-5 preview-inter">
+      <div class="flex items-baseline justify-between mb-3">
+        <span class="hand text-xl">opción 1 · Inter</span>
+        <span class="badge badge-muted">familiar · sobreusada</span>
+      </div>
+      <div style="font-family:'Inter',sans-serif">
+        <div class="text-xs uppercase tracking-wider text-stone-500 mb-1">Facturado YTD</div>
+        <div class="text-4xl font-semibold text-stone-900 leading-none mb-1" style="font-family:'JetBrains Mono',monospace">$2.4M</div>
+        <div class="text-sm text-emerald-700 mb-4">↑ 12.4% vs Q1</div>
+        <h3 class="text-base font-semibold text-stone-900 mb-1">Plan de medios — Q2 2026</h3>
+        <p class="text-sm text-stone-600 leading-relaxed">3 publishers activos. Gasto real al 68% del presupuesto. Fees pendientes de facturar al cierre del mes.</p>
+      </div>
+    </div>
+
+    <!-- Geist -->
+    <div class="sk p-5 preview-geist">
+      <div class="flex items-baseline justify-between mb-3">
+        <span class="hand text-xl">opción 2 · Geist</span>
+        <span class="badge badge-info">moderna · vercel</span>
+      </div>
+      <div style="font-family:'Geist',sans-serif">
+        <div class="text-xs uppercase tracking-wider text-stone-500 mb-1">Facturado YTD</div>
+        <div class="text-4xl font-semibold text-stone-900 leading-none mb-1" style="font-family:'JetBrains Mono',monospace">$2.4M</div>
+        <div class="text-sm text-emerald-700 mb-4">↑ 12.4% vs Q1</div>
+        <h3 class="text-base font-semibold text-stone-900 mb-1">Plan de medios — Q2 2026</h3>
+        <p class="text-sm text-stone-600 leading-relaxed">3 publishers activos. Gasto real al 68% del presupuesto. Fees pendientes de facturar al cierre del mes.</p>
+      </div>
+    </div>
+
+    <!-- IBM Plex Sans -->
+    <div class="sk p-5 preview-plex">
+      <div class="flex items-baseline justify-between mb-3">
+        <span class="hand text-xl">opción 3 · IBM Plex Sans</span>
+        <span class="badge" style="background:#fef3c7;border-color:#92400e;color:#92400e">técnica · carácter</span>
+      </div>
+      <div style="font-family:'IBM Plex Sans',sans-serif">
+        <div class="text-xs uppercase tracking-wider text-stone-500 mb-1">Facturado YTD</div>
+        <div class="text-4xl font-semibold text-stone-900 leading-none mb-1" style="font-family:'JetBrains Mono',monospace">$2.4M</div>
+        <div class="text-sm text-emerald-700 mb-4">↑ 12.4% vs Q1</div>
+        <h3 class="text-base font-semibold text-stone-900 mb-1">Plan de medios — Q2 2026</h3>
+        <p class="text-sm text-stone-600 leading-relaxed">3 publishers activos. Gasto real al 68% del presupuesto. Fees pendientes de facturar al cierre del mes.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="sk-soft p-4 mt-6 max-w-4xl">
+    <div class="scribble text-xl ink mb-1">escala tipográfica propuesta (mismo en los 3)</div>
+    <div class="anno grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-1 mt-2">
+      <div><span class="mono">display 36/40</span> · KPIs grandes</div>
+      <div><span class="mono">h1 24/28</span> · títulos página</div>
+      <div><span class="mono">h2 18/24</span> · secciones</div>
+      <div><span class="mono">body 14/20</span> · default</div>
+      <div><span class="mono">small 13/18</span> · tabla</div>
+      <div><span class="mono">micro 11/14</span> · labels uppercase</div>
+      <div><span class="mono">tabular</span> · todos los $</div>
+      <div><span class="mono">weights</span> 400 / 500 / 600</div>
+    </div>
+  </div>
+</section>
+
+<div class="torn"></div>
+
+<!-- ============== 3. COMPONENTS ============== -->
+<section class="max-w-[1400px] mx-auto px-8 py-10">
+  <div class="mb-6">
+    <div class="scribble text-2xl muted">03</div>
+    <h2 class="hand text-3xl">Componentes base + variantes</h2>
+    <div class="anno mt-1">cada uno definido <span class="marker">una vez</span>. cuando una pantalla necesita una "variante", se nombra explícitamente.</div>
+  </div>
+
+  <!-- BUTTONS -->
+  <div class="sk p-5 mb-6">
+    <span class="pin">Button</span>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-2">
+      <div>
+        <div class="hand text-lg mb-2">jerarquía</div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn btn-primary">Primary action</button>
+          <button class="btn">Secondary</button>
+          <button class="btn btn-ghost">Ghost</button>
+          <button class="btn btn-danger">Destructive</button>
+        </div>
+        <div class="anno mt-3">↑ 1 primary por pantalla. Destructive sólo en confirmaciones.</div>
+      </div>
+      <div>
+        <div class="hand text-lg mb-2">tamaños · estados</div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn btn-primary" style="padding:3px 10px;font-size:13px">sm</button>
+          <button class="btn btn-primary">md (default)</button>
+          <button class="btn btn-primary" style="padding:9px 18px;font-size:16px">lg</button>
+          <button class="btn btn-primary opacity-50 cursor-not-allowed">disabled</button>
+          <button class="btn btn-primary">⏳ loading…</button>
+        </div>
+        <div class="anno mt-3">loading state visible es <span class="marker-blue">crítico</span>: latencia google.script.run 200ms-2s</div>
+      </div>
+      <div>
+        <div class="hand text-lg mb-2">variantes con icono</div>
+        <div class="flex flex-wrap gap-2 items-center">
+          <button class="btn">＋ Nuevo cliente</button>
+          <button class="btn btn-primary">Generar billing →</button>
+          <button class="btn btn-ghost">⋯</button>
+          <button class="btn">⬇ Excel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INPUTS -->
+  <div class="sk p-5 mb-6">
+    <span class="pin">Input · Select · Search</span>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-2">
+      <div>
+        <label class="hand text-sm muted block mb-1">Nombre del cliente</label>
+        <div class="sk-thick px-3 py-2 hand">Copa Airlines</div>
+      </div>
+      <div>
+        <label class="hand text-sm muted block mb-1">Período</label>
+        <div class="sk-thick px-3 py-2 hand flex justify-between items-center">
+          <span>Abril 2026</span><span class="muted">▾</span>
+        </div>
+      </div>
+      <div>
+        <label class="hand text-sm muted block mb-1">Buscar plan…</label>
+        <div class="sk-thick px-3 py-2 hand flex gap-2 items-center">
+          <span class="muted">⌕</span><span class="muted">campaign Q2…</span>
+        </div>
+      </div>
+      <div>
+        <label class="hand text-sm muted block mb-1">Inversión real (USD)</label>
+        <div class="sk-thick px-3 py-2 hand mono flex justify-between items-center" style="border-color:#1d4ed8;background:#eff6ff">
+          <span>$ 24,500.00</span><span class="text-blue-700 text-xs">focused</span>
+        </div>
+      </div>
+      <div>
+        <label class="hand text-sm muted block mb-1">CPA estimado</label>
+        <div class="sk-thick px-3 py-2 hand mono flex justify-between items-center" style="border-color:#b91c1c;background:#fef2f2">
+          <span>—</span><span class="text-red-700 text-xs">requerido</span>
+        </div>
+        <div class="anno mt-1 text-red-700">Este campo es obligatorio</div>
+      </div>
+      <div>
+        <label class="hand text-sm muted block mb-1">Notas</label>
+        <div class="sk-thick px-3 py-2 hand muted h-16">Textarea (multi-line)…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CARDS -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- KPI Card -->
+    <div class="sk p-5">
+      <span class="pin">KPI Card</span>
+      <div class="grid grid-cols-2 gap-3 mt-2">
+        <div class="kpi">
+          <div class="text-xs uppercase tracking-wider muted mb-1 hand">Facturado YTD</div>
+          <div class="mono text-3xl font-semibold ink leading-none">$2.4M</div>
+          <div class="flex items-end justify-between mt-2">
+            <div class="hand text-sm" style="color:#15803d">↑ 12.4%</div>
+            <svg width="60" height="20" viewBox="0 0 60 20"><polyline points="0,15 10,12 20,14 30,8 40,10 50,5 60,3" fill="none" stroke="#15803d" stroke-width="1.5"/></svg>
+          </div>
+        </div>
+        <div class="kpi">
+          <div class="text-xs uppercase tracking-wider muted mb-1 hand">Pendiente</div>
+          <div class="mono text-3xl font-semibold ink leading-none">$840K</div>
+          <div class="flex items-end justify-between mt-2">
+            <div class="hand text-sm" style="color:#92400e">↓ 4.1%</div>
+            <svg width="60" height="20" viewBox="0 0 60 20"><polyline points="0,5 10,7 20,6 30,10 40,9 50,12 60,15" fill="none" stroke="#92400e" stroke-width="1.5"/></svg>
+          </div>
+        </div>
+        <div class="kpi" style="background:#1c1917;color:#fafaf9;border-color:#1c1917">
+          <div class="text-xs uppercase tracking-wider mb-1 hand" style="color:#a8a29e">% avance año</div>
+          <div class="mono text-3xl font-semibold leading-none">68%</div>
+          <div class="mt-3 h-2 rounded-full" style="background:#44403c">
+            <div class="h-2 rounded-full" style="width:68%;background:#fafaf9"></div>
+          </div>
+        </div>
+        <div class="kpi" style="border-style:dashed;background:#fafaf9">
+          <div class="hand text-sm muted">— estado vacío —</div>
+          <div class="mono text-3xl font-semibold muted leading-none mt-1">— —</div>
+          <div class="anno mt-2">sin datos para el rango</div>
+        </div>
+      </div>
+      <div class="anno mt-3">variantes: <span class="marker">default · inverted (KPI hero) · empty · loading skeleton</span></div>
+    </div>
+
+    <!-- Generic card / panel -->
+    <div class="sk p-5">
+      <span class="pin">Panel / Section Card</span>
+      <div class="kpi mt-2">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <div class="hand text-lg ink">Inversión por publisher</div>
+            <div class="anno">últimos 12 meses</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn" style="padding:3px 10px;font-size:13px">YTD</button>
+            <button class="btn btn-primary" style="padding:3px 10px;font-size:13px">12m</button>
+            <button class="btn" style="padding:3px 10px;font-size:13px">Custom</button>
+          </div>
+        </div>
+        <div id="chart-publishers" style="height:160px"></div>
+        <div class="flex flex-wrap gap-3 mt-3 hand text-sm">
+          <span class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded-sm" style="background:#3a86ff"></span>YouTube</span>
+          <span class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded-sm" style="background:#1c1917"></span>Meta</span>
+          <span class="flex items-center gap-2"><span class="w-3 h-3 inline-block rounded-sm" style="background:#a8a29e"></span>TikTok</span>
+        </div>
+      </div>
+      <div class="anno mt-3">variantes: <span class="marker">con header · sin header · con tabs · con footer de leyenda</span></div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="sk p-5 mb-6">
+    <span class="pin">Table</span>
+    <div class="flex items-center justify-between mt-2 mb-3">
+      <div class="hand text-lg">Resumen por cliente</div>
+      <div class="flex gap-2">
+        <div class="sk-thick px-3 py-1 hand text-sm flex gap-2 items-center"><span class="muted">⌕</span><span class="muted">buscar…</span></div>
+        <button class="btn" style="padding:3px 10px;font-size:13px">⚙ columnas</button>
+      </div>
+    </div>
+    <table class="sk-table">
+      <thead>
+        <tr>
+          <th>Cliente <span class="muted">↕</span></th>
+          <th>Proyectos</th>
+          <th>Facturado <span class="muted">↓</span></th>
+          <th>Pendiente</th>
+          <th>% avance</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Cliente Aviación</td>
+          <td>4</td>
+          <td class="mono">$1,240,000</td>
+          <td class="mono">$320,000</td>
+          <td>
+            <div class="flex items-center gap-2">
+              <div class="w-20 h-1.5 rounded-full bg-stone-200"><div class="h-1.5 rounded-full bg-stone-900" style="width:78%"></div></div>
+              <span class="hand text-sm">78%</span>
+            </div>
+          </td>
+          <td><span class="badge badge-success">activo</span></td>
+          <td class="muted">⋯</td>
+        </tr>
+        <tr>
+          <td>Cliente QSR</td>
+          <td>2</td>
+          <td class="mono">$680,000</td>
+          <td class="mono">$210,000</td>
+          <td>
+            <div class="flex items-center gap-2">
+              <div class="w-20 h-1.5 rounded-full bg-stone-200"><div class="h-1.5 rounded-full bg-stone-900" style="width:54%"></div></div>
+              <span class="hand text-sm">54%</span>
+            </div>
+          </td>
+          <td><span class="badge badge-success">activo</span></td>
+          <td class="muted">⋯</td>
+        </tr>
+        <tr>
+          <td>Cliente Edu/Media</td>
+          <td>3</td>
+          <td class="mono">$480,000</td>
+          <td class="mono">$310,000</td>
+          <td>
+            <div class="flex items-center gap-2">
+              <div class="w-20 h-1.5 rounded-full bg-stone-200"><div class="h-1.5 rounded-full bg-stone-900" style="width:42%"></div></div>
+              <span class="hand text-sm">42%</span>
+            </div>
+          </td>
+          <td><span class="badge badge-warning">en revisión</span></td>
+          <td class="muted">⋯</td>
+        </tr>
+        <tr style="background:#fafaf9">
+          <td><b>Total</b></td>
+          <td>9</td>
+          <td class="mono"><b>$2,400,000</b></td>
+          <td class="mono"><b>$840,000</b></td>
+          <td colspan="3"></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="flex items-center justify-between mt-3">
+      <div class="anno">3 de 3 · ordenable · filtrable por columna · acciones por fila</div>
+      <div class="flex gap-1">
+        <button class="btn" style="padding:3px 10px;font-size:13px">‹</button>
+        <button class="btn btn-primary" style="padding:3px 10px;font-size:13px">1</button>
+        <button class="btn" style="padding:3px 10px;font-size:13px">2</button>
+        <button class="btn" style="padding:3px 10px;font-size:13px">›</button>
+      </div>
+    </div>
+    <div class="anno mt-3">variantes tabla: <span class="marker">default · editable (gastos reales) · con totales · con sub-rows expandibles</span></div>
+  </div>
+
+  <!-- BADGES + STATES + TABS -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="sk p-5">
+      <span class="pin">Badge</span>
+      <div class="flex flex-wrap gap-2 mt-2">
+        <span class="badge badge-success">● activo</span>
+        <span class="badge badge-warning">● en revisión</span>
+        <span class="badge badge-danger">● vencido</span>
+        <span class="badge badge-info">● borrador</span>
+        <span class="badge badge-muted">● archivado</span>
+        <span class="badge">v2.3 vigente</span>
+        <span class="badge">YouTube</span>
+        <span class="badge">Meta</span>
+      </div>
+      <div class="anno mt-3">5 estados semánticos + neutral para tags</div>
+    </div>
+    <div class="sk p-5">
+      <span class="pin">Tabs</span>
+      <div class="flex gap-1 mt-2">
+        <div class="tab active">Plan de Medios</div>
+        <div class="tab">Gastos Reales</div>
+        <div class="tab">Billing</div>
+        <div class="tab">Histórico</div>
+      </div>
+      <div class="border-t-2 border-stone-900 mb-3"></div>
+      <div class="anno">tabs en Vista de Proyecto · cambia el contenido del panel inferior</div>
+    </div>
+    <div class="sk p-5">
+      <span class="pin">Toast</span>
+      <div class="sk-thick p-3 flex gap-3 items-start mt-2">
+        <span class="text-xl" style="color:#15803d">✓</span>
+        <div>
+          <div class="hand">Billing generado</div>
+          <div class="anno">Abril 2026 · Cliente Aviación · descargar Excel</div>
+        </div>
+        <span class="muted text-xl">×</span>
+      </div>
+      <div class="sk-thick p-3 flex gap-3 items-start mt-2" style="background:#fef2f2;border-color:#b91c1c">
+        <span class="text-xl text-red-700">!</span>
+        <div>
+          <div class="hand">Error al parsear Excel</div>
+          <div class="anno">Línea 23: columna "NET TOTAL" vacía</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADING / EMPTY / ERROR -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <div class="sk p-5">
+      <span class="pin">Loading skeleton</span>
+      <div class="space-y-2 mt-2 animate-pulse">
+        <div class="h-3 bg-stone-200 rounded w-2/3"></div>
+        <div class="h-8 bg-stone-200 rounded w-1/2"></div>
+        <div class="h-3 bg-stone-200 rounded w-1/3"></div>
+        <div class="h-24 bg-stone-100 rounded mt-3"></div>
+      </div>
+      <div class="anno mt-3">crítico para google.script.run · evita layout shift</div>
+    </div>
+    <div class="sk p-5 flex flex-col items-center justify-center text-center" style="min-height:180px">
+      <span class="pin">Empty state</span>
+      <div class="w-12 h-12 rounded-full sk-soft flex items-center justify-center text-2xl mb-2 mt-3">∅</div>
+      <div class="hand text-lg">Sin planes cargados</div>
+      <div class="anno mb-2">Subí un Excel desde la carpeta de Drive del proyecto.</div>
+      <button class="btn btn-primary" style="padding:4px 12px;font-size:14px">＋ Cargar plan</button>
+    </div>
+    <div class="sk p-5 flex flex-col items-center justify-center text-center" style="min-height:180px;background:#fef2f2;border-color:#b91c1c">
+      <span class="pin">Error state</span>
+      <div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl mb-2 mt-3" style="background:#fecaca;color:#991b1b">!</div>
+      <div class="hand text-lg" style="color:#991b1b">No pudimos conectar con Supabase</div>
+      <div class="anno mb-2">Reintentá en unos segundos. Si persiste, contactá a admin.</div>
+      <button class="btn" style="padding:4px 12px;font-size:14px">↻ Reintentar</button>
+    </div>
+  </div>
+
+  <!-- MODAL -->
+  <div class="sk p-5">
+    <span class="pin">Modal · destructiva</span>
+    <div class="mt-2 relative" style="background:#f5f5f4;border-radius:8px;padding:24px">
+      <div class="sk-thick p-5 max-w-md mx-auto" style="background:#fff">
+        <div class="hand text-lg mb-1">¿Eliminar Cliente Aviación?</div>
+        <div class="anno mb-4">Esta acción borra 4 proyectos, 12 planes vigentes y 38 billings históricos. <span class="marker-pink">No se puede deshacer.</span></div>
+        <div class="sk-soft p-2 mb-4">
+          <div class="anno">Escribí <span class="mono ink">eliminar</span> para confirmar</div>
+          <div class="sk-thick px-2 py-1 mt-1 hand muted">eliminar_</div>
+        </div>
+        <div class="flex justify-end gap-2">
+          <button class="btn">Cancelar</button>
+          <button class="btn btn-danger">Sí, eliminar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="torn"></div>
+
+<!-- ============== 4. DENSITY VARIANTS ============== -->
+<section class="max-w-[1400px] mx-auto px-8 py-10">
+  <div class="mb-6">
+    <div class="scribble text-2xl muted">04</div>
+    <h2 class="hand text-3xl">Densidad — densa vs aireada</h2>
+    <div class="anno mt-1">misma data en KPIs + tabla. <span class="marker">elegí una</span> antes de pasar al Dashboard.</div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 responsive-grid">
+    <!-- DENSE -->
+    <div class="sk p-4">
+      <span class="pin">A · densa (Bloomberg/Pry)</span>
+      <div class="hand text-sm muted mt-2 mb-3">+30% más datos por pantalla · pad 8/12 · text 13px · row height 32px</div>
+      <div class="grid grid-cols-4 gap-2 mb-3">
+        <div class="kpi" style="padding:8px 10px">
+          <div class="text-[10px] uppercase tracking-wider muted">Facturado YTD</div>
+          <div class="mono text-xl font-semibold ink leading-tight">$2.4M</div>
+          <div class="text-[11px]" style="color:#15803d">↑ 12.4%</div>
+        </div>
+        <div class="kpi" style="padding:8px 10px">
+          <div class="text-[10px] uppercase tracking-wider muted">Pendiente</div>
+          <div class="mono text-xl font-semibold ink leading-tight">$840K</div>
+          <div class="text-[11px]" style="color:#92400e">↓ 4.1%</div>
+        </div>
+        <div class="kpi" style="padding:8px 10px">
+          <div class="text-[10px] uppercase tracking-wider muted">Inversión gestionada</div>
+          <div class="mono text-xl font-semibold ink leading-tight">$5.8M</div>
+          <div class="text-[11px]" style="color:#15803d">↑ 8.2%</div>
+        </div>
+        <div class="kpi" style="padding:8px 10px">
+          <div class="text-[10px] uppercase tracking-wider muted">% avance año</div>
+          <div class="mono text-xl font-semibold ink leading-tight">68%</div>
+          <div class="h-1 rounded-full bg-stone-200 mt-1"><div class="h-1 rounded-full bg-stone-900" style="width:68%"></div></div>
+        </div>
+      </div>
+      <table class="sk-table" style="font-size:12px">
+        <thead><tr><th>Cliente</th><th>Proy</th><th>Fact.</th><th>Pend.</th><th>%</th><th>St</th></tr></thead>
+        <tbody>
+          <tr><td>Cliente Aviación</td><td>4</td><td class="mono">$1.24M</td><td class="mono">$320K</td><td>78%</td><td>●</td></tr>
+          <tr><td>Cliente QSR</td><td>2</td><td class="mono">$680K</td><td class="mono">$210K</td><td>54%</td><td>●</td></tr>
+          <tr><td>Cliente Edu/Media</td><td>3</td><td class="mono">$480K</td><td class="mono">$310K</td><td>42%</td><td>◐</td></tr>
+          <tr><td>Cliente Retail</td><td>1</td><td class="mono">$220K</td><td class="mono">$80K</td><td>61%</td><td>●</td></tr>
+          <tr><td>Cliente B2B Saas</td><td>2</td><td class="mono">$340K</td><td class="mono">$140K</td><td>47%</td><td>●</td></tr>
+        </tbody>
+      </table>
+      <div class="anno mt-3">✓ <span class="marker-blue">analista power-user</span> ve más sin scroll. ✗ percibido como “pesado”, peor en mobile.</div>
+    </div>
+
+    <!-- AIRY -->
+    <div class="sk p-4">
+      <span class="pin">B · aireada (Linear/Vercel)</span>
+      <div class="hand text-sm muted mt-2 mb-3">whitespace generoso · pad 16/20 · text 14-16px · row height 48px</div>
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <div class="kpi" style="padding:18px 20px">
+          <div class="text-xs uppercase tracking-wider muted mb-1">Facturado YTD</div>
+          <div class="mono text-3xl font-semibold ink leading-none">$2.4M</div>
+          <div class="text-sm mt-2" style="color:#15803d">↑ 12.4% vs Q1</div>
+        </div>
+        <div class="kpi" style="padding:18px 20px">
+          <div class="text-xs uppercase tracking-wider muted mb-1">Pendiente</div>
+          <div class="mono text-3xl font-semibold ink leading-none">$840K</div>
+          <div class="text-sm mt-2" style="color:#92400e">↓ 4.1% vs Q1</div>
+        </div>
+      </div>
+      <table class="sk-table">
+        <thead><tr><th>Cliente</th><th>Facturado</th><th>% avance</th><th>Estado</th></tr></thead>
+        <tbody>
+          <tr><td style="padding:14px 10px">Cliente Aviación</td><td class="mono">$1,240,000</td><td>78%</td><td><span class="badge badge-success">activo</span></td></tr>
+          <tr><td style="padding:14px 10px">Cliente QSR</td><td class="mono">$680,000</td><td>54%</td><td><span class="badge badge-success">activo</span></td></tr>
+          <tr><td style="padding:14px 10px">Cliente Edu/Media</td><td class="mono">$480,000</td><td>42%</td><td><span class="badge badge-warning">en revisión</span></td></tr>
+        </tbody>
+      </table>
+      <div class="anno mt-3">✓ <span class="marker-green">presentable a clientes</span>, escaneo rápido. ✗ scroll constante en pantallas con mucha info (plan de medios).</div>
+    </div>
+  </div>
+
+  <div class="anno mt-4 max-w-3xl">
+    <span class="scribble text-xl ink">mi recomendación:</span> <span class="marker-blue">híbrido controlado</span> — densidad <b>aireada</b> en Dashboard / Cliente / Billing (lo que se muestra a clientes), <b>densa</b> en tablas operativas (Plan de Medios, Gastos Reales). Mismo sistema, dos densidades por contexto.
+  </div>
+</section>
+
+<div class="torn"></div>
+
+<!-- ============== 5. SIDEBAR VARIANTS ============== -->
+<section class="max-w-[1400px] mx-auto px-8 py-10">
+  <div class="mb-6">
+    <div class="scribble text-2xl muted">05</div>
+    <h2 class="hand text-3xl">Sidebar — fija vs colapsable</h2>
+    <div class="anno mt-1">7 secciones: Dashboard · Clientes · Proyectos · Planes · Gastos · Billing · Configuración</div>
+  </div>
+
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 responsive-grid">
+
+    <!-- SIDEBAR A: FIXED -->
+    <div class="sk p-3">
+      <span class="pin">A · fija (240px, siempre visible)</span>
+      <div class="flex gap-3 mt-2" style="height:380px">
+        <aside class="sk-thick p-3" style="width:200px;background:#fafaf9">
+          <div class="hand text-sm font-semibold mb-3 px-2">Copa<span class="muted">·</span>OS</div>
+          <nav class="space-y-1 text-sm">
+            <div class="nav-item active">▦ Dashboard</div>
+            <div class="nav-item">◉ Clientes</div>
+            <div class="nav-item">▤ Proyectos</div>
+            <div class="nav-item">⊞ Planes de Medios</div>
+            <div class="nav-item">∑ Gastos</div>
+            <div class="nav-item">⎙ Billing</div>
+            <div class="border-t border-dashed border-stone-300 my-2"></div>
+            <div class="nav-item">⚙ Configuración</div>
+          </nav>
+          <div class="absolute bottom-3 left-3 right-3" style="position:relative;margin-top:18px">
+            <div class="sk-soft p-2 flex items-center gap-2">
+              <div class="w-7 h-7 rounded-full bg-stone-300"></div>
+              <div class="hand text-xs">tu nombre<br/><span class="muted">admin</span></div>
+            </div>
+          </div>
+        </aside>
+        <div class="flex-1 sk-soft p-3">
+          <div class="anno">contenido (~1180px disponibles)</div>
+          <div class="grid grid-cols-3 gap-2 mt-2">
+            <div class="stripes h-16 rounded"></div>
+            <div class="stripes h-16 rounded"></div>
+            <div class="stripes h-16 rounded"></div>
+          </div>
+          <div class="stripes h-32 rounded mt-2"></div>
+          <div class="stripes h-20 rounded mt-2"></div>
+        </div>
+      </div>
+      <div class="anno mt-3">✓ navegación visible siempre. ✗ -200px de canvas (notable en plan de medios y gastos).</div>
+    </div>
+
+    <!-- SIDEBAR B: COLLAPSIBLE -->
+    <div class="sk p-3">
+      <span class="pin">B · colapsable (icon-only, 56px → 200px hover)</span>
+      <div class="flex gap-3 mt-2" style="height:380px">
+        <aside class="sk-thick p-2 flex flex-col items-center" style="width:56px;background:#1c1917;color:#fafaf9">
+          <div class="w-8 h-8 rounded bg-stone-50 text-stone-900 flex items-center justify-center hand text-sm mb-3">C</div>
+          <div class="space-y-2 mt-2 text-lg w-full text-center">
+            <div class="py-1 rounded" style="background:#44403c">▦</div>
+            <div class="py-1 muted">◉</div>
+            <div class="py-1 muted">▤</div>
+            <div class="py-1 muted">⊞</div>
+            <div class="py-1 muted">∑</div>
+            <div class="py-1 muted">⎙</div>
+          </div>
+          <div class="mt-auto py-1 muted">⚙</div>
+          <div class="w-7 h-7 rounded-full bg-stone-500 mt-2"></div>
+        </aside>
+        <div class="flex-1 sk-soft p-3 relative">
+          <!-- Hover preview -->
+          <div class="absolute top-3 left-2 sk-thick p-3" style="width:180px;background:#1c1917;color:#fafaf9;border-color:#1c1917;z-index:5">
+            <div class="hand text-xs muted mb-2 px-2">▦ NAVEGACIÓN</div>
+            <div class="space-y-1 text-sm">
+              <div class="nav-item active" style="background:#3a86ff;color:#fff">▦ Dashboard</div>
+              <div class="nav-item" style="color:#fafaf9">◉ Clientes</div>
+              <div class="nav-item" style="color:#fafaf9">▤ Proyectos</div>
+              <div class="nav-item" style="color:#fafaf9">⊞ Planes</div>
+              <div class="nav-item" style="color:#fafaf9">∑ Gastos</div>
+              <div class="nav-item" style="color:#fafaf9">⎙ Billing</div>
+            </div>
+          </div>
+          <div class="ml-44">
+            <div class="anno">contenido (~1340px disponibles cuando colapsada)</div>
+            <div class="grid grid-cols-4 gap-2 mt-2">
+              <div class="stripes h-16 rounded"></div>
+              <div class="stripes h-16 rounded"></div>
+              <div class="stripes h-16 rounded"></div>
+              <div class="stripes h-16 rounded"></div>
+            </div>
+            <div class="stripes h-32 rounded mt-2"></div>
+          </div>
+        </div>
+      </div>
+      <div class="anno mt-3">✓ +160px canvas. ✓ icono-only se mantiene oscuro como “app shell”. ✗ requiere memoria de iconos (mitigable con tooltips).</div>
+    </div>
+  </div>
+
+  <div class="anno mt-4 max-w-3xl">
+    <span class="scribble text-xl ink">mi recomendación:</span> <span class="marker-blue">colapsable</span> con preferencia persistida en localStorage. Por defecto expandida en escritorio &gt;1280px, colapsada por defecto bajo 1280. Toggle manual en topbar.
+  </div>
+</section>
+
+<div class="torn"></div>
+
+<!-- ============== 6. NAV FLOW ============== -->
+<section class="max-w-[1400px] mx-auto px-8 py-10">
+  <div class="mb-6">
+    <div class="scribble text-2xl muted">06</div>
+    <h2 class="hand text-3xl">Flujo de navegación entre las 8 pantallas</h2>
+    <div class="anno mt-1">no es definitivo — sirve para validar que las pantallas pedidas conectan bien</div>
+  </div>
+
+  <div class="sk p-6 relative" style="min-height:420px">
+    <svg viewBox="0 0 1280 400" class="w-full" style="height:400px">
+      <!-- arrows -->
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="#78716c"/>
+        </marker>
+      </defs>
+
+      <!-- Dashboard -->
+      <g transform="translate(40,160)">
+        <rect width="180" height="80" rx="6" fill="#fff" stroke="#1c1917" stroke-width="1.5"/>
+        <text x="90" y="28" text-anchor="middle" font-family="Kalam" font-size="16" font-weight="700">1. Dashboard</text>
+        <text x="90" y="52" text-anchor="middle" font-family="Kalam" font-size="12" fill="#78716c">KPIs · barras · tabla</text>
+        <text x="90" y="68" text-anchor="middle" font-family="Kalam" font-size="12" fill="#78716c">por cliente</text>
+      </g>
+
+      <!-- Cliente -->
+      <g transform="translate(290,80)">
+        <rect width="170" height="74" rx="6" fill="#fff" stroke="#1c1917" stroke-width="1.5"/>
+        <text x="85" y="28" text-anchor="middle" font-family="Kalam" font-size="15" font-weight="700">2. Cliente</text>
+        <text x="85" y="50" text-anchor="middle" font-family="Kalam" font-size="12" fill="#78716c">drill-down + KPIs</text>
+        <text x="85" y="64" text-anchor="middle" font-family="Kalam" font-size="12" fill="#78716c">+ proyectos</text>
+      </g>
+
+      <!-- Proyecto -->
+      <g transform="translate(530,160)">
+        <rect width="200" height="80" rx="6" fill="#fff" stroke="#1c1917" stroke-width="2" filter="drop-shadow(2px 2px 0 rgba(0,0,0,0.1))"/>
+        <text x="100" y="26" text-anchor="middle" font-family="Kalam" font-size="16" font-weight="700">3. Proyecto</text>
+        <text x="100" y="46" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">tabs: Plan / Gastos /</text>
+        <text x="100" y="60" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">Billing / Histórico</text>
+        <text x="100" y="76" text-anchor="middle" font-family="Caveat" font-size="14" fill="#3a86ff">★ pantalla más compleja</text>
+      </g>
+
+      <!-- Publisher (lateral) -->
+      <g transform="translate(290,260)">
+        <rect width="170" height="74" rx="6" fill="#fff" stroke="#1c1917" stroke-width="1.5" stroke-dasharray="4,3"/>
+        <text x="85" y="28" text-anchor="middle" font-family="Kalam" font-size="15" font-weight="700">8. Publisher</text>
+        <text x="85" y="50" text-anchor="middle" font-family="Kalam" font-size="12" fill="#78716c">drawer lateral</text>
+        <text x="85" y="64" text-anchor="middle" font-family="Kalam" font-size="12" fill="#78716c">desde tabla</text>
+      </g>
+
+      <!-- Carga Plan -->
+      <g transform="translate(800,40)">
+        <rect width="190" height="72" rx="6" fill="#fff" stroke="#1c1917" stroke-width="1.5"/>
+        <text x="95" y="26" text-anchor="middle" font-family="Kalam" font-size="15" font-weight="700">5. Carga Plan</text>
+        <text x="95" y="48" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">parsear Excel · diff vs</text>
+        <text x="95" y="62" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">versión anterior</text>
+      </g>
+
+      <!-- Gastos -->
+      <g transform="translate(800,135)">
+        <rect width="190" height="72" rx="6" fill="#fff" stroke="#1c1917" stroke-width="1.5"/>
+        <text x="95" y="26" text-anchor="middle" font-family="Kalam" font-size="15" font-weight="700">6. Gastos Reales</text>
+        <text x="95" y="48" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">grilla mensual</text>
+        <text x="95" y="62" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">editable</text>
+      </g>
+
+      <!-- Billing -->
+      <g transform="translate(800,230)">
+        <rect width="190" height="72" rx="6" fill="#fff" stroke="#1c1917" stroke-width="1.5"/>
+        <text x="95" y="26" text-anchor="middle" font-family="Kalam" font-size="15" font-weight="700">7. Generador Billing</text>
+        <text x="95" y="48" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">líneas + fees · preview</text>
+        <text x="95" y="62" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">excel</text>
+      </g>
+
+      <!-- Clientes CRUD -->
+      <g transform="translate(800,320)">
+        <rect width="190" height="60" rx="6" fill="#fff" stroke="#1c1917" stroke-width="1.5"/>
+        <text x="95" y="26" text-anchor="middle" font-family="Kalam" font-size="15" font-weight="700">4. Clientes (CRUD)</text>
+        <text x="95" y="46" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">cards · modal/drawer</text>
+      </g>
+
+      <!-- Sidebar nav node -->
+      <g transform="translate(1060,160)">
+        <rect width="160" height="80" rx="6" fill="#fafaf9" stroke="#78716c" stroke-width="1.5" stroke-dasharray="3,3"/>
+        <text x="80" y="28" text-anchor="middle" font-family="Caveat" font-size="18" fill="#78716c">sidebar</text>
+        <text x="80" y="50" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">acceso directo</text>
+        <text x="80" y="64" text-anchor="middle" font-family="Kalam" font-size="11" fill="#78716c">a 5/6/7 también</text>
+      </g>
+
+      <!-- Arrows -->
+      <path class="arrow" marker-end="url(#arrow)" d="M220 190 C 250 130, 270 110, 290 110"/>
+      <path class="arrow" marker-end="url(#arrow)" d="M460 110 C 500 130, 510 160, 530 180"/>
+      <path class="arrow" marker-end="url(#arrow)" d="M220 200 L 290 290"/>
+      <path class="arrow" marker-end="url(#arrow)" d="M730 180 C 770 100, 780 80, 800 75"/>
+      <path class="arrow" marker-end="url(#arrow)" d="M730 195 L 800 165"/>
+      <path class="arrow" marker-end="url(#arrow)" d="M730 220 L 800 255"/>
+      <path class="arrow" marker-end="url(#arrow)" d="M460 290 L 530 220"/>
+      <path class="arrow" marker-end="url(#arrow)" d="M730 235 L 800 340"/>
+      <path class="arrow" marker-end="url(#arrow)" stroke-dasharray="4,3" d="M1060 195 L 990 175"/>
+      <path class="arrow" marker-end="url(#arrow)" stroke-dasharray="4,3" d="M1060 205 L 990 250"/>
+
+      <text x="245" y="135" font-family="Caveat" font-size="14" fill="#78716c">click cliente</text>
+      <text x="475" y="135" font-family="Caveat" font-size="14" fill="#78716c">click proyecto</text>
+      <text x="345" y="240" font-family="Caveat" font-size="14" fill="#78716c">click publisher</text>
+      <text x="755" y="100" font-family="Caveat" font-size="14" fill="#78716c">tab Plan</text>
+      <text x="755" y="155" font-family="Caveat" font-size="14" fill="#78716c">tab Gastos</text>
+      <text x="755" y="245" font-family="Caveat" font-size="14" fill="#78716c">tab Billing</text>
+    </svg>
+  </div>
+</section>
+
+<div class="torn"></div>
+
+<!-- ============== 7. NEXT STEPS ============== -->
+<section class="max-w-[1400px] mx-auto px-8 py-10 pb-32">
+  <div class="mb-6">
+    <div class="scribble text-2xl muted">07</div>
+    <h2 class="hand text-3xl">Próximos pasos &amp; preguntas abiertas</h2>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="sk p-5">
+      <span class="pin">decisiones que necesito de vos</span>
+      <ol class="hand space-y-2 mt-3 list-decimal pl-5">
+        <li><b>Paleta:</b> A · B · C · D · o mezcla. <span class="anno">(actual tweak: accent #3a86ff → encaja en D y A)</span></li>
+        <li><b>Tipografía:</b> Inter · Geist · IBM Plex · u otra.</li>
+        <li><b>Densidad:</b> ¿OK con el híbrido (aireada en presentación / densa en operativas)?</li>
+        <li><b>Sidebar:</b> ¿OK con colapsable + preferencia persistida?</li>
+        <li><b>Datos en wireframes:</b> ¿usamos nombres genéricos como "Cliente Aviación / QSR / Edu" o prefieres iniciales (CA, CK, VT)?</li>
+      </ol>
+    </div>
+
+    <div class="sk p-5">
+      <span class="pin">preguntas abiertas (no bloqueantes)</span>
+      <ul class="hand space-y-2 mt-3 list-disc pl-5">
+        <li>¿Multi-moneda? Los KPIs son en USD pero los billings podrían ser en otra moneda.</li>
+        <li>¿Roles? Confirmaste que no — pero ¿hay algún control de "sólo un usuario edita gastos"? (concurrent editing en Apps Script es delicado)</li>
+        <li>¿El histórico de versiones del plan se accede sólo desde la tab del proyecto, o también necesita una pantalla global?</li>
+        <li>¿El módulo de Configuración cubre qué? (templates de fees, tipo de cambio, integraciones Drive…) — no estaba en la lista de pantallas pero está en sidebar.</li>
+        <li>Mobile: ¿prioridad alta, media o "nice to have"?</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="sk-soft p-5 mt-6">
+    <div class="scribble text-2xl ink mb-2">si confirmás dirección, el siguiente entregable es:</div>
+    <ol class="hand list-decimal pl-5 space-y-1">
+      <li><b>Dashboard principal</b> en lo-fi con 3 layouts distintos (jerarquía de KPIs, dónde va el chart, cómo se ordena la tabla).</li>
+      <li>Ya con el sistema aplicado: tipografía, paleta, densidad, sidebar elegidos.</li>
+      <li>Después: Vista de Proyecto (la más compleja), 2-3 layouts del manejo de tabs.</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ============== TWEAKS PANEL ============== -->
+<div id="tweaks-root"></div>
+
+<script>
+  // Apply accent from tweaks
+  const TWEAKS = /*EDITMODE-BEGIN*/{
+    "accent": "#3a86ff",
+    "clientsVariant": "marquee"
+  }/*EDITMODE-END*/;
+  document.documentElement.style.setProperty('--accent', TWEAKS.accent);
+
+  // Inline tweaks panel (the system shows toolbar toggle when __edit_mode_available is posted)
+  (function () {
+    let active = false;
+    let panel = null;
+
+    function buildPanel() {
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;bottom:20px;right:20px;width:280px;background:#fff;border:1.5px solid #1c1917;border-radius:8px;box-shadow:3px 3px 0 rgba(0,0,0,0.12);padding:14px;font-family:Kalam,cursive;z-index:99999';
+      el.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+          <div style="font-family:Caveat,cursive;font-size:20px">Tweaks</div>
+          <button id="tw-close" style="background:none;border:none;font-size:18px;cursor:pointer">×</button>
+        </div>
+        <div style="font-size:13px;color:#78716c;margin-bottom:6px">Accent</div>
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          ${['#3a86ff','#0d6e4f','#4338ca','#1c1917'].map(c => `<button data-c="${c}" style="width:34px;height:34px;border-radius:6px;border:1.5px solid #1c1917;background:${c};cursor:pointer"></button>`).join('')}
+        </div>
+        <div style="font-size:13px;color:#78716c;margin-bottom:6px">Clients section variant</div>
+        <select id="tw-cv" style="width:100%;padding:6px;border:1.5px solid #1c1917;border-radius:6px;font-family:Kalam,cursive">
+          <option value="marquee">marquee</option>
+          <option value="grid">grid</option>
+          <option value="list">list</option>
+        </select>
+        <div style="font-size:11px;color:#a8a29e;margin-top:10px">Estos tweaks son sólo para el archivo de foundations. Las pantallas reales tendrán los suyos.</div>
+      `;
+      el.querySelector('#tw-close').addEventListener('click', dismiss);
+      el.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => {
+        const c = b.dataset.c;
+        document.documentElement.style.setProperty('--accent', c);
+        window.parent.postMessage({type:'__edit_mode_set_keys', edits:{accent:c}}, '*');
+      }));
+      el.querySelector('#tw-cv').value = TWEAKS.clientsVariant || 'marquee';
+      el.querySelector('#tw-cv').addEventListener('change', e => {
+        window.parent.postMessage({type:'__edit_mode_set_keys', edits:{clientsVariant:e.target.value}}, '*');
+      });
+      return el;
+    }
+
+    function activate() {
+      if (active) return;
+      active = true;
+      panel = buildPanel();
+      document.body.appendChild(panel);
+    }
+    function deactivate() {
+      if (!active) return;
+      active = false;
+      panel && panel.remove();
+      panel = null;
+    }
+    function dismiss() {
+      deactivate();
+      window.parent.postMessage({type:'__edit_mode_dismissed'}, '*');
+    }
+
+    window.addEventListener('message', (e) => {
+      if (!e.data || !e.data.type) return;
+      if (e.data.type === '__activate_edit_mode') activate();
+      else if (e.data.type === '__deactivate_edit_mode') deactivate();
+    });
+    window.parent.postMessage({type:'__edit_mode_available'}, '*');
+  })();
+
+  // ApexCharts demo for Panel section
+  document.addEventListener('DOMContentLoaded', () => {
+    const opt = {
+      chart: { type: 'bar', height: 160, toolbar: { show: false }, fontFamily: 'Kalam, cursive', animations: { speed: 400 } },
+      series: [
+        { name: 'YouTube', data: [12, 18, 15, 22, 28, 24, 30, 26, 32, 28, 34, 38] },
+        { name: 'Meta', data: [8, 10, 14, 12, 16, 18, 14, 20, 18, 22, 20, 24] },
+        { name: 'TikTok', data: [4, 6, 5, 8, 10, 9, 12, 14, 11, 13, 16, 18] },
+      ],
+      colors: ['#3a86ff', '#1c1917', '#a8a29e'],
+      plotOptions: { bar: { columnWidth: '60%', borderRadius: 2 } },
+      dataLabels: { enabled: false },
+      grid: { borderColor: '#e7e5e4', strokeDashArray: 3 },
+      xaxis: {
+        categories: ['M','A','M','J','J','A','S','O','N','D','E','F'],
+        labels: { style: { fontFamily: 'Kalam, cursive', colors: '#78716c' } },
+        axisBorder: { show: false }, axisTicks: { show: false },
+      },
+      yaxis: { labels: { style: { fontFamily: 'JetBrains Mono', colors: '#78716c', fontSize: '11px' }, formatter: v => '$' + v + 'K' } },
+      legend: { show: false },
+      tooltip: { theme: 'light', style: { fontFamily: 'Kalam, cursive' } },
+    };
+    const target = document.querySelector('#chart-publishers');
+    if (target && window.ApexCharts) new ApexCharts(target, opt).render();
+  });
+</script>
+
+</body>
+</html>
