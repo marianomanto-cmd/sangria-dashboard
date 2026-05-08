@@ -12,7 +12,9 @@ Lo que estamos construyendo es **Sangria Media OS**: la herramienta interna que 
 
 **Usuarios:** equipo interno de Sangria (planners, account managers, finance, dirección). NO es para clientes externos.
 
-**Diseño:** estética **editorial / archivística**, NO SaaS genérico. Inspiración: Linear + Notion + un periódico viejo. Fondo crema (`#f6f4ef`), tinta casi negra (`#19171a`), tipografía sobria, mucho espacio en blanco, casi cero color. Acento único: rojo Sangria (`#7a1820`) usado con extrema parquedad. Iconografía mínima, monoespaciada para cifras.
+**Diseño:** estética **editorial sobria**, NO SaaS genérico. Inspiración: Linear + Notion. Paleta de neutros **stone (warm)** + acento sangría/burgundy. Tipografía **Geist** (sans-serif) para todo el chrome y body, **JetBrains Mono** para cifras tabulares. Mucho espacio en blanco, densidad híbrida (aireada en presentación, densa en operativa). Fondo `#fafaf9`, tinta `#1c1917`. Acento único: sangría `#7a1f3d`, usado sólo en CTAs primarios, links activos y elementos de marca — **nunca en data-viz** (los gráficos usan ink + grises). Iconografía mínima con Lucide. **Cero emoji en UI.**
+
+> ⚠️ **Fuente de verdad del sistema:** los tokens y componentes salen de `index.html` (Round 02, sistema confirmado) y los mockups derivados (`Dashboard.html`, `Vista de Cliente.html`, `Vista de Proyecto.html`). El archivo `Foundations v1 (manuscrita).html` es la **versión descartada** del moodboard inicial (accent azul `#3a86ff`, tipografía cursiva, paper texture) — sirve para entender el proceso pero **no extraigas tokens de ahí**.
 
 ---
 
@@ -159,41 +161,62 @@ audit_log {
 
 ## 4 · Sistema de diseño (tokens y componentes)
 
-Extraé estos tokens del archivo `index.html` (pantalla de Foundations) y de los demás mockups:
+Estos tokens están extraídos de `index.html` (Round 02 — sistema confirmado) y se replican en `Dashboard.html`, `Vista de Cliente.html`, `Vista de Proyecto.html`. **Pegalos tal cual** en `globals.css` (o en el `@theme` de Tailwind v4):
 
 ```css
-/* Color */
---paper:    #f6f4ef;   /* fondo crema */
---paper-2:  #efebe1;   /* fondo soft */
---ink:      #19171a;   /* texto principal */
---ink-2:    #4d484f;   /* texto secundario */
---rule:     #d9d3c5;   /* borde / hairline */
---accent:   #7a1820;   /* rojo sangria — uso parco */
---success:  #2f6f4f;
---warn:     #b58220;
---danger:   #9b2c2c;
---info:     #2a5a83;
+:root {
+  /* Color — neutros stone (warm) + acento sangría */
+  --paper:        #fafaf9;   /* fondo principal */
+  --paper-2:      #f5f5f4;   /* fondo soft */
+  --line-soft:    #e7e5e4;   /* hairline interno (filas de tabla) */
+  --line:         #d6d3d1;   /* borde estándar (cards, inputs) */
+  --muted:        #78716c;   /* texto secundario, labels micro */
+  --ink-2:        #44403c;   /* texto cuerpo */
+  --ink:          #1c1917;   /* texto principal, sidebar dark */
 
-/* Type — Tailwind v4 syntax */
---font-display: 'Fraunces', 'Georgia', serif;   /* H1, números hero */
---font-body:    'Inter', system-ui, sans-serif;
---font-mono:    'JetBrains Mono', ui-monospace, monospace;
+  /* Acento sangría — uso parco: CTAs primarios, links activos, marca */
+  --accent:        #7a1f3d;
+  --accent-strong: #5e1730;
+  --accent-soft:   #f5e6ec;
+  --accent-violet: #8b2a52;  /* hover/activo sutil cuando hace falta variar del base */
 
-/* Radius */
---radius-sm: 4px;
---radius:    8px;
---radius-lg: 14px;
+  /* Estados semánticos */
+  --success: #15803d;  --success-soft: #dcfce7;
+  --warn:    #92400e;  --warn-soft:    #fef3c7;
+  --danger:  #b91c1c;  --danger-soft:  #fee2e2;
+  --info:    #1e40af;  --info-soft:    #dbeafe;
 
-/* Shadow */
---shadow-soft: 0 1px 2px rgba(25,23,26,.04), 0 8px 24px rgba(25,23,26,.04);
+  /* Tipografía */
+  --font-sans: 'Geist', ui-sans-serif, system-ui, sans-serif;   /* chrome, body, headings */
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;        /* cifras tabulares */
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius:    6px;   /* botones, inputs, badges */
+  --radius-lg: 10px;  /* cards, paneles */
+
+  /* Font features para Geist */
+  /* aplicar en html/body: font-feature-settings: "ss01", "cv11"; */
+}
 ```
 
+**Reglas tipográficas (extraídas de `index.html` §02):**
+- **Pesos:** 400 body / 500 énfasis / 600 títulos. No usar 700+.
+- **Tracking:** `-0.02em` en `h1` / `h2` / display.
+- **Mono** en cualquier número que se compare en columna (KPIs, tablas de cifras).
+- **Uppercase** sólo en labels micro con tracking `+0.08em` (ver `.label-micro` en mockups).
+- `text-wrap: balance` en `h1`/`h2`; `pretty` en párrafos.
+
 **Componentes a derivar (con shadcn como base):**
-- `Button` (primary / ghost / sm), `Badge` (success/warn/danger/info/accent)
-- `Card`, `Tabs`, `Table` (con TanStack), `Input`, `InputCell` (inline editable, autosave)
-- `KpiCard`, `Sparkline`, `EmptyState`, `LayoutToggle`
-- `PublisherRow` (la fila desplegable del plan de medios)
-- `BudgetOriginTabs`
+- `Button` (primary / secondary / accent / ghost / danger; sm / md / lg; con icono y loading state)
+- `Badge` (success / warn / danger / info / muted / accent)
+- `Card`, `Card-tight`, `Card-ink`, `Tabs`, `Table` (con TanStack), `Input`, `InputCell` (inline editable, autosave)
+- `KpiCard` (default / ink / empty / skeleton), `Sparkline`, `EmptyState`, `LayoutToggle`
+- `PublisherRow` (fila desplegable del plan de medios)
+- `BudgetOriginTabs` (segmented control)
+- `Toast` (success / danger), `Modal` (con confirmación tipeada para destructivas)
+- `Sidebar` (expandida 220px ≥1280px / colapsada 56px) + `Topbar` (breadcrumbs + filtros globales)
+- `SangriaMark` (logo dot — radial-gradient con burgundy → strong)
 
 ---
 
@@ -204,7 +227,7 @@ Extraé estos tokens del archivo `index.html` (pantalla de Foundations) y de los
 - Auth con Google SSO
 - Layout shell (sidebar + topbar) extraído de los mockups
 - Design tokens en `globals.css`
-- Tipografías cargadas (Fraunces + Inter + JetBrains Mono)
+- Tipografías cargadas vía Google Fonts (Geist + JetBrains Mono)
 - **Entregable:** app loguea, muestra layout vacío con sidebar funcional
 
 ### **Fase 1 — Modelo + seed (2 días)**
@@ -276,7 +299,7 @@ Extraé estos tokens del archivo `index.html` (pantalla de Foundations) y de los
 
 1. **No replicar el HTML de los mockups literalmente** — usalos como referencia de layout y estilo. El código debe ser componentes React limpios, no markup pegado.
 2. **Toda edición se audita.** Cada `actual_spend`, cada cambio en `media_plan_line`, va a `audit_log` con before/after.
-3. **Tipografía y color del design system son sagrados.** Nada de Inter en headlines, nada de azul corporativo, nada de gradientes.
+3. **Tipografía y color del design system son sagrados.** Geist es la única familia sans (no mezclar con Inter / SF Pro / Roboto). JetBrains Mono solo para cifras tabulares. Nada de azul corporativo, nada de gradientes (excepto el `sangria-mark`), nada de serif para titulares.
 4. **Densidad sobre espacio en tablas operativas.** En Plan de Medios y Gastos Reales priorizar info-density. En Dashboard priorizar respiración visual.
 5. **Mobile no es prioridad.** Esto es una herramienta interna de escritorio. Min-width 1280px. Pero que no rompa en 1024.
 6. **i18n: español rioplatense** (no neutro, no es). "Facturado", "Gastado", "Pendiente". Sin tutear en UI ("Editá" no "Edita").
