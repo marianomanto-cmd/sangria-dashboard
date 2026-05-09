@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronDown } from "lucide-react";
-import { ActualsGrid } from "@/components/actuals-grid";
+import { ActualsGridEditable } from "@/components/actuals-grid-editable";
 import { StatusBadge } from "@/components/status-badge";
 import { getProjectActuals } from "@/db/queries/project-actuals";
 import {
@@ -143,7 +143,7 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       {tab === "plan" && <PlanTab detail={detail} />}
       {tab === "gastos" &&
         (tabPayload && "actuals" in tabPayload && tabPayload.actuals ? (
-          <ActualsGrid data={tabPayload.actuals} />
+          <ActualsGridEditable data={tabPayload.actuals} />
         ) : (
           <NoPlanForActuals />
         ))}
