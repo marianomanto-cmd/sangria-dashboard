@@ -173,6 +173,56 @@ export async function setPublisherConsumption(input: {
   if (!Number.isFinite(input.amountRealUsd) || input.amountRealUsd < 0)
     return { ok: false, error: "Monto inválido" };
 
+  // Cap: no permitir facturar más allá del total planeado para este publisher,
+  // contando lo ya facturado en otros meses del mismo plan.
+  const [billing] = await db
+    .select({ id: planBillings.id, mediaPlanId: planBillings.mediaPlanId })
+    .from(planBillings)
+    .where(eq(planBillings.id, input.billingId))
+    .limit(1);
+  if (!billing) return { ok: false, error: "Billing no encontrado" };
+
+  const [planPub] = await db
+    .select({ totalPlannedUsd: mediaPlanPublishers.totalPlannedUsd })
+    .from(mediaPlanPublishers)
+    .where(
+      and(
+        eq(mediaPlanPublishers.mediaPlanId, billing.mediaPlanId),
+        eq(mediaPlanPublishers.publisherId, input.publisherId),
+      ),
+    )
+    .limit(1);
+
+  if (planPub) {
+    const [accumOthersRow] = await db
+      .select({
+        total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+      })
+      .from(planBillingPublishers)
+      .innerJoin(
+        planBillings,
+        eq(planBillingPublishers.planBillingId, planBillings.id),
+      )
+      .where(
+        and(
+          eq(planBillings.mediaPlanId, billing.mediaPlanId),
+          eq(planBillingPublishers.publisherId, input.publisherId),
+          sql`${planBillingPublishers.planBillingId} != ${input.billingId}`,
+        ),
+      );
+
+    const planTotal = Number.parseFloat(planPub.totalPlannedUsd);
+    const accumOthers = Number.parseFloat(accumOthersRow.total);
+    const maxAllowed = planTotal - accumOthers;
+
+    if (input.amountRealUsd > maxAllowed + 0.01) {
+      return {
+        ok: false,
+        error: `Excede el plan. Ya consumido en otros meses: $${accumOthers.toFixed(2)}. Plan total: $${planTotal.toFixed(2)}. Máximo este mes: $${Math.max(0, maxAllowed).toFixed(2)}.`,
+      };
+    }
+  }
+
   const [existing] = await db
     .select()
     .from(planBillingPublishers)
@@ -238,6 +288,39 @@ export async function setFeeImputation(input: {
 }): Promise<Result> {
   if (!Number.isFinite(input.amountImputedUsd) || input.amountImputedUsd < 0)
     return { ok: false, error: "Monto inválido" };
+
+  // Cap: no permitir imputar más allá del total del fee, contando lo ya
+  // imputado en otros meses.
+  const [feeRow] = await db
+    .select({ amount: mediaPlanFees.amountUsd })
+    .from(mediaPlanFees)
+    .where(eq(mediaPlanFees.id, input.mediaPlanFeeId))
+    .limit(1);
+
+  if (feeRow) {
+    const [accumOthersRow] = await db
+      .select({
+        total: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
+      })
+      .from(planBillingFees)
+      .where(
+        and(
+          eq(planBillingFees.mediaPlanFeeId, input.mediaPlanFeeId),
+          sql`${planBillingFees.planBillingId} != ${input.billingId}`,
+        ),
+      );
+
+    const feeTotal = Number.parseFloat(feeRow.amount);
+    const accumOthers = Number.parseFloat(accumOthersRow.total);
+    const maxAllowed = feeTotal - accumOthers;
+
+    if (input.amountImputedUsd > maxAllowed + 0.01) {
+      return {
+        ok: false,
+        error: `Excede el fee. Ya imputado en otros meses: $${accumOthers.toFixed(2)}. Fee total: $${feeTotal.toFixed(2)}. Máximo este mes: $${Math.max(0, maxAllowed).toFixed(2)}.`,
+      };
+    }
+  }
 
   const [existing] = await db
     .select()

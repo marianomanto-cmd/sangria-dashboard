@@ -10,7 +10,7 @@ import {
   transitionBillingStatus,
 } from "@/app/actions/plan-billing";
 import type { planBillings as planBillingsTable } from "@/db/schema";
-import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+import { formatUsd, formatUsdCompact } from "@/lib/format";
 
 type Billing = typeof planBillingsTable.$inferSelect;
 
@@ -20,6 +20,7 @@ type PubLine = {
   publisherSlug: string;
   agencyPays: boolean;
   totalPlannedUsd: number;
+  consumedBeforeUsd: number;
   amountThisMonthUsd: number;
   isBillable: boolean;
   notes: string | null;
@@ -214,17 +215,19 @@ export function BillingMonthEditor({
                 <th className="text-left font-medium px-5 py-2">Publisher</th>
                 <th className="text-left font-medium px-5 py-2">Facturable</th>
                 <th className="text-right font-medium px-5 py-2">Plan</th>
-                <th className="text-right font-medium px-5 py-2">Consumo del mes</th>
-                <th className="text-right font-medium px-5 py-2">% del plan</th>
+                <th className="text-right font-medium px-5 py-2">Consumido antes</th>
+                <th className="text-right font-medium px-5 py-2">Este mes</th>
+                <th className="text-right font-medium px-5 py-2">Restante</th>
                 <th className="text-left font-medium px-5 py-2">Notas</th>
               </tr>
             </thead>
             <tbody>
               {publisherLines.map((p) => {
-                const pct =
-                  p.totalPlannedUsd > 0
-                    ? (p.amountThisMonthUsd / p.totalPlannedUsd) * 100
-                    : 0;
+                const remaining =
+                  p.totalPlannedUsd - p.consumedBeforeUsd - p.amountThisMonthUsd;
+                const isOver = remaining < -0.01;
+                const isAtCap =
+                  p.totalPlannedUsd > 0 && remaining < 0.01 && remaining > -0.01;
                 return (
                   <tr
                     key={p.publisherId}
@@ -243,18 +246,35 @@ export function BillingMonthEditor({
                         }
                       />
                     </td>
+                    <td className="px-5 py-2 text-right font-mono text-ink-2">
+                      {formatUsd(p.totalPlannedUsd)}
+                    </td>
                     <td className="px-5 py-2 text-right font-mono text-muted text-xs">
-                      {formatUsdCompact(p.totalPlannedUsd)}
+                      {formatUsdCompact(p.consumedBeforeUsd)}
                     </td>
                     <td className="px-5 py-2 text-right">
                       <NumInput
                         value={p.amountThisMonthUsd}
                         disabled={!editable}
-                        onCommit={(v) => onSetPublisher(p.publisherId, { amount: v })}
+                        max={Math.max(
+                          0,
+                          p.totalPlannedUsd - p.consumedBeforeUsd,
+                        )}
+                        onCommit={(v) =>
+                          onSetPublisher(p.publisherId, { amount: v })
+                        }
                       />
                     </td>
-                    <td className="px-5 py-2 text-right font-mono text-xs text-muted">
-                      {p.totalPlannedUsd > 0 ? formatPct(pct, 0) : "—"}
+                    <td
+                      className={`px-5 py-2 text-right font-mono text-xs ${
+                        isOver
+                          ? "text-warn font-semibold"
+                          : isAtCap
+                            ? "text-success"
+                            : "text-muted"
+                      }`}
+                    >
+                      {formatUsd(remaining)}
                     </td>
                     <td className="px-5 py-2">
                       <TextInput
@@ -320,6 +340,10 @@ export function BillingMonthEditor({
                       <NumInput
                         value={f.amountThisMonthUsd}
                         disabled={!editable}
+                        max={Math.max(
+                          0,
+                          f.totalAmountUsd - f.accumulatedBeforeUsd,
+                        )}
                         onCommit={(v) => onSetFee(f.mediaPlanFeeId, v)}
                       />
                     </td>
@@ -391,11 +415,14 @@ function NumInput({
   value,
   onCommit,
   disabled,
+  max,
 }: {
   value: number;
   onCommit: (v: number) => void;
   disabled: boolean;
+  max?: number;
 }) {
+  const overCap = max !== undefined && value > max + 0.01;
   return (
     <input
       type="text"
@@ -403,11 +430,29 @@ function NumInput({
       defaultValue={value > 0 ? value.toFixed(2) : ""}
       disabled={disabled}
       placeholder="0"
+      title={
+        max !== undefined
+          ? `Máximo facturable este mes: $${max.toFixed(2)}`
+          : undefined
+      }
       onBlur={(e) => {
-        const v = Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        let v = Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        if (max !== undefined && v > max + 0.01) {
+          // Hard cap: avisamos y clampeamos al máximo permitido.
+          alert(
+            `Excede el plan: máximo facturable este mes es $${max.toFixed(2)}. Se ajusta el valor.`,
+          );
+          v = Math.max(0, max);
+          // Reflejamos el clamp en el input
+          e.target.value = v > 0 ? v.toFixed(2) : "";
+        }
         if (Math.abs(v - value) >= 0.01) onCommit(v);
       }}
-      className="w-32 text-right font-mono tabular-nums bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 disabled:opacity-50"
+      className={`w-32 text-right font-mono tabular-nums bg-transparent border-b ${
+        overCap
+          ? "border-danger text-warn"
+          : "border-transparent hover:border-line focus:border-accent"
+      } focus:outline-none px-1 disabled:opacity-50`}
     />
   );
 }

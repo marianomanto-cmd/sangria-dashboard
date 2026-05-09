@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
@@ -111,6 +111,7 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
     publisherSlug: string;
     agencyPays: boolean;
     totalPlannedUsd: number;
+    consumedBeforeUsd: number;
     amountThisMonthUsd: number;
     isBillable: boolean;
     notes: string | null;
@@ -132,15 +133,34 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
       .where(eq(planBillingPublishers.planBillingId, selectedBilling.id));
     const pubMap = new Map(pubRows.map((r) => [r.publisherId, r]));
 
+    // Total consumido por publisher en TODOS los billings de este plan
+    // (incluye este mes; restamos el este mes después para obtener "antes").
+    const totalByPub = await db
+      .select({
+        publisherId: planBillingPublishers.publisherId,
+        total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+      })
+      .from(planBillingPublishers)
+      .innerJoin(planBillings, eq(planBillingPublishers.planBillingId, planBillings.id))
+      .where(eq(planBillings.mediaPlanId, planId))
+      .groupBy(planBillingPublishers.publisherId);
+    const totalByPubMap = new Map(
+      totalByPub.map((r) => [r.publisherId, Number.parseFloat(r.total)]),
+    );
+
     publisherLines = planPubs.map((p) => {
       const r = pubMap.get(p.publisherId);
+      const thisMonth = r ? Number.parseFloat(r.amountRealUsd) : 0;
+      const totalAcrossAll = totalByPubMap.get(p.publisherId) ?? 0;
+      const consumedBefore = totalAcrossAll - thisMonth;
       return {
         publisherId: p.publisherId,
         publisherName: p.publisherName,
         publisherSlug: p.publisherSlug,
         agencyPays: p.agencyPaysOverride ?? p.agencyPaysDefault,
         totalPlannedUsd: Number.parseFloat(p.totalPlannedUsd),
-        amountThisMonthUsd: r ? Number.parseFloat(r.amountRealUsd) : 0,
+        consumedBeforeUsd: consumedBefore,
+        amountThisMonthUsd: thisMonth,
         isBillable: r?.isBillable ?? (p.agencyPaysOverride ?? p.agencyPaysDefault),
         notes: r?.notes ?? null,
       };
@@ -152,25 +172,24 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
       .where(eq(planBillingFees.planBillingId, selectedBilling.id));
     const feeRowsMap = new Map(feeRows.map((r) => [r.mediaPlanFeeId, r]));
 
-    // For each fee, compute accumulated imputation across all months.
-    const accumByFee = new Map<string, number>();
-    for (const f of planFees) {
-      const allImputations = await db
-        .select({ amount: planBillingFees.amountImputedUsd })
-        .from(planBillingFees)
-        .innerJoin(planBillings, eq(planBillingFees.planBillingId, planBillings.id))
-        .where(eq(planBillings.mediaPlanId, planId));
-      const total = allImputations.reduce(
-        (s, r) => s + Number.parseFloat(r.amount),
-        0,
-      );
-      accumByFee.set(f.id, total);
-    }
+    // Total imputado por fee en TODOS los billings del plan, en una query.
+    const totalByFee = await db
+      .select({
+        mediaPlanFeeId: planBillingFees.mediaPlanFeeId,
+        total: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
+      })
+      .from(planBillingFees)
+      .innerJoin(planBillings, eq(planBillingFees.planBillingId, planBillings.id))
+      .where(eq(planBillings.mediaPlanId, planId))
+      .groupBy(planBillingFees.mediaPlanFeeId);
+    const totalByFeeMap = new Map(
+      totalByFee.map((r) => [r.mediaPlanFeeId, Number.parseFloat(r.total)]),
+    );
 
     feeLines = planFees.map((f) => {
       const r = feeRowsMap.get(f.id);
-      const accumTotal = accumByFee.get(f.id) ?? 0;
       const thisMonth = r ? Number.parseFloat(r.amountImputedUsd) : 0;
+      const accumTotal = totalByFeeMap.get(f.id) ?? 0;
       return {
         mediaPlanFeeId: f.id,
         feeName: f.name,
