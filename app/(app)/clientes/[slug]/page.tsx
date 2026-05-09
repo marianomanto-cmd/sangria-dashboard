@@ -87,7 +87,7 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
       {tab === "resumen" ? (
         <ResumenTab detail={detail} />
       ) : (
-        <TimelineEmptyPlaceholder />
+        <TimelineTab detail={detail} />
       )}
     </main>
   );
@@ -214,11 +214,160 @@ function ResumenTab({
   );
 }
 
-function TimelineEmptyPlaceholder() {
+// ────────────────────────────────────────────────────────────────────────────
+// Timeline tab — gantt chart con consumo en la barra
+// ────────────────────────────────────────────────────────────────────────────
+
+const MONTH_LABELS_ES = [
+  "Ene", "Feb", "Mar", "Abr", "May", "Jun",
+  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
+];
+
+function enumerateMonths(start: string, end: string): string[] {
+  const out: string[] = [];
+  const [sy, sm] = start.split("-").map(Number);
+  const [ey, em] = end.split("-").map(Number);
+  let y = sy;
+  let m = sm;
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
+
+function dateToMonthFraction(date: string, months: string[]): number {
+  // date = 'YYYY-MM-DD' → posición fraccional dentro del array de meses.
+  const month = date.slice(0, 7);
+  const idx = months.indexOf(month);
+  if (idx < 0) return idx < 0 && month < months[0] ? -0.05 : months.length - 0.95;
+  const day = Number.parseInt(date.slice(8, 10), 10);
+  const [yStr, mStr] = month.split("-");
+  const daysInMonth = new Date(
+    Number.parseInt(yStr, 10),
+    Number.parseInt(mStr, 10),
+    0,
+  ).getDate();
+  return idx + Math.max(0, Math.min(1, (day - 1) / daysInMonth));
+}
+
+function TimelineTab({
+  detail,
+}: {
+  detail: NonNullable<Awaited<ReturnType<typeof getClientDetail>>>;
+}) {
+  const dated = detail.projects.filter((p) => p.startDate && p.endDate);
+
+  if (dated.length === 0) {
+    return (
+      <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center text-sm text-muted">
+        No hay proyectos con fechas para mostrar en la línea de tiempo.
+      </div>
+    );
+  }
+
+  let minMonth = dated[0].startDate!.slice(0, 7);
+  let maxMonth = dated[0].endDate!.slice(0, 7);
+  for (const p of dated) {
+    const sm = p.startDate!.slice(0, 7);
+    const em = p.endDate!.slice(0, 7);
+    if (sm < minMonth) minMonth = sm;
+    if (em > maxMonth) maxMonth = em;
+  }
+  const months = enumerateMonths(minMonth, maxMonth);
+  const totalMonths = months.length;
+
   return (
-    <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center text-sm text-muted">
-      Línea de tiempo · próximo commit
-    </div>
+    <section className="rounded-lg border border-line bg-white p-5">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-sm font-semibold">Línea de tiempo</h2>
+        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+          {dated.length} proyecto{dated.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {/* Header de meses */}
+      <div className="grid grid-cols-[260px_1fr] gap-3 mb-2">
+        <div />
+        <div className="relative h-5">
+          {months.map((m, i) => (
+            <span
+              key={m}
+              className="absolute top-0 text-[10px] font-medium uppercase tracking-[0.06em] text-muted -translate-x-1/2"
+              style={{ left: `${((i + 0.5) / totalMonths) * 100}%` }}
+            >
+              {MONTH_LABELS_ES[Number.parseInt(m.slice(5, 7), 10) - 1]}{" "}
+              <span className="text-stone-400">{m.slice(2, 4)}</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Filas de proyectos */}
+      <div className="flex flex-col gap-1">
+        {dated.map((p) => {
+          const startFr = dateToMonthFraction(p.startDate!, months);
+          const endFr = dateToMonthFraction(p.endDate!, months);
+          const leftPct = (startFr / totalMonths) * 100;
+          const widthPct = Math.max(0.5, ((endFr - startFr) / totalMonths) * 100);
+          const overConsumed = p.consumptionPct > 100;
+          const fillPct = Math.min(p.consumptionPct, 100);
+
+          return (
+            <div
+              key={p.id}
+              className="grid grid-cols-[260px_1fr] gap-3 items-center hover:bg-paper-2 rounded px-1 py-1 -mx-1 transition-colors"
+            >
+              <div className="min-w-0">
+                <Link
+                  href={`/proyectos/${p.code}`}
+                  className="font-medium text-ink hover:underline truncate block text-sm"
+                >
+                  {p.name}
+                </Link>
+                <div className="font-mono text-[10px] text-muted">{p.code}</div>
+              </div>
+              <div className="relative h-7">
+                {/* Grid lines */}
+                <div className="absolute inset-0 flex">
+                  {months.map((m) => (
+                    <div
+                      key={m}
+                      className="flex-1 border-l border-line-soft first:border-l-0"
+                    />
+                  ))}
+                </div>
+                {/* Project bar */}
+                <div
+                  className="absolute top-1 h-5 rounded bg-paper-2 border border-line overflow-hidden"
+                  style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                  title={`${p.startDate} → ${p.endDate} · ${p.consumptionPct.toFixed(0)}%`}
+                >
+                  <div
+                    className={`absolute inset-y-0 left-0 ${
+                      overConsumed ? "bg-warn" : "bg-ink"
+                    }`}
+                    style={{ width: `${fillPct}%` }}
+                  />
+                  {p.status !== "active" && (
+                    <div className="absolute inset-0 bg-paper-2/40" />
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-4 text-[11px] text-muted">
+        Las barras muestran el rango de fechas del proyecto; el fill es el % de
+        consumo de budget. Proyectos no activos quedan tenues.
+      </p>
+    </section>
   );
 }
 
