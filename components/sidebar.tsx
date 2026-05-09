@@ -10,6 +10,7 @@ import {
   FileText,
   Receipt,
   FileCheck,
+  History,
   Settings,
   ChevronsLeft,
   ChevronsRight,
@@ -33,6 +34,7 @@ const PRIMARY: NavEntry[] = [
 ];
 
 const FOOTER: NavEntry[] = [
+  { href: "/auditoria", label: "Auditoría", icon: History },
   { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
