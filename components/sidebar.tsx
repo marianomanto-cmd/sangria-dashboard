@@ -8,10 +8,10 @@ import {
   Users,
   Briefcase,
   FileText,
-  Receipt,
   FileCheck,
   History,
   Settings,
+  BarChart3,
   ChevronsLeft,
   ChevronsRight,
   type LucideIcon,
@@ -29,8 +29,8 @@ const PRIMARY: NavEntry[] = [
   { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/proyectos", label: "Proyectos", icon: Briefcase },
   { href: "/planes", label: "Planes de Medios", icon: FileText },
-  { href: "/gastos", label: "Gastos", icon: Receipt },
   { href: "/billing", label: "Billing", icon: FileCheck },
+  { href: "/reportes", label: "Reportes", icon: BarChart3 },
 ];
 
 const FOOTER: NavEntry[] = [

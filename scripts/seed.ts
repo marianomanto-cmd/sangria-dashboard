@@ -12,13 +12,7 @@
 import { db } from "@/db";
 import * as s from "@/db/schema";
 
-// ─── RNG determinístico ────────────────────────────────────────────────
-let _seed = 1337;
-const rand = () => {
-  _seed = (_seed * 9301 + 49297) % 233280;
-  return _seed / 233280;
-};
-const variance = (min: number, max: number) => min + rand() * (max - min);
+// (no RNG necesario en este seed; se mantienen valores fijos)
 
 async function main() {
   console.log("⏳ Limpiando datos existentes...");

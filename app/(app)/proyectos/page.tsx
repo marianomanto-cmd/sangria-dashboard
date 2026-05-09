@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { Sparkline } from "@/components/sparkline";
 import { StatusBadge } from "@/components/status-badge";
 import { PageShell } from "@/components/page-shell";
@@ -13,6 +14,15 @@ export default async function ProyectosPage() {
       eyebrow="Proyectos"
       title="Todos los proyectos"
       subtitle={`${data.rows.length} proyecto${data.rows.length === 1 ? "" : "s"} en el sistema`}
+      actions={
+        <Link
+          href="/proyectos/nuevo"
+          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 transition-colors"
+        >
+          <Plus size={14} strokeWidth={2.5} />
+          Nuevo proyecto
+        </Link>
+      }
     >
       <section className="rounded-lg border border-line bg-white overflow-hidden">
         <table className="w-full text-sm">
