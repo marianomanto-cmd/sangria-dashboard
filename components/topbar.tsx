@@ -1,27 +1,24 @@
-import { Calendar, ChevronDown, Moon } from "lucide-react";
+import { Moon } from "lucide-react";
+import { asc } from "drizzle-orm";
+import { Suspense } from "react";
+import { db } from "@/db";
+import { clients } from "@/db/schema";
+import { TopbarClientPicker } from "@/components/topbar-client-picker";
 
-export function Topbar() {
+export async function Topbar() {
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-white">
       <div className="px-6 h-12 flex items-center gap-4">
         <Breadcrumbs trail={["Sangria", "Dashboard"]} />
 
         <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-xs text-ink hover:bg-paper-2 hover:border-ink-2 transition-colors"
+          <Suspense
+            fallback={
+              <div className="h-7 w-[160px] rounded-md border border-line bg-paper-2 animate-pulse" />
+            }
           >
-            <Calendar size={13} strokeWidth={2} />
-            <span>Abr — Jun 2026</span>
-          </button>
-
-          <button
-            type="button"
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-xs text-ink hover:bg-paper-2 hover:border-ink-2 transition-colors"
-          >
-            <span>Cliente: Todos</span>
-            <ChevronDown size={12} strokeWidth={2} />
-          </button>
+            <ClientPickerLoader />
+          </Suspense>
 
           <button
             type="button"
@@ -39,6 +36,14 @@ export function Topbar() {
       </div>
     </header>
   );
+}
+
+async function ClientPickerLoader() {
+  const rows = await db
+    .select({ slug: clients.slug, name: clients.name })
+    .from(clients)
+    .orderBy(asc(clients.name));
+  return <TopbarClientPicker clients={rows} />;
 }
 
 function Breadcrumbs({ trail }: { trail: readonly string[] }) {
