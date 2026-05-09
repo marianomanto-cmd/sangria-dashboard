@@ -1,15 +1,12 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import Link from "next/link";
 import { LayoutGrid, Table2 } from "lucide-react";
 import { FacturacionChart } from "@/components/facturacion-chart";
 import { KpiCard } from "@/components/kpi-card";
-import { Sparkline } from "@/components/sparkline";
-import { StatusBadge } from "@/components/status-badge";
+import { ProjectsTableExpandable } from "@/components/projects-table-expandable";
 import type {
   DashboardKpis,
-  DashboardProjectRow,
   DashboardProjects,
   MonthlyTotal,
 } from "@/db/queries/dashboard";
@@ -157,7 +154,7 @@ function LayoutA({ kpis, projects, monthly }: Props) {
         <FacturacionChart data={monthly} />
       </section>
 
-      <ProjectsTable rows={projects.rows} dense={false} groupByClient={false} />
+      <ProjectsSection rows={projects.rows} dense={false} />
     </>
   );
 }
@@ -199,7 +196,7 @@ function LayoutC({
         />
       </section>
 
-      <ProjectsTable rows={projects.rows} dense groupByClient />
+      <ProjectsSection rows={projects.rows} dense />
     </>
   );
 }
@@ -233,162 +230,25 @@ function CompactKpi({
 // Projects table — modos default y dense, opcionalmente agrupada por cliente
 // ────────────────────────────────────────────────────────────────────────────
 
-function ProjectsTable({
+function ProjectsSection({
   rows,
   dense,
-  groupByClient,
 }: {
-  rows: DashboardProjectRow[];
+  rows: DashboardProjects["rows"];
   dense: boolean;
-  groupByClient: boolean;
 }) {
-  const groups: { clientName: string; items: DashboardProjectRow[] }[] = [];
-  if (groupByClient) {
-    const map = new Map<string, DashboardProjectRow[]>();
-    for (const r of rows) {
-      const list = map.get(r.clientName) ?? [];
-      list.push(r);
-      map.set(r.clientName, list);
-    }
-    for (const [clientName, items] of map) groups.push({ clientName, items });
-  }
-
-  const cellPad = dense ? "px-5 py-2" : "px-5 py-3";
   const headerPad = dense ? "px-5 py-2" : "px-5 py-2.5";
-
   return (
     <section className="mt-6 rounded-lg border border-line bg-white overflow-hidden">
-      <div className={`${headerPad} border-b border-line flex items-baseline justify-between`}>
+      <div
+        className={`${headerPad} border-b border-line flex items-baseline justify-between`}
+      >
         <h2 className="text-sm font-semibold">Proyectos</h2>
         <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-          {rows.length} totales
+          {rows.length} totales · click ▶ para ver planes
         </span>
       </div>
-      <table className="w-full text-sm">
-        <thead className="bg-paper">
-          <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-            <th className={`text-left font-medium ${headerPad}`}>Proyecto</th>
-            {!groupByClient && (
-              <th className={`text-left font-medium ${headerPad}`}>Cliente</th>
-            )}
-            <th className={`text-left font-medium ${headerPad}`}>Estado</th>
-            <th className={`text-right font-medium ${headerPad}`}>Budget</th>
-            <th className={`text-right font-medium ${headerPad}`}>Gastado</th>
-            <th className={`text-left font-medium ${headerPad} w-[140px]`}>
-              Spark
-            </th>
-            <th className={`text-left font-medium ${headerPad} w-[180px]`}>
-              Avance
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {groupByClient
-            ? groups.map((g) => (
-                <ClientGroup
-                  key={g.clientName}
-                  clientName={g.clientName}
-                  items={g.items}
-                  cellPad={cellPad}
-                />
-              ))
-            : rows.map((p) => (
-                <ProjectRow
-                  key={p.id}
-                  project={p}
-                  showClient
-                  cellPad={cellPad}
-                />
-              ))}
-        </tbody>
-      </table>
+      <ProjectsTableExpandable rows={rows} showClient dense={dense} />
     </section>
-  );
-}
-
-function ClientGroup({
-  clientName,
-  items,
-  cellPad,
-}: {
-  clientName: string;
-  items: DashboardProjectRow[];
-  cellPad: string;
-}) {
-  return (
-    <>
-      <tr className="bg-paper-2">
-        <td colSpan={6} className={`${cellPad} text-[11px] font-semibold uppercase tracking-[0.08em] text-muted`}>
-          {clientName}
-          <span className="ml-2 font-normal normal-case tracking-normal">
-            · {items.length} proyecto{items.length === 1 ? "" : "s"}
-          </span>
-        </td>
-      </tr>
-      {items.map((p) => (
-        <ProjectRow key={p.id} project={p} showClient={false} cellPad={cellPad} />
-      ))}
-    </>
-  );
-}
-
-function ProjectRow({
-  project,
-  showClient,
-  cellPad,
-}: {
-  project: DashboardProjectRow;
-  showClient: boolean;
-  cellPad: string;
-}) {
-  const overConsumed = project.consumptionPct > 100;
-  const barWidth = Math.min(project.consumptionPct, 100);
-
-  return (
-    <tr className="border-t border-line-soft hover:bg-paper-2 transition-colors">
-      <td className={cellPad}>
-        <Link
-          href={`/proyectos/${project.code}`}
-          className="font-medium text-ink hover:underline"
-        >
-          {project.name}
-        </Link>
-        <div className="font-mono text-[11px] text-muted">{project.code}</div>
-      </td>
-      {showClient && (
-        <td className={`${cellPad} text-ink-2`}>{project.clientName}</td>
-      )}
-      <td className={cellPad}>
-        <StatusBadge status={project.status} />
-      </td>
-      <td className={`${cellPad} text-right font-mono text-ink-2`}>
-        {formatUsd(project.totalBudgetUsd)}
-      </td>
-      <td className={`${cellPad} text-right font-mono text-ink-2`}>
-        {project.spentUsd > 0 ? formatUsd(project.spentUsd) : "—"}
-      </td>
-      <td className={cellPad}>
-        <Sparkline values={project.monthlySpend} />
-      </td>
-      <td className={cellPad}>
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
-            <div
-              className={`h-full rounded-full ${
-                overConsumed ? "bg-warn" : "bg-ink"
-              }`}
-              style={{ width: `${barWidth}%` }}
-            />
-          </div>
-          <span
-            className={`font-mono text-xs ${
-              overConsumed ? "text-warn font-medium" : "text-ink-2"
-            }`}
-          >
-            {formatPct(project.consumptionPct, 0)}
-          </span>
-        </div>
-      </td>
-    </tr>
   );
 }

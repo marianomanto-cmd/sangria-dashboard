@@ -465,12 +465,24 @@ export async function addFee(input: {
   planId: string;
   feeType: "management" | "setup" | "reporting" | "custom";
   name: string;
-  amountUsd: number;
+  amountUsd?: number;       // para non-management
+  ratePct?: number | null;  // solo para management (0-100)
   notes?: string | null;
 }): Promise<Result<{ feeId: string }>> {
   if (!input.name.trim()) return { ok: false, error: "Nombre del fee requerido" };
-  if (!Number.isFinite(input.amountUsd) || input.amountUsd < 0)
-    return { ok: false, error: "Monto inválido" };
+
+  const isManagementWithRate =
+    input.feeType === "management" && input.ratePct != null && input.ratePct > 0;
+
+  if (isManagementWithRate) {
+    if (input.ratePct! >= 100) {
+      return { ok: false, error: "Rate debe ser menor a 100%" };
+    }
+  } else {
+    if (!Number.isFinite(input.amountUsd) || (input.amountUsd ?? 0) < 0) {
+      return { ok: false, error: "Monto inválido" };
+    }
+  }
 
   const [{ next }] = await db
     .select({
@@ -479,13 +491,15 @@ export async function addFee(input: {
     .from(mediaPlanFees)
     .where(eq(mediaPlanFees.mediaPlanId, input.planId));
 
+  // Para management con rate, dejamos amount=0 — se computa al leer.
   const [f] = await db
     .insert(mediaPlanFees)
     .values({
       mediaPlanId: input.planId,
       feeType: input.feeType,
       name: input.name.trim(),
-      amountUsd: input.amountUsd.toFixed(2),
+      ratePct: isManagementWithRate ? input.ratePct!.toFixed(2) : null,
+      amountUsd: isManagementWithRate ? "0.00" : (input.amountUsd ?? 0).toFixed(2),
       notes: input.notes ?? null,
       sortOrder: next,
     })
@@ -505,6 +519,7 @@ export async function updateFee(input: {
   feeId: string;
   name?: string;
   amountUsd?: number;
+  ratePct?: number | null;  // solo aplica a management
   notes?: string | null;
 }): Promise<Result> {
   const [before] = await db
@@ -520,6 +535,17 @@ export async function updateFee(input: {
     if (!Number.isFinite(input.amountUsd) || input.amountUsd < 0)
       return { ok: false, error: "Monto inválido" };
     update.amountUsd = input.amountUsd.toFixed(2);
+  }
+  if (input.ratePct !== undefined) {
+    if (input.ratePct === null) {
+      update.ratePct = null;
+    } else {
+      if (input.ratePct < 0 || input.ratePct >= 100)
+        return { ok: false, error: "Rate debe estar entre 0 y 100 (exclusivo)" };
+      update.ratePct = input.ratePct.toFixed(2);
+      // Si seteamos rate, el amount queda en 0 (se computa al leer)
+      if (before.feeType === "management") update.amountUsd = "0.00";
+    }
   }
   if (input.notes !== undefined) update.notes = input.notes;
   if (Object.keys(update).length === 0) return { ok: true };

@@ -173,13 +173,24 @@ export function PlanEditor({
     });
   };
 
-  const onAddFee = () => {
+  const onAddFee = (
+    feeType: "management" | "setup" | "reporting" | "custom" = "custom",
+  ) => {
+    const defaultName =
+      feeType === "management"
+        ? "Management Fee"
+        : feeType === "setup"
+          ? "Set Up Fee"
+          : feeType === "reporting"
+            ? "Reporting Fee"
+            : "Nuevo fee";
     startTransition(async () => {
       await addFee({
         planId: detail.plan.id,
-        feeType: "custom",
-        name: "Nuevo fee",
-        amountUsd: 0,
+        feeType,
+        name: defaultName,
+        amountUsd: feeType === "management" ? undefined : 0,
+        ratePct: feeType === "management" ? 15 : null,
       });
       refresh();
     });
@@ -406,6 +417,7 @@ export function PlanEditor({
                 <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
                   <th className="text-left font-medium px-5 py-2">Tipo</th>
                   <th className="text-left font-medium px-5 py-2">Nombre</th>
+                  <th className="text-right font-medium px-5 py-2">Rate %</th>
                   <th className="text-right font-medium px-5 py-2">Monto</th>
                   <th className="text-left font-medium px-5 py-2">Notas</th>
                   {editable && <th className="w-10"></th>}
@@ -425,15 +437,48 @@ export function PlanEditor({
             </table>
           )}
           {editable && (
-            <div className="border-t border-line-soft px-5 py-2">
+            <div className="border-t border-line-soft px-5 py-2 flex items-center gap-3 text-xs text-muted">
+              <span>Agregar fee:</span>
               <button
                 type="button"
-                onClick={onAddFee}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink transition-colors disabled:opacity-50"
+                onClick={() => onAddFee("management")}
+                disabled={pending || detail.fees.some((f) => f.feeType === "management")}
+                className="inline-flex items-center gap-1 hover:text-ink disabled:opacity-30"
+                title={
+                  detail.fees.some((f) => f.feeType === "management")
+                    ? "Ya hay un management fee en este plan"
+                    : undefined
+                }
               >
-                <Plus size={12} strokeWidth={2.5} />
-                Agregar fee
+                <Plus size={11} strokeWidth={2.5} />
+                Management
+              </button>
+              <button
+                type="button"
+                onClick={() => onAddFee("setup")}
+                disabled={pending}
+                className="inline-flex items-center gap-1 hover:text-ink"
+              >
+                <Plus size={11} strokeWidth={2.5} />
+                Set Up
+              </button>
+              <button
+                type="button"
+                onClick={() => onAddFee("reporting")}
+                disabled={pending}
+                className="inline-flex items-center gap-1 hover:text-ink"
+              >
+                <Plus size={11} strokeWidth={2.5} />
+                Reporting
+              </button>
+              <button
+                type="button"
+                onClick={() => onAddFee("custom")}
+                disabled={pending}
+                className="inline-flex items-center gap-1 hover:text-ink"
+              >
+                <Plus size={11} strokeWidth={2.5} />
+                Custom
               </button>
             </div>
           )}
@@ -1314,6 +1359,8 @@ function FeeRow({
     });
   };
 
+  const isManagement = fee.feeType === "management";
+
   return (
     <tr className="border-t border-line-soft hover:bg-paper-2/40">
       <td className="px-5 py-1.5 text-xs font-mono text-muted uppercase">
@@ -1328,12 +1375,32 @@ function FeeRow({
         />
       </td>
       <td className="px-5 py-1.5 text-right">
-        <NumberInput
-          value={fee.amountUsd}
-          onCommit={(v) => update({ amountUsd: v })}
-          disabled={!editable}
-          className="w-28 text-right font-mono"
-        />
+        {isManagement ? (
+          <RatePctInput
+            value={fee.ratePct}
+            disabled={!editable}
+            onCommit={(v) => update({ ratePct: v })}
+          />
+        ) : (
+          <span className="text-stone-300 text-xs font-mono">—</span>
+        )}
+      </td>
+      <td className="px-5 py-1.5 text-right">
+        {fee.isAutoComputed ? (
+          <span
+            className="font-mono text-ink-2 tabular-nums"
+            title="Calculado automáticamente desde el rate y el total media del plan"
+          >
+            {formatUsd(fee.amountUsd)}
+          </span>
+        ) : (
+          <NumberInput
+            value={fee.amountUsd}
+            onCommit={(v) => update({ amountUsd: v })}
+            disabled={!editable}
+            className="w-28 text-right font-mono"
+          />
+        )}
       </td>
       <td className="px-5 py-1.5">
         <TextInput
@@ -1412,6 +1479,42 @@ function NumberInput({
       }}
       className={`tabular-nums bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 disabled:opacity-50 ${className}`}
     />
+  );
+}
+
+function RatePctInput({
+  value,
+  onCommit,
+  disabled,
+}: {
+  value: number | null;
+  onCommit: (v: number | null) => void;
+  disabled?: boolean;
+}) {
+  const display = value != null && value > 0 ? value.toFixed(2) : "";
+  return (
+    <span className="inline-flex items-center gap-0.5 justify-end">
+      <input
+        key={display}
+        type="text"
+        inputMode="decimal"
+        defaultValue={display}
+        disabled={disabled}
+        placeholder="—"
+        onBlur={(e) => {
+          const text = e.target.value.replace(/[^0-9.]/g, "");
+          if (!text) {
+            if (value != null) onCommit(null);
+            return;
+          }
+          const v = Number.parseFloat(text);
+          if (!Number.isFinite(v)) return;
+          if (value == null || Math.abs(v - value) >= 0.01) onCommit(v);
+        }}
+        className="w-16 text-right tabular-nums font-mono bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 disabled:opacity-50"
+      />
+      <span className="text-muted text-xs">%</span>
+    </span>
   );
 }
 

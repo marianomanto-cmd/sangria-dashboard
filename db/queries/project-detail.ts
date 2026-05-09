@@ -112,7 +112,10 @@ export async function getProjectWithPlans(
     db
       .select({
         planId: mediaPlanFees.mediaPlanId,
-        total: sql<string>`coalesce(sum(${mediaPlanFees.amountUsd}), 0)`,
+        // Fees con monto fijo (todos los no-management + management sin rate)
+        fixedTotal: sql<string>`coalesce(sum(${mediaPlanFees.amountUsd}) filter (where ${mediaPlanFees.ratePct} is null or ${mediaPlanFees.feeType} != 'management'), 0)`,
+        // Rate de management fee (asumimos uno solo por plan)
+        mgmtRatePct: sql<string | null>`max(${mediaPlanFees.ratePct}) filter (where ${mediaPlanFees.feeType} = 'management')::text`,
       })
       .from(mediaPlanFees)
       .where(inArray(mediaPlanFees.mediaPlanId, planIds))
@@ -148,7 +151,15 @@ export async function getProjectWithPlans(
       { periodStart: r.periodStart, periodEnd: r.periodEnd },
     ]),
   );
-  const feeTotalByPlan = new Map(feeTotals.map((r) => [r.planId, Number.parseFloat(r.total)]));
+  const feeDataByPlan = new Map(
+    feeTotals.map((r) => [
+      r.planId,
+      {
+        fixed: Number.parseFloat(r.fixedTotal),
+        mgmtRatePct: r.mgmtRatePct ? Number.parseFloat(r.mgmtRatePct) : null,
+      },
+    ]),
+  );
   const lastSnapByPlan = new Map(
     lastSnaps.map((r) => [r.planId, r.lastApprovedAt ? new Date(r.lastApprovedAt) : null]),
   );
@@ -156,7 +167,13 @@ export async function getProjectWithPlans(
 
   const plans: ProjectPlanSummary[] = planSummaries.map((p) => {
     const totalMedia = Number.parseFloat(p.totalMediaUsd);
-    const totalFees = feeTotalByPlan.get(p.id) ?? 0;
+    const feeData = feeDataByPlan.get(p.id);
+    const fixedFees = feeData?.fixed ?? 0;
+    const mgmtFee =
+      feeData?.mgmtRatePct != null && feeData.mgmtRatePct < 100
+        ? (totalMedia * feeData.mgmtRatePct) / (100 - feeData.mgmtRatePct)
+        : 0;
+    const totalFees = fixedFees + mgmtFee;
     const period = periodByPlan.get(p.id);
     return {
       id: p.id,
@@ -219,7 +236,9 @@ export type PlanFee = {
   id: string;
   feeType: (typeof mediaPlanFees.$inferSelect)["feeType"];
   name: string;
-  amountUsd: number;
+  amountUsd: number;        // computado dinámicamente para management con ratePct
+  ratePct: number | null;   // solo para management; null en otros tipos
+  isAutoComputed: boolean;  // true cuando amount viene del rate %
   notes: string | null;
   sortOrder: number;
 };
@@ -351,16 +370,35 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     };
   });
 
-  const fees: PlanFee[] = feeRows.map((f) => ({
-    id: f.id,
-    feeType: f.feeType,
-    name: f.name,
-    amountUsd: Number.parseFloat(f.amountUsd),
-    notes: f.notes,
-    sortOrder: f.sortOrder,
-  }));
-
   const totalMedia = publisherGroups.reduce((s, g) => s + g.totalPlannedUsd, 0);
+
+  const fees: PlanFee[] = feeRows.map((f) => {
+    const ratePct = f.ratePct ? Number.parseFloat(f.ratePct) : null;
+    let amount = Number.parseFloat(f.amountUsd);
+    let isAutoComputed = false;
+    if (
+      f.feeType === "management" &&
+      ratePct != null &&
+      ratePct > 0 &&
+      ratePct < 100
+    ) {
+      // amount = TM × ratePct / (100 - ratePct)
+      // Equivalente a la fórmula del usuario: TM/(1 - ratePct/100) - TM.
+      amount = (totalMedia * ratePct) / (100 - ratePct);
+      isAutoComputed = true;
+    }
+    return {
+      id: f.id,
+      feeType: f.feeType,
+      name: f.name,
+      amountUsd: amount,
+      ratePct,
+      isAutoComputed,
+      notes: f.notes,
+      sortOrder: f.sortOrder,
+    };
+  });
+
   const totalFees = fees.reduce((s, f) => s + f.amountUsd, 0);
 
   return {

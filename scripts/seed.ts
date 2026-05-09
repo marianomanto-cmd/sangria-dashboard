@@ -241,7 +241,7 @@ async function main() {
   const awarenessFees = await db
     .insert(s.mediaPlanFees)
     .values([
-      { mediaPlanId: planAwareness.id, feeType: "management", name: "Management Fee", amountUsd: "15000.00", sortOrder: 0 },
+      { mediaPlanId: planAwareness.id, feeType: "management", name: "Management Fee", amountUsd: "0.00", ratePct: "15.00", sortOrder: 0 },
       { mediaPlanId: planAwareness.id, feeType: "setup",      name: "Set Up Fee",     amountUsd: "1000.00",  sortOrder: 1 },
       { mediaPlanId: planAwareness.id, feeType: "reporting",  name: "Reporting Fee",  amountUsd: "2000.00",  sortOrder: 2 },
     ])
@@ -326,7 +326,7 @@ async function main() {
   ]);
 
   await db.insert(s.mediaPlanFees).values([
-    { mediaPlanId: planConsideration.id, feeType: "management", name: "Management Fee", amountUsd: "8500.00",  sortOrder: 0 },
+    { mediaPlanId: planConsideration.id, feeType: "management", name: "Management Fee", amountUsd: "0.00", ratePct: "15.00", sortOrder: 0 },
     { mediaPlanId: planConsideration.id, feeType: "setup",      name: "Set Up Fee",     amountUsd: "500.00",   sortOrder: 1 },
     { mediaPlanId: planConsideration.id, feeType: "reporting",  name: "Reporting Fee",  amountUsd: "2000.00",  sortOrder: 2 },
   ]);
@@ -384,7 +384,7 @@ async function main() {
   ]);
 
   await db.insert(s.mediaPlanFees).values([
-    { mediaPlanId: planPerformance.id, feeType: "management", name: "Management Fee", amountUsd: "9500.00", sortOrder: 0 },
+    { mediaPlanId: planPerformance.id, feeType: "management", name: "Management Fee", amountUsd: "0.00", ratePct: "15.00", sortOrder: 0 },
     { mediaPlanId: planPerformance.id, feeType: "setup",      name: "Set Up Fee",     amountUsd: "500.00",  sortOrder: 1 },
   ]);
 
@@ -432,7 +432,7 @@ async function main() {
   ]);
 
   await db.insert(s.mediaPlanFees).values([
-    { mediaPlanId: planBrand.id, feeType: "management", name: "Management Fee", amountUsd: "27000.00", sortOrder: 0 },
+    { mediaPlanId: planBrand.id, feeType: "management", name: "Management Fee", amountUsd: "0.00", ratePct: "15.00", sortOrder: 0 },
     { mediaPlanId: planBrand.id, feeType: "reporting",  name: "Reporting Fee",  amountUsd: "6000.00",  sortOrder: 1 },
   ]);
 
@@ -495,7 +495,7 @@ async function main() {
   ]);
 
   await db.insert(s.mediaPlanFees).values([
-    { mediaPlanId: planPromo.id, feeType: "management", name: "Management Fee", amountUsd: "10500.00", sortOrder: 0 },
+    { mediaPlanId: planPromo.id, feeType: "management", name: "Management Fee", amountUsd: "0.00", ratePct: "15.00", sortOrder: 0 },
     { mediaPlanId: planPromo.id, feeType: "setup",      name: "Set Up Fee",     amountUsd: "500.00",   sortOrder: 1 },
   ]);
 

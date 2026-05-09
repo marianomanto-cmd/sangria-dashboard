@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   clients,
+  mediaPlanFees,
   mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
@@ -98,17 +99,32 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
 // de TODOS sus planes (peers).
 // ────────────────────────────────────────────────────────────────────────────
 
+export type DashboardPlanSummary = {
+  id: string;
+  name: string;
+  status: (typeof mediaPlans.$inferSelect)["status"];
+  currentVersion: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  totalMediaUsd: number;
+  totalFeesUsd: number;
+  totalUsd: number;
+  spentRealUsd: number;
+};
+
 export type DashboardProjectRow = {
   id: string;
   code: string;
   name: string;
   clientName: string;
+  clientSlug: string;
   status: (typeof projects.$inferSelect)["status"];
   totalBudgetUsd: number;
   spentUsd: number;
   consumptionPct: number;
   planCount: number;
   monthlySpend: number[];
+  plans: DashboardPlanSummary[];
 };
 
 export type DashboardProjects = {
@@ -124,6 +140,7 @@ export async function getDashboardProjects(): Promise<DashboardProjects> {
       code: projects.code,
       name: projects.name,
       clientName: clients.name,
+      clientSlug: clients.slug,
       status: projects.status,
       totalBudgetUsd: projects.totalGrossBudgetUsd,
       spentUsd: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
@@ -137,7 +154,7 @@ export async function getDashboardProjects(): Promise<DashboardProjects> {
       planBillingPublishers,
       eq(planBillingPublishers.planBillingId, planBillings.id),
     )
-    .groupBy(projects.id, clients.name)
+    .groupBy(projects.id, clients.name, clients.slug)
     .orderBy(asc(projects.code));
 
   // Spend mensual por proyecto.
@@ -168,6 +185,10 @@ export async function getDashboardProjects(): Promise<DashboardProjects> {
     m.set(r.month, Number.parseFloat(r.total));
   }
 
+  // Plans summary per project (3 queries en batch para todos los planes).
+  const projectIds = totals.map((t) => t.id);
+  const plansByProject = await getPlansSummaryForProjects(projectIds);
+
   const rows: DashboardProjectRow[] = totals.map((t) => {
     const total = Number.parseFloat(t.totalBudgetUsd ?? "0");
     const spent = Number.parseFloat(t.spentUsd);
@@ -178,16 +199,123 @@ export async function getDashboardProjects(): Promise<DashboardProjects> {
       code: t.code,
       name: t.name,
       clientName: t.clientName,
+      clientSlug: t.clientSlug,
       status: t.status,
       totalBudgetUsd: total,
       spentUsd: spent,
       consumptionPct: total > 0 ? (spent / total) * 100 : 0,
       planCount: t.planCount,
       monthlySpend,
+      plans: plansByProject.get(t.id) ?? [],
     };
   });
 
   return { rows, monthLabels };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Plans summary in batch — 3 queries para sumar info de N planes a la vez.
+// Usado por /proyectos y por el Dashboard para mostrar planes en cada fila.
+// ────────────────────────────────────────────────────────────────────────────
+
+async function getPlansSummaryForProjects(
+  projectIds: string[],
+): Promise<Map<string, DashboardPlanSummary[]>> {
+  if (projectIds.length === 0) return new Map();
+
+  const planRows = await db
+    .select({
+      id: mediaPlans.id,
+      projectId: mediaPlans.projectId,
+      name: mediaPlans.name,
+      status: mediaPlans.status,
+      currentVersion: mediaPlans.currentVersion,
+      createdAt: mediaPlans.createdAt,
+      totalMediaUsd: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+      periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
+      periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
+    })
+    .from(mediaPlans)
+    .leftJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+    )
+    .leftJoin(
+      mediaPlanPlacements,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .where(inArray(mediaPlans.projectId, projectIds))
+    .groupBy(mediaPlans.id)
+    .orderBy(asc(mediaPlans.createdAt));
+
+  if (planRows.length === 0) return new Map();
+  const planIds = planRows.map((p) => p.id);
+
+  const [feeData, spentData] = await Promise.all([
+    db
+      .select({
+        planId: mediaPlanFees.mediaPlanId,
+        fixedTotal: sql<string>`coalesce(sum(${mediaPlanFees.amountUsd}) filter (where ${mediaPlanFees.ratePct} is null or ${mediaPlanFees.feeType} != 'management'), 0)`,
+        mgmtRatePct: sql<string | null>`max(${mediaPlanFees.ratePct}) filter (where ${mediaPlanFees.feeType} = 'management')::text`,
+      })
+      .from(mediaPlanFees)
+      .where(inArray(mediaPlanFees.mediaPlanId, planIds))
+      .groupBy(mediaPlanFees.mediaPlanId),
+    db
+      .select({
+        planId: planBillings.mediaPlanId,
+        spent: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+      })
+      .from(planBillings)
+      .leftJoin(
+        planBillingPublishers,
+        eq(planBillingPublishers.planBillingId, planBillings.id),
+      )
+      .where(inArray(planBillings.mediaPlanId, planIds))
+      .groupBy(planBillings.mediaPlanId),
+  ]);
+
+  const feesByPlan = new Map(
+    feeData.map((f) => [
+      f.planId,
+      {
+        fixed: Number.parseFloat(f.fixedTotal),
+        mgmtRatePct: f.mgmtRatePct ? Number.parseFloat(f.mgmtRatePct) : null,
+      },
+    ]),
+  );
+  const spentByPlan = new Map(
+    spentData.map((s) => [s.planId, Number.parseFloat(s.spent)]),
+  );
+
+  const result = new Map<string, DashboardPlanSummary[]>();
+  for (const p of planRows) {
+    const totalMedia = Number.parseFloat(p.totalMediaUsd);
+    const fee = feesByPlan.get(p.id);
+    const fixedFees = fee?.fixed ?? 0;
+    const mgmtFee =
+      fee?.mgmtRatePct != null && fee.mgmtRatePct < 100
+        ? (totalMedia * fee.mgmtRatePct) / (100 - fee.mgmtRatePct)
+        : 0;
+    const totalFees = fixedFees + mgmtFee;
+    const summary: DashboardPlanSummary = {
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      currentVersion: p.currentVersion,
+      periodStart: p.periodStart,
+      periodEnd: p.periodEnd,
+      totalMediaUsd: totalMedia,
+      totalFeesUsd: totalFees,
+      totalUsd: totalMedia + totalFees,
+      spentRealUsd: spentByPlan.get(p.id) ?? 0,
+    };
+    const list = result.get(p.projectId) ?? [];
+    list.push(summary);
+    result.set(p.projectId, list);
+  }
+
+  return result;
 }
 
 // ────────────────────────────────────────────────────────────────────────────

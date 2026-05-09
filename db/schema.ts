@@ -322,6 +322,12 @@ export const mediaPlanFees = pgTable("media_plan_fees", {
     .references(() => mediaPlans.id, { onDelete: "cascade" }),
   feeType: feeType("fee_type").notNull(),
   name: text("name").notNull(),               // "Management Fee", custom name
+  // Para management fees: el planner setea ratePct (% de comisión sobre
+  // gross). El amount se DERIVA: amount = TM × ratePct/(100 - ratePct).
+  // Equivalente a la fórmula del usuario: amount = TM/(1 - ratePct/100) - TM.
+  // Para otros tipos de fee (setup, reporting, custom): ratePct queda null
+  // y amount es manual.
+  ratePct: numeric("rate_pct", { precision: 5, scale: 2 }),
   amountUsd: numeric("amount_usd", { precision: 14, scale: 2 }).notNull(),
   notes: text("notes"),
   sortOrder: integer("sort_order").notNull().default(0),
