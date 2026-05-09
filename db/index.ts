@@ -30,9 +30,13 @@ function getClient(): ReturnType<typeof postgres> {
       "DATABASE_URL no está definida — revisá .env.local (en dev) o las env vars del deploy.",
     );
   }
+  // En serverless cada invocación tiene su propio pool. `max: 1` evita
+  // exhaustar el pool del Transaction Pooler de Supabase cuando hay muchas
+  // funciones warm en paralelo. En dev (HMR) `max: 5` está bien.
+  const max = process.env.NODE_ENV === "production" ? 1 : 5;
   const client = postgres(connectionString, {
     prepare: false,
-    max: 5,
+    max,
     idle_timeout: 20,
   });
   if (process.env.NODE_ENV !== "production") {
