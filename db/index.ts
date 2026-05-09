@@ -2,14 +2,6 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error(
-    "DATABASE_URL no está definida — revisá .env.local (en dev) o las env vars del deploy.",
-  );
-}
-
 // `prepare: false` para compatibilidad con el transaction pooler de Supabase
 // (puerto 6543). Sobre la session pooler (5432) tampoco molesta.
 //
@@ -24,13 +16,41 @@ declare global {
   var __pgClient: ReturnType<typeof postgres> | undefined;
 }
 
-const client =
-  global.__pgClient ??
-  postgres(connectionString, { prepare: false, max: 5, idle_timeout: 20 });
-
-if (process.env.NODE_ENV !== "production") {
-  global.__pgClient = client;
+function getClient(): ReturnType<typeof postgres> {
+  if (global.__pgClient) return global.__pgClient;
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error(
+      "DATABASE_URL no está definida — revisá .env.local (en dev) o las env vars del deploy.",
+    );
+  }
+  const client = postgres(connectionString, {
+    prepare: false,
+    max: 5,
+    idle_timeout: 20,
+  });
+  if (process.env.NODE_ENV !== "production") {
+    global.__pgClient = client;
+  }
+  return client;
 }
 
-export const db = drizzle(client, { schema });
+// `db` es un Proxy: difiere la creación del cliente postgres + drizzle hasta
+// el primer acceso a una propiedad/método. Esto permite que el build de
+// Next.js (que carga los módulos durante "Collecting page data") no requiera
+// DATABASE_URL — sólo se necesita en runtime, cuando hay un request real.
+type DbInstance = ReturnType<typeof drizzle<typeof schema>>;
+let _db: DbInstance | null = null;
+function getDb(): DbInstance {
+  if (_db) return _db;
+  _db = drizzle(getClient(), { schema });
+  return _db;
+}
+
+export const db = new Proxy({} as DbInstance, {
+  get(_t, prop, receiver) {
+    return Reflect.get(getDb(), prop, receiver);
+  },
+}) as DbInstance;
+
 export { schema };
