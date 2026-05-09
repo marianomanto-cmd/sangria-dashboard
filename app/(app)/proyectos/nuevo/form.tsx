@@ -20,7 +20,6 @@ export function NewProjectForm({
   const [name, setName] = useState("");
   const [totalGrossBudget, setTotalGrossBudget] = useState("");
   const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -64,7 +63,6 @@ export function NewProjectForm({
         ? Number.parseFloat(totalGrossBudget)
         : undefined,
       startDate: startDate || null,
-      endDate: endDate || null,
       notesMd: notes || null,
     });
     if (!r.ok) {
@@ -164,24 +162,18 @@ export function NewProjectForm({
         />
       </Field>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Field label="Período inicio">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
-          />
-        </Field>
-        <Field label="Período fin">
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
-          />
-        </Field>
-      </div>
+      <Field label="Fecha estimada de inicio (opcional)">
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+          className="w-full sm:w-1/2 rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+        />
+        <p className="mt-1 text-[11px] text-muted">
+          La fecha de finalización del proyecto se calcula automáticamente
+          desde el placement con la fecha más lejana entre todos los planes.
+        </p>
+      </Field>
 
       <Field label="Notas (opcional)">
         <textarea

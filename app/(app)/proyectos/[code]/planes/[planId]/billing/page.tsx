@@ -6,6 +6,7 @@ import {
   budgetOrigins,
   clients,
   mediaPlanFees,
+  mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
   planBillingFees,
@@ -62,10 +63,25 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
 
   const plan = planRow.plan;
 
-  // Months en el período del plan.
+  // El período del plan se deriva de min(placement.start) → max(placement.end)
+  const [periodRow] = await db
+    .select({
+      periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
+      periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
+    })
+    .from(mediaPlanPlacements)
+    .innerJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .where(eq(mediaPlanPublishers.mediaPlanId, planId));
+
   const months =
-    plan.periodStart && plan.periodEnd
-      ? enumerateMonths(plan.periodStart.slice(0, 7), plan.periodEnd.slice(0, 7))
+    periodRow?.periodStart && periodRow?.periodEnd
+      ? enumerateMonths(
+          periodRow.periodStart.slice(0, 7),
+          periodRow.periodEnd.slice(0, 7),
+        )
       : [];
 
   // Existing billings for this plan.

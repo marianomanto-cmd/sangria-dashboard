@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlanDetail } from "@/db/queries/project-detail";
-import { listPublishers } from "@/app/actions/plans";
+import {
+  listMarkets,
+  listMetrics,
+  listPublishers,
+} from "@/app/actions/plans";
 import { PlanEditor } from "./editor";
 
 type Props = {
@@ -10,9 +14,11 @@ type Props = {
 
 export default async function PlanDetailPage({ params }: Props) {
   const { code, planId } = await params;
-  const [detail, allPublishers] = await Promise.all([
+  const [detail, allPublishers, allMarkets, allMetrics] = await Promise.all([
     getPlanDetail(planId),
     listPublishers(),
+    listMarkets(),
+    listMetrics(),
   ]);
 
   if (!detail) notFound();
@@ -39,7 +45,12 @@ export default async function PlanDetailPage({ params }: Props) {
         <span className="text-ink font-medium">{detail.plan.name}</span>
       </nav>
 
-      <PlanEditor detail={detail} allPublishers={allPublishers} />
+      <PlanEditor
+        detail={detail}
+        allPublishers={allPublishers}
+        allMarkets={allMarkets}
+        allMetrics={allMetrics}
+      />
     </main>
   );
 }

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   budgetOrigins,
   clients,
+  mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
   projects,
@@ -32,8 +33,9 @@ export default async function PlanesPage({ searchParams }: Props) {
       name: mediaPlans.name,
       status: mediaPlans.status,
       currentVersion: mediaPlans.currentVersion,
-      periodStart: mediaPlans.periodStart,
-      periodEnd: mediaPlans.periodEnd,
+      // periodStart/End derivados de los placements del plan
+      periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
+      periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
       createdAt: mediaPlans.createdAt,
       projectId: projects.id,
       projectCode: projects.code,
@@ -50,6 +52,10 @@ export default async function PlanesPage({ searchParams }: Props) {
     .leftJoin(
       mediaPlanPublishers,
       eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+    )
+    .leftJoin(
+      mediaPlanPlacements,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
     .groupBy(mediaPlans.id, projects.id, clients.id, budgetOrigins.id)
     .orderBy(asc(projects.code), asc(mediaPlans.createdAt));

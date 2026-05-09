@@ -31,10 +31,29 @@ import type {
   PlanPlacement,
   PlanPublisherGroup,
 } from "@/db/queries/project-detail";
-import type { publishers } from "@/db/schema";
+import type {
+  markets as marketsTable,
+  metricsCatalog as metricsTable,
+  publishers,
+} from "@/db/schema";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 
 type PublisherCatalog = (typeof publishers.$inferSelect);
+type Market = (typeof marketsTable.$inferSelect);
+type MetricCatalog = (typeof metricsTable.$inferSelect);
+
+// Mapeo cost_method → métrica principal slug del catálogo
+const COST_METHOD_PRIMARY_METRIC: Record<string, string | null> = {
+  dCPV: "views",
+  CPV: "views",
+  dCPM: "impressions",
+  CPM: "impressions",
+  dCPC: "clicks",
+  CPC: "clicks",
+  CPA: "conversions",
+  Flat: null,
+  Other: null,
+};
 type CostMethod =
   | "dCPV"
   | "dCPC"
@@ -59,9 +78,13 @@ const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> 
 export function PlanEditor({
   detail,
   allPublishers,
+  allMarkets,
+  allMetrics,
 }: {
   detail: PlanDetail;
   allPublishers: PublisherCatalog[];
+  allMarkets: Market[];
+  allMetrics: MetricCatalog[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -77,8 +100,22 @@ export function PlanEditor({
   const coveragePct = projectBudget > 0 ? (planTotal / projectBudget) * 100 : 0;
   const overBudget = coveragePct > 100;
 
+  // Período del plan derivado de las fechas de los placements
+  const allPlacements = detail.publishers.flatMap((p) => p.placements);
+  const periodStart =
+    allPlacements
+      .map((p) => p.startDate)
+      .filter((d): d is string => !!d)
+      .sort()[0] ?? null;
+  const periodEnd =
+    allPlacements
+      .map((p) => p.endDate)
+      .filter((d): d is string => !!d)
+      .sort()
+      .pop() ?? null;
+
   // ─── Plan-level handlers ────────────────────────────────────────────
-  const onChangePlanField = (field: "name" | "periodStart" | "periodEnd" | "notesMd", value: string) => {
+  const onChangePlanField = (field: "name" | "notesMd", value: string) => {
     startTransition(async () => {
       await updatePlanMetadata({ planId: detail.plan.id, [field]: value });
       refresh();
@@ -223,50 +260,47 @@ export function PlanEditor({
         </div>
       </header>
 
-      {/* Plan metadata strip */}
+      {/* Plan metadata strip — todas las fechas son derivadas de los placements */}
       <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
-        <Field label="Período inicio">
-          <input
-            type="date"
-            defaultValue={detail.plan.periodStart ?? ""}
-            disabled={!editable}
-            onBlur={(e) =>
-              e.target.value !== (detail.plan.periodStart ?? "") &&
-              onChangePlanField("periodStart", e.target.value)
-            }
-            className="font-mono text-sm bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50"
-          />
-        </Field>
-        <Field label="Período fin">
-          <input
-            type="date"
-            defaultValue={detail.plan.periodEnd ?? ""}
-            disabled={!editable}
-            onBlur={(e) =>
-              e.target.value !== (detail.plan.periodEnd ?? "") &&
-              onChangePlanField("periodEnd", e.target.value)
-            }
-            className="font-mono text-sm bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50"
-          />
+        <Field label="Período (derivado)">
+          <span className="font-mono text-sm text-ink-2">
+            {periodStart ?? "—"}
+            <span className="text-stone-300"> → </span>
+            {periodEnd ?? "—"}
+          </span>
+          <p className="text-[10px] text-muted mt-0.5">
+            min/max de los placements
+          </p>
         </Field>
         <Field label="Total media + fees">
           <span className="font-mono text-sm font-semibold tabular-nums">
             {formatUsd(planTotal)}
-            <span className="text-muted text-xs font-normal ml-1">
-              ({formatUsdCompact(detail.totals.media)} + {formatUsdCompact(detail.totals.fees)} fees)
-            </span>
           </span>
+          <p className="text-[10px] text-muted mt-0.5">
+            {formatUsdCompact(detail.totals.media)} +{" "}
+            {formatUsdCompact(detail.totals.fees)} fees
+          </p>
+        </Field>
+        <Field label="Placements">
+          <span className="font-mono text-sm font-semibold tabular-nums">
+            {allPlacements.length}
+          </span>
+          <p className="text-[10px] text-muted mt-0.5">
+            {detail.publishers.length} publishers
+          </p>
         </Field>
         <Field label="vs Project budget">
           {projectBudget > 0 ? (
-            <span
-              className={`font-mono text-sm font-semibold tabular-nums ${overBudget ? "text-warn" : "text-ink"}`}
-            >
-              {formatPct(coveragePct, 0)}
-              <span className="text-muted text-xs font-normal ml-1">
-                de {formatUsdCompact(projectBudget)}
+            <>
+              <span
+                className={`font-mono text-sm font-semibold tabular-nums ${overBudget ? "text-warn" : "text-ink"}`}
+              >
+                {formatPct(coveragePct, 0)}
               </span>
-            </span>
+              <p className="text-[10px] text-muted mt-0.5">
+                de {formatUsdCompact(projectBudget)}
+              </p>
+            </>
           ) : (
             <span className="text-sm text-muted">—</span>
           )}
@@ -312,6 +346,8 @@ export function PlanEditor({
             key={pub.id}
             pub={pub}
             editable={editable}
+            allMarkets={allMarkets}
+            allMetrics={allMetrics}
             onChange={refresh}
             startTransition={startTransition}
           />
@@ -429,11 +465,15 @@ export function PlanEditor({
 function PublisherSection({
   pub,
   editable,
+  allMarkets,
+  allMetrics,
   onChange,
   startTransition,
 }: {
   pub: PlanPublisherGroup;
   editable: boolean;
+  allMarkets: Market[];
+  allMetrics: MetricCatalog[];
   onChange: () => void;
   startTransition: ReturnType<typeof useTransition>[1];
 }) {
@@ -536,6 +576,8 @@ function PublisherSection({
                   key={pl.id}
                   placement={pl}
                   editable={editable}
+                  allMarkets={allMarkets}
+                  allMetrics={allMetrics}
                   onChange={onChange}
                   startTransition={startTransition}
                 />
@@ -567,11 +609,15 @@ function PublisherSection({
 function PlacementRow({
   placement,
   editable,
+  allMarkets,
+  allMetrics,
   onChange,
   startTransition,
 }: {
   placement: PlanPlacement;
   editable: boolean;
+  allMarkets: Market[];
+  allMetrics: MetricCatalog[];
   onChange: () => void;
   startTransition: ReturnType<typeof useTransition>[1];
 }) {
@@ -613,13 +659,21 @@ function PlacementRow({
           />
         </td>
         <td className="px-3 py-1.5">
-          <TextInput
-            value={placement.market ?? ""}
-            onCommit={(v) => update({ market: v || null })}
+          <select
+            value={placement.marketId ?? ""}
             disabled={!editable}
-            placeholder="—"
-            className="w-full text-ink-2"
-          />
+            onChange={(e) =>
+              update({ marketId: e.target.value || null })
+            }
+            className="text-xs bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50 max-w-[180px]"
+          >
+            <option value="">— sin mercado —</option>
+            {allMarkets.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
         </td>
         <td className="px-3 py-1.5">
           <select
@@ -663,6 +717,7 @@ function PlacementRow({
             <PlacementDetails
               placement={placement}
               editable={editable}
+              allMetrics={allMetrics}
               update={update}
             />
           </td>
@@ -675,45 +730,72 @@ function PlacementRow({
 function PlacementDetails({
   placement,
   editable,
+  allMetrics,
   update,
 }: {
   placement: PlanPlacement;
   editable: boolean;
+  allMetrics: MetricCatalog[];
   update: (partial: Parameters<typeof updatePlacement>[0]) => void;
 }) {
+  // Métrica principal según el cost_method seleccionado
+  const primarySlug = placement.costMethod
+    ? COST_METHOD_PRIMARY_METRIC[placement.costMethod] ?? null
+    : null;
+  const primaryMetric = primarySlug
+    ? allMetrics.find((m) => m.slug === primarySlug) ?? null
+    : null;
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="space-y-3">
-        <Field label="Fecha inicio">
-          <input
-            type="date"
-            defaultValue={placement.startDate ?? ""}
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Fecha inicio">
+            <input
+              type="date"
+              defaultValue={placement.startDate ?? ""}
+              disabled={!editable}
+              onBlur={(e) =>
+                e.target.value !== (placement.startDate ?? "") &&
+                update({ startDate: e.target.value || null })
+              }
+              className="font-mono text-sm bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50"
+            />
+          </Field>
+          <Field label="Fecha fin">
+            <input
+              type="date"
+              defaultValue={placement.endDate ?? ""}
+              disabled={!editable}
+              onBlur={(e) =>
+                e.target.value !== (placement.endDate ?? "") &&
+                update({ endDate: e.target.value || null })
+              }
+              className="font-mono text-sm bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50"
+            />
+          </Field>
+        </div>
+
+        <Field label="Audiencia">
+          <textarea
+            defaultValue={placement.audience ?? ""}
             disabled={!editable}
+            rows={3}
+            placeholder="25-44 viajeros frecuentes, lookalike de site visitors, retargeting, etc."
             onBlur={(e) =>
-              e.target.value !== (placement.startDate ?? "") &&
-              update({ startDate: e.target.value || null })
+              e.target.value !== (placement.audience ?? "") &&
+              update({ audience: e.target.value || null })
             }
-            className="font-mono text-sm bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50"
+            className="w-full text-sm bg-white border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
           />
         </Field>
-        <Field label="Fecha fin">
-          <input
-            type="date"
-            defaultValue={placement.endDate ?? ""}
-            disabled={!editable}
-            onBlur={(e) =>
-              e.target.value !== (placement.endDate ?? "") &&
-              update({ endDate: e.target.value || null })
-            }
-            className="font-mono text-sm bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50"
-          />
-        </Field>
-        <Field label="Notas / audiencia / formatos">
+
+        <Field label="Notas / formatos / detalles">
           <textarea
             defaultValue={placement.notesMd ?? ""}
             disabled={!editable}
-            rows={4}
-            placeholder="Audiencia: 25-44 viajeros frecuentes&#10;Formato: video vertical 15-30s&#10;..."
+            rows={3}
+            placeholder="Formato: video vertical 15-30s, 3 versiones rotativas, etc."
             onBlur={(e) =>
               e.target.value !== (placement.notesMd ?? "") &&
               update({ notesMd: e.target.value || null })
@@ -722,36 +804,61 @@ function PlacementDetails({
           />
         </Field>
       </div>
-      <MetricsEditor
-        metrics={placement.metricsJson}
-        editable={editable}
-        onCommit={(m) => update({ metricsJson: m })}
-      />
+      <div>
+        {primaryMetric && (
+          <p className="text-[11px] mb-2 px-2 py-1.5 bg-accent-soft/40 border border-accent-soft rounded text-ink">
+            <span className="font-medium uppercase tracking-[0.06em] text-accent">
+              Métrica principal por {placement.costMethod}:
+            </span>{" "}
+            <span className="font-mono">{primaryMetric.slug}</span>{" "}
+            <span className="text-muted">({primaryMetric.name})</span>
+          </p>
+        )}
+        <MetricsEditor
+          metrics={placement.metricsJson}
+          allMetrics={allMetrics}
+          amountUsd={placement.amountUsd}
+          editable={editable}
+          onCommit={(m) => update({ metricsJson: m })}
+        />
+      </div>
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Editor de metrics_json (key-value flexible)
+// Editor de metrics_json: el planner elige métricas direct del catálogo,
+// las calculated se computan automáticamente desde direct + amount.
 // ════════════════════════════════════════════════════════════════════════════
 
 function MetricsEditor({
   metrics,
+  allMetrics,
+  amountUsd,
   editable,
   onCommit,
 }: {
   metrics: Record<string, number>;
+  allMetrics: MetricCatalog[];
+  amountUsd: number;
   editable: boolean;
   onCommit: (m: Record<string, number>) => void;
 }) {
-  const [draft, setDraft] = useState<Array<{ key: string; value: string }>>(
-    Object.entries(metrics).map(([k, v]) => ({ key: k, value: String(v) })),
+  // Solo guardamos las métricas direct. Calculated se derivan al render.
+  const directMetrics = allMetrics.filter((m) => m.kind === "direct");
+  const calculatedMetrics = allMetrics.filter((m) => m.kind === "calculated");
+  const directBySlug = new Map(directMetrics.map((m) => [m.slug, m]));
+
+  const [draft, setDraft] = useState<Array<{ slug: string; value: string }>>(
+    Object.entries(metrics)
+      .filter(([k]) => directBySlug.has(k))
+      .map(([k, v]) => ({ slug: k, value: String(v) })),
   );
 
   const commit = (next: typeof draft) => {
     const obj: Record<string, number> = {};
-    for (const { key, value } of next) {
-      const k = key.trim();
+    for (const { slug, value } of next) {
+      const k = slug.trim();
       if (!k) continue;
       const v = Number.parseFloat(value);
       if (Number.isFinite(v)) obj[k] = v;
@@ -759,14 +866,14 @@ function MetricsEditor({
     onCommit(obj);
   };
 
-  const updateRow = (idx: number, partial: Partial<{ key: string; value: string }>) => {
+  const updateRow = (idx: number, partial: Partial<{ slug: string; value: string }>) => {
     const next = draft.map((r, i) => (i === idx ? { ...r, ...partial } : r));
     setDraft(next);
     commit(next);
   };
 
-  const addRow = () => {
-    setDraft((d) => [...d, { key: "", value: "" }]);
+  const addRow = (slug = "") => {
+    setDraft((d) => [...d, { slug, value: "" }]);
   };
 
   const removeRow = (idx: number) => {
@@ -775,75 +882,176 @@ function MetricsEditor({
     commit(next);
   };
 
+  // Slugs ya usados en el draft, para filtrar el dropdown
+  const usedSlugs = new Set(draft.map((d) => d.slug).filter(Boolean));
+  const availableMetrics = directMetrics.filter((m) => !usedSlugs.has(m.slug));
+
+  // Cómputo de métricas calculadas desde el draft
+  const directValues: Record<string, number> = {};
+  for (const { slug, value } of draft) {
+    const v = Number.parseFloat(value);
+    if (slug && Number.isFinite(v)) directValues[slug] = v;
+  }
+
+  function evalCalculated(formula: string): number | null {
+    // Soportamos fórmulas simples: "amount/views", "clicks/impressions",
+    // "amount/impressions × 1000", "amount/conversions", "views/impressions".
+    // Si hay un × N, multiplicamos al final.
+    let f = formula.toLowerCase().replace(/\s+/g, "");
+    let multiplier = 1;
+    const xMatch = f.match(/×(\d+)/);
+    if (xMatch) {
+      multiplier = Number.parseInt(xMatch[1], 10);
+      f = f.replace(/×\d+/, "");
+    }
+    const slashMatch = f.match(/^([a-z_]+)\/([a-z_]+)$/);
+    if (!slashMatch) return null;
+    const [, num, den] = slashMatch;
+    const numerator = num === "amount" ? amountUsd : directValues[num];
+    const denominator = den === "amount" ? amountUsd : directValues[den];
+    if (
+      numerator == null ||
+      denominator == null ||
+      !Number.isFinite(numerator) ||
+      !Number.isFinite(denominator) ||
+      denominator === 0
+    )
+      return null;
+    return (numerator / denominator) * multiplier;
+  }
+
   return (
     <div>
       <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted mb-2">
-        Indicadores (cpc, ctr, est_imp, etc.)
+        Indicadores estimados
       </p>
       <div className="rounded-md border border-line bg-white">
-        {draft.length === 0 ? (
+        {draft.length === 0 && calculatedMetrics.length === 0 ? (
           <div className="px-3 py-4 text-center text-xs text-muted">
             Sin indicadores cargados
           </div>
         ) : (
           <table className="w-full text-sm">
             <tbody>
-              {draft.map((row, idx) => (
-                <tr key={idx} className="border-b border-line-soft last:border-b-0">
-                  <td className="px-2 py-1 w-[40%]">
-                    <input
-                      type="text"
-                      value={row.key}
-                      placeholder="cpc"
-                      disabled={!editable}
-                      onChange={(e) =>
-                        updateRow(idx, { key: e.target.value })
-                      }
-                      className="w-full font-mono text-xs bg-transparent focus:outline-none disabled:opacity-50"
-                    />
-                  </td>
-                  <td className="px-2 py-1">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      value={row.value}
-                      placeholder="0.012"
-                      disabled={!editable}
-                      onChange={(e) =>
-                        updateRow(idx, { value: e.target.value })
-                      }
-                      className="w-full font-mono text-xs bg-transparent text-right focus:outline-none disabled:opacity-50"
-                    />
-                  </td>
-                  {editable && (
-                    <td className="w-8 text-center">
-                      <button
-                        type="button"
-                        onClick={() => removeRow(idx)}
-                        className="text-muted hover:text-danger p-1"
+              {draft.map((row, idx) => {
+                const metric = directBySlug.get(row.slug);
+                return (
+                  <tr key={idx} className="border-b border-line-soft last:border-b-0">
+                    <td className="px-2 py-1 w-[45%]">
+                      <select
+                        value={row.slug}
+                        disabled={!editable}
+                        onChange={(e) => updateRow(idx, { slug: e.target.value })}
+                        className="w-full text-xs bg-transparent focus:outline-none disabled:opacity-50"
                       >
-                        <X size={11} />
-                      </button>
+                        {row.slug && !metric && (
+                          <option value={row.slug}>{row.slug} (no en catálogo)</option>
+                        )}
+                        <option value="">— elegir métrica —</option>
+                        {availableMetrics
+                          .concat(metric ? [metric] : [])
+                          .sort((a, b) => a.sortOrder - b.sortOrder)
+                          .map((m) => (
+                            <option key={m.id} value={m.slug}>
+                              {m.name} {m.unit ? `(${m.unit})` : ""}
+                            </option>
+                          ))}
+                      </select>
                     </td>
-                  )}
-                </tr>
-              ))}
+                    <td className="px-2 py-1">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={row.value}
+                        placeholder="0"
+                        disabled={!editable}
+                        onChange={(e) =>
+                          updateRow(idx, { value: e.target.value })
+                        }
+                        className="w-full font-mono text-xs bg-transparent text-right focus:outline-none disabled:opacity-50"
+                      />
+                    </td>
+                    {editable && (
+                      <td className="w-8 text-center">
+                        <button
+                          type="button"
+                          onClick={() => removeRow(idx)}
+                          className="text-muted hover:text-danger p-1"
+                        >
+                          <X size={11} />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
         {editable && (
-          <div className="border-t border-line-soft px-2 py-1">
+          <div className="border-t border-line-soft px-2 py-1 flex items-center gap-2">
             <button
               type="button"
-              onClick={addRow}
+              onClick={() => addRow("")}
               className="inline-flex items-center gap-1 text-[11px] text-muted hover:text-ink"
             >
               <Plus size={10} strokeWidth={2.5} />
-              Agregar
+              Agregar métrica
             </button>
+            {availableMetrics.length > 0 && (
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    addRow(e.target.value);
+                    e.target.value = "";
+                  }
+                }}
+                className="text-[11px] bg-transparent text-muted hover:text-ink focus:outline-none"
+              >
+                <option value="">elegir del catálogo…</option>
+                {availableMetrics.map((m) => (
+                  <option key={m.id} value={m.slug}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
       </div>
+
+      {calculatedMetrics.length > 0 && (
+        <div className="mt-2 rounded-md border border-line-soft bg-paper-2/40 px-3 py-2">
+          <p className="text-[10px] uppercase tracking-[0.08em] font-medium text-muted mb-1">
+            Métricas calculadas
+          </p>
+          <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] font-mono">
+            {calculatedMetrics.map((m) => {
+              const v = m.formula ? evalCalculated(m.formula) : null;
+              return (
+                <li key={m.id} className="flex items-baseline justify-between gap-2">
+                  <span className="text-muted truncate">{m.slug}</span>
+                  <span
+                    className={
+                      v == null ? "text-stone-300" : "text-ink-2 tabular-nums"
+                    }
+                    title={m.formula ?? undefined}
+                  >
+                    {v == null
+                      ? "—"
+                      : m.unit === "%"
+                        ? `${(v * 100).toFixed(2)}%`
+                        : v < 1
+                          ? `$${v.toFixed(4)}`
+                          : `$${v.toFixed(2)}`}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

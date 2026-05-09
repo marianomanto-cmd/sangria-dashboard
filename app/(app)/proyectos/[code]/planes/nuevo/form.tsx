@@ -9,18 +9,12 @@ const PRESETS = ["Awareness", "Consideration", "Performance", "Brand", "Promo"];
 export function NewPlanForm({
   projectId,
   projectCode,
-  defaultStart,
-  defaultEnd,
 }: {
   projectId: string;
   projectCode: string;
-  defaultStart: string;
-  defaultEnd: string;
 }) {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [periodStart, setPeriodStart] = useState(defaultStart);
-  const [periodEnd, setPeriodEnd] = useState(defaultEnd);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,8 +26,6 @@ export function NewPlanForm({
     const r = await createPlan({
       projectId,
       name: name.trim(),
-      periodStart: periodStart || null,
-      periodEnd: periodEnd || null,
     });
     if (!r.ok) {
       setError(r.error);
@@ -81,31 +73,6 @@ export function NewPlanForm({
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-muted mb-1.5">
-            Período inicio
-          </label>
-          <input
-            type="date"
-            value={periodStart}
-            onChange={(e) => setPeriodStart(e.target.value)}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
-          />
-        </div>
-        <div>
-          <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-muted mb-1.5">
-            Período fin
-          </label>
-          <input
-            type="date"
-            value={periodEnd}
-            onChange={(e) => setPeriodEnd(e.target.value)}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
-          />
-        </div>
-      </div>
-
       {error && (
         <div className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-xs text-danger">
           {error}
@@ -130,8 +97,10 @@ export function NewPlanForm({
       </div>
 
       <p className="text-[11px] text-muted border-t border-line-soft pt-3">
-        El plan arranca en estado <span className="font-mono">draft</span> sin
-        publishers ni placements. Los agregás desde el editor.
+        El plan arranca en estado <span className="font-mono">draft</span>{" "}
+        sin publishers ni placements. Las fechas del plan se calcularán
+        automáticamente desde las fechas de los placements que cargues
+        en el editor.
       </p>
     </form>
   );

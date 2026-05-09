@@ -109,8 +109,14 @@ export default async function ProjectDetailPage({ params }: Props) {
           <span className="font-mono text-sm text-ink-2">
             {project.startDate ?? "—"}
             <span className="text-stone-300"> → </span>
-            {project.endDate ?? "—"}
+            {(() => {
+              const ends = plans.map((p) => p.periodEnd).filter((d): d is string => !!d).sort();
+              return ends.length > 0 ? ends[ends.length - 1] : "—";
+            })()}
           </span>
+          <p className="text-[10px] text-muted mt-0.5">
+            fin derivado del último placement
+          </p>
         </Meta>
         <Meta label="Total gross budget">
           <span className="font-mono text-sm font-semibold tabular-nums text-ink">

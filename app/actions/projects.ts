@@ -21,7 +21,6 @@ export async function createProject(input: {
   name: string;
   totalGrossBudgetUsd?: number;
   startDate?: string | null;
-  endDate?: string | null;
   notesMd?: string | null;
 }): Promise<Result<{ projectId: string; code: string }>> {
   if (!input.code.trim()) return { ok: false, error: "Code requerido" };
@@ -53,7 +52,6 @@ export async function createProject(input: {
         name: input.name.trim(),
         status: "active",
         startDate: input.startDate ?? null,
-        endDate: input.endDate ?? null,
         totalGrossBudgetUsd:
           input.totalGrossBudgetUsd != null
             ? input.totalGrossBudgetUsd.toFixed(2)

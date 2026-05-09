@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   budgetOrigins,
   clients,
+  mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
   planBillingPublishers,
@@ -70,6 +71,9 @@ export async function getClientDetail(
   }
   const filterClause = and(...filterConds);
 
+  // El endDate del proyecto se deriva del placement con fecha más lejana
+  // de TODOS los planes del proyecto. Lo computamos en una query separada
+  // para mantener el SQL simple.
   const totals = await db
     .select({
       id: projects.id,
@@ -77,7 +81,6 @@ export async function getClientDetail(
       name: projects.name,
       status: projects.status,
       startDate: projects.startDate,
-      endDate: projects.endDate,
       totalBudgetUsd: projects.totalGrossBudgetUsd,
       spentUsd: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
       planCount: sql<number>`count(distinct ${mediaPlans.id})::int`,
@@ -92,6 +95,27 @@ export async function getClientDetail(
     .where(filterClause)
     .groupBy(projects.id)
     .orderBy(asc(projects.code));
+
+  const projectEndDates = await db
+    .select({
+      projectId: projects.id,
+      endDate: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
+    })
+    .from(projects)
+    .innerJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
+    .innerJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+    )
+    .innerJoin(
+      mediaPlanPlacements,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .where(filterClause)
+    .groupBy(projects.id);
+  const endDateByProject = new Map(
+    projectEndDates.map((r) => [r.projectId, r.endDate]),
+  );
 
   const monthly = await db
     .select({
@@ -132,7 +156,7 @@ export async function getClientDetail(
       name: t.name,
       status: t.status,
       startDate: t.startDate,
-      endDate: t.endDate,
+      endDate: endDateByProject.get(t.id) ?? null,
       totalBudgetUsd: total,
       spentUsd: spent,
       consumptionPct: total > 0 ? (spent / total) * 100 : 0,
@@ -150,8 +174,6 @@ export async function getClientDetail(
     .filter((p) => p.status === "active")
     .reduce((s, p) => s + p.spentUsd, 0);
 
-  // Suprimimos vars no usadas que dejamos importadas para futura extensión.
-  void mediaPlanPublishers;
 
   return {
     client,

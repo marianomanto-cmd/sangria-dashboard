@@ -14,8 +14,6 @@ export default async function NuevoPlanPage({ params }: Props) {
       id: projects.id,
       code: projects.code,
       name: projects.name,
-      startDate: projects.startDate,
-      endDate: projects.endDate,
     })
     .from(projects)
     .where(eq(projects.code, code))
@@ -48,12 +46,7 @@ export default async function NuevoPlanPage({ params }: Props) {
         <p className="text-sm text-muted mt-1 font-mono">{project.code}</p>
       </header>
 
-      <NewPlanForm
-        projectId={project.id}
-        projectCode={project.code}
-        defaultStart={project.startDate ?? ""}
-        defaultEnd={project.endDate ?? ""}
-      />
+      <NewPlanForm projectId={project.id} projectCode={project.code} />
     </main>
   );
 }

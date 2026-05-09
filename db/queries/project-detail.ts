@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   budgetOrigins,
   clients,
+  markets,
   mediaPlanFees,
   mediaPlanPlacements,
   mediaPlanPublishers,
@@ -63,14 +64,14 @@ export async function getProjectWithPlans(
 
   if (!row) return null;
 
-  // Resumen de planes con totales agregados.
+  // Resumen de planes con totales agregados. Las fechas del plan se derivan
+  // de min(placement.startDate) / max(placement.endDate) — calculadas en
+  // una query separada para mantener el SQL simple.
   const planSummaries = await db
     .select({
       id: mediaPlans.id,
       name: mediaPlans.name,
       status: mediaPlans.status,
-      periodStart: mediaPlans.periodStart,
-      periodEnd: mediaPlans.periodEnd,
       currentVersion: mediaPlans.currentVersion,
       createdAt: mediaPlans.createdAt,
       publishersCount: sql<number>`count(distinct ${mediaPlanPublishers.id})::int`,
@@ -91,12 +92,15 @@ export async function getProjectWithPlans(
 
   const planIds = planSummaries.map((p) => p.id);
 
-  // Counts de placements + total fees + último snapshot — en queries paralelas.
-  const [placementCounts, feeTotals, lastSnaps, spentByPlan] = await Promise.all([
+  // Counts de placements + total fees + último snapshot + período derivado
+  // — en queries paralelas.
+  const [placementCountsAndDates, feeTotals, lastSnaps, spentByPlan] = await Promise.all([
     db
       .select({
         planId: mediaPlanPublishers.mediaPlanId,
         count: sql<number>`count(*)::int`,
+        periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
+        periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
       })
       .from(mediaPlanPlacements)
       .innerJoin(
@@ -135,7 +139,15 @@ export async function getProjectWithPlans(
       .groupBy(planBillings.mediaPlanId),
   ]);
 
-  const placementCountByPlan = new Map(placementCounts.map((r) => [r.planId, r.count]));
+  const placementCountByPlan = new Map(
+    placementCountsAndDates.map((r) => [r.planId, r.count]),
+  );
+  const periodByPlan = new Map(
+    placementCountsAndDates.map((r) => [
+      r.planId,
+      { periodStart: r.periodStart, periodEnd: r.periodEnd },
+    ]),
+  );
   const feeTotalByPlan = new Map(feeTotals.map((r) => [r.planId, Number.parseFloat(r.total)]));
   const lastSnapByPlan = new Map(
     lastSnaps.map((r) => [r.planId, r.lastApprovedAt ? new Date(r.lastApprovedAt) : null]),
@@ -145,12 +157,13 @@ export async function getProjectWithPlans(
   const plans: ProjectPlanSummary[] = planSummaries.map((p) => {
     const totalMedia = Number.parseFloat(p.totalMediaUsd);
     const totalFees = feeTotalByPlan.get(p.id) ?? 0;
+    const period = periodByPlan.get(p.id);
     return {
       id: p.id,
       name: p.name,
       status: p.status,
-      periodStart: p.periodStart,
-      periodEnd: p.periodEnd,
+      periodStart: period?.periodStart ?? null,
+      periodEnd: period?.periodEnd ?? null,
       currentVersion: p.currentVersion,
       publishersCount: p.publishersCount,
       placementsCount: placementCountByPlan.get(p.id) ?? 0,
@@ -178,7 +191,9 @@ export async function getProjectWithPlans(
 export type PlanPlacement = {
   id: string;
   placementName: string;
-  market: string | null;
+  marketId: string | null;
+  marketName: string | null;            // join contra markets para mostrar
+  audience: string | null;
   amountUsd: number;
   costMethod: (typeof mediaPlanPlacements.$inferSelect)["costMethod"];
   startDate: string | null;
@@ -271,8 +286,12 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     mppIds.length === 0
       ? []
       : await db
-          .select()
+          .select({
+            placement: mediaPlanPlacements,
+            marketName: markets.name,
+          })
           .from(mediaPlanPlacements)
+          .leftJoin(markets, eq(mediaPlanPlacements.marketId, markets.id))
           .where(inArray(mediaPlanPlacements.mediaPlanPublisherId, mppIds))
           .orderBy(asc(mediaPlanPlacements.sortOrder));
 
@@ -296,12 +315,15 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     .orderBy(desc(mediaPlanSnapshots.versionNumber));
 
   const placementsByPub = new Map<string, PlanPlacement[]>();
-  for (const p of placementRows) {
+  for (const r of placementRows) {
+    const p = r.placement;
     const list = placementsByPub.get(p.mediaPlanPublisherId) ?? [];
     list.push({
       id: p.id,
       placementName: p.placementName,
-      market: p.market,
+      marketId: p.marketId,
+      marketName: r.marketName,
+      audience: p.audience,
       amountUsd: Number.parseFloat(p.amountUsd),
       costMethod: p.costMethod,
       startDate: p.startDate,

@@ -70,9 +70,58 @@ export const costMethod = pgEnum("cost_method", [
   "Other",
 ]);
 
+// Tipo de métrica del catálogo:
+//   direct     — el planner entra el valor directamente (views, clicks, impressions)
+//   calculated — derivada de otras (cpc = amount/clicks, ctr = clicks/impressions)
+export const metricKind = pgEnum("metric_kind", ["direct", "calculated"]);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Catálogo de mercados (editable desde /configuracion/markets).
+// Puede incluir países individuales (Costa Rica, Panama) o agrupaciones
+// (Centroamérica, LATAM). El planner elige UN mercado por placement.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const markets = pgTable(
+  "markets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),  // costa-rica, latam, centroamerica
+    name: text("name").notNull(),            // Costa Rica, LATAM, Centroamérica
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_markets_enabled").on(t.enabled, t.sortOrder)],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Catálogo de métricas / KPIs (editable desde /configuracion/metricas).
+// Direct: views, clicks, impressions, conversions, etc.
+// Calculated: ctr, cpc, cpm, cpv, etc. (derivadas de otras + amount).
+// ════════════════════════════════════════════════════════════════════════════
+
+export const metricsCatalog = pgTable(
+  "metrics_catalog",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),    // impressions, ctr, cpc
+    name: text("name").notNull(),              // Impressions, CTR, CPC
+    kind: metricKind("kind").notNull(),
+    unit: text("unit"),                        // imp, %, $, click, view (descriptivo)
+    formula: text("formula"),                   // null en direct; "amount/views" en calculated
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_metrics_enabled").on(t.enabled, t.sortOrder)],
+);
+
 // ════════════════════════════════════════════════════════════════════════════
 // Catálogo de publishers (editable desde /configuracion/publishers).
-// Reemplaza el enum hardcodeado que teníamos antes.
 // ════════════════════════════════════════════════════════════════════════════
 
 export const publishers = pgTable(
@@ -131,6 +180,11 @@ export const budgetOrigins = pgTable("budget_origins", {
 // Proyectos. AM crea el proyecto con metadata principal + total gross budget.
 // Code sigue convención: <CLIENT_PREFIX>.m<id>.<ProjectName>
 // Ej: "COPA.mCostaRica2026", "COPA.m1234.SubeLaMarea"
+//
+// La fecha de finalización del proyecto se DERIVA del placement con la fecha
+// fin más lejana de todos los planes del proyecto — no se almacena.
+// El startDate sí se guarda como "estimado de inicio" del AM (puede usarse
+// antes de que existan placements).
 // ════════════════════════════════════════════════════════════════════════════
 
 export const projects = pgTable("projects", {
@@ -144,8 +198,7 @@ export const projects = pgTable("projects", {
   code: text("code").notNull().unique(),       // "COPA.mCostaRica2026"
   name: text("name").notNull(),                 // "Costa Rica 2026" (display)
   status: projectStatus("status").notNull().default("planning"),
-  startDate: date("start_date"),
-  endDate: date("end_date"),
+  startDate: date("start_date"),                // estimado del AM
   totalGrossBudgetUsd: numeric("total_gross_budget_usd", {
     precision: 14,
     scale: 2,
@@ -162,6 +215,11 @@ export const projects = pgTable("projects", {
 // Cada plan tiene su propio lifecycle (draft → ready_to_send → approved).
 // Plan name sigue convención: <Project.code>.<PlanName>
 // Ej: "COPA.mCostaRica2026.Awareness", "COPA.mCostaRica2026.Performance"
+//
+// Las fechas del plan se DERIVAN de las fechas de los placements:
+//   period_start = min(placement.start_date)
+//   period_end   = max(placement.end_date)
+// No se almacenan.
 // ════════════════════════════════════════════════════════════════════════════
 
 export const mediaPlans = pgTable(
@@ -173,8 +231,6 @@ export const mediaPlans = pgTable(
       .references(() => projects.id, { onDelete: "cascade" }),
     name: text("name").notNull(),               // "Awareness", "Performance"
     status: planStatus("status").notNull().default("draft"),
-    periodStart: date("period_start"),
-    periodEnd: date("period_end"),
     // 0 = nunca aprobado. Cada vez que se aprueba se crea un snapshot e
     // incrementa este contador.
     currentVersion: integer("current_version").notNull().default(0),
@@ -219,8 +275,11 @@ export const mediaPlanPublishers = pgTable(
 
 // ════════════════════════════════════════════════════════════════════════════
 // Placements (líneas) dentro de un publisher dentro de un plan.
-// Cada placement: nombre, mercado, monto, cost_method, indicadores flexibles
-// (jsonb: cpc, ctr, est_imp, etc.) y notas free-text para audiencia/formato.
+// Cada placement: nombre, mercado (FK a markets), monto, cost_method,
+// audiencia (free text), indicadores flexibles (jsonb con keys del catálogo
+// de metrics_catalog) y notas free-text para formatos/extras.
+// Las fechas (start_date / end_date) son la fuente de verdad — el período
+// del plan y del proyecto se derivan de acá.
 // ════════════════════════════════════════════════════════════════════════════
 
 export const mediaPlanPlacements = pgTable(
@@ -231,16 +290,21 @@ export const mediaPlanPlacements = pgTable(
       .notNull()
       .references(() => mediaPlanPublishers.id, { onDelete: "cascade" }),
     placementName: text("placement_name").notNull(),
-    market: text("market"),
+    marketId: uuid("market_id").references(() => markets.id, {
+      onDelete: "set null",
+    }),
+    audience: text("audience"),                  // detalles de audiencia (free text)
     amountUsd: numeric("amount_usd", { precision: 14, scale: 2 }).notNull(),
-    costMethod: costMethod("cost_method"),
+    costMethod: costMethod("cost_method"),       // método principal
     startDate: date("start_date"),
     endDate: date("end_date"),
-    // Diccionario flexible: { cpc: 0.012, ctr: 0.5, est_imp: 1000000, ... }
+    // Diccionario flexible: keys son slugs de metrics_catalog (cpc, ctr,
+    // est_imp, etc.). Solo se almacenan métricas direct; las calculated
+    // se derivan en runtime con la fórmula del catálogo.
     metricsJson: jsonb("metrics_json")
       .$type<Record<string, number>>()
       .default(sql`'{}'::jsonb`),
-    notesMd: text("notes_md"), // audiencia / formatos / detalles libres
+    notesMd: text("notes_md"),                    // formatos / detalles libres
     sortOrder: integer("sort_order").notNull().default(0),
   },
   (t) => [index("idx_placements_mpp").on(t.mediaPlanPublisherId)],

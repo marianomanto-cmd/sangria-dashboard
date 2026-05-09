@@ -215,33 +215,34 @@ export async function getMonthlyTotals(): Promise<MonthlyTotal[]> {
     )
     .groupBy(planBillings.month);
 
-  // Proyectado: para cada plan approved con períodos, prorratear el
-  // total_planned_usd (sumado de mediaPlanPublishers) entre los meses
-  // del período del plan.
-  const planTotals = await db
+  // Proyectado: para cada plan approved, prorrateamos el budget de cada
+  // PLACEMENT entre los meses de su [start, end] (el período del plan ya
+  // no se almacena, se deriva). Si dos placements del mismo mes contribuyen,
+  // se suman.
+  const placementSpans = await db
     .select({
       planId: mediaPlans.id,
-      periodStart: mediaPlans.periodStart,
-      periodEnd: mediaPlans.periodEnd,
-      total: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+      startDate: mediaPlanPlacements.startDate,
+      endDate: mediaPlanPlacements.endDate,
+      amount: mediaPlanPlacements.amountUsd,
     })
-    .from(mediaPlans)
+    .from(mediaPlanPlacements)
     .innerJoin(
       mediaPlanPublishers,
-      eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
-    .where(eq(mediaPlans.status, "approved"))
-    .groupBy(mediaPlans.id);
+    .innerJoin(mediaPlans, eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id))
+    .where(eq(mediaPlans.status, "approved"));
 
   const projectedByMonth: Record<string, number> = {};
-  for (const p of planTotals) {
-    if (!p.periodStart || !p.periodEnd) continue;
+  for (const p of placementSpans) {
+    if (!p.startDate || !p.endDate) continue;
     const months = enumerateMonths(
-      p.periodStart.slice(0, 7),
-      p.periodEnd.slice(0, 7),
+      p.startDate.slice(0, 7),
+      p.endDate.slice(0, 7),
     );
     if (months.length === 0) continue;
-    const monthly = Number.parseFloat(p.total) / months.length;
+    const monthly = Number.parseFloat(p.amount) / months.length;
     for (const m of months) {
       projectedByMonth[m] = (projectedByMonth[m] ?? 0) + monthly;
     }
@@ -262,5 +263,3 @@ export async function getMonthlyTotals(): Promise<MonthlyTotal[]> {
   }));
 }
 
-// Mantener export para no romper imports en pages.
-export { mediaPlanPlacements as _placements };

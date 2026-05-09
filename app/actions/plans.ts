@@ -5,11 +5,13 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
   auditLog,
+  markets,
   mediaPlanFees,
   mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
   mediaPlanSnapshots,
+  metricsCatalog,
   projects,
   publishers,
 } from "@/db/schema";
@@ -25,8 +27,6 @@ type Result<T = void> =
 export async function createPlan(input: {
   projectId: string;
   name: string;
-  periodStart: string | null;
-  periodEnd: string | null;
 }): Promise<Result<{ planId: string }>> {
   if (!input.projectId) return { ok: false, error: "Falta project_id" };
   if (!input.name.trim()) return { ok: false, error: "El plan necesita un nombre" };
@@ -56,8 +56,6 @@ export async function createPlan(input: {
       projectId: input.projectId,
       name: input.name.trim(),
       status: "draft",
-      periodStart: input.periodStart,
-      periodEnd: input.periodEnd,
     })
     .returning();
 
@@ -82,8 +80,6 @@ export async function createPlan(input: {
 export async function updatePlanMetadata(input: {
   planId: string;
   name?: string;
-  periodStart?: string | null;
-  periodEnd?: string | null;
   notesMd?: string | null;
 }): Promise<Result> {
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
@@ -100,8 +96,6 @@ export async function updatePlanMetadata(input: {
 
   const update: Record<string, unknown> = {};
   if (input.name !== undefined) update.name = input.name.trim();
-  if (input.periodStart !== undefined) update.periodStart = input.periodStart;
-  if (input.periodEnd !== undefined) update.periodEnd = input.periodEnd;
   if (input.notesMd !== undefined) update.notesMd = input.notesMd;
   if (Object.keys(update).length === 0) return { ok: true };
 
@@ -344,7 +338,7 @@ export async function removePublisherFromPlan(
 export async function addPlacement(input: {
   mppId: string;
   placementName: string;
-  market?: string | null;
+  marketId?: string | null;
   amountUsd: number;
 }): Promise<Result<{ placementId: string }>> {
   if (!input.placementName.trim())
@@ -364,7 +358,7 @@ export async function addPlacement(input: {
     .values({
       mediaPlanPublisherId: input.mppId,
       placementName: input.placementName.trim(),
-      market: input.market ?? null,
+      marketId: input.marketId ?? null,
       amountUsd: input.amountUsd.toFixed(2),
       sortOrder: next,
     })
@@ -383,7 +377,8 @@ export async function addPlacement(input: {
 export async function updatePlacement(input: {
   placementId: string;
   placementName?: string;
-  market?: string | null;
+  marketId?: string | null;
+  audience?: string | null;
   amountUsd?: number;
   costMethod?:
     | "dCPV"
@@ -411,7 +406,8 @@ export async function updatePlacement(input: {
   const update: Record<string, unknown> = {};
   if (input.placementName !== undefined)
     update.placementName = input.placementName.trim();
-  if (input.market !== undefined) update.market = input.market;
+  if (input.marketId !== undefined) update.marketId = input.marketId;
+  if (input.audience !== undefined) update.audience = input.audience;
   if (input.amountUsd !== undefined) {
     if (!Number.isFinite(input.amountUsd) || input.amountUsd < 0)
       return { ok: false, error: "Monto inválido" };
@@ -566,7 +562,7 @@ export async function removeFee(feeId: string): Promise<Result> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Lookup: lista de publishers del catálogo (para el dropdown del editor)
+// Lookups del catálogo (para los dropdowns del editor)
 // ════════════════════════════════════════════════════════════════════════════
 
 export async function listPublishers() {
@@ -575,4 +571,20 @@ export async function listPublishers() {
     .from(publishers)
     .where(eq(publishers.enabled, true))
     .orderBy(asc(publishers.sortOrder), asc(publishers.name));
+}
+
+export async function listMarkets() {
+  return db
+    .select()
+    .from(markets)
+    .where(eq(markets.enabled, true))
+    .orderBy(asc(markets.sortOrder), asc(markets.name));
+}
+
+export async function listMetrics() {
+  return db
+    .select()
+    .from(metricsCatalog)
+    .where(eq(metricsCatalog.enabled, true))
+    .orderBy(asc(metricsCatalog.sortOrder), asc(metricsCatalog.name));
 }
