@@ -1,15 +1,20 @@
+import { FacturacionChart } from "@/components/facturacion-chart";
 import { KpiCard } from "@/components/kpi-card";
+import { Sparkline } from "@/components/sparkline";
 import { StatusBadge } from "@/components/status-badge";
 import {
+  type DashboardProjectRow,
   getDashboardKpis,
   getDashboardProjects,
+  getMonthlyTotals,
 } from "@/db/queries/dashboard";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 
 export default async function DashboardPage() {
-  const [kpis, projects] = await Promise.all([
+  const [kpis, projectsData, monthly] = await Promise.all([
     getDashboardKpis(),
     getDashboardProjects(),
+    getMonthlyTotals(),
   ]);
 
   return (
@@ -59,9 +64,9 @@ export default async function DashboardPage() {
         />
       </section>
 
-      {/* Chart placeholder — próximo commit */}
-      <section className="mt-6 rounded-lg border border-line border-dashed bg-paper-2 px-5 py-10 text-center text-sm text-muted">
-        Chart de facturación real vs proyectado · próximo commit
+      {/* Chart */}
+      <section className="mt-6">
+        <FacturacionChart data={monthly} />
       </section>
 
       {/* Tabla de proyectos */}
@@ -69,7 +74,7 @@ export default async function DashboardPage() {
         <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">Proyectos</h2>
           <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            {projects.length} totales
+            {projectsData.rows.length} totales
           </span>
         </div>
         <table className="w-full text-sm">
@@ -80,13 +85,16 @@ export default async function DashboardPage() {
               <th className="text-left font-medium px-5 py-2.5">Estado</th>
               <th className="text-right font-medium px-5 py-2.5">Budget</th>
               <th className="text-right font-medium px-5 py-2.5">Gastado</th>
+              <th className="text-left font-medium px-5 py-2.5 w-[140px]">
+                Spark
+              </th>
               <th className="text-left font-medium px-5 py-2.5 w-[180px]">
                 Avance
               </th>
             </tr>
           </thead>
           <tbody>
-            {projects.map((p) => (
+            {projectsData.rows.map((p) => (
               <ProjectRow key={p.id} project={p} />
             ))}
           </tbody>
@@ -96,11 +104,7 @@ export default async function DashboardPage() {
   );
 }
 
-function ProjectRow({
-  project,
-}: {
-  project: Awaited<ReturnType<typeof getDashboardProjects>>[number];
-}) {
+function ProjectRow({ project }: { project: DashboardProjectRow }) {
   const overConsumed = project.consumptionPct > 100;
   const barWidth = Math.min(project.consumptionPct, 100);
 
@@ -119,6 +123,9 @@ function ProjectRow({
       </td>
       <td className="px-5 py-3 text-right font-mono text-ink-2">
         {project.spentUsd > 0 ? formatUsd(project.spentUsd) : "—"}
+      </td>
+      <td className="px-5 py-3">
+        <Sparkline values={project.monthlySpend} />
       </td>
       <td className="px-5 py-3">
         <div className="flex items-center gap-3">
