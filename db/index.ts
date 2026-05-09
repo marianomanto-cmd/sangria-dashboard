@@ -30,14 +30,17 @@ function getClient(): ReturnType<typeof postgres> {
       "DATABASE_URL no está definida — revisá .env.local (en dev) o las env vars del deploy.",
     );
   }
-  // En serverless cada invocación tiene su propio pool. `max: 1` evita
-  // exhaustar el pool del Transaction Pooler de Supabase cuando hay muchas
-  // funciones warm en paralelo. En dev (HMR) `max: 5` está bien.
-  const max = process.env.NODE_ENV === "production" ? 1 : 5;
+  // `max: 5` permite que las páginas con muchas queries paralelas
+  // (Promise.all en el dashboard) no las queueen en una sola conexión.
+  // El Transaction Pooler de Supabase aguanta ~200 conexiones en total, así
+  // que 5 por warm-instance es seguro. En el Session Pooler (límite 15) ya
+  // no rinde — pero el deploy usa el Transaction Pooler.
+  // `connect_timeout: 10` evita que cuelgue indefinido al levantar la conn.
   const client = postgres(connectionString, {
     prepare: false,
-    max,
+    max: 5,
     idle_timeout: 20,
+    connect_timeout: 10,
   });
   if (process.env.NODE_ENV !== "production") {
     global.__pgClient = client;
