@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
@@ -7,6 +8,7 @@ import {
   ChevronRight,
   GripVertical,
   Plus,
+  Receipt,
   Trash2,
   X,
 } from "lucide-react";
@@ -171,6 +173,13 @@ export function PlanEditor({
         </div>
 
         <div className="flex items-center gap-2">
+          <Link
+            href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/billing`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
+          >
+            <Receipt size={14} strokeWidth={2} />
+            Billing del plan
+          </Link>
           {detail.plan.status === "draft" && (
             <button
               type="button"

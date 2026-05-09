@@ -1,0 +1,436 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+import {
+  ensureBillingForMonth,
+  setFeeImputation,
+  setPublisherConsumption,
+  transitionBillingStatus,
+} from "@/app/actions/plan-billing";
+import type { planBillings as planBillingsTable } from "@/db/schema";
+import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+
+type Billing = typeof planBillingsTable.$inferSelect;
+
+type PubLine = {
+  publisherId: string;
+  publisherName: string;
+  publisherSlug: string;
+  agencyPays: boolean;
+  totalPlannedUsd: number;
+  amountThisMonthUsd: number;
+  isBillable: boolean;
+  notes: string | null;
+};
+
+type FeeLine = {
+  mediaPlanFeeId: string;
+  feeName: string;
+  feeType: string;
+  totalAmountUsd: number;
+  accumulatedBeforeUsd: number;
+  amountThisMonthUsd: number;
+  notes: string | null;
+};
+
+export function BillingMonthEditor({
+  planId,
+  projectCode,
+  month,
+  billing,
+  publisherLines,
+  feeLines,
+}: {
+  planId: string;
+  projectCode: string;
+  month: string;
+  billing: Billing | null;
+  publisherLines: PubLine[];
+  feeLines: FeeLine[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  if (!billing) {
+    // Auto-create on load? Show CTA instead.
+    const handleCreate = () => {
+      startTransition(async () => {
+        const r = await ensureBillingForMonth({ planId, month });
+        if (!r.ok) {
+          alert(r.error);
+          return;
+        }
+        router.refresh();
+      });
+    };
+    return (
+      <div className="rounded-lg border border-line bg-white px-5 py-8 text-center">
+        <p className="text-sm font-medium text-ink-2 mb-2">
+          Sin carga para {month}
+        </p>
+        <p className="text-xs text-muted mb-4">
+          Crear el billing draft del mes con todos los publishers + fees del
+          plan pre-cargados en cero.
+        </p>
+        <button
+          type="button"
+          onClick={handleCreate}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
+        >
+          {pending ? "Creando…" : `Crear draft para ${month}`}
+        </button>
+      </div>
+    );
+  }
+
+  const editable = billing.status === "draft";
+
+  const onSetPublisher = (publisherId: string, partial: { amount?: number; isBillable?: boolean; notes?: string | null }) => {
+    startTransition(async () => {
+      const r = await setPublisherConsumption({
+        billingId: billing.id,
+        publisherId,
+        amountRealUsd:
+          partial.amount ??
+          publisherLines.find((p) => p.publisherId === publisherId)?.amountThisMonthUsd ??
+          0,
+        isBillable: partial.isBillable,
+        notes: partial.notes,
+      });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  const onSetFee = (feeId: string, amount: number, notes?: string | null) => {
+    startTransition(async () => {
+      const r = await setFeeImputation({
+        billingId: billing.id,
+        mediaPlanFeeId: feeId,
+        amountImputedUsd: amount,
+        notes,
+      });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  const onTransition = (to: "draft" | "ready" | "sent" | "paid") => {
+    if (to === "sent" && !confirm(`¿Emitir factura para ${month}? Se asigna número y fecha de vencimiento (30d).`)) return;
+    startTransition(async () => {
+      const r = await transitionBillingStatus({ billingId: billing.id, to });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  const publisherSubtotal = publisherLines
+    .filter((p) => p.isBillable)
+    .reduce((s, p) => s + p.amountThisMonthUsd, 0);
+  const feeSubtotal = feeLines.reduce((s, f) => s + f.amountThisMonthUsd, 0);
+  const grand = publisherSubtotal + feeSubtotal;
+
+  return (
+    <div className="space-y-4">
+      {/* Header del mes */}
+      <div className="rounded-lg border border-line bg-white px-5 py-4 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            Billing · {month}
+          </p>
+          <div className="flex items-center gap-3 mt-1">
+            <h2 className="text-xl font-semibold">{month}</h2>
+            <BillingStatusPillInline status={billing.status} />
+            {billing.invoiceNumber && (
+              <span className="font-mono text-xs text-muted">
+                N° {billing.invoiceNumber}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {billing.status === "draft" && (
+            <button
+              type="button"
+              onClick={() => onTransition("ready")}
+              disabled={pending}
+              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
+            >
+              Marcar listo
+            </button>
+          )}
+          {billing.status === "ready" && (
+            <>
+              <button
+                type="button"
+                onClick={() => onTransition("draft")}
+                disabled={pending}
+                className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+              >
+                Volver a draft
+              </button>
+              <button
+                type="button"
+                onClick={() => onTransition("sent")}
+                disabled={pending}
+                className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
+              >
+                Emitir factura
+              </button>
+            </>
+          )}
+          {billing.status === "sent" && (
+            <button
+              type="button"
+              onClick={() => onTransition("paid")}
+              disabled={pending}
+              className="rounded-md bg-success text-white px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+            >
+              Marcar como pagada
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Publishers — consumo del mes */}
+      <section className="rounded-lg border border-line bg-white overflow-hidden">
+        <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
+          <h3 className="text-sm font-semibold">Consumo por publisher</h3>
+          <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+            Subtotal facturable: {formatUsd(publisherSubtotal)}
+          </span>
+        </div>
+        {publisherLines.length === 0 ? (
+          <div className="px-5 py-8 text-center text-xs text-muted">
+            El plan no tiene publishers cargados.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-paper">
+              <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                <th className="text-left font-medium px-5 py-2">Publisher</th>
+                <th className="text-left font-medium px-5 py-2">Facturable</th>
+                <th className="text-right font-medium px-5 py-2">Plan</th>
+                <th className="text-right font-medium px-5 py-2">Consumo del mes</th>
+                <th className="text-right font-medium px-5 py-2">% del plan</th>
+                <th className="text-left font-medium px-5 py-2">Notas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {publisherLines.map((p) => {
+                const pct =
+                  p.totalPlannedUsd > 0
+                    ? (p.amountThisMonthUsd / p.totalPlannedUsd) * 100
+                    : 0;
+                return (
+                  <tr
+                    key={p.publisherId}
+                    className="border-t border-line-soft hover:bg-paper-2/50"
+                  >
+                    <td className="px-5 py-2">
+                      <span className="font-medium text-ink">{p.publisherName}</span>
+                    </td>
+                    <td className="px-5 py-2">
+                      <input
+                        type="checkbox"
+                        checked={p.isBillable}
+                        disabled={!editable}
+                        onChange={(e) =>
+                          onSetPublisher(p.publisherId, { isBillable: e.target.checked })
+                        }
+                      />
+                    </td>
+                    <td className="px-5 py-2 text-right font-mono text-muted text-xs">
+                      {formatUsdCompact(p.totalPlannedUsd)}
+                    </td>
+                    <td className="px-5 py-2 text-right">
+                      <NumInput
+                        value={p.amountThisMonthUsd}
+                        disabled={!editable}
+                        onCommit={(v) => onSetPublisher(p.publisherId, { amount: v })}
+                      />
+                    </td>
+                    <td className="px-5 py-2 text-right font-mono text-xs text-muted">
+                      {p.totalPlannedUsd > 0 ? formatPct(pct, 0) : "—"}
+                    </td>
+                    <td className="px-5 py-2">
+                      <TextInput
+                        value={p.notes ?? ""}
+                        disabled={!editable}
+                        onCommit={(v) => onSetPublisher(p.publisherId, { notes: v || null })}
+                        placeholder="—"
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {/* Fees */}
+      <section className="rounded-lg border border-line bg-white overflow-hidden">
+        <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
+          <h3 className="text-sm font-semibold">Imputación de fees</h3>
+          <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+            Subtotal: {formatUsd(feeSubtotal)}
+          </span>
+        </div>
+        {feeLines.length === 0 ? (
+          <div className="px-5 py-8 text-center text-xs text-muted">
+            El plan no tiene fees cargados.
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-paper">
+              <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                <th className="text-left font-medium px-5 py-2">Tipo</th>
+                <th className="text-left font-medium px-5 py-2">Nombre</th>
+                <th className="text-right font-medium px-5 py-2">Total fee</th>
+                <th className="text-right font-medium px-5 py-2">Imputado antes</th>
+                <th className="text-right font-medium px-5 py-2">Este mes</th>
+                <th className="text-right font-medium px-5 py-2">Restante</th>
+                <th className="text-left font-medium px-5 py-2">Notas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {feeLines.map((f) => {
+                const remaining = f.totalAmountUsd - f.accumulatedBeforeUsd - f.amountThisMonthUsd;
+                const isOver = remaining < -0.01;
+                return (
+                  <tr
+                    key={f.mediaPlanFeeId}
+                    className="border-t border-line-soft hover:bg-paper-2/50"
+                  >
+                    <td className="px-5 py-2 text-xs font-mono text-muted uppercase">
+                      {f.feeType}
+                    </td>
+                    <td className="px-5 py-2 text-ink">{f.feeName}</td>
+                    <td className="px-5 py-2 text-right font-mono text-ink-2">
+                      {formatUsd(f.totalAmountUsd)}
+                    </td>
+                    <td className="px-5 py-2 text-right font-mono text-muted text-xs">
+                      {formatUsdCompact(f.accumulatedBeforeUsd)}
+                    </td>
+                    <td className="px-5 py-2 text-right">
+                      <NumInput
+                        value={f.amountThisMonthUsd}
+                        disabled={!editable}
+                        onCommit={(v) => onSetFee(f.mediaPlanFeeId, v)}
+                      />
+                    </td>
+                    <td
+                      className={`px-5 py-2 text-right font-mono text-xs ${
+                        isOver ? "text-warn font-semibold" : "text-muted"
+                      }`}
+                    >
+                      {formatUsd(remaining)}
+                    </td>
+                    <td className="px-5 py-2 text-xs text-muted">
+                      {f.notes ?? "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      {/* Totales */}
+      <div className="rounded-lg border-2 border-ink bg-paper-2 px-5 py-3 flex items-center justify-between">
+        <span className="text-sm font-semibold">Total del mes</span>
+        <div className="text-right">
+          <span className="font-mono text-xl font-semibold tabular-nums">
+            {formatUsd(grand)}
+          </span>
+          <p className="text-[11px] text-muted">
+            {formatUsdCompact(publisherSubtotal)} consumo +{" "}
+            {formatUsdCompact(feeSubtotal)} fees
+          </p>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-muted">
+        Edición disponible solo en estado <span className="font-mono">draft</span>.
+        Una vez emitida la factura, el monto queda inmutable.
+      </p>
+      <div className="text-[11px] text-muted">
+        <Link
+          href={`/proyectos/${projectCode}/planes/${planId}`}
+          className="hover:underline"
+        >
+          ← Volver al editor del plan
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function BillingStatusPillInline({ status }: { status: string }) {
+  const styles: Record<string, { label: string; cls: string; dot: string }> = {
+    draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
+    ready: { label: "listo", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
+    sent: { label: "emitida", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
+    paid: { label: "pagada", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
+  };
+  const s = styles[status] ?? styles.draft;
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${s.cls}`}>
+      <span className={`inline-block h-1.5 w-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+function NumInput({
+  value,
+  onCommit,
+  disabled,
+}: {
+  value: number;
+  onCommit: (v: number) => void;
+  disabled: boolean;
+}) {
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      defaultValue={value > 0 ? value.toFixed(2) : ""}
+      disabled={disabled}
+      placeholder="0"
+      onBlur={(e) => {
+        const v = Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        if (Math.abs(v - value) >= 0.01) onCommit(v);
+      }}
+      className="w-32 text-right font-mono tabular-nums bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 disabled:opacity-50"
+    />
+  );
+}
+
+function TextInput({
+  value,
+  onCommit,
+  disabled,
+  placeholder,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  disabled: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <input
+      type="text"
+      defaultValue={value}
+      disabled={disabled}
+      placeholder={placeholder}
+      onBlur={(e) => e.target.value !== value && onCommit(e.target.value)}
+      className="w-full text-xs text-muted bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 disabled:opacity-50"
+    />
+  );
+}
