@@ -54,6 +54,25 @@ const COST_METHOD_PRIMARY_METRIC: Record<string, string | null> = {
   Flat: null,
   Other: null,
 };
+
+// Par tarifa↔delivery para auto-cálculo bidireccional.
+// delivery = (amount × multiplier) / rate
+// rate     = (amount × multiplier) / delivery
+// (CPM tiene multiplier=1000 porque es "por cada mil")
+const COST_METHOD_PAIR: Record<
+  string,
+  { rate: string; delivery: string; multiplier: number } | null
+> = {
+  dCPV: { rate: "cpv", delivery: "views", multiplier: 1 },
+  CPV: { rate: "cpv", delivery: "views", multiplier: 1 },
+  dCPM: { rate: "cpm", delivery: "impressions", multiplier: 1000 },
+  CPM: { rate: "cpm", delivery: "impressions", multiplier: 1000 },
+  dCPC: { rate: "cpc", delivery: "clicks", multiplier: 1 },
+  CPC: { rate: "cpc", delivery: "clicks", multiplier: 1 },
+  CPA: { rate: "cpa", delivery: "conversions", multiplier: 1 },
+  Flat: null,
+  Other: null,
+};
 type CostMethod =
   | "dCPV"
   | "dCPC"
@@ -805,57 +824,17 @@ function PlacementDetails({
         </Field>
       </div>
       <div>
-        {primaryMetric &&
-          (() => {
-            const delivery = placement.metricsJson[primaryMetric.slug];
-            const hasDelivery = typeof delivery === "number" && delivery > 0;
-            // Effective unit cost: amount / delivery (lo que estás pagando)
-            const effectiveUnitCost = hasDelivery
-              ? placement.amountUsd / delivery
-              : null;
-            const formatDelivery = (v: number) =>
-              new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(v);
-            const formatRate = (v: number) =>
-              v < 1
-                ? `$${v.toFixed(4)}`
-                : `$${v.toFixed(2)}`;
-            return (
-              <div className="text-[11px] mb-2 px-3 py-2 bg-accent-soft/40 border border-accent-soft rounded text-ink">
-                <p>
-                  <span className="font-medium uppercase tracking-[0.06em] text-accent">
-                    Métrica principal por {placement.costMethod}:
-                  </span>{" "}
-                  <span className="font-mono">{primaryMetric.slug}</span>{" "}
-                  <span className="text-muted">({primaryMetric.name})</span>
-                </p>
-                <p className="mt-1 font-mono text-[12px]">
-                  Delivery:{" "}
-                  {hasDelivery ? (
-                    <>
-                      <strong className="text-ink tabular-nums">
-                        {formatDelivery(delivery)}
-                      </strong>{" "}
-                      <span className="text-muted">
-                        {primaryMetric.unit ?? primaryMetric.slug}
-                      </span>
-                      {effectiveUnitCost !== null && (
-                        <span className="text-muted">
-                          {" · "}
-                          {formatRate(effectiveUnitCost)} efectivo por{" "}
-                          {primaryMetric.unit ?? "unit"}
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="text-muted">
-                      cargá <span className="font-mono">{primaryMetric.slug}</span> en
-                      indicadores para ver el delivery
-                    </span>
-                  )}
-                </p>
-              </div>
-            );
-          })()}
+        {primaryMetric && placement.costMethod && (
+          <PrincipalPairEditor
+            costMethod={placement.costMethod}
+            primaryMetricName={primaryMetric.name}
+            primaryUnit={primaryMetric.unit}
+            metricsJson={placement.metricsJson}
+            amountUsd={placement.amountUsd}
+            editable={editable}
+            onCommit={(m) => update({ metricsJson: m })}
+          />
+        )}
         <MetricsEditor
           metrics={placement.metricsJson}
           allMetrics={allMetrics}
@@ -866,6 +845,213 @@ function PlacementDetails({
       </div>
     </div>
   );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Editor del par tarifa↔delivery según el cost method del placement.
+// El planner edita uno y la app recalcula el otro desde amount × multiplier.
+// Se almacenan AMBOS valores en metrics_json para no perder data.
+// ════════════════════════════════════════════════════════════════════════════
+
+function PrincipalPairEditor({
+  costMethod,
+  primaryMetricName,
+  primaryUnit,
+  metricsJson,
+  amountUsd,
+  editable,
+  onCommit,
+}: {
+  costMethod: string;
+  primaryMetricName: string;
+  primaryUnit: string | null;
+  metricsJson: Record<string, number>;
+  amountUsd: number;
+  editable: boolean;
+  onCommit: (next: Record<string, number>) => void;
+}) {
+  const pair = COST_METHOD_PAIR[costMethod];
+  if (!pair) return null;
+
+  const rateInJson = metricsJson[pair.rate];
+  const deliveryInJson = metricsJson[pair.delivery];
+
+  // Effective values: si una está cargada, computamos la otra; si no, ambas vacías.
+  let effRate: number | null =
+    typeof rateInJson === "number" && rateInJson > 0 ? rateInJson : null;
+  let effDelivery: number | null =
+    typeof deliveryInJson === "number" && deliveryInJson > 0
+      ? deliveryInJson
+      : null;
+
+  if (effRate == null && effDelivery != null && amountUsd > 0) {
+    effRate = (amountUsd * pair.multiplier) / effDelivery;
+  }
+  if (effDelivery == null && effRate != null && amountUsd > 0) {
+    effDelivery = (amountUsd * pair.multiplier) / effRate;
+  }
+
+  // Detectar inconsistencia (si ambas vinieron del jsonb y la cuenta no cierra)
+  const bothFromJson =
+    typeof rateInJson === "number" &&
+    rateInJson > 0 &&
+    typeof deliveryInJson === "number" &&
+    deliveryInJson > 0;
+  let inconsistency: number | null = null;
+  if (bothFromJson && amountUsd > 0) {
+    const expectedDelivery = (amountUsd * pair.multiplier) / rateInJson;
+    const diff = Math.abs(expectedDelivery - deliveryInJson) / expectedDelivery;
+    if (diff > 0.005) inconsistency = diff;
+  }
+
+  const onChangeRate = (newRate: number) => {
+    if (newRate <= 0) {
+      const next = { ...metricsJson };
+      delete next[pair.rate];
+      delete next[pair.delivery];
+      onCommit(next);
+      return;
+    }
+    const newDelivery =
+      amountUsd > 0 ? (amountUsd * pair.multiplier) / newRate : 0;
+    onCommit({
+      ...metricsJson,
+      [pair.rate]: Number(newRate.toFixed(6)),
+      [pair.delivery]: Math.round(newDelivery),
+    });
+  };
+
+  const onChangeDelivery = (newDelivery: number) => {
+    if (newDelivery <= 0) {
+      const next = { ...metricsJson };
+      delete next[pair.rate];
+      delete next[pair.delivery];
+      onCommit(next);
+      return;
+    }
+    const newRate =
+      amountUsd > 0 ? (amountUsd * pair.multiplier) / newDelivery : 0;
+    onCommit({
+      ...metricsJson,
+      [pair.rate]: Number(newRate.toFixed(6)),
+      [pair.delivery]: Math.round(newDelivery),
+    });
+  };
+
+  return (
+    <div className="mb-2 px-3 py-2 bg-accent-soft/40 border border-accent-soft rounded text-[11px] text-ink">
+      <p className="mb-1.5">
+        <span className="font-medium uppercase tracking-[0.06em] text-accent">
+          Métrica principal por {costMethod}:
+        </span>{" "}
+        <span className="font-mono">{pair.delivery}</span>{" "}
+        <span className="text-muted">({primaryMetricName})</span>
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted block mb-0.5">
+            Tarifa ({pair.rate.toUpperCase()})
+          </label>
+          <RateInput
+            value={effRate}
+            disabled={!editable}
+            onCommit={onChangeRate}
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted block mb-0.5">
+            Delivery ({primaryUnit ?? pair.delivery})
+          </label>
+          <DeliveryInput
+            value={effDelivery}
+            disabled={!editable}
+            onCommit={onChangeDelivery}
+          />
+        </div>
+      </div>
+      <p className="mt-1.5 text-[10px] text-muted">
+        Editás uno y la app calcula el otro desde el monto del placement
+        ({" "}
+        <span className="font-mono">${amountUsd.toFixed(2)}</span>
+        {pair.multiplier !== 1 && (
+          <span className="font-mono"> × {pair.multiplier}</span>
+        )}
+        {" "}
+        / X = Y).
+      </p>
+      {inconsistency !== null && (
+        <p className="mt-1 text-[10px] text-warn">
+          ⚠ Tarifa y delivery cargados no coinciden ({(inconsistency * 100).toFixed(1)}% de diferencia con el monto). Cambiá uno para realinear.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function RateInput({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number | null;
+  disabled: boolean;
+  onCommit: (v: number) => void;
+}) {
+  // Tarifas suelen ser pequeñas (CPV $0.0028, CPM $5.20); 4 decimales por
+  // defecto. Aceptamos que el planner ingrese hasta 6.
+  const display = value != null ? formatRateDisplay(value) : "";
+  return (
+    <input
+      key={display}
+      type="text"
+      inputMode="decimal"
+      defaultValue={display}
+      disabled={disabled}
+      placeholder="0.0000"
+      onBlur={(e) => {
+        const v = Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        if (value == null || Math.abs(v - value) >= 0.000001) onCommit(v);
+      }}
+      className="w-full font-mono text-sm tabular-nums bg-white border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
+    />
+  );
+}
+
+function DeliveryInput({
+  value,
+  disabled,
+  onCommit,
+}: {
+  value: number | null;
+  disabled: boolean;
+  onCommit: (v: number) => void;
+}) {
+  const display =
+    value != null
+      ? new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(value)
+      : "";
+  return (
+    <input
+      key={display}
+      type="text"
+      inputMode="numeric"
+      defaultValue={display}
+      disabled={disabled}
+      placeholder="0"
+      onBlur={(e) => {
+        const v =
+          Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        if (value == null || Math.abs(v - value) >= 1) onCommit(v);
+      }}
+      className="w-full font-mono text-sm tabular-nums bg-white border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
+    />
+  );
+}
+
+function formatRateDisplay(v: number): string {
+  if (v >= 1) return v.toFixed(2);
+  if (v >= 0.01) return v.toFixed(4);
+  return v.toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
 }
 
 // ════════════════════════════════════════════════════════════════════════════
