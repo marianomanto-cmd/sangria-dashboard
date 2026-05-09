@@ -1,16 +1,18 @@
-// Seed con datos de prueba consistentes con la Fase 1 del prompt:
-//   2 clientes · 4 budget origins · 8 proyectos
-//   · 1 plan de medios completo (~28 líneas) · 3 meses de gastos reales
+// Seed con datos de prueba consistentes con el modelo nuevo:
+//   1 cliente (Copa Airlines)
+//   3 budget origins
+//   3 proyectos siguiendo convención COPA.m<id>.<ProjectName>
+//   5 planes peer (status mix) con sus publishers + placements + fees
+//   1 plan_billing de muestra
+//   1 snapshot inmutable del plan approved
 //
-// Es idempotente: borra todo y reinserta. Usa un RNG semilla para que
-// los gastos reales sean reproducibles.
-//
+// Idempotente: limpia las tablas en orden inverso de FK antes de insertar.
 // Uso: `npm run db:seed`
 
 import { db } from "@/db";
 import * as s from "@/db/schema";
 
-// ─── RNG determinístico (LCG) ──────────────────────────────────────────
+// ─── RNG determinístico ────────────────────────────────────────────────
 let _seed = 1337;
 const rand = () => {
   _seed = (_seed * 9301 + 49297) % 233280;
@@ -18,298 +20,524 @@ const rand = () => {
 };
 const variance = (min: number, max: number) => min + rand() * (max - min);
 
-// ─── Datos del plan ────────────────────────────────────────────────────
-type LineSeed = {
-  publisher: (typeof s.publisherEnum.enumValues)[number];
-  placementName: string;
-  audienceMarket: string;
-  startDate: string;
-  endDate: string;
-  budgetNetUsd: string;
-  feePct: string;
-};
-
-const PLAN_LINES: LineSeed[] = [
-  // YouTube — 6
-  { publisher: "YouTube", placementName: "In-Stream Skippable · LATAM Brand",
-    audienceMarket: "25-44 viajeros · LATAM",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "24500.00", feePct: "8.00" },
-  { publisher: "YouTube", placementName: "Bumper Ads 6s",
-    audienceMarket: "18-44 · LATAM",
-    startDate: "2026-04-15", endDate: "2026-05-31",
-    budgetNetUsd: "18200.00", feePct: "8.00" },
-  { publisher: "YouTube", placementName: "TrueView Discovery",
-    audienceMarket: "MX brand search",
-    startDate: "2026-04-01", endDate: "2026-06-15",
-    budgetNetUsd: "9200.00", feePct: "10.00" },
-  { publisher: "YouTube", placementName: "Masthead Mobile",
-    audienceMarket: "Brasil · all",
-    startDate: "2026-05-15", endDate: "2026-05-15",
-    budgetNetUsd: "35000.00", feePct: "12.00" },
-  { publisher: "YouTube", placementName: "Non-Skippable 15s",
-    audienceMarket: "LATAM premium",
-    startDate: "2026-05-01", endDate: "2026-06-30",
-    budgetNetUsd: "14800.00", feePct: "8.00" },
-  { publisher: "YouTube", placementName: "Shorts In-Feed",
-    audienceMarket: "25-44 LATAM",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "7400.00", feePct: "7.00" },
-
-  // Meta — 6
-  { publisher: "Meta", placementName: "Feed Conversion",
-    audienceMarket: "LATAM viajeros frecuentes",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "12400.00", feePct: "8.00" },
-  { publisher: "Meta", placementName: "Reels Brand",
-    audienceMarket: "25-44 LATAM",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "8600.00", feePct: "7.00" },
-  { publisher: "Meta", placementName: "Stories Awareness",
-    audienceMarket: "MX/AR/CL/PE",
-    startDate: "2026-04-01", endDate: "2026-05-15",
-    budgetNetUsd: "6200.00", feePct: "7.00" },
-  { publisher: "Meta", placementName: "Carousel Destinations",
-    audienceMarket: "LATAM brand",
-    startDate: "2026-05-01", endDate: "2026-06-30",
-    budgetNetUsd: "5400.00", feePct: "7.00" },
-  { publisher: "Meta", placementName: "Lookalike Conversion",
-    audienceMarket: "25-54 high-value",
-    startDate: "2026-04-15", endDate: "2026-06-30",
-    budgetNetUsd: "9800.00", feePct: "9.00" },
-  { publisher: "Meta", placementName: "Video Mid-Funnel",
-    audienceMarket: "LATAM consideradores",
-    startDate: "2026-04-01", endDate: "2026-05-31",
-    budgetNetUsd: "7200.00", feePct: "8.00" },
-
-  // TikTok — 4
-  { publisher: "TikTok", placementName: "In-Feed Top View",
-    audienceMarket: "18-34 LATAM",
-    startDate: "2026-04-15", endDate: "2026-05-15",
-    budgetNetUsd: "11000.00", feePct: "10.00" },
-  { publisher: "TikTok", placementName: "Spark Ads Creator",
-    audienceMarket: "MX / BR",
-    startDate: "2026-05-01", endDate: "2026-06-15",
-    budgetNetUsd: "6800.00", feePct: "9.00" },
-  { publisher: "TikTok", placementName: "Brand Takeover Mobile",
-    audienceMarket: "BR · all",
-    startDate: "2026-05-05", endDate: "2026-05-05",
-    budgetNetUsd: "18000.00", feePct: "12.00" },
-  { publisher: "TikTok", placementName: "Hashtag Challenge",
-    audienceMarket: "LATAM jóvenes",
-    startDate: "2026-06-01", endDate: "2026-06-30",
-    budgetNetUsd: "9400.00", feePct: "11.00" },
-
-  // DV360 — 4
-  { publisher: "DV360", placementName: "Programmatic Video",
-    audienceMarket: "Premium news inventory",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "14200.00", feePct: "9.00" },
-  { publisher: "DV360", placementName: "CTV Connected TV",
-    audienceMarket: "LATAM premium households",
-    startDate: "2026-05-01", endDate: "2026-06-30",
-    budgetNetUsd: "22000.00", feePct: "10.00" },
-  { publisher: "DV360", placementName: "PMP Display",
-    audienceMarket: "Travel inventory directos",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "7600.00", feePct: "8.00" },
-  { publisher: "DV360", placementName: "Audio Programmatic",
-    audienceMarket: "Spotify + One Podcasts · LATAM",
-    startDate: "2026-05-01", endDate: "2026-06-30",
-    budgetNetUsd: "4800.00", feePct: "8.00" },
-
-  // Display — 3
-  { publisher: "Display", placementName: "Premium Display Direct",
-    audienceMarket: "Travel sites direct buy",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "5200.00", feePct: "8.00" },
-  { publisher: "Display", placementName: "Native Outbrain",
-    audienceMarket: "LATAM consideradores",
-    startDate: "2026-04-15", endDate: "2026-06-15",
-    budgetNetUsd: "3400.00", feePct: "7.00" },
-  { publisher: "Display", placementName: "Rich Media",
-    audienceMarket: "MX premium",
-    startDate: "2026-05-01", endDate: "2026-06-30",
-    budgetNetUsd: "4100.00", feePct: "9.00" },
-
-  // Programmatic — 2
-  { publisher: "Programmatic", placementName: "Long-tail Retargeting",
-    audienceMarket: "site visitors L30D",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "3200.00", feePct: "7.00" },
-  { publisher: "Programmatic", placementName: "Native Travel Intent",
-    audienceMarket: "Travel intent LATAM",
-    startDate: "2026-04-15", endDate: "2026-06-30",
-    budgetNetUsd: "4600.00", feePct: "8.00" },
-
-  // OOH — 2
-  { publisher: "OOH", placementName: "DOOH Aeropuertos GRU+EZE+SCL",
-    audienceMarket: "Pasajeros tránsito · 30s loop",
-    startDate: "2026-05-01", endDate: "2026-06-15",
-    budgetNetUsd: "28000.00", feePct: "10.00" },
-  { publisher: "OOH", placementName: "OOH Estática Premium",
-    audienceMarket: "MX City premium hubs",
-    startDate: "2026-04-15", endDate: "2026-05-30",
-    budgetNetUsd: "16000.00", feePct: "10.00" },
-
-  // Search — 1
-  { publisher: "Search", placementName: "Brand Defense",
-    audienceMarket: "Google Ads · LATAM brand keywords",
-    startDate: "2026-04-01", endDate: "2026-06-30",
-    budgetNetUsd: "6400.00", feePct: "7.00" },
-];
-
-// ─── Main ──────────────────────────────────────────────────────────────
-
 async function main() {
   console.log("⏳ Limpiando datos existentes...");
   await db.delete(s.auditLog);
-  await db.delete(s.billingLines);
-  await db.delete(s.billings);
-  await db.delete(s.actualSpend);
-  await db.delete(s.mediaPlanLines);
+  await db.delete(s.planBillingFees);
+  await db.delete(s.planBillingPublishers);
+  await db.delete(s.planBillings);
+  await db.delete(s.mediaPlanSnapshots);
+  await db.delete(s.mediaPlanFees);
+  await db.delete(s.mediaPlanPlacements);
+  await db.delete(s.mediaPlanPublishers);
   await db.delete(s.mediaPlans);
   await db.delete(s.projects);
   await db.delete(s.budgetOrigins);
   await db.delete(s.clients);
+  await db.delete(s.publishers);
 
-  console.log("⏳ Insertando clientes...");
-  const [aviacion, qsr] = await db
+  console.log("⏳ Catálogo de publishers...");
+  const pubs = await db
+    .insert(s.publishers)
+    .values([
+      { slug: "youtube", name: "YouTube", agencyPaysDefault: true, sortOrder: 0 },
+      { slug: "meta", name: "Meta", agencyPaysDefault: true, sortOrder: 1 },
+      { slug: "tiktok", name: "TikTok", agencyPaysDefault: true, sortOrder: 2 },
+      { slug: "dv360", name: "DV360", agencyPaysDefault: true, sortOrder: 3 },
+      { slug: "display", name: "Display", agencyPaysDefault: true, sortOrder: 4 },
+      { slug: "search", name: "Google Search", agencyPaysDefault: true, sortOrder: 5 },
+      { slug: "spotify", name: "Spotify", agencyPaysDefault: true, sortOrder: 6 },
+      { slug: "ooh", name: "OOH (Out of Home)", agencyPaysDefault: false, sortOrder: 7 },
+      { slug: "programmatic", name: "Programmatic", agencyPaysDefault: true, sortOrder: 8 },
+    ])
+    .returning();
+
+  const pubBySlug = new Map(pubs.map((p) => [p.slug, p]));
+  const pub = (slug: string) => {
+    const p = pubBySlug.get(slug);
+    if (!p) throw new Error(`Publisher slug ${slug} no existe`);
+    return p;
+  };
+
+  console.log("⏳ Cliente...");
+  const [copa] = await db
     .insert(s.clients)
     .values([
-      { name: "Cliente Aviación", slug: "aviacion", status: "active" },
-      { name: "Cliente QSR", slug: "qsr", status: "active" },
-    ])
-    .returning();
-
-  console.log("⏳ Insertando budget origins...");
-  const [bgOnline, bgCmi, bgTrade, bgCargo] = await db
-    .insert(s.budgetOrigins)
-    .values([
-      { clientId: aviacion.id, name: "Online",
-        monthlyTargetUsd: "200000.00", colorHex: "#7a1f3d" },
-      { clientId: aviacion.id, name: "CMI",
-        monthlyTargetUsd: "80000.00", colorHex: "#5e1730" },
-      { clientId: aviacion.id, name: "Trade",
-        monthlyTargetUsd: "50000.00", colorHex: "#8b2a52" },
-      { clientId: qsr.id, name: "Cargo",
-        monthlyTargetUsd: "120000.00", colorHex: "#92400e" },
-    ])
-    .returning();
-
-  console.log("⏳ Insertando proyectos...");
-  const projects = await db
-    .insert(s.projects)
-    .values([
-      // Aviación
-      { clientId: aviacion.id, budgetOriginId: bgOnline.id,
-        name: "Brand Always-On Q2 2026", code: "AVI-BRD-Q2",
-        status: "active",
-        startDate: "2026-04-01", endDate: "2026-06-30",
-        totalBudgetUsd: "323400.00",
-        notesMd: "Plan vigente cargado a partir del Excel del cliente." },
-      { clientId: aviacion.id, budgetOriginId: bgOnline.id,
-        name: "Performance Lower Funnel Q2", code: "AVI-PLF-Q2",
-        status: "active",
-        startDate: "2026-04-01", endDate: "2026-06-30",
-        totalBudgetUsd: "180000.00", notesMd: null },
-      { clientId: aviacion.id, budgetOriginId: bgCmi.id,
-        name: "CMI Trip Booking Push", code: "AVI-CMI-001",
-        status: "active",
-        startDate: "2026-04-15", endDate: "2026-07-15",
-        totalBudgetUsd: "210000.00", notesMd: null },
-      { clientId: aviacion.id, budgetOriginId: bgCmi.id,
-        name: "Premium Class Awareness", code: "AVI-CMI-002",
-        status: "planning",
-        startDate: "2026-07-01", endDate: "2026-09-30",
-        totalBudgetUsd: "150000.00", notesMd: null },
-      { clientId: aviacion.id, budgetOriginId: bgTrade.id,
-        name: "Travel Trade Activation", code: "AVI-TRD-001",
-        status: "active",
-        startDate: "2026-05-01", endDate: "2026-08-31",
-        totalBudgetUsd: "120000.00", notesMd: null },
-      // QSR
-      { clientId: qsr.id, budgetOriginId: bgCargo.id,
-        name: "Cargo Local Push Brasil", code: "QSR-LOC-BR",
-        status: "active",
-        startDate: "2026-03-01", endDate: "2026-05-31",
-        totalBudgetUsd: "240000.00", notesMd: null },
-      { clientId: qsr.id, budgetOriginId: bgCargo.id,
-        name: "Cargo Loyalty App", code: "QSR-LOY-001",
-        status: "planning",
-        startDate: "2026-07-01", endDate: "2026-12-31",
-        totalBudgetUsd: "320000.00", notesMd: null },
-      { clientId: qsr.id, budgetOriginId: bgCargo.id,
-        name: "Cargo Brand New York", code: "QSR-BRD-NY",
-        status: "closed",
-        startDate: "2025-09-01", endDate: "2025-12-31",
-        totalBudgetUsd: "280000.00", notesMd: null },
-    ])
-    .returning();
-
-  const brandAlwaysOn = projects[0];
-
-  console.log("⏳ Insertando media plan + 28 líneas...");
-  const [plan] = await db
-    .insert(s.mediaPlans)
-    .values([
       {
-        projectId: brandAlwaysOn.id,
-        version: 1,
-        status: "approved",
-        importedAt: new Date("2026-03-25T14:32:00Z"),
-        approvedAt: new Date("2026-03-28T11:15:00Z"),
+        name: "Copa Airlines",
+        slug: "copa",
+        prefix: "COPA",
+        status: "active",
       },
     ])
     .returning();
 
-  const lines = await db
-    .insert(s.mediaPlanLines)
-    .values(
-      PLAN_LINES.map((line, idx) => ({
-        mediaPlanId: plan.id,
-        publisher: line.publisher,
-        placementName: line.placementName,
-        audienceMarket: line.audienceMarket,
-        startDate: line.startDate,
-        endDate: line.endDate,
-        budgetNetUsd: line.budgetNetUsd,
-        feePct: line.feePct,
-        sortOrder: idx,
-      })),
-    )
+  console.log("⏳ Budget origins...");
+  const [bgOnline, bgCmi, bgTrade] = await db
+    .insert(s.budgetOrigins)
+    .values([
+      { clientId: copa.id, name: "Online", monthlyTargetUsd: "200000.00", colorHex: "#7a1f3d" },
+      { clientId: copa.id, name: "CMI", monthlyTargetUsd: "80000.00", colorHex: "#5e1730" },
+      { clientId: copa.id, name: "Trade", monthlyTargetUsd: "50000.00", colorHex: "#8b2a52" },
+    ])
     .returning();
 
-  console.log("⏳ Insertando 3 meses de gastos reales (84 filas)...");
-  const months = ["2026-04", "2026-05", "2026-06"];
-  const spendRows = lines.flatMap((line) => {
-    const totalBudget = Number.parseFloat(line.budgetNetUsd);
-    const startMonth = line.startDate?.slice(0, 7) ?? "2026-04";
-    const endMonth = line.endDate?.slice(0, 7) ?? "2026-06";
-    const activeMonths = months.filter((m) => m >= startMonth && m <= endMonth);
-    const monthly = activeMonths.length > 0 ? totalBudget / activeMonths.length : 0;
+  console.log("⏳ Proyectos...");
+  const [projCR, projPanama, projMiami] = await db
+    .insert(s.projects)
+    .values([
+      {
+        clientId: copa.id,
+        budgetOriginId: bgOnline.id,
+        code: "COPA.m2026A01.CostaRica2026",
+        name: "Costa Rica 2026",
+        status: "active",
+        startDate: "2026-02-01",
+        endDate: "2026-05-31",
+        totalGrossBudgetUsd: "300000.00",
+        notesMd:
+          "Campaña multi-funnel para promoción de Costa Rica. Se divide en 3 planes peer: Awareness, Consideration y Performance, con períodos solapados.",
+      },
+      {
+        clientId: copa.id,
+        budgetOriginId: bgCmi.id,
+        code: "COPA.m2026B02.PanamaSummer",
+        name: "Panama Summer 2026",
+        status: "active",
+        startDate: "2026-03-01",
+        endDate: "2026-08-31",
+        totalGrossBudgetUsd: "450000.00",
+        notesMd: null,
+      },
+      {
+        clientId: copa.id,
+        budgetOriginId: bgTrade.id,
+        code: "COPA.m2026C03.MiamiHubGrowth",
+        name: "Miami Hub Growth",
+        status: "planning",
+        startDate: "2026-06-01",
+        endDate: "2026-12-31",
+        totalGrossBudgetUsd: "200000.00",
+        notesMd: null,
+      },
+    ])
+    .returning();
 
-    return months.map((month) => {
-      const isActive = activeMonths.includes(month);
-      const amount = isActive ? (monthly * variance(0.85, 1.15)).toFixed(2) : "0.00";
-      return {
-        mediaPlanLineId: line.id,
-        month,
-        amountUsd: amount,
-      };
-    });
-  });
+  console.log("⏳ Planes peer del proyecto Costa Rica...");
 
-  await db.insert(s.actualSpend).values(spendRows);
+  // ─── Plan 1: Awareness (APPROVED) ───────────────────────────────────
+  const [planAwareness] = await db
+    .insert(s.mediaPlans)
+    .values([
+      {
+        projectId: projCR.id,
+        name: "Awareness",
+        status: "approved",
+        periodStart: "2026-02-01",
+        periodEnd: "2026-03-31",
+        currentVersion: 1,
+        notesMd: "Plan upper-funnel para construir conocimiento del destino.",
+      },
+    ])
+    .returning();
+
+  // Publishers + placements + fees del Awareness
+  const [aw_yt, aw_meta, aw_tt] = await db
+    .insert(s.mediaPlanPublishers)
+    .values([
+      { mediaPlanId: planAwareness.id, publisherId: pub("youtube").id, totalPlannedUsd: "45000.00", sortOrder: 0 },
+      { mediaPlanId: planAwareness.id, publisherId: pub("meta").id,    totalPlannedUsd: "35000.00", sortOrder: 1 },
+      { mediaPlanId: planAwareness.id, publisherId: pub("tiktok").id,  totalPlannedUsd: "20000.00", sortOrder: 2 },
+    ])
+    .returning();
+
+  await db.insert(s.mediaPlanPlacements).values([
+    {
+      mediaPlanPublisherId: aw_yt.id, sortOrder: 0,
+      placementName: "Bumper Ads 6s", market: "Costa Rica",
+      amountUsd: "25000.00", costMethod: "dCPV",
+      startDate: "2026-02-01", endDate: "2026-03-31",
+      metricsJson: { cpv: 0.0019, est_views: 13157894, est_imp: 14500000 },
+      notesMd: "Audiencia: 25-44 viajeros frecuentes\nFormato: video vertical + horizontal\nCreatividad: 3 versiones rotativas",
+    },
+    {
+      mediaPlanPublisherId: aw_yt.id, sortOrder: 1,
+      placementName: "In-Stream Skippable", market: "Centroamérica (PA, CR, GT, NI, HN)",
+      amountUsd: "20000.00", costMethod: "dCPV",
+      startDate: "2026-02-15", endDate: "2026-03-31",
+      metricsJson: { cpv: 0.0028, est_views: 7142857, est_imp: 9500000 },
+      notesMd: "Audiencia: 18-44 LATAM travel intent\nFormato: video 15-30s",
+    },
+    {
+      mediaPlanPublisherId: aw_meta.id, sortOrder: 0,
+      placementName: "Feed Awareness", market: "Costa Rica",
+      amountUsd: "18000.00", costMethod: "dCPM",
+      startDate: "2026-02-01", endDate: "2026-03-31",
+      metricsJson: { cpm: 4.5, est_imp: 4000000, est_reach: 1200000 },
+      notesMd: "Audiencia: travelers + lookalike\nFormato: feed estático + carrusel",
+    },
+    {
+      mediaPlanPublisherId: aw_meta.id, sortOrder: 1,
+      placementName: "Reels Brand", market: "Costa Rica + LATAM",
+      amountUsd: "17000.00", costMethod: "dCPV",
+      startDate: "2026-02-15", endDate: "2026-03-31",
+      metricsJson: { cpv: 0.012, est_views: 1416666, est_imp: 2500000 },
+      notesMd: "Audiencia: 18-34\nFormato: video vertical 9:16",
+    },
+    {
+      mediaPlanPublisherId: aw_tt.id, sortOrder: 0,
+      placementName: "In-Feed Top View", market: "18-34 LATAM",
+      amountUsd: "20000.00", costMethod: "dCPV",
+      startDate: "2026-02-01", endDate: "2026-03-31",
+      metricsJson: { cpv: 0.018, est_views: 1111111, est_imp: 1800000 },
+      notesMd: "Audiencia: 18-34 jóvenes viajeros\nFormato: video full-screen vertical",
+    },
+  ]);
+
+  const awarenessFees = await db
+    .insert(s.mediaPlanFees)
+    .values([
+      { mediaPlanId: planAwareness.id, feeType: "management", name: "Management Fee", amountUsd: "15000.00", sortOrder: 0 },
+      { mediaPlanId: planAwareness.id, feeType: "setup",      name: "Set Up Fee",     amountUsd: "1000.00",  sortOrder: 1 },
+      { mediaPlanId: planAwareness.id, feeType: "reporting",  name: "Reporting Fee",  amountUsd: "2000.00",  sortOrder: 2 },
+    ])
+    .returning();
+
+  // Snapshot del plan Awareness al momento de su aprobación.
+  await db.insert(s.mediaPlanSnapshots).values([
+    {
+      mediaPlanId: planAwareness.id,
+      versionNumber: 1,
+      approvedAt: new Date("2026-01-28T15:30:00Z"),
+      notes: "Aprobación inicial del plan, firmado por la cuenta del cliente.",
+      snapshotJson: {
+        plan: { name: "Awareness", periodStart: "2026-02-01", periodEnd: "2026-03-31" },
+        totalMedia: 100000,
+        totalFees: 18000,
+        publishers: 3,
+        placements: 5,
+      },
+    },
+  ]);
+
+  // ─── Plan 2: Consideration (DRAFT) ──────────────────────────────────
+  const [planConsideration] = await db
+    .insert(s.mediaPlans)
+    .values([
+      {
+        projectId: projCR.id,
+        name: "Consideration",
+        status: "draft",
+        periodStart: "2026-03-01",
+        periodEnd: "2026-04-30",
+        currentVersion: 0,
+        notesMd: "Plan mid-funnel para mover audiencias a consideración. Solapa con Awareness en Marzo.",
+      },
+    ])
+    .returning();
+
+  const [co_meta, co_yt, co_disp] = await db
+    .insert(s.mediaPlanPublishers)
+    .values([
+      { mediaPlanId: planConsideration.id, publisherId: pub("meta").id,    totalPlannedUsd: "25000.00", sortOrder: 0 },
+      { mediaPlanId: planConsideration.id, publisherId: pub("youtube").id, totalPlannedUsd: "20000.00", sortOrder: 1 },
+      { mediaPlanId: planConsideration.id, publisherId: pub("display").id, totalPlannedUsd: "10000.00", sortOrder: 2 },
+    ])
+    .returning();
+
+  await db.insert(s.mediaPlanPlacements).values([
+    {
+      mediaPlanPublisherId: co_meta.id, sortOrder: 0,
+      placementName: "Reels Consideration", market: "Costa Rica + LATAM",
+      amountUsd: "15000.00", costMethod: "dCPV",
+      startDate: "2026-03-01", endDate: "2026-04-30",
+      metricsJson: { cpv: 0.014 },
+      notesMd: "Audiencia: retargeting de Awareness + interest groups",
+    },
+    {
+      mediaPlanPublisherId: co_meta.id, sortOrder: 1,
+      placementName: "Carousel Destinations", market: "Costa Rica",
+      amountUsd: "10000.00", costMethod: "dCPC",
+      startDate: "2026-03-15", endDate: "2026-04-30",
+      metricsJson: { cpc: 0.45, est_clicks: 22222 },
+      notesMd: "Audiencia: travel intent\nFormato: carrusel multi-destino",
+    },
+    {
+      mediaPlanPublisherId: co_yt.id, sortOrder: 0,
+      placementName: "In-Stream Mid-Funnel", market: "LATAM",
+      amountUsd: "20000.00", costMethod: "dCPV",
+      startDate: "2026-03-01", endDate: "2026-04-30",
+      metricsJson: { cpv: 0.0025 },
+      notesMd: "Audiencia: lookalike de Awareness viewers",
+    },
+    {
+      mediaPlanPublisherId: co_disp.id, sortOrder: 0,
+      placementName: "Programmatic Display", market: "Centroamérica",
+      amountUsd: "10000.00", costMethod: "CPM",
+      startDate: "2026-03-01", endDate: "2026-04-30",
+      metricsJson: { cpm: 3.2 },
+      notesMd: "Audiencia: travel intent + retargeting site visitors",
+    },
+  ]);
+
+  await db.insert(s.mediaPlanFees).values([
+    { mediaPlanId: planConsideration.id, feeType: "management", name: "Management Fee", amountUsd: "8500.00",  sortOrder: 0 },
+    { mediaPlanId: planConsideration.id, feeType: "setup",      name: "Set Up Fee",     amountUsd: "500.00",   sortOrder: 1 },
+    { mediaPlanId: planConsideration.id, feeType: "reporting",  name: "Reporting Fee",  amountUsd: "2000.00",  sortOrder: 2 },
+  ]);
+
+  // ─── Plan 3: Performance (READY_TO_SEND) ────────────────────────────
+  const [planPerformance] = await db
+    .insert(s.mediaPlans)
+    .values([
+      {
+        projectId: projCR.id,
+        name: "Performance",
+        status: "ready_to_send",
+        periodStart: "2026-04-01",
+        periodEnd: "2026-05-31",
+        currentVersion: 0,
+        notesMd: "Plan lower-funnel: search + conversion campaigns. Esperando firma del cliente.",
+      },
+    ])
+    .returning();
+
+  const [pe_search, pe_meta] = await db
+    .insert(s.mediaPlanPublishers)
+    .values([
+      { mediaPlanId: planPerformance.id, publisherId: pub("search").id, totalPlannedUsd: "30000.00", sortOrder: 0 },
+      { mediaPlanId: planPerformance.id, publisherId: pub("meta").id,   totalPlannedUsd: "25000.00", sortOrder: 1 },
+    ])
+    .returning();
+
+  await db.insert(s.mediaPlanPlacements).values([
+    {
+      mediaPlanPublisherId: pe_search.id, sortOrder: 0,
+      placementName: "Brand Defense", market: "Costa Rica + Centroamérica",
+      amountUsd: "12000.00", costMethod: "CPC",
+      startDate: "2026-04-01", endDate: "2026-05-31",
+      metricsJson: { cpc: 0.35, est_clicks: 34285 },
+      notesMd: "Brand keywords + competitor defense",
+    },
+    {
+      mediaPlanPublisherId: pe_search.id, sortOrder: 1,
+      placementName: "Non-Brand Travel Intent", market: "LATAM",
+      amountUsd: "18000.00", costMethod: "CPC",
+      startDate: "2026-04-01", endDate: "2026-05-31",
+      metricsJson: { cpc: 0.85, est_clicks: 21176 },
+      notesMd: "Audiencia: searchers de \"vuelos a costa rica\", \"hoteles tamarindo\", etc.",
+    },
+    {
+      mediaPlanPublisherId: pe_meta.id, sortOrder: 0,
+      placementName: "Conversion Campaign", market: "Costa Rica + LATAM",
+      amountUsd: "25000.00", costMethod: "CPA",
+      startDate: "2026-04-01", endDate: "2026-05-31",
+      metricsJson: { cpa: 18, est_conversions: 1388 },
+      notesMd: "Optimización por compra de pasaje\nFormato: feed + reels\nAudiencia: warm + lookalike",
+    },
+  ]);
+
+  await db.insert(s.mediaPlanFees).values([
+    { mediaPlanId: planPerformance.id, feeType: "management", name: "Management Fee", amountUsd: "9500.00", sortOrder: 0 },
+    { mediaPlanId: planPerformance.id, feeType: "setup",      name: "Set Up Fee",     amountUsd: "500.00",  sortOrder: 1 },
+  ]);
+
+  // ─── Plan 4: Brand Continuous (APPROVED, en proyecto Panama) ────────
+  const [planBrand] = await db
+    .insert(s.mediaPlans)
+    .values([
+      {
+        projectId: projPanama.id,
+        name: "Brand Continuous",
+        status: "approved",
+        periodStart: "2026-03-01",
+        periodEnd: "2026-08-31",
+        currentVersion: 2,
+        notesMd: "Plan always-on de marca para Panama Summer.",
+      },
+    ])
+    .returning();
+
+  const [br_yt, br_meta] = await db
+    .insert(s.mediaPlanPublishers)
+    .values([
+      { mediaPlanId: planBrand.id, publisherId: pub("youtube").id, totalPlannedUsd: "120000.00", sortOrder: 0 },
+      { mediaPlanId: planBrand.id, publisherId: pub("meta").id,    totalPlannedUsd: "60000.00",  sortOrder: 1 },
+    ])
+    .returning();
+
+  await db.insert(s.mediaPlanPlacements).values([
+    {
+      mediaPlanPublisherId: br_yt.id, sortOrder: 0,
+      placementName: "Always-On In-Stream", market: "LATAM",
+      amountUsd: "120000.00", costMethod: "dCPV",
+      startDate: "2026-03-01", endDate: "2026-08-31",
+      metricsJson: { cpv: 0.0022 },
+      notesMd: "Brand always-on, 6 meses de pauta continua",
+    },
+    {
+      mediaPlanPublisherId: br_meta.id, sortOrder: 0,
+      placementName: "Reels Brand Always-On", market: "LATAM",
+      amountUsd: "60000.00", costMethod: "dCPV",
+      startDate: "2026-03-01", endDate: "2026-08-31",
+      metricsJson: { cpv: 0.011 },
+      notesMd: "Brand awareness Reels",
+    },
+  ]);
+
+  await db.insert(s.mediaPlanFees).values([
+    { mediaPlanId: planBrand.id, feeType: "management", name: "Management Fee", amountUsd: "27000.00", sortOrder: 0 },
+    { mediaPlanId: planBrand.id, feeType: "reporting",  name: "Reporting Fee",  amountUsd: "6000.00",  sortOrder: 1 },
+  ]);
+
+  // Dos snapshots: v1 (initial approval) + v2 (current — minor revision)
+  await db.insert(s.mediaPlanSnapshots).values([
+    {
+      mediaPlanId: planBrand.id, versionNumber: 1,
+      approvedAt: new Date("2026-02-15T10:00:00Z"),
+      notes: "Aprobación inicial.",
+      snapshotJson: { plan: "Brand Continuous v1", totalMedia: 175000, totalFees: 32000 },
+    },
+    {
+      mediaPlanId: planBrand.id, versionNumber: 2,
+      approvedAt: new Date("2026-04-12T14:20:00Z"),
+      notes: "Revisión Q2: ajuste de presupuesto YouTube +$5K, fees actualizados.",
+      snapshotJson: { plan: "Brand Continuous v2", totalMedia: 180000, totalFees: 33000 },
+    },
+  ]);
+
+  // ─── Plan 5: Promo Lanzamiento (APPROVED, en proyecto Panama) ───────
+  const [planPromo] = await db
+    .insert(s.mediaPlans)
+    .values([
+      {
+        projectId: projPanama.id,
+        name: "Promo Lanzamiento",
+        status: "approved",
+        periodStart: "2026-03-15",
+        periodEnd: "2026-04-30",
+        currentVersion: 1,
+        notesMd: "Burst de lanzamiento de promoción Summer Panama.",
+      },
+    ])
+    .returning();
+
+  const [pr_meta, pr_tt] = await db
+    .insert(s.mediaPlanPublishers)
+    .values([
+      { mediaPlanId: planPromo.id, publisherId: pub("meta").id,   totalPlannedUsd: "40000.00", sortOrder: 0 },
+      { mediaPlanId: planPromo.id, publisherId: pub("tiktok").id, totalPlannedUsd: "30000.00", sortOrder: 1 },
+    ])
+    .returning();
+
+  await db.insert(s.mediaPlanPlacements).values([
+    {
+      mediaPlanPublisherId: pr_meta.id, sortOrder: 0,
+      placementName: "Reels + Feed Promo", market: "Centroamérica",
+      amountUsd: "40000.00", costMethod: "dCPM",
+      startDate: "2026-03-15", endDate: "2026-04-30",
+      metricsJson: { cpm: 5.2, est_imp: 7700000 },
+      notesMd: "Burst de pauta, mensaje promocional",
+    },
+    {
+      mediaPlanPublisherId: pr_tt.id, sortOrder: 0,
+      placementName: "Brand Takeover Promo", market: "Panama + LATAM jóvenes",
+      amountUsd: "30000.00", costMethod: "dCPV",
+      startDate: "2026-04-01", endDate: "2026-04-30",
+      metricsJson: { cpv: 0.020 },
+      notesMd: "Burst de TikTok para jóvenes viajeros",
+    },
+  ]);
+
+  await db.insert(s.mediaPlanFees).values([
+    { mediaPlanId: planPromo.id, feeType: "management", name: "Management Fee", amountUsd: "10500.00", sortOrder: 0 },
+    { mediaPlanId: planPromo.id, feeType: "setup",      name: "Set Up Fee",     amountUsd: "500.00",   sortOrder: 1 },
+  ]);
+
+  await db.insert(s.mediaPlanSnapshots).values([
+    {
+      mediaPlanId: planPromo.id, versionNumber: 1,
+      approvedAt: new Date("2026-03-08T11:45:00Z"),
+      notes: "Aprobación del burst promocional.",
+      snapshotJson: { plan: "Promo Lanzamiento v1", totalMedia: 70000, totalFees: 11000 },
+    },
+  ]);
+
+  // ─── Plan billing de muestra para Awareness (Feb 2026) ──────────────
+  console.log("⏳ Plan billings de muestra...");
+  const [billAwarenessFeb] = await db
+    .insert(s.planBillings)
+    .values([
+      {
+        mediaPlanId: planAwareness.id,
+        month: "2026-02",
+        status: "paid",
+        invoiceNumber: "2026-0001",
+        totalNetUsd: "48000.00",
+        totalFeeUsd: "9000.00",
+        totalUsd: "57000.00",
+        sentAt: new Date("2026-03-05T16:00:00Z"),
+        paidAt: new Date("2026-03-25T10:30:00Z"),
+        dueDate: "2026-04-04",
+        notesMd: "Cierre Feb 2026.",
+      },
+    ])
+    .returning();
+
+  await db.insert(s.planBillingPublishers).values([
+    {
+      planBillingId: billAwarenessFeb.id, publisherId: pub("youtube").id,
+      amountRealUsd: "22000.00", isBillable: true,
+      notes: "Imputación 50% del Bumper + parcial In-Stream",
+    },
+    {
+      planBillingId: billAwarenessFeb.id, publisherId: pub("meta").id,
+      amountRealUsd: "16000.00", isBillable: true,
+      notes: "50% Feed + 30% Reels",
+    },
+    {
+      planBillingId: billAwarenessFeb.id, publisherId: pub("tiktok").id,
+      amountRealUsd: "10000.00", isBillable: true,
+      notes: "50% TikTok In-Feed",
+    },
+  ]);
+
+  await db.insert(s.planBillingFees).values([
+    { planBillingId: billAwarenessFeb.id, mediaPlanFeeId: awarenessFees[0].id, amountImputedUsd: "7500.00", notes: "50% del Mgmt Fee" },
+    { planBillingId: billAwarenessFeb.id, mediaPlanFeeId: awarenessFees[1].id, amountImputedUsd: "1000.00", notes: "Set Up completo" },
+    { planBillingId: billAwarenessFeb.id, mediaPlanFeeId: awarenessFees[2].id, amountImputedUsd: "500.00",  notes: "Reporting parcial" },
+  ]);
+
+  // Marzo en draft (sin emitir)
+  const [billAwarenessMar] = await db
+    .insert(s.planBillings)
+    .values([
+      {
+        mediaPlanId: planAwareness.id,
+        month: "2026-03",
+        status: "draft",
+        totalNetUsd: "0.00",
+        totalFeeUsd: "0.00",
+        totalUsd: "0.00",
+      },
+    ])
+    .returning();
 
   // ─── Resumen ────────────────────────────────────────────────────────
   console.log("\n✓ Seed completo:");
-  console.log(`  · ${2} clientes`);
-  console.log(`  · ${4} budget origins`);
-  console.log(`  · ${projects.length} proyectos`);
-  console.log(`  · ${1} plan de medios (v1, approved)`);
-  console.log(`  · ${lines.length} líneas del plan`);
-  console.log(`  · ${spendRows.length} registros de gasto real`);
+  console.log(`  · 1 cliente (Copa Airlines)`);
+  console.log(`  · 3 budget origins (Online / CMI / Trade)`);
+  console.log(`  · 9 publishers en catálogo`);
+  console.log(`  · 3 proyectos`);
+  console.log(`  · 5 planes peer (Awareness/Consideration/Performance + Brand/Promo)`);
+  console.log(`  · 17 placements distribuidos`);
+  console.log(`  · 12 fees del plan`);
+  console.log(`  · 4 snapshots de aprobación`);
+  console.log(`  · 2 plan_billings (1 paid + 1 draft)`);
+
+  // Suprimimos linter de variables del seed que usamos para validación o
+  // que quedan reservadas para data adicional cuando se necesite.
+  void [bgTrade, projMiami, planConsideration, planPerformance, planPromo, billAwarenessMar];
 }
 
 main()

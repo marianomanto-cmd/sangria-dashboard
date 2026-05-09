@@ -1,31 +1,35 @@
-import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  actualSpend,
-  billingLines,
-  billings,
   budgetOrigins,
   clients,
-  mediaPlanLines,
+  mediaPlanFees,
+  mediaPlanPublishers,
   mediaPlans,
+  planBillingFees,
+  planBillingPublishers,
+  planBillings,
   projects,
+  publishers,
 } from "@/db/schema";
 
 // ────────────────────────────────────────────────────────────────────────────
-// Listado de billings (para /billing)
+// Listado global de billings
 // ────────────────────────────────────────────────────────────────────────────
 
 export type BillingListRow = {
   id: string;
   month: string;
   invoiceNumber: string | null;
-  status: (typeof billings.$inferSelect)["status"];
+  status: (typeof planBillings.$inferSelect)["status"];
   totalUsd: number;
   totalNetUsd: number;
   totalFeeUsd: number;
+  planId: string;
+  planName: string;
   projectId: string;
-  projectName: string;
   projectCode: string;
+  projectName: string;
   clientName: string;
   clientSlug: string;
   budgetOriginName: string;
@@ -38,29 +42,32 @@ export type BillingListRow = {
 export async function getBillingsList(): Promise<BillingListRow[]> {
   const rows = await db
     .select({
-      id: billings.id,
-      month: billings.month,
-      invoiceNumber: billings.invoiceNumber,
-      status: billings.status,
-      totalUsd: billings.totalUsd,
-      totalNetUsd: billings.totalNetUsd,
-      totalFeeUsd: billings.totalFeeUsd,
-      projectId: billings.projectId,
-      projectName: projects.name,
+      id: planBillings.id,
+      month: planBillings.month,
+      invoiceNumber: planBillings.invoiceNumber,
+      status: planBillings.status,
+      totalUsd: planBillings.totalUsd,
+      totalNetUsd: planBillings.totalNetUsd,
+      totalFeeUsd: planBillings.totalFeeUsd,
+      planId: mediaPlans.id,
+      planName: mediaPlans.name,
+      projectId: projects.id,
       projectCode: projects.code,
+      projectName: projects.name,
       clientName: clients.name,
       clientSlug: clients.slug,
       budgetOriginName: budgetOrigins.name,
-      createdAt: billings.createdAt,
-      sentAt: billings.sentAt,
-      paidAt: billings.paidAt,
-      dueDate: billings.dueDate,
+      createdAt: planBillings.createdAt,
+      sentAt: planBillings.sentAt,
+      paidAt: planBillings.paidAt,
+      dueDate: planBillings.dueDate,
     })
-    .from(billings)
-    .innerJoin(projects, eq(billings.projectId, projects.id))
+    .from(planBillings)
+    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
-    .innerJoin(budgetOrigins, eq(billings.budgetOriginId, budgetOrigins.id))
-    .orderBy(desc(billings.createdAt));
+    .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
+    .orderBy(desc(planBillings.createdAt));
 
   return rows.map((r) => ({
     ...r,
@@ -71,184 +78,162 @@ export async function getBillingsList(): Promise<BillingListRow[]> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Detalle de billing (para /billing/[id])
+// Detalle de un plan_billing — para la página de carga del AM.
+// Trae publishers del plan, sus consumos del mes (si hay), y fees del plan
+// con sus imputaciones del mes.
 // ────────────────────────────────────────────────────────────────────────────
+
+export type BillingPublisherLine = {
+  publisherId: string;
+  publisherName: string;
+  publisherSlug: string;
+  publisherSortOrder: number;
+  agencyPays: boolean;
+  totalPlannedUsd: number;
+  consumedAccumulatedUsd: number; // a través de meses anteriores
+  amountThisMonthUsd: number;
+  isBillable: boolean;
+  notes: string | null;
+};
+
+export type BillingFeeLine = {
+  mediaPlanFeeId: string;
+  feeType: (typeof mediaPlanFees.$inferSelect)["feeType"];
+  feeName: string;
+  totalAmountUsd: number;
+  imputedAccumulatedUsd: number;
+  imputedThisMonthUsd: number;
+  notes: string | null;
+};
 
 export type BillingDetail = {
-  billing: typeof billings.$inferSelect;
+  billing: typeof planBillings.$inferSelect;
+  plan: { id: string; name: string };
   project: { id: string; name: string; code: string };
   client: { id: string; name: string; slug: string };
-  budgetOrigin: { id: string; name: string; colorHex: string | null };
-  lines: Array<{
-    id: string;
-    publisher: string;
-    placementName: string;
-    amountNet: number;
-    feeAmount: number;
-    total: number;
-  }>;
+  budgetOrigin: { id: string; name: string };
+  publisherLines: BillingPublisherLine[];
+  feeLines: BillingFeeLine[];
 };
 
-export async function getBillingDetail(
-  id: string,
-): Promise<BillingDetail | null> {
-  const [row] = await db
+export async function getBillingDetail(id: string): Promise<BillingDetail | null> {
+  const [billingRow] = await db
     .select({
-      billing: billings,
+      billing: planBillings,
+      plan: { id: mediaPlans.id, name: mediaPlans.name },
       project: { id: projects.id, name: projects.name, code: projects.code },
       client: { id: clients.id, name: clients.name, slug: clients.slug },
-      origin: {
-        id: budgetOrigins.id,
-        name: budgetOrigins.name,
-        colorHex: budgetOrigins.colorHex,
-      },
+      origin: { id: budgetOrigins.id, name: budgetOrigins.name },
     })
-    .from(billings)
-    .innerJoin(projects, eq(billings.projectId, projects.id))
-    .innerJoin(clients, eq(projects.clientId, clients.id))
-    .innerJoin(budgetOrigins, eq(billings.budgetOriginId, budgetOrigins.id))
-    .where(eq(billings.id, id))
-    .limit(1);
-
-  if (!row) return null;
-
-  const lines = await db
-    .select({
-      id: billingLines.id,
-      publisher: mediaPlanLines.publisher,
-      placementName: mediaPlanLines.placementName,
-      amountNet: billingLines.amountNet,
-      feeAmount: billingLines.feeAmount,
-      total: billingLines.total,
-      sortOrder: mediaPlanLines.sortOrder,
-    })
-    .from(billingLines)
-    .innerJoin(
-      mediaPlanLines,
-      eq(billingLines.mediaPlanLineId, mediaPlanLines.id),
-    )
-    .where(eq(billingLines.billingId, id))
-    .orderBy(asc(mediaPlanLines.sortOrder));
-
-  return {
-    billing: row.billing,
-    project: row.project,
-    client: row.client,
-    budgetOrigin: row.origin,
-    lines: lines.map((l) => ({
-      id: l.id,
-      publisher: l.publisher,
-      placementName: l.placementName,
-      amountNet: Number.parseFloat(l.amountNet),
-      feeAmount: Number.parseFloat(l.feeAmount),
-      total: Number.parseFloat(l.total),
-    })),
-  };
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Datos para el wizard de generación (/billing/nuevo)
-// ────────────────────────────────────────────────────────────────────────────
-
-export type BillingCandidate = {
-  projectId: string;
-  projectName: string;
-  projectCode: string;
-  clientName: string;
-  budgetOriginName: string;
-  monthsWithSpend: string[]; // YYYY-MM, descendente
-  alreadyBilledMonths: string[]; // YYYY-MM con factura existente
-};
-
-export async function getBillingCandidates(): Promise<BillingCandidate[]> {
-  // Para cada proyecto activo o cerrado: meses con actual_spend > 0
-  // y meses ya facturados.
-  const rows = await db
-    .select({
-      projectId: projects.id,
-      projectName: projects.name,
-      projectCode: projects.code,
-      clientName: clients.name,
-      budgetOriginName: budgetOrigins.name,
-      month: actualSpend.month,
-      total: sql<string>`coalesce(sum(${actualSpend.amountUsd}), 0)`,
-    })
-    .from(projects)
+    .from(planBillings)
+    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
-    .innerJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
-    .innerJoin(
-      mediaPlanLines,
-      eq(mediaPlanLines.mediaPlanId, mediaPlans.id),
-    )
-    .innerJoin(
-      actualSpend,
-      eq(actualSpend.mediaPlanLineId, mediaPlanLines.id),
-    )
-    .where(inArray(projects.status, ["active", "closed"]))
-    .groupBy(
-      projects.id,
-      projects.name,
-      projects.code,
-      clients.name,
-      budgetOrigins.name,
-      actualSpend.month,
-    )
-    .having(sql`sum(${actualSpend.amountUsd}) > 0`);
+    .where(eq(planBillings.id, id))
+    .limit(1);
 
-  const billed = await db
-    .select({ projectId: billings.projectId, month: billings.month })
-    .from(billings);
+  if (!billingRow) return null;
 
-  const billedSet = new Set(billed.map((b) => `${b.projectId}::${b.month}`));
+  // Publishers del plan + consumos.
+  const planPubs = await db
+    .select({
+      mpp: mediaPlanPublishers,
+      pub: { id: publishers.id, name: publishers.name, slug: publishers.slug, agencyPaysDefault: publishers.agencyPaysDefault, sortOrder: publishers.sortOrder },
+    })
+    .from(mediaPlanPublishers)
+    .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
+    .where(eq(mediaPlanPublishers.mediaPlanId, billingRow.plan.id));
 
-  const byProject = new Map<string, BillingCandidate>();
-  for (const r of rows) {
-    let candidate = byProject.get(r.projectId);
-    if (!candidate) {
-      candidate = {
-        projectId: r.projectId,
-        projectName: r.projectName,
-        projectCode: r.projectCode,
-        clientName: r.clientName,
-        budgetOriginName: r.budgetOriginName,
-        monthsWithSpend: [],
-        alreadyBilledMonths: [],
+  // Consumo acumulado por publisher (todos los meses anteriores e iguales).
+  const accumByPub = await db
+    .select({
+      publisherId: planBillingPublishers.publisherId,
+      total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+    })
+    .from(planBillingPublishers)
+    .innerJoin(planBillings, eq(planBillingPublishers.planBillingId, planBillings.id))
+    .where(eq(planBillings.mediaPlanId, billingRow.plan.id))
+    .groupBy(planBillingPublishers.publisherId);
+
+  // Consumo de este mes específico (del billing actual).
+  const thisMonthByPub = await db
+    .select()
+    .from(planBillingPublishers)
+    .where(eq(planBillingPublishers.planBillingId, id));
+
+  const accumMap = new Map(accumByPub.map((r) => [r.publisherId, Number.parseFloat(r.total)]));
+  const thisMonthMap = new Map(thisMonthByPub.map((r) => [r.publisherId, r]));
+
+  const publisherLines: BillingPublisherLine[] = planPubs
+    .sort((a, b) => a.pub.sortOrder - b.pub.sortOrder)
+    .map((r) => {
+      const thisMonth = thisMonthMap.get(r.pub.id);
+      const accumTotal = accumMap.get(r.pub.id) ?? 0;
+      const thisMonthAmount = thisMonth ? Number.parseFloat(thisMonth.amountRealUsd) : 0;
+      // Para mostrar "consumido antes de este mes": accum total - this month.
+      const consumedBefore = accumTotal - thisMonthAmount;
+      return {
+        publisherId: r.pub.id,
+        publisherName: r.pub.name,
+        publisherSlug: r.pub.slug,
+        publisherSortOrder: r.pub.sortOrder,
+        agencyPays: r.mpp.agencyPaysOverride ?? r.pub.agencyPaysDefault,
+        totalPlannedUsd: Number.parseFloat(r.mpp.totalPlannedUsd),
+        consumedAccumulatedUsd: consumedBefore,
+        amountThisMonthUsd: thisMonthAmount,
+        isBillable: thisMonth?.isBillable ?? (r.mpp.agencyPaysOverride ?? r.pub.agencyPaysDefault),
+        notes: thisMonth?.notes ?? null,
       };
-      byProject.set(r.projectId, candidate);
-    }
-    candidate.monthsWithSpend.push(r.month);
-    if (billedSet.has(`${r.projectId}::${r.month}`)) {
-      candidate.alreadyBilledMonths.push(r.month);
-    }
-  }
+    });
 
-  // Ordenar meses descendente.
-  for (const c of byProject.values()) {
-    c.monthsWithSpend.sort().reverse();
-    c.alreadyBilledMonths.sort().reverse();
-  }
+  // Fees del plan + imputaciones.
+  const planFees = await db
+    .select()
+    .from(mediaPlanFees)
+    .where(eq(mediaPlanFees.mediaPlanId, billingRow.plan.id));
 
-  return Array.from(byProject.values()).sort((a, b) =>
-    a.projectName.localeCompare(b.projectName),
-  );
-}
+  const accumByFee = await db
+    .select({
+      mediaPlanFeeId: planBillingFees.mediaPlanFeeId,
+      total: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
+    })
+    .from(planBillingFees)
+    .innerJoin(planBillings, eq(planBillingFees.planBillingId, planBillings.id))
+    .where(eq(planBillings.mediaPlanId, billingRow.plan.id))
+    .groupBy(planBillingFees.mediaPlanFeeId);
 
-// ────────────────────────────────────────────────────────────────────────────
-// Próximo número de factura del año (sequential YYYY-NNNN)
-// ────────────────────────────────────────────────────────────────────────────
+  const thisMonthFeeRows = await db
+    .select()
+    .from(planBillingFees)
+    .where(eq(planBillingFees.planBillingId, id));
 
-export async function getNextInvoiceNumber(year: number): Promise<string> {
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(billings)
-    .where(
-      and(
-        inArray(billings.status, ["sent", "paid"]),
-        gte(billings.month, `${year}-01`),
-        sql`${billings.month} < ${`${year + 1}-01`}`,
-      ),
-    );
-  const next = count + 1;
-  return `${year}-${String(next).padStart(4, "0")}`;
+  const feeAccumMap = new Map(accumByFee.map((r) => [r.mediaPlanFeeId, Number.parseFloat(r.total)]));
+  const feeThisMonthMap = new Map(thisMonthFeeRows.map((r) => [r.mediaPlanFeeId, r]));
+
+  const feeLines: BillingFeeLine[] = planFees.map((f) => {
+    const thisMonth = feeThisMonthMap.get(f.id);
+    const accum = feeAccumMap.get(f.id) ?? 0;
+    const thisMonthAmt = thisMonth ? Number.parseFloat(thisMonth.amountImputedUsd) : 0;
+    const before = accum - thisMonthAmt;
+    return {
+      mediaPlanFeeId: f.id,
+      feeType: f.feeType,
+      feeName: f.name,
+      totalAmountUsd: Number.parseFloat(f.amountUsd),
+      imputedAccumulatedUsd: before,
+      imputedThisMonthUsd: thisMonthAmt,
+      notes: thisMonth?.notes ?? null,
+    };
+  });
+
+  return {
+    billing: billingRow.billing,
+    plan: billingRow.plan,
+    project: billingRow.project,
+    client: billingRow.client,
+    budgetOrigin: billingRow.origin,
+    publisherLines,
+    feeLines,
+  };
 }

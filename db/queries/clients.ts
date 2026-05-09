@@ -21,7 +21,7 @@ export async function getClientsList(): Promise<ClientListRow[]> {
       status: clients.status,
       totalProjects: sql<number>`count(${projects.id})::int`,
       activeProjects: sql<number>`count(${projects.id}) filter (where ${projects.status} = 'active')::int`,
-      activePipelineUsd: sql<string>`coalesce(sum(${projects.totalBudgetUsd}) filter (where ${projects.status} = 'active'), 0)`,
+      activePipelineUsd: sql<string>`coalesce(sum(${projects.totalGrossBudgetUsd}) filter (where ${projects.status} = 'active'), 0)`,
     })
     .from(clients)
     .leftJoin(projects, eq(projects.clientId, clients.id))

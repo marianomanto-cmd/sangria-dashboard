@@ -1,52 +1,53 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronDown, FileSpreadsheet } from "lucide-react";
-import { ActualsGridEditable } from "@/components/actuals-grid-editable";
+import { ArrowUpRight, Plus } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
-import { getProjectActuals } from "@/db/queries/project-actuals";
-import {
-  getProjectBillings,
-  getProjectPlanVersions,
-  type ProjectBillingRow,
-} from "@/db/queries/project-billings";
-import {
-  getProjectDetail,
-  type PublisherGroup,
-} from "@/db/queries/project-detail";
+import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 
-type Tab = "plan" | "gastos" | "billing" | "diff";
+type Props = { params: Promise<{ code: string }> };
 
-type Props = {
-  params: Promise<{ code: string }>;
-  searchParams: Promise<{ tab?: string }>;
+const PLAN_STATUS_STYLE: Record<
+  string,
+  { label: string; cls: string; dot: string }
+> = {
+  draft: {
+    label: "draft",
+    cls: "bg-paper-2 text-muted border-line",
+    dot: "bg-muted",
+  },
+  ready_to_send: {
+    label: "ready to send",
+    cls: "bg-warn-soft text-warn border-warn-soft",
+    dot: "bg-warn",
+  },
+  approved: {
+    label: "approved",
+    cls: "bg-success-soft text-success border-success-soft",
+    dot: "bg-success",
+  },
+  archived: {
+    label: "archived",
+    cls: "bg-paper-2 text-stone-400 border-line",
+    dot: "bg-stone-400",
+  },
 };
 
-export default async function ProjectDetailPage({ params, searchParams }: Props) {
+export default async function ProjectDetailPage({ params }: Props) {
   const { code } = await params;
-  const sp = await searchParams;
-  const tab: Tab =
-    sp.tab === "gastos" || sp.tab === "billing" || sp.tab === "diff"
-      ? sp.tab
-      : "plan";
-
-  const detail = await getProjectDetail(code);
+  const detail = await getProjectWithPlans(code);
   if (!detail) notFound();
 
-  // Cargas dependientes de la tab activa — evitamos fetchear todo en cada
-  // request para no penalizar la latencia hacia Supabase São Paulo.
-  const tabPayload =
-    tab === "gastos"
-      ? { actuals: await getProjectActuals(detail.project.id) }
-      : tab === "billing"
-        ? { billings: await getProjectBillings(detail.project.id) }
-        : tab === "diff"
-          ? { versions: await getProjectPlanVersions(detail.project.id) }
-          : null;
+  const { project, client, budgetOrigin, plans } = detail;
+
+  const totalPlanned = plans.reduce((s, p) => s + p.totalUsd, 0);
+  const totalSpent = plans.reduce((s, p) => s + p.spentRealUsd, 0);
+  const totalBudget = Number.parseFloat(project.totalGrossBudgetUsd ?? "0");
+  const planningCoveragePct =
+    totalBudget > 0 ? (totalPlanned / totalBudget) * 100 : 0;
 
   return (
     <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
-      {/* Breadcrumb */}
       <nav
         aria-label="Breadcrumb"
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
@@ -55,411 +56,231 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
           Proyectos
         </Link>
         <span className="text-stone-300">/</span>
-        <Link href={`/clientes/${detail.client.slug}`} className="hover:text-ink">
-          {detail.client.name}
+        <Link href={`/clientes/${client.slug}`} className="hover:text-ink">
+          {client.name}
         </Link>
         <span className="text-stone-300">/</span>
-        <span className="text-ink font-medium">{detail.project.name}</span>
+        <span className="text-ink font-medium">{project.name}</span>
       </nav>
 
-      {/* Header */}
-      <header className="mb-5 flex items-end justify-between gap-4 flex-wrap">
+      <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] uppercase text-accent">
             Proyecto
           </p>
           <h1 className="text-3xl font-semibold tracking-tight mt-2 flex items-center gap-3 flex-wrap">
-            {detail.project.name}
-            <StatusBadge status={detail.project.status} />
+            {project.name}
+            <StatusBadge status={project.status} />
           </h1>
-          <p className="text-sm text-muted mt-1 font-mono">{detail.project.code}</p>
+          <p className="text-sm text-muted mt-1 font-mono">{project.code}</p>
         </div>
         <Link
-          href={`/proyectos/${detail.project.code}/importar`}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 transition-colors"
+          href={`/proyectos/${project.code}/planes/nuevo`}
+          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 transition-colors"
         >
-          <FileSpreadsheet size={14} strokeWidth={2} />
-          Importar plan
+          <Plus size={14} strokeWidth={2.5} />
+          Nuevo plan
         </Link>
       </header>
 
       {/* Metadata strip */}
-      <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-x-6 gap-y-3 mb-6">
+      <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-3 mb-6">
         <Meta label="Cliente">
           <Link
-            href={`/clientes/${detail.client.slug}`}
+            href={`/clientes/${client.slug}`}
             className="text-ink hover:underline font-medium text-sm"
           >
-            {detail.client.name}
+            {client.name}
           </Link>
         </Meta>
         <Meta label="Budget Origin">
           <span className="inline-flex items-center gap-1.5 text-ink font-medium text-sm">
-            {detail.budgetOrigin.colorHex && (
+            {budgetOrigin.colorHex && (
               <span
                 aria-hidden
                 className="inline-block w-2 h-2 rounded-full"
-                style={{ background: detail.budgetOrigin.colorHex }}
+                style={{ background: budgetOrigin.colorHex }}
               />
             )}
-            {detail.budgetOrigin.name}
+            {budgetOrigin.name}
           </span>
         </Meta>
         <Meta label="Período">
           <span className="font-mono text-sm text-ink-2">
-            {detail.project.startDate ?? "—"}
+            {project.startDate ?? "—"}
             <span className="text-stone-300"> → </span>
-            {detail.project.endDate ?? "—"}
+            {project.endDate ?? "—"}
           </span>
         </Meta>
-        <Meta label="Budget total">
+        <Meta label="Total gross budget">
           <span className="font-mono text-sm font-semibold tabular-nums text-ink">
-            {detail.project.totalBudgetUsd
-              ? formatUsd(Number.parseFloat(detail.project.totalBudgetUsd))
-              : "—"}
+            {totalBudget > 0 ? formatUsd(totalBudget) : "—"}
           </span>
         </Meta>
-        <Meta label="Plan vigente">
-          {detail.activePlan ? (
-            <span className="font-mono text-sm text-ink-2">
-              v{detail.activePlan.version}
-              <span className="text-muted"> · approved</span>
-            </span>
-          ) : (
-            <span className="text-sm text-muted">sin plan aprobado</span>
-          )}
+        <Meta label="Cobertura planificada">
+          <span
+            className={`font-mono text-sm font-semibold tabular-nums ${
+              planningCoveragePct > 100 ? "text-warn" : "text-ink"
+            }`}
+          >
+            {totalBudget > 0 ? formatPct(planningCoveragePct, 0) : "—"}
+            {totalBudget > 0 && (
+              <span className="text-muted text-xs font-normal ml-1">
+                ({formatUsdCompact(totalPlanned)} de {formatUsdCompact(totalBudget)})
+              </span>
+            )}
+          </span>
         </Meta>
       </section>
 
-      {/* Tabs */}
-      <div className="border-b border-line mb-6 flex gap-0 overflow-x-auto">
-        <ProjectTabLink code={code} target="plan" current={tab}>
-          Plan de Medios
-        </ProjectTabLink>
-        <ProjectTabLink code={code} target="gastos" current={tab}>
-          Gastos Reales
-        </ProjectTabLink>
-        <ProjectTabLink code={code} target="billing" current={tab}>
-          Billing
-        </ProjectTabLink>
-        <ProjectTabLink code={code} target="diff" current={tab}>
-          Diff
-        </ProjectTabLink>
-      </div>
+      {/* Lista de planes peer */}
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold">
+            Planes
+            <span className="ml-2 text-xs font-normal text-muted">
+              ({plans.length} peer{plans.length === 1 ? "" : "s"})
+            </span>
+          </h2>
+          <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+            gastado: {formatUsdCompact(totalSpent)}
+          </span>
+        </div>
 
-      {tab === "plan" && <PlanTab detail={detail} />}
-      {tab === "gastos" &&
-        (tabPayload && "actuals" in tabPayload && tabPayload.actuals ? (
-          <ActualsGridEditable data={tabPayload.actuals} />
+        {plans.length === 0 ? (
+          <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
+            <p className="text-sm font-medium text-ink-2">Sin planes todavía</p>
+            <p className="text-xs text-muted mt-1 max-w-md mx-auto">
+              El media planner crea acá los planes del proyecto (Awareness,
+              Consideration, Performance, etc.). Cada plan tiene su lifecycle
+              de aprobación independiente.
+            </p>
+            <Link
+              href={`/proyectos/${project.code}/planes/nuevo`}
+              className="inline-flex items-center gap-1.5 mt-4 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2"
+            >
+              <Plus size={14} strokeWidth={2.5} />
+              Crear primer plan
+            </Link>
+          </div>
         ) : (
-          <NoPlanForActuals />
-        ))}
-      {tab === "billing" &&
-        tabPayload &&
-        "billings" in tabPayload && (
-          <BillingTab rows={tabPayload.billings} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {plans.map((p) => (
+              <PlanCard
+                key={p.id}
+                plan={p}
+                projectCode={project.code}
+                clientName={client.name}
+              />
+            ))}
+          </div>
         )}
-      {tab === "diff" &&
-        tabPayload &&
-        "versions" in tabPayload && (
-          <DiffTab versions={tabPayload.versions} />
-        )}
+      </section>
     </main>
   );
 }
 
-function NoPlanForActuals() {
-  return (
-    <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
-      <p className="text-sm font-medium text-ink-2">Sin plan vigente</p>
-      <p className="text-xs text-muted mt-1">
-        No hay un plan aprobado para este proyecto, así que no hay grilla de
-        gastos para mostrar.
-      </p>
-    </div>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Billing tab — historial de facturas del proyecto
-// ────────────────────────────────────────────────────────────────────────────
-
-function BillingTab({ rows }: { rows: ProjectBillingRow[] }) {
-  if (rows.length === 0) {
-    return (
-      <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
-        <p className="text-sm font-medium text-ink-2">Sin facturas emitidas</p>
-        <p className="text-xs text-muted mt-1">
-          El generador de billing llega en Fase 7. Vas a poder seleccionar mes
-          + proyecto, revisar las líneas y emitir la factura desde acá.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <section className="rounded-lg border border-line bg-white overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-paper">
-          <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-            <th className="text-left font-medium px-5 py-2.5">Mes</th>
-            <th className="text-left font-medium px-5 py-2.5">N° factura</th>
-            <th className="text-left font-medium px-5 py-2.5">Estado</th>
-            <th className="text-right font-medium px-5 py-2.5">Net</th>
-            <th className="text-right font-medium px-5 py-2.5">Fee</th>
-            <th className="text-right font-medium px-5 py-2.5">Total</th>
-            <th className="text-left font-medium px-5 py-2.5">PDF</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((b) => (
-            <tr
-              key={b.id}
-              className="border-t border-line-soft hover:bg-paper-2 transition-colors"
-            >
-              <td className="px-5 py-3 font-mono">{b.month}</td>
-              <td className="px-5 py-3 font-mono text-ink-2">
-                {b.invoiceNumber ?? "—"}
-              </td>
-              <td className="px-5 py-3 text-ink-2">{b.status}</td>
-              <td className="px-5 py-3 text-right font-mono text-ink-2">
-                {formatUsd(Number.parseFloat(b.totalNetUsd))}
-              </td>
-              <td className="px-5 py-3 text-right font-mono text-ink-2">
-                {formatUsd(Number.parseFloat(b.totalFeeUsd))}
-              </td>
-              <td className="px-5 py-3 text-right font-mono font-semibold text-ink">
-                {formatUsd(Number.parseFloat(b.totalUsd))}
-              </td>
-              <td className="px-5 py-3">
-                {b.pdfUrl ? (
-                  <a
-                    href={b.pdfUrl}
-                    className="text-accent hover:underline"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    descargar
-                  </a>
-                ) : (
-                  <span className="text-muted text-xs">—</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Diff tab — comparación entre versiones del plan
-// ────────────────────────────────────────────────────────────────────────────
-
-function DiffTab({
-  versions,
+function PlanCard({
+  plan,
+  projectCode,
 }: {
-  versions: { id: string; version: number; status: string; approvedAt: Date | null }[];
+  plan: ProjectPlanSummary;
+  projectCode: string;
+  clientName: string;
 }) {
-  if (versions.length === 0) {
-    return (
-      <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
-        <p className="text-sm font-medium text-ink-2">Sin planes</p>
-        <p className="text-xs text-muted mt-1">
-          Cuando importes un Excel del cliente vas a tener un plan v1 acá.
-        </p>
-      </div>
-    );
-  }
+  const style = PLAN_STATUS_STYLE[plan.status] ?? PLAN_STATUS_STYLE.draft;
+  const consumption =
+    plan.totalMediaUsd > 0
+      ? (plan.spentRealUsd / plan.totalMediaUsd) * 100
+      : 0;
 
-  if (versions.length === 1) {
-    return (
-      <section className="rounded-lg border border-line bg-white px-5 py-8 text-center">
-        <p className="text-sm font-medium text-ink-2">
-          Solo hay una versión del plan
-        </p>
-        <p className="text-xs text-muted mt-1 max-w-md mx-auto">
-          Cuando se importe una v2 (revisión del cliente), el diff se calcula
-          contra la versión anterior: líneas agregadas, eliminadas o
-          modificadas (presupuesto, fechas).
-        </p>
-        <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-line bg-paper-2 text-xs">
-          <span className="font-mono">v{versions[0].version}</span>
-          <span className="text-muted">{versions[0].status}</span>
-          {versions[0].approvedAt && (
-            <>
-              <span className="text-stone-300">·</span>
-              <span className="font-mono text-muted">
-                {versions[0].approvedAt.toISOString().slice(0, 10)}
-              </span>
-            </>
-          )}
-        </div>
-      </section>
-    );
-  }
-
-  // 2+ versiones: el cómputo del diff llega en el commit del importador
-  // de Excel (Fase 6) cuando ya tengamos múltiples versiones reales.
-  return (
-    <section className="rounded-lg border border-line bg-white px-5 py-8 text-center">
-      <p className="text-sm font-medium text-ink-2">
-        {versions.length} versiones del plan
-      </p>
-      <p className="text-xs text-muted mt-1">
-        El cómputo del diff (added / removed / modified) se implementa en Fase 6
-        junto con el importador de Excel.
-      </p>
-    </section>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Plan tab
-// ────────────────────────────────────────────────────────────────────────────
-
-function PlanTab({
-  detail,
-}: {
-  detail: NonNullable<Awaited<ReturnType<typeof getProjectDetail>>>;
-}) {
-  if (!detail.activePlan) {
-    return (
-      <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
-        <p className="text-sm font-medium text-ink-2">Sin plan aprobado</p>
-        <p className="text-xs text-muted mt-1">
-          Importá un Excel del cliente o creá un plan desde cero (Fase 6).
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <section className="rounded-lg border border-line bg-white overflow-hidden">
-      <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold">Plan agrupado por publisher</h2>
-        <div className="flex items-center gap-4 text-[11px] text-muted uppercase tracking-[0.06em] font-medium">
-          <span>{detail.totalLines} placements</span>
-          <span>{detail.publishers.length} publishers</span>
-          <span className="text-ink font-mono normal-case tracking-normal">
-            {formatUsd(detail.totalBudget)}
-          </span>
-        </div>
-      </div>
-
-      <div className="divide-y divide-line-soft">
-        {detail.publishers.map((pg, idx) => (
-          <PublisherRow key={pg.publisher} group={pg} defaultOpen={idx === 0} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function PublisherRow({
-  group,
-  defaultOpen,
-}: {
-  group: PublisherGroup;
-  defaultOpen: boolean;
-}) {
-  return (
-    <details open={defaultOpen} className="group">
-      <summary className="flex items-center gap-3 px-5 py-3 cursor-pointer list-none hover:bg-paper-2 transition-colors [&::-webkit-details-marker]:hidden">
-        <ChevronDown
-          size={14}
-          strokeWidth={2}
-          className="text-muted shrink-0 transition-transform -rotate-90 group-open:rotate-0"
-        />
-        <div className="flex-1 min-w-0">
-          <span className="font-medium text-ink">{group.publisher}</span>
-          <span className="ml-2 text-xs text-muted">
-            {group.lines.length} placement{group.lines.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        <div className="font-mono text-xs text-muted tabular-nums">
-          {group.minStart && group.maxEnd
-            ? `${group.minStart} → ${group.maxEnd}`
-            : "—"}
-        </div>
-        <div className="font-mono text-sm font-semibold tabular-nums text-ink min-w-[100px] text-right">
-          {formatUsdCompact(group.totalBudget)}
-        </div>
-      </summary>
-
-      <div className="px-5 pb-4 pt-0">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-              <th className="text-left font-medium py-2 pl-7">Placement</th>
-              <th className="text-left font-medium py-2">Audiencia / Mercado</th>
-              <th className="text-left font-medium py-2">Período</th>
-              <th className="text-right font-medium py-2">Net</th>
-              <th className="text-right font-medium py-2">Fee</th>
-              <th className="text-right font-medium py-2">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {group.lines.map((l) => {
-              const fee = l.budgetNetUsd * (l.feePct / 100);
-              return (
-                <tr
-                  key={l.id}
-                  className="border-t border-line-soft hover:bg-paper-2 transition-colors"
-                >
-                  <td className="py-2 pl-7 text-ink">{l.placementName}</td>
-                  <td className="py-2 text-ink-2 text-xs">
-                    {l.audienceMarket ?? "—"}
-                  </td>
-                  <td className="py-2 text-ink-2 font-mono text-[11px]">
-                    {l.startDate} → {l.endDate}
-                  </td>
-                  <td className="py-2 text-right font-mono text-ink-2">
-                    {formatUsd(l.budgetNetUsd)}
-                  </td>
-                  <td className="py-2 text-right font-mono text-muted text-xs">
-                    {formatPct(l.feePct, 0)}{" "}
-                    <span className="text-stone-400">·</span>{" "}
-                    {formatUsd(fee)}
-                  </td>
-                  <td className="py-2 text-right font-mono text-ink font-medium">
-                    {formatUsd(l.budgetNetUsd + fee)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </details>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ────────────────────────────────────────────────────────────────────────────
-
-function ProjectTabLink({
-  code,
-  target,
-  current,
-  children,
-}: {
-  code: string;
-  target: Tab;
-  current: Tab;
-  children: React.ReactNode;
-}) {
-  const href =
-    target === "plan" ? `/proyectos/${code}` : `/proyectos/${code}?tab=${target}`;
   return (
     <Link
-      href={href}
-      data-active={current === target}
-      className="-mb-px px-3.5 py-2 text-[13px] font-medium text-muted hover:text-ink-2 border-b-2 border-transparent data-[active=true]:text-ink data-[active=true]:border-accent transition-colors whitespace-nowrap"
+      href={`/proyectos/${projectCode}/planes/${plan.id}`}
+      className="group rounded-lg border border-line bg-white p-4 hover:border-ink-2 transition-colors"
     >
-      {children}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-semibold text-ink truncate">{plan.name}</h3>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[10px] font-medium ${style.cls}`}
+            >
+              <span
+                className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`}
+              />
+              {style.label}
+            </span>
+            {plan.currentVersion > 0 && (
+              <span className="font-mono text-[10px] text-muted">
+                v{plan.currentVersion}
+              </span>
+            )}
+          </div>
+          <p className="font-mono text-[11px] text-muted mt-1 truncate">
+            {projectCode}.{plan.name}
+          </p>
+        </div>
+        <ArrowUpRight
+          size={14}
+          strokeWidth={2}
+          className="text-muted group-hover:text-ink transition-colors shrink-0 mt-1"
+        />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+            Período
+          </p>
+          <p className="font-mono text-[12px] text-ink-2 mt-0.5">
+            {plan.periodStart ?? "—"}
+            <span className="text-stone-300"> → </span>
+            {plan.periodEnd ?? "—"}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+            Inversión
+          </p>
+          <p className="font-mono text-sm font-semibold tabular-nums mt-0.5">
+            {formatUsdCompact(plan.totalMediaUsd)}
+            <span className="text-muted text-xs font-normal ml-1">
+              + {formatUsdCompact(plan.totalFeesUsd)} fees
+            </span>
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3">
+        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted mb-1">
+          {plan.publishersCount} publishers · {plan.placementsCount} placements
+          {plan.spentRealUsd > 0 && (
+            <span>
+              {" · "}
+              <span className={consumption > 100 ? "text-warn" : ""}>
+                {formatPct(consumption, 0)} consumido
+              </span>
+            </span>
+          )}
+        </p>
+        {plan.totalMediaUsd > 0 && (
+          <div className="h-1 rounded-full bg-paper-2 overflow-hidden">
+            <div
+              className={`h-full rounded-full ${
+                consumption > 100 ? "bg-warn" : "bg-ink"
+              }`}
+              style={{ width: `${Math.min(consumption, 100)}%` }}
+            />
+          </div>
+        )}
+      </div>
+
+      {plan.lastSnapshotAt && (
+        <p className="text-[10px] text-muted mt-3 font-mono">
+          última aprobación: {plan.lastSnapshotAt.toISOString().slice(0, 10)}
+        </p>
+      )}
     </Link>
   );
 }

@@ -1,21 +1,23 @@
+import { sql } from "drizzle-orm";
 import {
-  pgTable,
-  uuid,
-  text,
-  varchar,
+  boolean,
   date,
-  timestamp,
-  integer,
-  numeric,
-  jsonb,
-  pgEnum,
-  unique,
   index,
+  integer,
+  jsonb,
+  numeric,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+  varchar,
 } from "drizzle-orm/pg-core";
 
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 // Enums
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
 
 export const clientStatus = pgEnum("client_status", [
   "active",
@@ -30,40 +32,76 @@ export const projectStatus = pgEnum("project_status", [
   "closed",
 ]);
 
-export const mediaPlanStatus = pgEnum("media_plan_status", [
+// Lifecycle de un plan dentro de un proyecto:
+//   draft         → editable por el MM
+//   ready_to_send → MM lo congeló, AM puede bajar el PDF y mandarlo a firma
+//   approved      → cliente firmó, plan vigente, ediciones futuras crean nueva versión
+//   archived      → reemplazado por una nueva versión approved o cancelado
+export const planStatus = pgEnum("plan_status", [
   "draft",
+  "ready_to_send",
   "approved",
-  "superseded",
+  "archived",
 ]);
 
 export const billingStatus = pgEnum("billing_status", [
   "draft",
+  "ready",
   "sent",
   "paid",
-  "overdue",
 ]);
 
-export const publisherEnum = pgEnum("publisher", [
-  "YouTube",
-  "Meta",
-  "TikTok",
-  "DV360",
-  "OOH",
-  "Display",
-  "Search",
-  "Spotify",
-  "Programmatic",
+export const feeType = pgEnum("fee_type", [
+  "management",
+  "setup",
+  "reporting",
+  "custom",
+]);
+
+export const costMethod = pgEnum("cost_method", [
+  "dCPV",
+  "dCPC",
+  "dCPM",
+  "CPM",
+  "CPC",
+  "CPV",
+  "CPA",
+  "Flat",
   "Other",
 ]);
 
-// ────────────────────────────────────────────────────────────────────────────
-// Clientes — centro de contratación con Sangria.
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Catálogo de publishers (editable desde /configuracion/publishers).
+// Reemplaza el enum hardcodeado que teníamos antes.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const publishers = pgTable(
+  "publishers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),       // youtube, meta, tiktok
+    name: text("name").notNull(),                 // YouTube, Meta, TikTok
+    enabled: boolean("enabled").notNull().default(true),
+    // Default agency-pays. La agencia factura los publishers que ella paga;
+    // los que el cliente paga directo no aparecen en facturas (tracking sí).
+    agencyPaysDefault: boolean("agency_pays_default").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_publishers_enabled").on(t.enabled, t.sortOrder)],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Clientes
+// ════════════════════════════════════════════════════════════════════════════
 
 export const clients = pgTable("clients", {
   id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),                 // "Copa Airlines"
+  slug: text("slug").notNull().unique(),        // "copa"
+  prefix: text("prefix"),                        // "COPA" — se usa en code de proyectos
   logoUrl: text("logo_url"),
   status: clientStatus("status").notNull().default("active"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -71,18 +109,17 @@ export const clients = pgTable("clients", {
     .defaultNow(),
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Budget Origins — centros de costo / fuentes de presupuesto del cliente.
-// Un cliente tiene N (ej: "Online", "CMI", "Trade", "Cargo").
-// Es la unidad que se factura por separado.
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Budget Origins (centros de costos / fuentes de presupuesto del cliente).
+// Un proyecto pertenece a UN budget_origin (regla dura).
+// ════════════════════════════════════════════════════════════════════════════
 
 export const budgetOrigins = pgTable("budget_origins", {
   id: uuid("id").primaryKey().defaultRandom(),
   clientId: uuid("client_id")
     .notNull()
     .references(() => clients.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
+  name: text("name").notNull(),                 // "Online", "CMI", "Trade", "Cargo"
   monthlyTargetUsd: numeric("monthly_target_usd", { precision: 14, scale: 2 }),
   colorHex: text("color_hex"),
   createdAt: timestamp("created_at", { withTimezone: true })
@@ -90,42 +127,42 @@ export const budgetOrigins = pgTable("budget_origins", {
     .defaultNow(),
 });
 
-// ────────────────────────────────────────────────────────────────────────────
-// Proyectos — campañas/iniciativas con fechas + budget origin asociado.
-// Regla dura: un plan de medios pertenece a UN solo budget origin (vía
-// project.budget_origin_id). No se mezclan orígenes en un plan.
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Proyectos. AM crea el proyecto con metadata principal + total gross budget.
+// Code sigue convención: <CLIENT_PREFIX>.m<id>.<ProjectName>
+// Ej: "COPA.mCostaRica2026", "COPA.m1234.SubeLaMarea"
+// ════════════════════════════════════════════════════════════════════════════
 
-export const projects = pgTable(
-  "projects",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    clientId: uuid("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "restrict" }),
-    budgetOriginId: uuid("budget_origin_id")
-      .notNull()
-      .references(() => budgetOrigins.id, { onDelete: "restrict" }),
-    name: text("name").notNull(),
-    code: text("code").notNull(),
-    status: projectStatus("status").notNull().default("planning"),
-    startDate: date("start_date"),
-    endDate: date("end_date"),
-    totalBudgetUsd: numeric("total_budget_usd", { precision: 14, scale: 2 }),
-    driveFolderUrl: text("drive_folder_url"),
-    notesMd: text("notes_md"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [unique("uq_project_client_code").on(t.clientId, t.code)],
-);
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  clientId: uuid("client_id")
+    .notNull()
+    .references(() => clients.id, { onDelete: "restrict" }),
+  budgetOriginId: uuid("budget_origin_id")
+    .notNull()
+    .references(() => budgetOrigins.id, { onDelete: "restrict" }),
+  code: text("code").notNull().unique(),       // "COPA.mCostaRica2026"
+  name: text("name").notNull(),                 // "Costa Rica 2026" (display)
+  status: projectStatus("status").notNull().default("planning"),
+  startDate: date("start_date"),
+  endDate: date("end_date"),
+  totalGrossBudgetUsd: numeric("total_gross_budget_usd", {
+    precision: 14,
+    scale: 2,
+  }),
+  driveFolderUrl: text("drive_folder_url"),
+  notesMd: text("notes_md"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
-// ────────────────────────────────────────────────────────────────────────────
-// Planes de Medios — un plan trimestral/mensual del proyecto.
-// Un proyecto puede tener varios planes (revisiones del cliente), pero solo
-// uno con status='approved' a la vez. Eso lo enforzamos en app code, no acá.
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Planes — múltiples por proyecto, peers (no versiones de uno).
+// Cada plan tiene su propio lifecycle (draft → ready_to_send → approved).
+// Plan name sigue convención: <Project.code>.<PlanName>
+// Ej: "COPA.mCostaRica2026.Awareness", "COPA.mCostaRica2026.Performance"
+// ════════════════════════════════════════════════════════════════════════════
 
 export const mediaPlans = pgTable(
   "media_plans",
@@ -134,95 +171,139 @@ export const mediaPlans = pgTable(
     projectId: uuid("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    version: integer("version").notNull().default(1),
-    status: mediaPlanStatus("status").notNull().default("draft"),
-    excelSourceUrl: text("excel_source_url"),
-    importedAt: timestamp("imported_at", { withTimezone: true }),
-    approvedAt: timestamp("approved_at", { withTimezone: true }),
-    // createdBy referencia auth.users(id) gestionada por Supabase Auth.
-    // No declaramos la FK acá para no acoplar el schema de Drizzle al
-    // schema interno de Supabase (auth.users vive en otro namespace).
-    createdBy: uuid("created_by"),
+    name: text("name").notNull(),               // "Awareness", "Performance"
+    status: planStatus("status").notNull().default("draft"),
+    periodStart: date("period_start"),
+    periodEnd: date("period_end"),
+    // 0 = nunca aprobado. Cada vez que se aprueba se crea un snapshot e
+    // incrementa este contador.
+    currentVersion: integer("current_version").notNull().default(0),
+    notesMd: text("notes_md"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [unique("uq_media_plan_project_version").on(t.projectId, t.version)],
+  (t) => [unique("uq_media_plan_project_name").on(t.projectId, t.name)],
 );
 
-// ────────────────────────────────────────────────────────────────────────────
-// Líneas del Plan — un placement individual.
-// Tras importar el Excel del cliente agrupamos visualmente por publisher,
-// pero en la tabla guardamos cada placement como fila propia.
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Publisher dentro de un plan. Tiene un total planeado que debe coincidir
+// con la suma de sus placements.
+// ════════════════════════════════════════════════════════════════════════════
 
-export const mediaPlanLines = pgTable(
-  "media_plan_lines",
+export const mediaPlanPublishers = pgTable(
+  "media_plan_publishers",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     mediaPlanId: uuid("media_plan_id")
       .notNull()
       .references(() => mediaPlans.id, { onDelete: "cascade" }),
-    publisher: publisherEnum("publisher").notNull(),
-    placementName: text("placement_name").notNull(),
-    audienceMarket: text("audience_market"),
-    startDate: date("start_date"),
-    endDate: date("end_date"),
-    budgetNetUsd: numeric("budget_net_usd", {
+    publisherId: uuid("publisher_id")
+      .notNull()
+      .references(() => publishers.id, { onDelete: "restrict" }),
+    totalPlannedUsd: numeric("total_planned_usd", {
       precision: 14,
       scale: 2,
-    }).notNull(),
-    feePct: numeric("fee_pct", { precision: 5, scale: 2 })
+    })
       .notNull()
       .default("0"),
-    notes: text("notes"),
+    // Si está seteado, override del agencyPaysDefault del catálogo.
+    agencyPaysOverride: boolean("agency_pays_override"),
     sortOrder: integer("sort_order").notNull().default(0),
-  },
-  (t) => [index("idx_mpl_media_plan").on(t.mediaPlanId)],
-);
-
-// ────────────────────────────────────────────────────────────────────────────
-// Gastos reales — autosave en grilla mes a mes (debounce 300ms en UI).
-// Cada cambio escribe acá y dispara audit_log. Una fila por (línea, mes).
-// ────────────────────────────────────────────────────────────────────────────
-
-export const actualSpend = pgTable(
-  "actual_spend",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    mediaPlanLineId: uuid("media_plan_line_id")
-      .notNull()
-      .references(() => mediaPlanLines.id, { onDelete: "cascade" }),
-    month: varchar("month", { length: 7 }).notNull(), // formato YYYY-MM
-    amountUsd: numeric("amount_usd", { precision: 14, scale: 2 }).notNull(),
-    note: text("note"),
-    recordedAt: timestamp("recorded_at", { withTimezone: true })
+    createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    recordedBy: uuid("recorded_by"),
+  },
+  (t) => [unique("uq_mpp_plan_publisher").on(t.mediaPlanId, t.publisherId)],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Placements (líneas) dentro de un publisher dentro de un plan.
+// Cada placement: nombre, mercado, monto, cost_method, indicadores flexibles
+// (jsonb: cpc, ctr, est_imp, etc.) y notas free-text para audiencia/formato.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const mediaPlanPlacements = pgTable(
+  "media_plan_placements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaPlanPublisherId: uuid("media_plan_publisher_id")
+      .notNull()
+      .references(() => mediaPlanPublishers.id, { onDelete: "cascade" }),
+    placementName: text("placement_name").notNull(),
+    market: text("market"),
+    amountUsd: numeric("amount_usd", { precision: 14, scale: 2 }).notNull(),
+    costMethod: costMethod("cost_method"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    // Diccionario flexible: { cpc: 0.012, ctr: 0.5, est_imp: 1000000, ... }
+    metricsJson: jsonb("metrics_json")
+      .$type<Record<string, number>>()
+      .default(sql`'{}'::jsonb`),
+    notesMd: text("notes_md"), // audiencia / formatos / detalles libres
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("idx_placements_mpp").on(t.mediaPlanPublisherId)],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Fees del plan. La agencia los suma al billing y los imputa mes a mes
+// como considere (ver plan_billing_fees).
+// ════════════════════════════════════════════════════════════════════════════
+
+export const mediaPlanFees = pgTable("media_plan_fees", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  mediaPlanId: uuid("media_plan_id")
+    .notNull()
+    .references(() => mediaPlans.id, { onDelete: "cascade" }),
+  feeType: feeType("fee_type").notNull(),
+  name: text("name").notNull(),               // "Management Fee", custom name
+  amountUsd: numeric("amount_usd", { precision: 14, scale: 2 }).notNull(),
+  notes: text("notes"),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Snapshots inmutables — cada vez que el plan se aprueba se guarda el
+// estado completo en JSON + el PDF firmado.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const mediaPlanSnapshots = pgTable(
+  "media_plan_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaPlanId: uuid("media_plan_id")
+      .notNull()
+      .references(() => mediaPlans.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    // Snapshot completo: plan + publishers + placements + fees al momento.
+    snapshotJson: jsonb("snapshot_json").notNull(),
+    pdfUrl: text("pdf_url"),
+    signedPdfUrl: text("signed_pdf_url"),
+    approvedAt: timestamp("approved_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    approvedByUserId: uuid("approved_by_user_id"),
+    notes: text("notes"),
   },
   (t) => [
-    unique("uq_actual_spend_line_month").on(t.mediaPlanLineId, t.month),
-    index("idx_actual_spend_month").on(t.month),
+    unique("uq_mps_plan_version").on(t.mediaPlanId, t.versionNumber),
+    index("idx_mps_plan_approved_at").on(t.mediaPlanId, t.approvedAt),
   ],
 );
 
-// ────────────────────────────────────────────────────────────────────────────
-// Billing — factura mensual generada por (proyecto, mes).
-// Se factura por budget origin porque cada origen es contablemente
-// independiente. Una factura cubre un solo budget origin.
-// ────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+// Billings del plan, mes a mes. AM carga el consumo por publisher + imputa
+// los fees del plan en cada mes (prorrateo manual).
+// ════════════════════════════════════════════════════════════════════════════
 
-export const billings = pgTable(
-  "billings",
+export const planBillings = pgTable(
+  "plan_billings",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    projectId: uuid("project_id")
+    mediaPlanId: uuid("media_plan_id")
       .notNull()
-      .references(() => projects.id, { onDelete: "restrict" }),
-    budgetOriginId: uuid("budget_origin_id")
-      .notNull()
-      .references(() => budgetOrigins.id, { onDelete: "restrict" }),
+      .references(() => mediaPlans.id, { onDelete: "cascade" }),
     month: varchar("month", { length: 7 }).notNull(), // YYYY-MM
     status: billingStatus("status").notNull().default("draft"),
     invoiceNumber: text("invoice_number").unique(),
@@ -239,31 +320,61 @@ export const billings = pgTable(
     sentAt: timestamp("sent_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     dueDate: date("due_date"),
+    notesMd: text("notes_md"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [unique("uq_billing_project_month").on(t.projectId, t.month)],
+  (t) => [unique("uq_pb_plan_month").on(t.mediaPlanId, t.month)],
 );
 
-export const billingLines = pgTable("billing_lines", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  billingId: uuid("billing_id")
-    .notNull()
-    .references(() => billings.id, { onDelete: "cascade" }),
-  mediaPlanLineId: uuid("media_plan_line_id")
-    .notNull()
-    .references(() => mediaPlanLines.id, { onDelete: "restrict" }),
-  amountNet: numeric("amount_net", { precision: 14, scale: 2 }).notNull(),
-  feeAmount: numeric("fee_amount", { precision: 14, scale: 2 }).notNull(),
-  total: numeric("total", { precision: 14, scale: 2 }).notNull(),
-});
+// Consumo por publisher dentro de un billing mensual.
+// `isBillable=false` para los publishers que la agencia no factura
+// (cliente paga directo). Igual se trackea para reporting.
+export const planBillingPublishers = pgTable(
+  "plan_billing_publishers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planBillingId: uuid("plan_billing_id")
+      .notNull()
+      .references(() => planBillings.id, { onDelete: "cascade" }),
+    publisherId: uuid("publisher_id")
+      .notNull()
+      .references(() => publishers.id, { onDelete: "restrict" }),
+    amountRealUsd: numeric("amount_real_usd", { precision: 14, scale: 2 })
+      .notNull()
+      .default("0"),
+    isBillable: boolean("is_billable").notNull().default(true),
+    notes: text("notes"),
+  },
+  (t) => [unique("uq_pbp_billing_publisher").on(t.planBillingId, t.publisherId)],
+);
 
-// ────────────────────────────────────────────────────────────────────────────
-// Audit log — toda edición se audita (regla dura del prompt §6).
-// Cada actualización de actual_spend, media_plan_line, etc., escribe acá
-// con before/after JSON.
-// ────────────────────────────────────────────────────────────────────────────
+// Imputación de fees del plan en un mes específico. La suma a lo largo
+// del tiempo de un fee no debería exceder al fee total del plan
+// (validación en app, no DB).
+export const planBillingFees = pgTable(
+  "plan_billing_fees",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    planBillingId: uuid("plan_billing_id")
+      .notNull()
+      .references(() => planBillings.id, { onDelete: "cascade" }),
+    mediaPlanFeeId: uuid("media_plan_fee_id")
+      .notNull()
+      .references(() => mediaPlanFees.id, { onDelete: "cascade" }),
+    amountImputedUsd: numeric("amount_imputed_usd", {
+      precision: 14,
+      scale: 2,
+    }).notNull(),
+    notes: text("notes"),
+  },
+  (t) => [unique("uq_pbf_billing_fee").on(t.planBillingId, t.mediaPlanFeeId)],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Audit log — sin cambios respecto al schema anterior.
+// ════════════════════════════════════════════════════════════════════════════
 
 export const auditLog = pgTable(
   "audit_log",
@@ -271,7 +382,7 @@ export const auditLog = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     entityType: text("entity_type").notNull(),
     entityId: uuid("entity_id").notNull(),
-    action: text("action").notNull(), // 'create' | 'update' | 'delete'
+    action: text("action").notNull(),
     beforeJson: jsonb("before_json"),
     afterJson: jsonb("after_json"),
     userId: uuid("user_id"),

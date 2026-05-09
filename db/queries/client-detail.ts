@@ -1,22 +1,14 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  actualSpend,
   budgetOrigins,
   clients,
-  mediaPlanLines,
+  mediaPlanPublishers,
   mediaPlans,
+  planBillingPublishers,
+  planBillings,
   projects,
 } from "@/db/schema";
-
-// ────────────────────────────────────────────────────────────────────────────
-// Client detail — todo lo que necesita /clientes/[slug]:
-//   · client
-//   · budget origins del cliente (para los tabs)
-//   · proyectos filtrados por (clientId, opcionalmente originId) + sus
-//     totales de gasto + serie mensual (sparkline)
-//   · KPIs derivados
-// ────────────────────────────────────────────────────────────────────────────
 
 export type ClientDetailKpis = {
   totalProjects: number;
@@ -36,6 +28,7 @@ export type ClientDetailProject = {
   totalBudgetUsd: number;
   spentUsd: number;
   consumptionPct: number;
+  planCount: number;
   monthlySpend: number[];
 };
 
@@ -52,7 +45,6 @@ export async function getClientDetail(
   slug: string,
   originFilter: string | null,
 ): Promise<ClientDetail | null> {
-  // 1. Client por slug.
   const [client] = await db
     .select()
     .from(clients)
@@ -61,7 +53,6 @@ export async function getClientDetail(
 
   if (!client) return null;
 
-  // 2. Budget origins del cliente.
   const origins = await db
     .select()
     .from(budgetOrigins)
@@ -73,7 +64,6 @@ export async function getClientDetail(
       ? originFilter
       : null;
 
-  // 3. Proyectos del cliente, opcionalmente filtrados por origin.
   const filterConds = [eq(projects.clientId, client.id)];
   if (selectedOriginId) {
     filterConds.push(eq(projects.budgetOriginId, selectedOriginId));
@@ -88,13 +78,17 @@ export async function getClientDetail(
       status: projects.status,
       startDate: projects.startDate,
       endDate: projects.endDate,
-      totalBudgetUsd: projects.totalBudgetUsd,
-      spentUsd: sql<string>`coalesce(sum(${actualSpend.amountUsd}), 0)`,
+      totalBudgetUsd: projects.totalGrossBudgetUsd,
+      spentUsd: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+      planCount: sql<number>`count(distinct ${mediaPlans.id})::int`,
     })
     .from(projects)
     .leftJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
-    .leftJoin(mediaPlanLines, eq(mediaPlanLines.mediaPlanId, mediaPlans.id))
-    .leftJoin(actualSpend, eq(actualSpend.mediaPlanLineId, mediaPlanLines.id))
+    .leftJoin(planBillings, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .leftJoin(
+      planBillingPublishers,
+      eq(planBillingPublishers.planBillingId, planBillings.id),
+    )
     .where(filterClause)
     .groupBy(projects.id)
     .orderBy(asc(projects.code));
@@ -102,21 +96,18 @@ export async function getClientDetail(
   const monthly = await db
     .select({
       projectId: projects.id,
-      month: actualSpend.month,
-      total: sql<string>`coalesce(sum(${actualSpend.amountUsd}), 0)`,
+      month: planBillings.month,
+      total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
     })
     .from(projects)
     .innerJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
+    .innerJoin(planBillings, eq(planBillings.mediaPlanId, mediaPlans.id))
     .innerJoin(
-      mediaPlanLines,
-      eq(mediaPlanLines.mediaPlanId, mediaPlans.id),
-    )
-    .innerJoin(
-      actualSpend,
-      eq(actualSpend.mediaPlanLineId, mediaPlanLines.id),
+      planBillingPublishers,
+      eq(planBillingPublishers.planBillingId, planBillings.id),
     )
     .where(filterClause)
-    .groupBy(projects.id, actualSpend.month);
+    .groupBy(projects.id, planBillings.month);
 
   const monthLabels = Array.from(new Set(monthly.map((r) => r.month))).sort();
 
@@ -145,11 +136,11 @@ export async function getClientDetail(
       totalBudgetUsd: total,
       spentUsd: spent,
       consumptionPct: total > 0 ? (spent / total) * 100 : 0,
+      planCount: t.planCount,
       monthlySpend,
     };
   });
 
-  // 4. KPIs derivados de la selección.
   const totalProjects = projectsRows.length;
   const activeProjects = projectsRows.filter((p) => p.status === "active").length;
   const pipelineActiveUsd = projectsRows
@@ -158,6 +149,9 @@ export async function getClientDetail(
   const spentUsd = projectsRows
     .filter((p) => p.status === "active")
     .reduce((s, p) => s + p.spentUsd, 0);
+
+  // Suprimimos vars no usadas que dejamos importadas para futura extensión.
+  void mediaPlanPublishers;
 
   return {
     client,
