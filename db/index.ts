@@ -1,6 +1,12 @@
+import dns from "node:dns";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "@/db/schema";
+
+// Forzar IPv4-first en DNS. En Vercel (y otros serverless) la resolución a
+// IPv6 del pooler de Supabase frecuentemente cae en ENETUNREACH; preferir
+// IPv4 evita ese problema. Node ≥18 soporta esta API.
+dns.setDefaultResultOrder("ipv4first");
 
 // `prepare: false` para compatibilidad con el transaction pooler de Supabase
 // (puerto 6543). Sobre la session pooler (5432) tampoco molesta.
