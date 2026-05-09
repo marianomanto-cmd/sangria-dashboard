@@ -1,8 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import { ActualsGrid } from "@/components/actuals-grid";
 import { StatusBadge } from "@/components/status-badge";
-import { getProjectDetail, type PublisherGroup } from "@/db/queries/project-detail";
+import { getProjectActuals } from "@/db/queries/project-actuals";
+import {
+  getProjectBillings,
+  getProjectPlanVersions,
+  type ProjectBillingRow,
+} from "@/db/queries/project-billings";
+import {
+  getProjectDetail,
+  type PublisherGroup,
+} from "@/db/queries/project-detail";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 
 type Tab = "plan" | "gastos" | "billing" | "diff";
@@ -22,6 +32,17 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
 
   const detail = await getProjectDetail(code);
   if (!detail) notFound();
+
+  // Cargas dependientes de la tab activa — evitamos fetchear todo en cada
+  // request para no penalizar la latencia hacia Supabase São Paulo.
+  const tabPayload =
+    tab === "gastos"
+      ? { actuals: await getProjectActuals(detail.project.id) }
+      : tab === "billing"
+        ? { billings: await getProjectBillings(detail.project.id) }
+        : tab === "diff"
+          ? { versions: await getProjectPlanVersions(detail.project.id) }
+          : null;
 
   return (
     <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
@@ -120,10 +141,170 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
       </div>
 
       {tab === "plan" && <PlanTab detail={detail} />}
-      {tab === "gastos" && <PlaceholderTab message="Gastos Reales · próximo commit (read-only primero, luego editable)" />}
-      {tab === "billing" && <PlaceholderTab message="Billing · próximo commit (historial de facturas del proyecto)" />}
-      {tab === "diff" && <PlaceholderTab message="Diff · próximo commit (compara versión vigente vs anterior)" />}
+      {tab === "gastos" &&
+        (tabPayload && "actuals" in tabPayload && tabPayload.actuals ? (
+          <ActualsGrid data={tabPayload.actuals} />
+        ) : (
+          <NoPlanForActuals />
+        ))}
+      {tab === "billing" &&
+        tabPayload &&
+        "billings" in tabPayload && (
+          <BillingTab rows={tabPayload.billings} />
+        )}
+      {tab === "diff" &&
+        tabPayload &&
+        "versions" in tabPayload && (
+          <DiffTab versions={tabPayload.versions} />
+        )}
     </main>
+  );
+}
+
+function NoPlanForActuals() {
+  return (
+    <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
+      <p className="text-sm font-medium text-ink-2">Sin plan vigente</p>
+      <p className="text-xs text-muted mt-1">
+        No hay un plan aprobado para este proyecto, así que no hay grilla de
+        gastos para mostrar.
+      </p>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Billing tab — historial de facturas del proyecto
+// ────────────────────────────────────────────────────────────────────────────
+
+function BillingTab({ rows }: { rows: ProjectBillingRow[] }) {
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
+        <p className="text-sm font-medium text-ink-2">Sin facturas emitidas</p>
+        <p className="text-xs text-muted mt-1">
+          El generador de billing llega en Fase 7. Vas a poder seleccionar mes
+          + proyecto, revisar las líneas y emitir la factura desde acá.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <section className="rounded-lg border border-line bg-white overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-paper">
+          <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+            <th className="text-left font-medium px-5 py-2.5">Mes</th>
+            <th className="text-left font-medium px-5 py-2.5">N° factura</th>
+            <th className="text-left font-medium px-5 py-2.5">Estado</th>
+            <th className="text-right font-medium px-5 py-2.5">Net</th>
+            <th className="text-right font-medium px-5 py-2.5">Fee</th>
+            <th className="text-right font-medium px-5 py-2.5">Total</th>
+            <th className="text-left font-medium px-5 py-2.5">PDF</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((b) => (
+            <tr
+              key={b.id}
+              className="border-t border-line-soft hover:bg-paper-2 transition-colors"
+            >
+              <td className="px-5 py-3 font-mono">{b.month}</td>
+              <td className="px-5 py-3 font-mono text-ink-2">
+                {b.invoiceNumber ?? "—"}
+              </td>
+              <td className="px-5 py-3 text-ink-2">{b.status}</td>
+              <td className="px-5 py-3 text-right font-mono text-ink-2">
+                {formatUsd(Number.parseFloat(b.totalNetUsd))}
+              </td>
+              <td className="px-5 py-3 text-right font-mono text-ink-2">
+                {formatUsd(Number.parseFloat(b.totalFeeUsd))}
+              </td>
+              <td className="px-5 py-3 text-right font-mono font-semibold text-ink">
+                {formatUsd(Number.parseFloat(b.totalUsd))}
+              </td>
+              <td className="px-5 py-3">
+                {b.pdfUrl ? (
+                  <a
+                    href={b.pdfUrl}
+                    className="text-accent hover:underline"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    descargar
+                  </a>
+                ) : (
+                  <span className="text-muted text-xs">—</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Diff tab — comparación entre versiones del plan
+// ────────────────────────────────────────────────────────────────────────────
+
+function DiffTab({
+  versions,
+}: {
+  versions: { id: string; version: number; status: string; approvedAt: Date | null }[];
+}) {
+  if (versions.length === 0) {
+    return (
+      <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
+        <p className="text-sm font-medium text-ink-2">Sin planes</p>
+        <p className="text-xs text-muted mt-1">
+          Cuando importes un Excel del cliente vas a tener un plan v1 acá.
+        </p>
+      </div>
+    );
+  }
+
+  if (versions.length === 1) {
+    return (
+      <section className="rounded-lg border border-line bg-white px-5 py-8 text-center">
+        <p className="text-sm font-medium text-ink-2">
+          Solo hay una versión del plan
+        </p>
+        <p className="text-xs text-muted mt-1 max-w-md mx-auto">
+          Cuando se importe una v2 (revisión del cliente), el diff se calcula
+          contra la versión anterior: líneas agregadas, eliminadas o
+          modificadas (presupuesto, fechas).
+        </p>
+        <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-line bg-paper-2 text-xs">
+          <span className="font-mono">v{versions[0].version}</span>
+          <span className="text-muted">{versions[0].status}</span>
+          {versions[0].approvedAt && (
+            <>
+              <span className="text-stone-300">·</span>
+              <span className="font-mono text-muted">
+                {versions[0].approvedAt.toISOString().slice(0, 10)}
+              </span>
+            </>
+          )}
+        </div>
+      </section>
+    );
+  }
+
+  // 2+ versiones: el cómputo del diff llega en el commit del importador
+  // de Excel (Fase 6) cuando ya tengamos múltiples versiones reales.
+  return (
+    <section className="rounded-lg border border-line bg-white px-5 py-8 text-center">
+      <p className="text-sm font-medium text-ink-2">
+        {versions.length} versiones del plan
+      </p>
+      <p className="text-xs text-muted mt-1">
+        El cómputo del diff (added / removed / modified) se implementa en Fase 6
+        junto con el importador de Excel.
+      </p>
+    </section>
   );
 }
 
@@ -245,14 +426,6 @@ function PublisherRow({
         </table>
       </div>
     </details>
-  );
-}
-
-function PlaceholderTab({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center text-sm text-muted">
-      {message}
-    </div>
   );
 }
 
