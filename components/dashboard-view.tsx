@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import Link from "next/link";
 import { LayoutGrid, Table2 } from "lucide-react";
 import { FacturacionChart } from "@/components/facturacion-chart";
 import { KpiCard } from "@/components/kpi-card";
@@ -346,7 +347,12 @@ function ProjectRow({
   return (
     <tr className="border-t border-line-soft hover:bg-paper-2 transition-colors">
       <td className={cellPad}>
-        <div className="font-medium text-ink">{project.name}</div>
+        <Link
+          href={`/proyectos/${project.code}`}
+          className="font-medium text-ink hover:underline"
+        >
+          {project.name}
+        </Link>
         <div className="font-mono text-[11px] text-muted">{project.code}</div>
       </td>
       {showClient && (
