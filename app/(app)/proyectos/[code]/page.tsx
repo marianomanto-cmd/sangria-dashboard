@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, FileSpreadsheet } from "lucide-react";
 import { ActualsGridEditable } from "@/components/actuals-grid-editable";
 import { StatusBadge } from "@/components/status-badge";
 import { getProjectActuals } from "@/db/queries/project-actuals";
@@ -74,6 +74,13 @@ export default async function ProjectDetailPage({ params, searchParams }: Props)
           </h1>
           <p className="text-sm text-muted mt-1 font-mono">{detail.project.code}</p>
         </div>
+        <Link
+          href={`/proyectos/${detail.project.code}/importar`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 transition-colors"
+        >
+          <FileSpreadsheet size={14} strokeWidth={2} />
+          Importar plan
+        </Link>
       </header>
 
       {/* Metadata strip */}
