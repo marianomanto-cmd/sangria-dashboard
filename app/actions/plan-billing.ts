@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
@@ -76,7 +76,7 @@ export async function ensureBillingForMonth(input: {
     const pubDefaults = await db
       .select({ id: publishers.id, agencyPaysDefault: publishers.agencyPaysDefault })
       .from(publishers)
-      .where(sql`${publishers.id} = ANY(${planPubs.map((p) => p.publisherId)})`);
+      .where(inArray(publishers.id, planPubs.map((p) => p.publisherId)));
     const defaultsMap = new Map(pubDefaults.map((p) => [p.id, p.agencyPaysDefault]));
 
     await db.insert(planBillingPublishers).values(

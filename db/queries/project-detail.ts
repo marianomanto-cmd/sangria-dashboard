@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -103,7 +103,7 @@ export async function getProjectWithPlans(
         mediaPlanPublishers,
         eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
       )
-      .where(sql`${mediaPlanPublishers.mediaPlanId} = ANY(${planIds})`)
+      .where(inArray(mediaPlanPublishers.mediaPlanId, planIds))
       .groupBy(mediaPlanPublishers.mediaPlanId),
     db
       .select({
@@ -111,15 +111,15 @@ export async function getProjectWithPlans(
         total: sql<string>`coalesce(sum(${mediaPlanFees.amountUsd}), 0)`,
       })
       .from(mediaPlanFees)
-      .where(sql`${mediaPlanFees.mediaPlanId} = ANY(${planIds})`)
+      .where(inArray(mediaPlanFees.mediaPlanId, planIds))
       .groupBy(mediaPlanFees.mediaPlanId),
     db
       .select({
         planId: mediaPlanSnapshots.mediaPlanId,
-        lastApprovedAt: sql<Date>`max(${mediaPlanSnapshots.approvedAt})`,
+        lastApprovedAt: sql<string>`max(${mediaPlanSnapshots.approvedAt})::text`,
       })
       .from(mediaPlanSnapshots)
-      .where(sql`${mediaPlanSnapshots.mediaPlanId} = ANY(${planIds})`)
+      .where(inArray(mediaPlanSnapshots.mediaPlanId, planIds))
       .groupBy(mediaPlanSnapshots.mediaPlanId),
     db
       .select({
@@ -131,13 +131,15 @@ export async function getProjectWithPlans(
         planBillingPublishers,
         eq(planBillingPublishers.planBillingId, planBillings.id),
       )
-      .where(sql`${planBillings.mediaPlanId} = ANY(${planIds})`)
+      .where(inArray(planBillings.mediaPlanId, planIds))
       .groupBy(planBillings.mediaPlanId),
   ]);
 
   const placementCountByPlan = new Map(placementCounts.map((r) => [r.planId, r.count]));
   const feeTotalByPlan = new Map(feeTotals.map((r) => [r.planId, Number.parseFloat(r.total)]));
-  const lastSnapByPlan = new Map(lastSnaps.map((r) => [r.planId, r.lastApprovedAt]));
+  const lastSnapByPlan = new Map(
+    lastSnaps.map((r) => [r.planId, r.lastApprovedAt ? new Date(r.lastApprovedAt) : null]),
+  );
   const spentByPlanMap = new Map(spentByPlan.map((r) => [r.planId, Number.parseFloat(r.spent)]));
 
   const plans: ProjectPlanSummary[] = planSummaries.map((p) => {
@@ -271,7 +273,7 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
       : await db
           .select()
           .from(mediaPlanPlacements)
-          .where(sql`${mediaPlanPlacements.mediaPlanPublisherId} = ANY(${mppIds})`)
+          .where(inArray(mediaPlanPlacements.mediaPlanPublisherId, mppIds))
           .orderBy(asc(mediaPlanPlacements.sortOrder));
 
   const feeRows = await db

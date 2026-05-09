@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
@@ -208,12 +208,14 @@ async function capturePlanSnapshot(planId: string) {
     .from(mediaPlanPublishers)
     .where(eq(mediaPlanPublishers.mediaPlanId, planId))
     .orderBy(asc(mediaPlanPublishers.sortOrder));
-  const placements = await db
-    .select()
-    .from(mediaPlanPlacements)
-    .where(
-      sql`${mediaPlanPlacements.mediaPlanPublisherId} = ANY(${pubs.map((p) => p.id)})`,
-    );
+  const mppIds = pubs.map((p) => p.id);
+  const placements =
+    mppIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(mediaPlanPlacements)
+          .where(inArray(mediaPlanPlacements.mediaPlanPublisherId, mppIds));
   const fees = await db
     .select()
     .from(mediaPlanFees)
