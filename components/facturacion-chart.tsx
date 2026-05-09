@@ -76,8 +76,11 @@ export function FacturacionChart({ data }: { data: MonthlyTotal[] }) {
               fontSize: 12,
               fontFamily: "var(--font-sans)",
             }}
-            labelFormatter={formatMonth}
-            formatter={(value: number, name) => [formatUsdCompact(value), name]}
+            labelFormatter={(label) => formatMonth(String(label))}
+            formatter={(value, name) => [
+              formatUsdCompact(Number(value)),
+              name,
+            ]}
           />
           <Bar dataKey="projected" name="Proyectado" fill="#d6d3d1" radius={[2, 2, 0, 0]} />
           <Bar dataKey="real" name="Real" fill="#1c1917" radius={[2, 2, 0, 0]} />

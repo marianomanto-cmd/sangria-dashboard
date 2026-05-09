@@ -159,6 +159,38 @@ export const clients = pgTable("clients", {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// Mapping per-cliente del catálogo de publishers.
+// Cada cliente tiene su propia lista de publishers habilitados y su propio
+// default de "agencia paga" / "cliente paga" para cada uno. El catálogo
+// global (`publishers`) sigue siendo la lista maestra de todos los publishers
+// conocidos; `client_publishers` define qué subset usa cada cliente y bajo
+// qué condiciones de pago.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const clientPublishers = pgTable(
+  "client_publishers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    publisherId: uuid("publisher_id")
+      .notNull()
+      .references(() => publishers.id, { onDelete: "cascade" }),
+    agencyPays: boolean("agency_pays").notNull().default(true),
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("uq_cp_client_publisher").on(t.clientId, t.publisherId),
+    index("idx_cp_client").on(t.clientId, t.enabled, t.sortOrder),
+  ],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // Budget Origins (centros de costos / fuentes de presupuesto del cliente).
 // Un proyecto pertenece a UN budget_origin (regla dura).
 // ════════════════════════════════════════════════════════════════════════════

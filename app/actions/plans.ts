@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
   auditLog,
+  clientPublishers,
   markets,
   mediaPlanFees,
   mediaPlanPlacements,
@@ -597,6 +598,40 @@ export async function listPublishers() {
     .from(publishers)
     .where(eq(publishers.enabled, true))
     .orderBy(asc(publishers.sortOrder), asc(publishers.name));
+}
+
+// Publishers habilitados para UN cliente, con su `agencyPays` propio.
+// Si el cliente todavía no tiene mapping para algún publisher del catálogo,
+// ese publisher no aparece (la mappings es la fuente de verdad por cliente).
+export async function listPublishersForClient(clientId: string) {
+  const rows = await db
+    .select({
+      id: publishers.id,
+      slug: publishers.slug,
+      name: publishers.name,
+      enabled: publishers.enabled,
+      agencyPays: clientPublishers.agencyPays,
+      sortOrder: clientPublishers.sortOrder,
+      cpEnabled: clientPublishers.enabled,
+    })
+    .from(clientPublishers)
+    .innerJoin(publishers, eq(clientPublishers.publisherId, publishers.id))
+    .where(
+      and(
+        eq(clientPublishers.clientId, clientId),
+        eq(clientPublishers.enabled, true),
+        eq(publishers.enabled, true),
+      ),
+    )
+    .orderBy(asc(clientPublishers.sortOrder), asc(publishers.name));
+  return rows.map((r) => ({
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    enabled: r.enabled,
+    agencyPaysDefault: r.agencyPays,
+    sortOrder: r.sortOrder,
+  }));
 }
 
 export async function listMarkets() {

@@ -45,7 +45,10 @@ export function MetricsAdmin({ initialRows }: { initialRows: Metric[] }) {
     refresh();
   };
 
-  const onUpdate = (id: string, partial: Parameters<typeof updateMetric>[0]) => {
+  const onUpdate = (
+    id: string,
+    partial: Omit<Parameters<typeof updateMetric>[0], "id">,
+  ) => {
     startTransition(async () => {
       const r = await updateMetric({ ...partial, id });
       if (!r.ok) alert(r.error);

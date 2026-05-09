@@ -39,7 +39,10 @@ export function PublishersAdmin({ initialRows }: { initialRows: Pub[] }) {
     refresh();
   };
 
-  const onUpdate = (id: string, partial: Parameters<typeof updatePublisher>[0]) => {
+  const onUpdate = (
+    id: string,
+    partial: Omit<Parameters<typeof updatePublisher>[0], "id">,
+  ) => {
     startTransition(async () => {
       const r = await updatePublisher({ ...partial, id });
       if (!r.ok) alert(r.error);

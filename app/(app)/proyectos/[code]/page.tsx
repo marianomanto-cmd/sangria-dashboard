@@ -1,9 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowUpRight, Plus } from "lucide-react";
+import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { StatusBadge } from "@/components/status-badge";
+import { getBillingEstimate } from "@/db/queries/dashboard";
 import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+
+function nextMonths(count: number): string[] {
+  const out: string[] = [];
+  const now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth() + 1;
+  for (let i = 0; i < count; i++) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
 
 type Props = { params: Promise<{ code: string }> };
 
@@ -39,6 +57,12 @@ export default async function ProjectDetailPage({ params }: Props) {
   if (!detail) notFound();
 
   const { project, client, budgetOrigin, plans } = detail;
+
+  const months = nextMonths(2);
+  const estimates = await getBillingEstimate({
+    months,
+    projectId: project.id,
+  });
 
   const totalPlanned = plans.reduce((s, p) => s + p.totalUsd, 0);
   const totalSpent = plans.reduce((s, p) => s + p.spentRealUsd, 0);
@@ -182,6 +206,8 @@ export default async function ProjectDetailPage({ params }: Props) {
           </div>
         )}
       </section>
+
+      <BillingEstimateCard estimates={estimates} hideProjectBreakdown />
     </main>
   );
 }

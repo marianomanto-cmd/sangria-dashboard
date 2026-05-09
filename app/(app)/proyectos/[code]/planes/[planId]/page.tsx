@@ -4,7 +4,7 @@ import { getPlanDetail } from "@/db/queries/project-detail";
 import {
   listMarkets,
   listMetrics,
-  listPublishers,
+  listPublishersForClient,
 } from "@/app/actions/plans";
 import { PlanEditor } from "./editor";
 
@@ -14,15 +14,15 @@ type Props = {
 
 export default async function PlanDetailPage({ params }: Props) {
   const { code, planId } = await params;
-  const [detail, allPublishers, allMarkets, allMetrics] = await Promise.all([
-    getPlanDetail(planId),
-    listPublishers(),
+  const detail = await getPlanDetail(planId);
+  if (!detail) notFound();
+  if (detail.project.code !== code) notFound();
+
+  const [allPublishers, allMarkets, allMetrics] = await Promise.all([
+    listPublishersForClient(detail.client.id),
     listMarkets(),
     listMetrics(),
   ]);
-
-  if (!detail) notFound();
-  if (detail.project.code !== code) notFound();
 
   return (
     <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">

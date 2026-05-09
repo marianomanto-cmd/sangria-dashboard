@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createProject } from "@/app/actions/projects";
 
 export function NewProjectForm({
@@ -33,12 +33,14 @@ export function NewProjectForm({
   );
 
   // Auto-set first origin when client changes
-  if (
-    filteredOrigins.length > 0 &&
-    !filteredOrigins.some((o) => o.id === budgetOriginId)
-  ) {
-    setBudgetOriginId(filteredOrigins[0].id);
-  }
+  useEffect(() => {
+    if (
+      filteredOrigins.length > 0 &&
+      !filteredOrigins.some((o) => o.id === budgetOriginId)
+    ) {
+      setBudgetOriginId(filteredOrigins[0].id);
+    }
+  }, [filteredOrigins, budgetOriginId]);
 
   const computedCode = useMemo(() => {
     const cleanId = shortId.trim().replace(/[^a-zA-Z0-9]/g, "");

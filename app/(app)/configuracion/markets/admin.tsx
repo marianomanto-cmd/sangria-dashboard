@@ -34,7 +34,10 @@ export function MarketsAdmin({ initialRows }: { initialRows: Market[] }) {
     refresh();
   };
 
-  const onUpdate = (id: string, partial: Parameters<typeof updateMarket>[0]) => {
+  const onUpdate = (
+    id: string,
+    partial: Omit<Parameters<typeof updateMarket>[0], "id">,
+  ) => {
     startTransition(async () => {
       const r = await updateMarket({ ...partial, id });
       if (!r.ok) alert(r.error);

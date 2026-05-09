@@ -2,6 +2,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
+  clientPublishers,
   clients,
   markets,
   mediaPlanFees,
@@ -289,13 +290,29 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
 
   if (!planRow) return null;
 
+  // Traemos también el agencyPays del client_publishers para usarlo como
+  // default cuando el plan no tiene override. Si el cliente no tiene
+  // mapping para ese publisher, caemos al default global del catálogo.
   const pubRows = await db
     .select({
       mpp: mediaPlanPublishers,
-      pub: { id: publishers.id, slug: publishers.slug, name: publishers.name, agencyPaysDefault: publishers.agencyPaysDefault },
+      pub: {
+        id: publishers.id,
+        slug: publishers.slug,
+        name: publishers.name,
+        agencyPaysDefault: publishers.agencyPaysDefault,
+      },
+      clientAgencyPays: clientPublishers.agencyPays,
     })
     .from(mediaPlanPublishers)
     .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
+    .leftJoin(
+      clientPublishers,
+      and(
+        eq(clientPublishers.publisherId, publishers.id),
+        eq(clientPublishers.clientId, planRow.client.id),
+      ),
+    )
     .where(eq(mediaPlanPublishers.mediaPlanId, planId))
     .orderBy(asc(mediaPlanPublishers.sortOrder));
 
@@ -357,13 +374,15 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
   const publisherGroups: PlanPublisherGroup[] = pubRows.map((r) => {
     const placements = placementsByPub.get(r.mpp.id) ?? [];
     const placementsTotalUsd = placements.reduce((s, p) => s + p.amountUsd, 0);
+    // Override del plan > default del cliente > default global del catálogo.
+    const clientDefault = r.clientAgencyPays ?? r.pub.agencyPaysDefault;
     return {
       id: r.mpp.id,
       publisherId: r.pub.id,
       publisherSlug: r.pub.slug,
       publisherName: r.pub.name,
       totalPlannedUsd: Number.parseFloat(r.mpp.totalPlannedUsd),
-      agencyPays: r.mpp.agencyPaysOverride ?? r.pub.agencyPaysDefault,
+      agencyPays: r.mpp.agencyPaysOverride ?? clientDefault,
       sortOrder: r.mpp.sortOrder,
       placements,
       placementsTotalUsd,

@@ -6,6 +6,8 @@ import { useState, useTransition } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  Download,
+  FileText,
   GripVertical,
   Plus,
   Receipt,
@@ -34,11 +36,18 @@ import type {
 import type {
   markets as marketsTable,
   metricsCatalog as metricsTable,
-  publishers,
 } from "@/db/schema";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 
-type PublisherCatalog = (typeof publishers.$inferSelect);
+// Solo los campos que el editor consume — viene de listPublishersForClient.
+type PublisherCatalog = {
+  id: string;
+  slug: string;
+  name: string;
+  enabled: boolean;
+  agencyPaysDefault: boolean;
+  sortOrder: number;
+};
 type Market = (typeof marketsTable.$inferSelect);
 type MetricCatalog = (typeof metricsTable.$inferSelect);
 
@@ -240,6 +249,22 @@ export function PlanEditor({
         </div>
 
         <div className="flex items-center gap-2">
+          <a
+            href={`/api/plans/${detail.plan.id}/export.xlsx`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
+            title="Descargar plan en Excel"
+          >
+            <Download size={14} strokeWidth={2} />
+            Excel
+          </a>
+          <a
+            href={`/api/plans/${detail.plan.id}/export.pdf`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
+            title="Descargar plan en PDF"
+          >
+            <FileText size={14} strokeWidth={2} />
+            PDF
+          </a>
           <Link
             href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/billing`}
             className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
@@ -687,7 +712,9 @@ function PlacementRow({
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  const update = (partial: Parameters<typeof updatePlacement>[0]) => {
+  const update = (
+    partial: Omit<Parameters<typeof updatePlacement>[0], "placementId">,
+  ) => {
     startTransition(async () => {
       await updatePlacement({ ...partial, placementId: placement.id });
       onChange();
@@ -800,7 +827,9 @@ function PlacementDetails({
   placement: PlanPlacement;
   editable: boolean;
   allMetrics: MetricCatalog[];
-  update: (partial: Parameters<typeof updatePlacement>[0]) => void;
+  update: (
+    partial: Omit<Parameters<typeof updatePlacement>[0], "placementId">,
+  ) => void;
 }) {
   // Métrica principal según el cost_method seleccionado
   const primarySlug = placement.costMethod
@@ -1344,7 +1373,9 @@ function FeeRow({
   onChange: () => void;
   startTransition: ReturnType<typeof useTransition>[1];
 }) {
-  const update = (partial: Parameters<typeof updateFee>[0]) => {
+  const update = (
+    partial: Omit<Parameters<typeof updateFee>[0], "feeId">,
+  ) => {
     startTransition(async () => {
       await updateFee({ ...partial, feeId: fee.id });
       onChange();
