@@ -15,6 +15,18 @@ const SECTIONS: Array<{
     status: "ready",
   },
   {
+    href: "/configuracion/markets",
+    title: "Mercados",
+    description: "Países y agrupaciones (Centroamérica, LATAM) que el planner asigna a cada placement.",
+    status: "ready",
+  },
+  {
+    href: "/configuracion/metricas",
+    title: "Métricas e indicadores",
+    description: "KPIs direct (views, clicks, impressions) y calculated (cpc, ctr, cpm — derivadas con fórmula).",
+    status: "ready",
+  },
+  {
     href: "/configuracion/usuarios",
     title: "Usuarios y roles",
     description: "Gestión de usuarios (Account Manager, Media Planner, Finance, Viewer). Llega después de Auth.",
