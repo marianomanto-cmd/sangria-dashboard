@@ -805,15 +805,57 @@ function PlacementDetails({
         </Field>
       </div>
       <div>
-        {primaryMetric && (
-          <p className="text-[11px] mb-2 px-2 py-1.5 bg-accent-soft/40 border border-accent-soft rounded text-ink">
-            <span className="font-medium uppercase tracking-[0.06em] text-accent">
-              Métrica principal por {placement.costMethod}:
-            </span>{" "}
-            <span className="font-mono">{primaryMetric.slug}</span>{" "}
-            <span className="text-muted">({primaryMetric.name})</span>
-          </p>
-        )}
+        {primaryMetric &&
+          (() => {
+            const delivery = placement.metricsJson[primaryMetric.slug];
+            const hasDelivery = typeof delivery === "number" && delivery > 0;
+            // Effective unit cost: amount / delivery (lo que estás pagando)
+            const effectiveUnitCost = hasDelivery
+              ? placement.amountUsd / delivery
+              : null;
+            const formatDelivery = (v: number) =>
+              new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(v);
+            const formatRate = (v: number) =>
+              v < 1
+                ? `$${v.toFixed(4)}`
+                : `$${v.toFixed(2)}`;
+            return (
+              <div className="text-[11px] mb-2 px-3 py-2 bg-accent-soft/40 border border-accent-soft rounded text-ink">
+                <p>
+                  <span className="font-medium uppercase tracking-[0.06em] text-accent">
+                    Métrica principal por {placement.costMethod}:
+                  </span>{" "}
+                  <span className="font-mono">{primaryMetric.slug}</span>{" "}
+                  <span className="text-muted">({primaryMetric.name})</span>
+                </p>
+                <p className="mt-1 font-mono text-[12px]">
+                  Delivery:{" "}
+                  {hasDelivery ? (
+                    <>
+                      <strong className="text-ink tabular-nums">
+                        {formatDelivery(delivery)}
+                      </strong>{" "}
+                      <span className="text-muted">
+                        {primaryMetric.unit ?? primaryMetric.slug}
+                      </span>
+                      {effectiveUnitCost !== null && (
+                        <span className="text-muted">
+                          {" · "}
+                          {formatRate(effectiveUnitCost)} efectivo por{" "}
+                          {primaryMetric.unit ?? "unit"}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-muted">
+                      cargá <span className="font-mono">{primaryMetric.slug}</span> en
+                      indicadores para ver el delivery
+                    </span>
+                  )}
+                </p>
+              </div>
+            );
+          })()}
         <MetricsEditor
           metrics={placement.metricsJson}
           allMetrics={allMetrics}
