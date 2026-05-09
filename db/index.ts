@@ -1,5 +1,6 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import * as schema from "@/db/schema";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -10,7 +11,8 @@ if (!connectionString) {
 }
 
 // `prepare: false` para compatibilidad con el transaction pooler de Supabase
-// (puerto 6543). Sobre la conexión directa (5432) tampoco molesta.
+// (puerto 6543). Sobre la session pooler (5432) tampoco molesta.
 const client = postgres(connectionString, { prepare: false });
 
-export const db = drizzle(client);
+export const db = drizzle(client, { schema });
+export { schema };
