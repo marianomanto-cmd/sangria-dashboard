@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -9,7 +9,9 @@ import {
   mediaPlans,
   projects,
 } from "@/db/schema";
+import { BudgetOriginSelector } from "@/components/budget-origin-selector";
 import { PageShell } from "@/components/page-shell";
+import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 
 const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> = {
@@ -20,12 +22,20 @@ const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> 
 };
 
 type Props = {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; origin?: string }>;
 };
 
 export default async function PlanesPage({ searchParams }: Props) {
   const sp = await searchParams;
   const filter = sp.status;
+  const allOrigins = await listAllBudgetOrigins();
+  const validOrigin =
+    sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
+
+  const conds = [];
+  if (filter) conds.push(eq(mediaPlans.status, filter as never));
+  if (validOrigin) conds.push(eq(projects.budgetOriginId, validOrigin));
+  const where = conds.length === 0 ? undefined : conds.length === 1 ? conds[0] : and(...conds);
 
   const baseQuery = db
     .select({
@@ -60,9 +70,7 @@ export default async function PlanesPage({ searchParams }: Props) {
     .groupBy(mediaPlans.id, projects.id, clients.id, budgetOrigins.id)
     .orderBy(asc(projects.code), asc(mediaPlans.createdAt));
 
-  const allPlans = filter
-    ? await baseQuery.where(eq(mediaPlans.status, filter as never))
-    : await baseQuery;
+  const allPlans = where ? await baseQuery.where(where) : await baseQuery;
 
   const counts = {
     draft: allPlans.filter((p) => p.status === "draft").length,
@@ -77,12 +85,39 @@ export default async function PlanesPage({ searchParams }: Props) {
       title="Todos los planes"
       subtitle={`Vista cross-proyectos del media planner. ${allPlans.length} plan${allPlans.length === 1 ? "" : "es"}.`}
     >
+      <BudgetOriginSelector
+        origins={allOrigins}
+        current={validOrigin}
+        basePath="/planes"
+        preserveParams={{ status: filter }}
+      />
+
       <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
         <FilterPill label="Estado">
-          <FilterChoice current={filter} value={undefined} label={`Todos (${allPlans.length})`} />
-          <FilterChoice current={filter} value="draft" label={`Draft (${counts.draft})`} />
-          <FilterChoice current={filter} value="ready_to_send" label={`Ready (${counts.ready_to_send})`} />
-          <FilterChoice current={filter} value="approved" label={`Approved (${counts.approved})`} />
+          <FilterChoice
+            current={filter}
+            value={undefined}
+            label={`Todos (${allPlans.length})`}
+            originId={validOrigin}
+          />
+          <FilterChoice
+            current={filter}
+            value="draft"
+            label={`Draft (${counts.draft})`}
+            originId={validOrigin}
+          />
+          <FilterChoice
+            current={filter}
+            value="ready_to_send"
+            label={`Ready (${counts.ready_to_send})`}
+            originId={validOrigin}
+          />
+          <FilterChoice
+            current={filter}
+            value="approved"
+            label={`Approved (${counts.approved})`}
+            originId={validOrigin}
+          />
         </FilterPill>
       </div>
 
@@ -186,13 +221,19 @@ function FilterChoice({
   current,
   value,
   label,
+  originId,
 }: {
   current: string | undefined;
   value: string | undefined;
   label: string;
+  originId: string | null;
 }) {
   const isActive = (current ?? null) === (value ?? null);
-  const href = value ? `/planes?status=${value}` : "/planes";
+  const params = new URLSearchParams();
+  if (value) params.set("status", value);
+  if (originId) params.set("origin", originId);
+  const qs = params.toString();
+  const href = qs ? `/planes?${qs}` : "/planes";
   return (
     <Link
       href={href}

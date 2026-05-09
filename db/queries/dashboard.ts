@@ -132,9 +132,13 @@ export type DashboardProjects = {
   monthLabels: string[];
 };
 
-export async function getDashboardProjects(): Promise<DashboardProjects> {
+export async function getDashboardProjects(
+  options: { budgetOriginId?: string | null } = {},
+): Promise<DashboardProjects> {
+  const filterOrigin = options.budgetOriginId ?? null;
+
   // Totales por proyecto: pipeline + spent agregado.
-  const totals = await db
+  const totalsBase = db
     .select({
       id: projects.id,
       code: projects.code,
@@ -156,6 +160,10 @@ export async function getDashboardProjects(): Promise<DashboardProjects> {
     )
     .groupBy(projects.id, clients.name, clients.slug)
     .orderBy(asc(projects.code));
+
+  const totals = await (filterOrigin
+    ? totalsBase.where(eq(projects.budgetOriginId, filterOrigin))
+    : totalsBase);
 
   // Spend mensual por proyecto.
   const monthly = await db
