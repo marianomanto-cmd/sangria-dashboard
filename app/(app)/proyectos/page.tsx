@@ -31,6 +31,17 @@ function nextMonths(count: number): string[] {
   return out;
 }
 
+function previousMonth(): string {
+  const now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth(); // 0-indexed month → ya es "mes anterior"
+  if (m === 0) {
+    y -= 1;
+    m = 12;
+  }
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
 export default async function ProyectosPage({ searchParams }: Props) {
   const sp = await searchParams;
   const client = await resolveClientFromSearchParams(sp);
@@ -39,10 +50,19 @@ export default async function ProyectosPage({ searchParams }: Props) {
   const validOrigin =
     sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
   const months = nextMonths(2);
-  const [data, estimates] = await Promise.all([
+  const prevMonth = previousMonth();
+  // Una sola query con [mes anterior, ...futuros]; separamos el resultado
+  // después porque el mes anterior se muestra como "real vs estimado".
+  const [data, allEstimates] = await Promise.all([
     getDashboardProjects({ budgetOriginId: validOrigin, clientId }),
-    getBillingEstimate({ months, budgetOriginId: validOrigin, clientId }),
+    getBillingEstimate({
+      months: [prevMonth, ...months],
+      budgetOriginId: validOrigin,
+      clientId,
+    }),
   ]);
+  const previousEstimate = allEstimates.find((e) => e.month === prevMonth) ?? null;
+  const estimates = allEstimates.filter((e) => e.month !== prevMonth);
 
   const filterDescriptors = [
     client ? client.name : null,
@@ -81,7 +101,10 @@ export default async function ProyectosPage({ searchParams }: Props) {
         </section>
       )}
 
-      <BillingEstimateCard estimates={estimates} />
+      <BillingEstimateCard
+        estimates={estimates}
+        previousMonth={previousEstimate}
+      />
     </PageShell>
   );
 }

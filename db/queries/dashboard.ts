@@ -605,8 +605,12 @@ export async function getMonthlyTotals(
 
 export type MonthlyBillingEstimate = {
   month: string; // YYYY-MM
-  grossUsd: number; // estimación bruta del mes
-  alreadyBilledUsd: number; // ya facturado en ese mes (sent/paid)
+  grossUsd: number; // estimación bruta del mes (media + fees)
+  grossMediaUsd: number; // bruto de placements (consumo de medios)
+  grossFeesUsd: number; // bruto de management/setup/reporting/custom
+  alreadyBilledUsd: number; // ya facturado en ese mes (sent/paid, media + fees)
+  alreadyBilledMediaUsd: number; // facturado de consumo (plan_billing_publishers)
+  alreadyBilledFeesUsd: number; // facturado de fees (plan_billing_fees)
   netUsd: number; // gross - alreadyBilled (mínimo 0)
   byProject: {
     projectId: string;
@@ -614,7 +618,11 @@ export type MonthlyBillingEstimate = {
     projectName: string;
     clientName: string;
     grossUsd: number;
+    grossMediaUsd: number;
+    grossFeesUsd: number;
     alreadyBilledUsd: number;
+    alreadyBilledMediaUsd: number;
+    alreadyBilledFeesUsd: number;
     netUsd: number;
   }[];
 };
@@ -668,7 +676,11 @@ export async function getBillingEstimate(options: {
     return options.months.map((m) => ({
       month: m,
       grossUsd: 0,
+      grossMediaUsd: 0,
+      grossFeesUsd: 0,
       alreadyBilledUsd: 0,
+      alreadyBilledMediaUsd: 0,
+      alreadyBilledFeesUsd: 0,
       netUsd: 0,
       byProject: [],
     }));
@@ -728,14 +740,18 @@ export async function getBillingEstimate(options: {
     }
   }
 
-  // 5. Acumular gross por (mes, proyecto) prorrateando placements + fees
+  // 5. Acumular gross por (mes, proyecto) prorrateando placements + fees.
+  // Se trackean media y fees por separado para poder mostrarlos en la UI;
+  // el total bruto del mes/proyecto es media + fees.
   type ProjectAgg = {
     projectId: string;
     projectCode: string;
     projectName: string;
     clientName: string;
-    gross: number;
-    billed: number;
+    media: number;
+    fees: number;
+    billedMedia: number;
+    billedFees: number;
   };
   const monthBuckets = new Map<string, Map<string, ProjectAgg>>();
 
@@ -748,6 +764,7 @@ export async function getBillingEstimate(options: {
       clientName: string;
     },
     amount: number,
+    kind: "media" | "fee",
   ) => {
     if (!targetMonths.has(month)) return;
     let projMap = monthBuckets.get(month);
@@ -757,20 +774,23 @@ export async function getBillingEstimate(options: {
     }
     const cur = projMap.get(proj.projectId);
     if (cur) {
-      cur.gross += amount;
+      if (kind === "media") cur.media += amount;
+      else cur.fees += amount;
     } else {
       projMap.set(proj.projectId, {
         projectId: proj.projectId,
         projectCode: proj.projectCode,
         projectName: proj.projectName,
         clientName: proj.clientName,
-        gross: amount,
-        billed: 0,
+        media: kind === "media" ? amount : 0,
+        fees: kind === "fee" ? amount : 0,
+        billedMedia: 0,
+        billedFees: 0,
       });
     }
   };
 
-  // 5a. Placements
+  // 5a. Placements (media)
   for (const p of placements) {
     if (!p.startDate || !p.endDate) continue;
     const months = enumerateMonths(
@@ -780,7 +800,7 @@ export async function getBillingEstimate(options: {
     if (months.length === 0) continue;
     const monthly = Number.parseFloat(p.amount) / months.length;
     for (const m of months) {
-      addToBucket(m, p, monthly);
+      addToBucket(m, p, monthly, "media");
     }
   }
 
@@ -806,7 +826,7 @@ export async function getBillingEstimate(options: {
     if (totalFee <= 0) continue;
     const monthly = totalFee / months.length;
     for (const m of months) {
-      addToBucket(m, proj, monthly);
+      addToBucket(m, proj, monthly, "fee");
     }
   }
 
@@ -868,19 +888,25 @@ export async function getBillingEstimate(options: {
     billedFeesBase,
   ]);
 
+  // Para que aparezcan proyectos que SOLO tienen facturas (sin placements
+  // activos en el período por algún motivo), creamos el bucket si no existe.
+  // Esto puede pasar con planes ya facturados parcialmente cuyo placement
+  // ya terminó. Como no tenemos info del proyecto en billedRows directo,
+  // los matching que no encuentran proyecto se ignoran (sólo se reflejan
+  // si el proyecto ya tiene un bucket de placements/fees en ese mes).
   for (const r of billedPubRows) {
     if (!targetMonths.has(r.month)) continue;
     const projMap = monthBuckets.get(r.month);
     if (!projMap) continue;
     const cur = projMap.get(r.projectId);
-    if (cur) cur.billed += Number.parseFloat(r.pubBilled);
+    if (cur) cur.billedMedia += Number.parseFloat(r.pubBilled);
   }
   for (const r of billedFeeRows) {
     if (!targetMonths.has(r.month)) continue;
     const projMap = monthBuckets.get(r.month);
     if (!projMap) continue;
     const cur = projMap.get(r.projectId);
-    if (cur) cur.billed += Number.parseFloat(r.feeBilled);
+    if (cur) cur.billedFees += Number.parseFloat(r.feeBilled);
   }
 
   // 7. Construir respuesta ordenada como options.months
@@ -888,26 +914,49 @@ export async function getBillingEstimate(options: {
     const projMap = monthBuckets.get(m);
     const byProject = projMap
       ? Array.from(projMap.values())
-          .map((p) => ({
-            projectId: p.projectId,
-            projectCode: p.projectCode,
-            projectName: p.projectName,
-            clientName: p.clientName,
-            grossUsd: p.gross,
-            alreadyBilledUsd: p.billed,
-            netUsd: Math.max(0, p.gross - p.billed),
-          }))
+          .map((p) => {
+            const grossMediaUsd = p.media;
+            const grossFeesUsd = p.fees;
+            const grossUsd = grossMediaUsd + grossFeesUsd;
+            const alreadyBilledMediaUsd = p.billedMedia;
+            const alreadyBilledFeesUsd = p.billedFees;
+            const alreadyBilledUsd = alreadyBilledMediaUsd + alreadyBilledFeesUsd;
+            return {
+              projectId: p.projectId,
+              projectCode: p.projectCode,
+              projectName: p.projectName,
+              clientName: p.clientName,
+              grossUsd,
+              grossMediaUsd,
+              grossFeesUsd,
+              alreadyBilledUsd,
+              alreadyBilledMediaUsd,
+              alreadyBilledFeesUsd,
+              netUsd: Math.max(0, grossUsd - alreadyBilledUsd),
+            };
+          })
           .sort((a, b) => b.netUsd - a.netUsd)
       : [];
-    const grossUsd = byProject.reduce((s, p) => s + p.grossUsd, 0);
-    const alreadyBilledUsd = byProject.reduce(
-      (s, p) => s + p.alreadyBilledUsd,
+    const grossMediaUsd = byProject.reduce((s, p) => s + p.grossMediaUsd, 0);
+    const grossFeesUsd = byProject.reduce((s, p) => s + p.grossFeesUsd, 0);
+    const grossUsd = grossMediaUsd + grossFeesUsd;
+    const alreadyBilledMediaUsd = byProject.reduce(
+      (s, p) => s + p.alreadyBilledMediaUsd,
       0,
     );
+    const alreadyBilledFeesUsd = byProject.reduce(
+      (s, p) => s + p.alreadyBilledFeesUsd,
+      0,
+    );
+    const alreadyBilledUsd = alreadyBilledMediaUsd + alreadyBilledFeesUsd;
     return {
       month: m,
       grossUsd,
+      grossMediaUsd,
+      grossFeesUsd,
       alreadyBilledUsd,
+      alreadyBilledMediaUsd,
+      alreadyBilledFeesUsd,
       netUsd: Math.max(0, grossUsd - alreadyBilledUsd),
       byProject,
     };
