@@ -290,9 +290,15 @@ export async function setFeeImputation(input: {
     return { ok: false, error: "Monto inválido" };
 
   // Cap: no permitir imputar más allá del total del fee, contando lo ya
-  // imputado en otros meses.
+  // imputado en otros meses. Para management fees con ratePct el total se
+  // deriva: amount = TM × ratePct / (100 - ratePct) (ver db/schema.ts:357-359).
   const [feeRow] = await db
-    .select({ amount: mediaPlanFees.amountUsd })
+    .select({
+      amount: mediaPlanFees.amountUsd,
+      feeType: mediaPlanFees.feeType,
+      ratePct: mediaPlanFees.ratePct,
+      mediaPlanId: mediaPlanFees.mediaPlanId,
+    })
     .from(mediaPlanFees)
     .where(eq(mediaPlanFees.id, input.mediaPlanFeeId))
     .limit(1);
@@ -310,7 +316,23 @@ export async function setFeeImputation(input: {
         ),
       );
 
-    const feeTotal = Number.parseFloat(feeRow.amount);
+    let feeTotal = Number.parseFloat(feeRow.amount);
+    const ratePct = feeRow.ratePct ? Number.parseFloat(feeRow.ratePct) : null;
+    if (
+      feeRow.feeType === "management" &&
+      ratePct != null &&
+      ratePct > 0 &&
+      ratePct < 100
+    ) {
+      const [tmRow] = await db
+        .select({
+          total: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+        })
+        .from(mediaPlanPublishers)
+        .where(eq(mediaPlanPublishers.mediaPlanId, feeRow.mediaPlanId));
+      const totalMedia = Number.parseFloat(tmRow.total);
+      feeTotal = (totalMedia * ratePct) / (100 - ratePct);
+    }
     const accumOthers = Number.parseFloat(accumOthersRow.total);
     const maxAllowed = feeTotal - accumOthers;
 
