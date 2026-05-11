@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { Sparkline } from "@/components/sparkline";
 import { StatusBadge } from "@/components/status-badge";
 import type {
   DashboardPlanSummary,
@@ -62,7 +61,6 @@ export function ProjectsTableExpandable({
           <th className={`text-left font-medium ${headerPad}`}>Estado</th>
           <th className={`text-right font-medium ${headerPad}`}>Budget</th>
           <th className={`text-right font-medium ${headerPad}`}>Gastado</th>
-          <th className={`text-left font-medium ${headerPad} w-[140px]`}>Spark</th>
           <th className={`text-left font-medium ${headerPad} w-[180px]`}>
             Avance
           </th>
@@ -104,7 +102,7 @@ function ProjectRowExpandable({
   const barWidth = Math.min(project.consumptionPct, 100);
   const hasPlans = project.plans.length > 0;
 
-  const colSpan = (showClient ? 9 : 8);
+  const colSpan = (showClient ? 8 : 7);
 
   return (
     <>
@@ -156,9 +154,6 @@ function ProjectRowExpandable({
         </td>
         <td className={`${cellPad} text-right font-mono text-ink-2`}>
           {project.spentUsd > 0 ? formatUsd(project.spentUsd) : "—"}
-        </td>
-        <td className={cellPad}>
-          <Sparkline values={project.monthlySpend} />
         </td>
         <td className={cellPad}>
           <div className="flex items-center gap-3">
