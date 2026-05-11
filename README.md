@@ -109,7 +109,11 @@ db/
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
-lib/format.ts               # formatUsd, formatPct, formatUsdCompact
+lib/
+  format.ts                 # formatUsd, formatPct, formatUsdCompact
+  client-filter.ts          # helpers puros del filtro global ?client=slug
+  client-filter.server.ts   # resolver server-only slug → {id, slug, name}
+  cost-methods.ts           # mapping cost method → métrica principal
 ```
 
 ---
@@ -183,6 +187,31 @@ lib/format.ts               # formatUsd, formatPct, formatUsdCompact
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` + `after_json`.
 - Vista en `/auditoria` con diff campo a campo, filtros por entityType y
   action.
+
+### Filtro global de cliente vía `?client=slug`
+- El picker arriba a la derecha (`components/topbar-client-picker.tsx`) setea
+  `?client=<slug>` en la URL. El slug se preserva al navegar entre vistas
+  globales — el sidebar reescribe sus Links automáticamente.
+- Páginas que aplican el filtro a sus queries: Dashboard, `/proyectos`,
+  `/planes`, `/billing`. El Budget Origin selector también se restringe a los
+  origins del cliente activo.
+- Vistas detalle (`/proyectos/[code]`, `/clientes/[slug]`,
+  `/proyectos/.../planes/[planId]`) NO aceptan el filtro porque ya están
+  scopeadas. Al cambiar de cliente desde una de esas, el picker redirige a
+  la lista equivalente (ej. `/proyectos/COPA.x → /proyectos?client=otro`).
+- Helpers:
+  - `lib/client-filter.ts` — puros: `buildHrefWithClient`,
+    `routeAcceptsClientFilter`, `redirectTargetForClientChange`. Los usan
+    componentes client (sidebar, picker).
+  - `lib/client-filter.server.ts` — `resolveClientFromSearchParams(sp)`
+    devuelve `{id, slug, name} | null`. Las pages la llaman antes de pasar
+    `clientId` a las queries.
+- Para agregar una nueva ruta al filtro: incluirla en `CLIENT_FILTER_ROUTES`
+  en `lib/client-filter.ts` + leer `searchParams.client` en la page +
+  agregar `clientId` opcional a la query relevante.
+- **Configuración**: por ahora publishers/markets/metrics siguen siendo
+  catálogos globales aunque haya un cliente seleccionado (banner aclaratorio
+  en `/configuracion`). La edición per-cliente es Parte B (ver HANDOFF.md).
 
 ---
 
@@ -299,6 +328,10 @@ Idempotente: limpia las tablas antes de insertar.
   son placeholders ("próximamente").
 - **Publishers per-cliente UI**: la edición del mapping `client_publishers`
   hoy es vía seed; no hay UI para que el AM lo administre.
+- **Markets/metrics per-cliente (Parte B)**: hoy son catálogos globales. Se
+  pidió poder editarlos per-cliente. Requiere migración de schema (nuevas
+  tablas `client_markets` / `client_metrics` o agregar `client_id`) +
+  decisión de qué hacer con la data existente. Ver detalle en HANDOFF.md.
 - **Excel/PDF**: formato básico, no es producción-ready. Especialmente el
   PDF (lista de texto plano, sin tablas estilizadas).
 - **Drive integration**: en discusión, fuera del scope MVP.

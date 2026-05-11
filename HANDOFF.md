@@ -1,7 +1,6 @@
-# Handoff — viernes 9/may/2026
+# Handoff — lunes 11/may/2026
 
-Estado del repo al cierre del viernes y plan para retomar el lunes desde
-otra máquina.
+Estado del repo al cierre y plan para retomar en otra sesión.
 
 > **Para setup inicial en una máquina nueva** ver [README.md](README.md).
 > Este documento asume que ya está clonado el repo y `npm install`-eado.
@@ -10,18 +9,39 @@ otra máquina.
 
 ## Estado actual
 
-App **deployada y funcionando** en Vercel (a verificar la última URL en el
-dashboard de Vercel, branch `main` en auto-deploy).
+App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 
 ### Commits recientes
 
 ```
+8e44a64  Billing fixes + filtro global de cliente (#3)
+c2a51e0  Filtro global de cliente vía ?client=slug
+4c1e75a  Billing: derivar cap de imputación de management fees por ratePct
+a4ff8fd  Billing: derivar Total Fee de management fees por ratePct
+bc625f0  Proyectos: quitar columna Spark del listado principal (#2)
+71494f9  Excel export: layout estilo plan de medios (#1)
+d6fac21  docs: README + HANDOFF para retomar desde otra máquina
 9466453  db: max=5 + connect_timeout para evitar statement timeouts en serverless
-fef471f  Topbar + Budget Origin: dropdowns funcionales
-a596089  Build de Vercel: force-dynamic en (app) + IPv4-first en DNS
-557bd16  Lazy-init de db: el build de Vercel no necesita DATABASE_URL
-9a475a0  Per-client publishers, billing breakdown + estimación, exports XLSX/PDF, seed expandido
 ```
+
+### Cambios de la sesión 11/may/2026 (PR #3)
+
+1. **Bug fix — Management Fee mostraba $0 en billing.** Para fees tipo
+   `management` con `ratePct`, el campo `amountUsd` se persiste como `0.00`
+   y el monto se deriva en runtime con `amount = TM × ratePct / (100 − ratePct)`.
+   La página de billing leía el `amountUsd` crudo y mostraba $0. Replicada
+   la fórmula en:
+   - `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx` (display)
+   - `app/actions/plan-billing.ts` `setFeeImputation` (validación del cap)
+
+2. **Filtro global de cliente vía `?client=slug`.** El picker arriba a la
+   derecha ahora preserva el cliente seleccionado al navegar entre vistas
+   globales (Dashboard, Proyectos, Planes, Billing). Antes sólo funcionaba
+   como atajo a `/clientes/[slug]` y la selección se perdía al cambiar de
+   página. Ver "Arquitectura: convenciones clave" en README.
+
+3. **Parte B pendiente.** Markets y metrics siguen siendo catálogos globales.
+   Se pidió poder editarlos per-cliente (ver "Próximos pasos" abajo).
 
 ### Lo que funciona end-to-end
 
@@ -46,8 +66,11 @@ a596089  Build de Vercel: force-dynamic en (app) + IPv4-first en DNS
 - `/billing` con todas las facturas.
 - `/auditoria` con log diff por entity type / action.
 - `/configuracion/markets`, `/metricas`, `/publishers` admin de catálogos.
-- **Topbar**: dropdown de cliente que navega a `/clientes/<slug>` y resalta
-  el cliente actual.
+- **Topbar**: dropdown de cliente que setea `?client=<slug>` en la URL y se
+  preserva al navegar entre vistas globales (Dashboard, Proyectos, Planes,
+  Billing). El sidebar reescribe sus Links automáticamente. En vistas
+  detalle (`/proyectos/[code]`, etc.) el picker redirige a la lista
+  equivalente al cambiar de cliente.
 - Catálogo de publishers **per cliente** con `client_publishers`: cada
   cliente ve solo su subset y su default de "agencia paga".
 
@@ -81,7 +104,64 @@ Si pasa algo raro con la DB, `npm run db:check` para diagnosticar.
 
 ## Próximos pasos sugeridos (orden recomendado)
 
-### 1. Auth + permisos (lo que pediste para el lunes)
+### 1. Parte B — Markets y Metrics per-cliente
+
+**Contexto**: en la sesión del 11/may se hizo el filtro global de cliente
+(`?client=slug`). En esa charla se pidió que `markets` y `metrics_catalog`
+fueran per-cliente para que cada cliente pueda tener su propia lista. Hoy
+son catálogos globales — la edición per-cliente requiere migración de
+schema y NO se hizo en este PR para no romper data.
+
+**Estado del schema hoy**:
+- `markets` — global, sin FK a cliente.
+- `metrics_catalog` — global, sin FK a cliente.
+- `publishers` — global, pero con tabla join `client_publishers` que ya
+  permite per-cliente (sólo falta UI).
+- `budget_origins` — ya es per-cliente (`client_id` FK).
+
+**Decisiones a tomar antes de codear**:
+
+1. **¿Mapping tables o columnas directas?**
+   - **Opción A** (mappings — sigue el patrón de `client_publishers`):
+     nuevas tablas `client_markets (client_id, market_id, enabled,
+     sort_order)` y `client_metrics (client_id, metric_id, enabled)`. El
+     catálogo global queda como lista maestra editable por admins; cada
+     cliente activa el subset que usa.
+   - **Opción B** (column directa): agregar `client_id` a `markets` y
+     `metrics_catalog`. Cada cliente tiene sus propios markets/metrics
+     completamente independientes; no hay catálogo global. Más simple
+     conceptualmente pero significa duplicar la lista para cada cliente
+     nuevo.
+
+2. **Migración de data existente**: hoy hay markets/metrics que se usan en
+   `media_plan_placements.market_id` y `media_plan_placements.metrics_json`.
+   - Si vamos Opción A: la FK existente en `placements` queda como está; el
+     mapping `client_markets` se rellena para todos los clientes con el set
+     global actual (mantener compat).
+   - Si vamos Opción B: hay que duplicar cada row global a cada cliente
+     existente Y reescribir las FKs en `placements` para apuntar al
+     market_id correcto del cliente. Más invasivo.
+
+3. **UI**: la página `/configuracion/markets` y `/configuracion/metricas`
+   hoy editan el catálogo global. Cuando hay `?client=` activo, deberían
+   mostrar el subset/lista de ese cliente. Sin cliente seleccionado: ver el
+   catálogo maestro (Opción A) o mostrar mensaje "elegí un cliente"
+   (Opción B).
+
+4. **Publishers UI**: aprovechar para hacer la UI de `client_publishers`
+   también (hoy se cargan vía seed). Misma página que markets/metrics: con
+   cliente seleccionado, editar los publishers habilitados + sus
+   `agency_pays`.
+
+**Mi recomendación**: Opción A (mappings). Es coherente con `client_publishers`
+que ya existe, la migración es backwards-compatible (data global queda
+intacta), y el catálogo maestro sigue siendo un lugar útil para admins.
+
+**Cuando se retome**: arrancar con la decisión Opción A vs B antes de
+tocar schema. El filtro global de cliente ya está listo, así que el wiring
+de la página queda mecánico una vez decidido el modelo de datos.
+
+### 2. Auth + permisos (lo que pediste para el lunes)
 
 El requerimiento: la app está abierta hoy para mostrar al manager. El
 próximo paso es agregar autenticación con roles.
@@ -103,7 +183,7 @@ próximo paso es agregar autenticación con roles.
 - ¿Roles per-cliente o globales? (ej. ¿un AM puede ser AM solo de Copa?)
 - ¿Cómo manejamos el flujo de aprobación de un plan — quién firma?
 
-### 2. Admin UI para per-client publishers
+### 3. Admin UI para per-client publishers
 
 Hoy `client_publishers` se carga vía seed. Falta una página
 `/configuracion/clientes/[slug]` o tab dentro de `/clientes/[slug]` para que
@@ -114,12 +194,15 @@ el AM pueda:
 Ya tenemos las server actions en `app/actions/publishers.ts` para el catálogo
 global; faltan equivalentes para `client_publishers`.
 
-### 3. Admin UI para clientes y budget origins
+Probablemente se hace junto con Parte B (paso 1) — todas las admin UIs
+per-cliente conviene tenerlas en el mismo lugar visual.
+
+### 4. Admin UI para clientes y budget origins
 
 Mismo razonamiento. Crear un cliente o budget origin hoy es vía seed.
 Sería `/configuracion/clientes` (ya está en placeholders).
 
-### 4. Polish del PDF/Excel
+### 5. Polish del PDF/Excel
 
 El PDF está en texto plano sin tablas; el Excel tiene 4 hojas básicas. Si
 los media planners van a mandarlo al cliente, conviene hacerlos más
@@ -130,7 +213,7 @@ presentables:
   totales por publisher, etc.).
 - Header con logo de Sangria y datos del cliente.
 
-### 5. Reportes
+### 6. Reportes
 
 `/reportes` tiene 6 specs descriptas. Implementar a medida que el equipo
 genere data histórica y se pueda benchmarkear.
@@ -172,6 +255,29 @@ ALTER DATABASE postgres SET statement_timeout = '60s';
   prod-prod), pasar a `db:generate` + `db:migrate` y commitear las
   migraciones SQL.
 
+### Helpers de client filter: split client vs server
+- `lib/client-filter.ts` — sólo helpers PUROS (path/URL). Lo usan
+  componentes `"use client"` (sidebar, topbar-client-picker). NO importar
+  `db` ni nada server-only acá.
+- `lib/client-filter.server.ts` — usa `db`. Sólo importar desde pages /
+  server actions. Si por error se importa desde un client component, el
+  bundler intentará bundlear `postgres` para el navegador y falla.
+- Convención: el sufijo `.server.ts` es informal (no enforced). En el
+  futuro, si se instala el paquete `server-only` se puede agregar el
+  `import "server-only"` arriba del archivo para que falle en build si
+  alguien lo importa mal.
+
+### Management fee con `rate_pct`
+- Schema (`db/schema.ts:357-359`): los management fees con `rate_pct`
+  guardan `amount_usd = 0.00`. El monto se deriva siempre en runtime.
+- Fórmula: `amount = TM × rate_pct / (100 − rate_pct)` donde `TM = total
+  media del plan` (suma de `totalPlannedUsd` de todos los publishers).
+- Hay 4 lugares que aplican esta fórmula. Si se modifica, actualizar los 4:
+  1. `db/queries/project-detail.ts:394-408` (vista del plan)
+  2. `db/queries/dashboard.ts` (`feeBreakdown` y `getBillingEstimate`)
+  3. `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx` (display)
+  4. `app/actions/plan-billing.ts` `setFeeImputation` (validación del cap)
+
 ### Force-dynamic global
 [app/(app)/layout.tsx](app/(app)/layout.tsx) tiene
 `export const dynamic = "force-dynamic"`. Esto evita que cualquier page
@@ -211,6 +317,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Configurar conexión DB                 | `db/index.ts`                                             |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |
 | Catálogo de cost methods, etc.         | `db/schema.ts` (enums) + `editor.tsx` (mapping principal) |
+| Tocar el picker / filtro global cliente| `components/topbar-client-picker.tsx`, `lib/client-filter*.ts` |
+| Agregar una ruta al filtro de cliente  | `CLIENT_FILTER_ROUTES` en `lib/client-filter.ts`          |
+| Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
 
 ---
 
