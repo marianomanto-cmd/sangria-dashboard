@@ -1,9 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, Check, ChevronDown } from "lucide-react";
+import {
+  buildHrefWithClient,
+  redirectTargetForClientChange,
+} from "@/lib/client-filter";
 
 type ClientOption = {
   slug: string;
@@ -11,15 +15,21 @@ type ClientOption = {
 };
 
 export function TopbarClientPicker({ clients }: { clients: ClientOption[] }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "/";
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
-  // Detectar si estamos en /clientes/<slug> para resaltar la selección actual.
+  // El cliente seleccionado vive en ?client=slug. Si estamos en /clientes/[slug]
+  // (vista de detalle), respetamos ese slug también para que el picker quede
+  // sincronizado con la vista actual.
   const currentSlug = useMemo(() => {
-    const m = pathname?.match(/^\/clientes\/([^/?#]+)/);
-    return m?.[1] ?? null;
-  }, [pathname]);
+    const fromQuery = searchParams?.get("client");
+    if (fromQuery && clients.some((c) => c.slug === fromQuery)) return fromQuery;
+    const m = pathname.match(/^\/clientes\/([^/?#]+)/);
+    if (m && clients.some((c) => c.slug === m[1])) return m[1];
+    return null;
+  }, [searchParams, pathname, clients]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -40,6 +50,18 @@ export function TopbarClientPicker({ clients }: { clients: ClientOption[] }) {
 
   const currentName =
     clients.find((c) => c.slug === currentSlug)?.name ?? null;
+
+  // Construye el destino al seleccionar un cliente. Si la ruta actual acepta
+  // el filtro, queda en la misma ruta con ?client=. Si no (ej. detalle de
+  // proyecto), vuelve a la lista equivalente. Caso especial: desde /clientes
+  // o /clientes/<otro> ir al detalle del cliente elegido.
+  const buildHrefFor = (slug: string | null): string => {
+    if (slug && (pathname === "/clientes" || pathname.startsWith("/clientes/"))) {
+      return `/clientes/${slug}`;
+    }
+    const target = redirectTargetForClientChange(pathname);
+    return buildHrefWithClient(target, slug);
+  };
 
   return (
     <div ref={ref} className="relative">
@@ -67,7 +89,7 @@ export function TopbarClientPicker({ clients }: { clients: ClientOption[] }) {
           className="absolute right-0 top-full mt-1 w-[240px] rounded-md border border-line bg-white shadow-lg z-30 max-h-[400px] overflow-auto py-1"
         >
           <Link
-            href="/clientes"
+            href={buildHrefFor(null)}
             onClick={() => setOpen(false)}
             data-active={currentSlug === null}
             className="flex items-center justify-between px-3 py-1.5 text-sm text-ink-2 hover:bg-paper-2 data-[active=true]:text-ink data-[active=true]:font-medium"
@@ -81,7 +103,7 @@ export function TopbarClientPicker({ clients }: { clients: ClientOption[] }) {
           {clients.map((c) => (
             <Link
               key={c.slug}
-              href={`/clientes/${c.slug}`}
+              href={buildHrefFor(c.slug)}
               onClick={() => setOpen(false)}
               data-active={currentSlug === c.slug}
               className="flex items-center justify-between px-3 py-1.5 text-sm text-ink-2 hover:bg-paper-2 data-[active=true]:text-ink data-[active=true]:font-medium"

@@ -12,9 +12,12 @@ export type BudgetOriginOption = {
 };
 
 // Lista global de budget origins con su cliente asociado (para los selectores
-// de filtro en /proyectos y /planes).
-export async function listAllBudgetOrigins(): Promise<BudgetOriginOption[]> {
-  return db
+// de filtro en /proyectos y /planes). Si `clientId` se pasa, restringe la
+// lista a los origins de ese cliente.
+export async function listAllBudgetOrigins(
+  options: { clientId?: string | null } = {},
+): Promise<BudgetOriginOption[]> {
+  const base = db
     .select({
       id: budgetOrigins.id,
       name: budgetOrigins.name,
@@ -26,4 +29,7 @@ export async function listAllBudgetOrigins(): Promise<BudgetOriginOption[]> {
     .from(budgetOrigins)
     .innerJoin(clients, eq(budgetOrigins.clientId, clients.id))
     .orderBy(asc(clients.name), asc(budgetOrigins.name));
+  return options.clientId
+    ? base.where(eq(budgetOrigins.clientId, options.clientId))
+    : base;
 }

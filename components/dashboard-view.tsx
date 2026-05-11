@@ -39,9 +39,10 @@ type Props = {
   kpis: DashboardKpis;
   projects: DashboardProjects;
   monthly: MonthlyTotal[];
+  clientName?: string | null;
 };
 
-export function DashboardView({ kpis, projects, monthly }: Props) {
+export function DashboardView({ kpis, projects, monthly, clientName }: Props) {
   const layout = useSyncExternalStore<DashboardLayout>(
     subscribeLayout,
     readLayout,
@@ -60,7 +61,9 @@ export function DashboardView({ kpis, projects, monthly }: Props) {
             Dashboard
           </h1>
           <p className="text-sm text-muted mt-1">
-            Resumen ejecutivo · datos del seed Q2 2026
+            {clientName
+              ? `Filtrado por ${clientName}`
+              : "Resumen ejecutivo · todos los clientes"}
           </p>
         </div>
         <LayoutToggle value={layout} onChange={setLayout} />

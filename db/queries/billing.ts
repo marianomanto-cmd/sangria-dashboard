@@ -39,8 +39,11 @@ export type BillingListRow = {
   dueDate: string | null;
 };
 
-export async function getBillingsList(): Promise<BillingListRow[]> {
-  const rows = await db
+export async function getBillingsList(
+  options: { clientId?: string | null } = {},
+): Promise<BillingListRow[]> {
+  const filterClient = options.clientId ?? null;
+  const base = db
     .select({
       id: planBillings.id,
       month: planBillings.month,
@@ -68,6 +71,10 @@ export async function getBillingsList(): Promise<BillingListRow[]> {
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
     .orderBy(desc(planBillings.createdAt));
+
+  const rows = filterClient
+    ? await base.where(eq(projects.clientId, filterClient))
+    : await base;
 
   return rows.map((r) => ({
     ...r,

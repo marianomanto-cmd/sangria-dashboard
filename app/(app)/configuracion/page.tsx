@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowUpRight, Tag } from "lucide-react";
+import { ArrowUpRight, Info, Tag } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
+import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 
 const SECTIONS: Array<{
   href: string;
@@ -40,19 +41,47 @@ const SECTIONS: Array<{
   },
 ];
 
-export default function ConfiguracionPage() {
+type Props = {
+  searchParams: Promise<{ client?: string }>;
+};
+
+export default async function ConfiguracionPage({ searchParams }: Props) {
+  const sp = await searchParams;
+  const client = await resolveClientFromSearchParams(sp);
+
   return (
     <PageShell
       eyebrow="Configuración"
-      title="Ajustes"
+      title={client ? `Ajustes · ${client.name}` : "Ajustes"}
       subtitle="Catálogos editables, gestión de usuarios y configuración general."
     >
+      {client && (
+        <div className="mb-5 rounded-lg border border-warn-soft bg-warn-soft/40 px-4 py-3 flex items-start gap-3">
+          <Info
+            size={16}
+            strokeWidth={2}
+            className="text-warn shrink-0 mt-0.5"
+          />
+          <div className="text-xs leading-relaxed text-ink-2">
+            <p className="font-medium text-ink">
+              Configuración compartida entre clientes
+            </p>
+            <p className="mt-0.5">
+              Publishers, mercados y métricas se editan como catálogo global por
+              ahora. La edición per-cliente (que cada cliente tenga sus propios
+              publishers/mercados/métricas) llega en una próxima iteración. Los
+              budget origins ya son per-cliente y se filtran por {client.name}.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {SECTIONS.map((s) =>
           s.status === "ready" ? (
             <Link
               key={s.href}
-              href={s.href}
+              href={client ? `${s.href}?client=${client.slug}` : s.href}
               className="group rounded-lg border border-line bg-white p-5 hover:border-ink-2 transition-colors"
             >
               <div className="flex items-start justify-between gap-2">

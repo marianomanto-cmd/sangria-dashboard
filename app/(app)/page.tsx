@@ -4,13 +4,28 @@ import {
   getDashboardProjects,
   getMonthlyTotals,
 } from "@/db/queries/dashboard";
+import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 
-export default async function DashboardPage() {
+type Props = {
+  searchParams: Promise<{ client?: string }>;
+};
+
+export default async function DashboardPage({ searchParams }: Props) {
+  const sp = await searchParams;
+  const client = await resolveClientFromSearchParams(sp);
+  const clientId = client?.id ?? null;
   const [kpis, projects, monthly] = await Promise.all([
-    getDashboardKpis(),
-    getDashboardProjects(),
-    getMonthlyTotals(),
+    getDashboardKpis({ clientId }),
+    getDashboardProjects({ clientId }),
+    getMonthlyTotals({ clientId }),
   ]);
 
-  return <DashboardView kpis={kpis} projects={projects} monthly={monthly} />;
+  return (
+    <DashboardView
+      kpis={kpis}
+      projects={projects}
+      monthly={monthly}
+      clientName={client?.name ?? null}
+    />
+  );
 }

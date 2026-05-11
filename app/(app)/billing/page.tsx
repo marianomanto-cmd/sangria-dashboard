@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageShell } from "@/components/page-shell";
 import { getBillingsList } from "@/db/queries/billing";
 import { formatUsd } from "@/lib/format";
+import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 
 const STATUS_STYLE: Record<
   string,
@@ -13,14 +14,20 @@ const STATUS_STYLE: Record<
   paid:  { label: "pagada", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
 };
 
-export default async function BillingPage() {
-  const rows = await getBillingsList();
+type Props = {
+  searchParams: Promise<{ client?: string }>;
+};
+
+export default async function BillingPage({ searchParams }: Props) {
+  const sp = await searchParams;
+  const client = await resolveClientFromSearchParams(sp);
+  const rows = await getBillingsList({ clientId: client?.id ?? null });
 
   return (
     <PageShell
       eyebrow="Billing"
-      title="Facturación mensual"
-      subtitle={`${rows.length} factura${rows.length === 1 ? "" : "s"}. Las facturas se generan a nivel de plan + mes desde la página de cada plan.`}
+      title={client ? `Billing · ${client.name}` : "Facturación mensual"}
+      subtitle={`${rows.length} factura${rows.length === 1 ? "" : "s"}${client ? ` de ${client.name}` : ""}. Las facturas se generan a nivel de plan + mes desde la página de cada plan.`}
     >
       {rows.length === 0 ? (
         <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
