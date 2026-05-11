@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { buildHrefWithClient } from "@/lib/client-filter";
 import {
   LayoutGrid,
   Users,
@@ -41,6 +42,8 @@ const FOOTER: NavEntry[] = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const clientSlug = searchParams?.get("client") ?? null;
 
   return (
     <aside
@@ -61,6 +64,7 @@ export function Sidebar() {
           <NavItem
             key={entry.href}
             entry={entry}
+            href={buildHrefWithClient(entry.href, clientSlug)}
             active={isActive(pathname, entry.href)}
             collapsed={collapsed}
           />
@@ -74,6 +78,7 @@ export function Sidebar() {
           <NavItem
             key={entry.href}
             entry={entry}
+            href={buildHrefWithClient(entry.href, clientSlug)}
             active={isActive(pathname, entry.href)}
             collapsed={collapsed}
           />
@@ -109,17 +114,19 @@ export function Sidebar() {
 
 function NavItem({
   entry,
+  href,
   active,
   collapsed,
 }: {
   entry: NavEntry;
+  href: string;
   active: boolean;
   collapsed: boolean;
 }) {
   const Icon = entry.icon;
   return (
     <Link
-      href={entry.href}
+      href={href}
       data-active={active}
       data-collapsed={collapsed}
       className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-stone-400 hover:bg-white/5 hover:text-white data-[active=true]:bg-white/[0.08] data-[active=true]:text-white data-[collapsed=true]:justify-center data-[collapsed=true]:px-0 data-[collapsed=true]:w-9 data-[collapsed=true]:h-9 transition-colors"

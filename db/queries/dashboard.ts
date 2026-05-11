@@ -45,32 +45,42 @@ export type DashboardKpis = {
   consumptionPct: number;
 };
 
-export async function getDashboardKpis(): Promise<DashboardKpis> {
+export async function getDashboardKpis(
+  options: { clientId?: string | null } = {},
+): Promise<DashboardKpis> {
   const yearStartMonth = `${new Date().getFullYear()}-01`;
+  const filterClient = options.clientId ?? null;
+
+  const projectsActive = filterClient
+    ? and(eq(projects.status, "active"), eq(projects.clientId, filterClient))
+    : eq(projects.status, "active");
 
   const [pipelineRow] = await db
     .select({
       value: sql<string>`coalesce(sum(${projects.totalGrossBudgetUsd}), 0)`,
     })
     .from(projects)
-    .where(eq(projects.status, "active"));
+    .where(projectsActive);
 
   const [clientsRow] = await db
     .select({
       value: sql<number>`count(distinct ${projects.clientId})::int`,
     })
     .from(projects)
-    .where(eq(projects.status, "active"));
+    .where(projectsActive);
 
   const [invoicedRow] = await db
     .select({
       value: sql<string>`coalesce(sum(${planBillings.totalUsd}), 0)`,
     })
     .from(planBillings)
+    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(
       and(
         inArray(planBillings.status, ["sent", "paid"]),
         sql`${planBillings.month} >= ${yearStartMonth}`,
+        ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
       ),
     );
 
@@ -82,7 +92,7 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
     .innerJoin(planBillings, eq(planBillingPublishers.planBillingId, planBillings.id))
     .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
-    .where(eq(projects.status, "active"));
+    .where(projectsActive);
 
   const pipeline = Number.parseFloat(pipelineRow.value);
   const spent = Number.parseFloat(consumptionRow.spent);
@@ -159,9 +169,16 @@ export type DashboardProjects = {
 };
 
 export async function getDashboardProjects(
-  options: { budgetOriginId?: string | null } = {},
+  options: { budgetOriginId?: string | null; clientId?: string | null } = {},
 ): Promise<DashboardProjects> {
   const filterOrigin = options.budgetOriginId ?? null;
+  const filterClient = options.clientId ?? null;
+  const conds = [
+    ...(filterOrigin ? [eq(projects.budgetOriginId, filterOrigin)] : []),
+    ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
+  ];
+  const totalsWhere =
+    conds.length === 0 ? undefined : conds.length === 1 ? conds[0] : and(...conds);
 
   // Totales por proyecto: pipeline + spent agregado.
   const totalsBase = db
@@ -187,9 +204,7 @@ export async function getDashboardProjects(
     .groupBy(projects.id, clients.name, clients.slug)
     .orderBy(asc(projects.code));
 
-  const totals = await (filterOrigin
-    ? totalsBase.where(eq(projects.budgetOriginId, filterOrigin))
-    : totalsBase);
+  const totals = await (totalsWhere ? totalsBase.where(totalsWhere) : totalsBase);
 
   // Spend mensual por proyecto.
   const monthly = await db
@@ -504,19 +519,28 @@ export type MonthlyTotal = {
   projected: number;
 };
 
-export async function getMonthlyTotals(): Promise<MonthlyTotal[]> {
+export async function getMonthlyTotals(
+  options: { clientId?: string | null } = {},
+): Promise<MonthlyTotal[]> {
+  const filterClient = options.clientId ?? null;
+
   // Real por mes: agregamos los amountRealUsd de todos los plan_billings.
-  const realRows = await db
+  const realRowsBase = db
     .select({
       month: planBillings.month,
       total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
     })
     .from(planBillings)
+    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .leftJoin(
       planBillingPublishers,
       eq(planBillingPublishers.planBillingId, planBillings.id),
     )
     .groupBy(planBillings.month);
+  const realRows = filterClient
+    ? await realRowsBase.where(eq(projects.clientId, filterClient))
+    : await realRowsBase;
 
   // Proyectado: para cada plan approved, prorrateamos el budget de cada
   // PLACEMENT entre los meses de su [start, end] (el período del plan ya
@@ -535,7 +559,12 @@ export async function getMonthlyTotals(): Promise<MonthlyTotal[]> {
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
     .innerJoin(mediaPlans, eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id))
-    .where(eq(mediaPlans.status, "approved"));
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .where(
+      filterClient
+        ? and(eq(mediaPlans.status, "approved"), eq(projects.clientId, filterClient))
+        : eq(mediaPlans.status, "approved"),
+    );
 
   const projectedByMonth: Record<string, number> = {};
   for (const p of placementSpans) {
@@ -594,10 +623,12 @@ export async function getBillingEstimate(options: {
   months: string[]; // ["YYYY-MM", ...]
   budgetOriginId?: string | null;
   projectId?: string | null;
+  clientId?: string | null;
 }): Promise<MonthlyBillingEstimate[]> {
   const targetMonths = new Set(options.months);
   const filterOrigin = options.budgetOriginId ?? null;
   const filterProject = options.projectId ?? null;
+  const filterClient = options.clientId ?? null;
 
   const planStatusFilter = inArray(mediaPlans.status, [
     "approved",
@@ -629,6 +660,7 @@ export async function getBillingEstimate(options: {
     planStatusFilter,
     ...(filterOrigin ? [eq(projects.budgetOriginId, filterOrigin)] : []),
     ...(filterProject ? [eq(projects.id, filterProject)] : []),
+    ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
   );
   const placements = await placementsBase.where(placementWhere);
 
@@ -800,6 +832,7 @@ export async function getBillingEstimate(options: {
           ? [eq(projects.budgetOriginId, filterOrigin)]
           : []),
         ...(filterProject ? [eq(projects.id, filterProject)] : []),
+        ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
       ),
     )
     .groupBy(planBillings.month, projects.id);
@@ -825,6 +858,7 @@ export async function getBillingEstimate(options: {
           ? [eq(projects.budgetOriginId, filterOrigin)]
           : []),
         ...(filterProject ? [eq(projects.id, filterProject)] : []),
+        ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
       ),
     )
     .groupBy(planBillings.month, projects.id);

@@ -13,6 +13,7 @@ import { BudgetOriginSelector } from "@/components/budget-origin-selector";
 import { PageShell } from "@/components/page-shell";
 import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
+import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 
 const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> = {
   draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
@@ -22,19 +23,22 @@ const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> 
 };
 
 type Props = {
-  searchParams: Promise<{ status?: string; origin?: string }>;
+  searchParams: Promise<{ status?: string; origin?: string; client?: string }>;
 };
 
 export default async function PlanesPage({ searchParams }: Props) {
   const sp = await searchParams;
   const filter = sp.status;
-  const allOrigins = await listAllBudgetOrigins();
+  const client = await resolveClientFromSearchParams(sp);
+  const clientId = client?.id ?? null;
+  const allOrigins = await listAllBudgetOrigins({ clientId });
   const validOrigin =
     sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
 
   const conds = [];
   if (filter) conds.push(eq(mediaPlans.status, filter as never));
   if (validOrigin) conds.push(eq(projects.budgetOriginId, validOrigin));
+  if (clientId) conds.push(eq(projects.clientId, clientId));
   const where = conds.length === 0 ? undefined : conds.length === 1 ? conds[0] : and(...conds);
 
   const baseQuery = db
@@ -82,14 +86,14 @@ export default async function PlanesPage({ searchParams }: Props) {
   return (
     <PageShell
       eyebrow="Planes de Medios"
-      title="Todos los planes"
-      subtitle={`Vista cross-proyectos del media planner. ${allPlans.length} plan${allPlans.length === 1 ? "" : "es"}.`}
+      title={client ? `Planes · ${client.name}` : "Todos los planes"}
+      subtitle={`Vista cross-proyectos del media planner. ${allPlans.length} plan${allPlans.length === 1 ? "" : "es"}${client ? ` de ${client.name}` : ""}.`}
     >
       <BudgetOriginSelector
         origins={allOrigins}
         current={validOrigin}
         basePath="/planes"
-        preserveParams={{ status: filter }}
+        preserveParams={{ status: filter, client: client?.slug }}
       />
 
       <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
@@ -99,24 +103,28 @@ export default async function PlanesPage({ searchParams }: Props) {
             value={undefined}
             label={`Todos (${allPlans.length})`}
             originId={validOrigin}
+            clientSlug={client?.slug ?? null}
           />
           <FilterChoice
             current={filter}
             value="draft"
             label={`Draft (${counts.draft})`}
             originId={validOrigin}
+            clientSlug={client?.slug ?? null}
           />
           <FilterChoice
             current={filter}
             value="ready_to_send"
             label={`Ready (${counts.ready_to_send})`}
             originId={validOrigin}
+            clientSlug={client?.slug ?? null}
           />
           <FilterChoice
             current={filter}
             value="approved"
             label={`Approved (${counts.approved})`}
             originId={validOrigin}
+            clientSlug={client?.slug ?? null}
           />
         </FilterPill>
       </div>
@@ -222,16 +230,19 @@ function FilterChoice({
   value,
   label,
   originId,
+  clientSlug,
 }: {
   current: string | undefined;
   value: string | undefined;
   label: string;
   originId: string | null;
+  clientSlug: string | null;
 }) {
   const isActive = (current ?? null) === (value ?? null);
   const params = new URLSearchParams();
   if (value) params.set("status", value);
   if (originId) params.set("origin", originId);
+  if (clientSlug) params.set("client", clientSlug);
   const qs = params.toString();
   const href = qs ? `/planes?${qs}` : "/planes";
   return (

@@ -9,9 +9,10 @@ import {
   getBillingEstimate,
   getDashboardProjects,
 } from "@/db/queries/dashboard";
+import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 
 type Props = {
-  searchParams: Promise<{ origin?: string }>;
+  searchParams: Promise<{ origin?: string; client?: string }>;
 };
 
 function nextMonths(count: number): string[] {
@@ -32,20 +33,27 @@ function nextMonths(count: number): string[] {
 
 export default async function ProyectosPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const allOrigins = await listAllBudgetOrigins();
+  const client = await resolveClientFromSearchParams(sp);
+  const clientId = client?.id ?? null;
+  const allOrigins = await listAllBudgetOrigins({ clientId });
   const validOrigin =
     sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
   const months = nextMonths(2);
   const [data, estimates] = await Promise.all([
-    getDashboardProjects({ budgetOriginId: validOrigin }),
-    getBillingEstimate({ months, budgetOriginId: validOrigin }),
+    getDashboardProjects({ budgetOriginId: validOrigin, clientId }),
+    getBillingEstimate({ months, budgetOriginId: validOrigin, clientId }),
   ]);
+
+  const filterDescriptors = [
+    client ? client.name : null,
+    validOrigin ? "origen" : null,
+  ].filter(Boolean);
 
   return (
     <PageShell
       eyebrow="Proyectos"
-      title="Todos los proyectos"
-      subtitle={`${data.rows.length} proyecto${data.rows.length === 1 ? "" : "s"}${validOrigin ? " · filtrado" : ""}. Click en la flecha para ver los planes adentro.`}
+      title={client ? `Proyectos · ${client.name}` : "Todos los proyectos"}
+      subtitle={`${data.rows.length} proyecto${data.rows.length === 1 ? "" : "s"}${filterDescriptors.length ? ` · filtrado por ${filterDescriptors.join(" + ")}` : ""}. Click en la flecha para ver los planes adentro.`}
       actions={
         <Link
           href="/proyectos/nuevo"
@@ -60,6 +68,7 @@ export default async function ProyectosPage({ searchParams }: Props) {
         origins={allOrigins}
         current={validOrigin}
         basePath="/proyectos"
+        preserveParams={{ client: client?.slug }}
       />
 
       {data.rows.length === 0 ? (

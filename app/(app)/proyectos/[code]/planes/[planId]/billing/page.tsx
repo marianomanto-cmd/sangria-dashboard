@@ -202,15 +202,32 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
       totalByFee.map((r) => [r.mediaPlanFeeId, Number.parseFloat(r.total)]),
     );
 
+    // Total media del plan: base para derivar management fees por %.
+    // amount = TM × ratePct / (100 - ratePct) (ver db/schema.ts:357-359)
+    const totalMedia = planPubs.reduce(
+      (s, p) => s + Number.parseFloat(p.totalPlannedUsd),
+      0,
+    );
+
     feeLines = planFees.map((f) => {
       const r = feeRowsMap.get(f.id);
       const thisMonth = r ? Number.parseFloat(r.amountImputedUsd) : 0;
       const accumTotal = totalByFeeMap.get(f.id) ?? 0;
+      const ratePct = f.ratePct ? Number.parseFloat(f.ratePct) : null;
+      let totalAmountUsd = Number.parseFloat(f.amountUsd);
+      if (
+        f.feeType === "management" &&
+        ratePct != null &&
+        ratePct > 0 &&
+        ratePct < 100
+      ) {
+        totalAmountUsd = (totalMedia * ratePct) / (100 - ratePct);
+      }
       return {
         mediaPlanFeeId: f.id,
         feeName: f.name,
         feeType: f.feeType,
-        totalAmountUsd: Number.parseFloat(f.amountUsd),
+        totalAmountUsd,
         accumulatedBeforeUsd: accumTotal - thisMonth,
         amountThisMonthUsd: thisMonth,
         notes: r?.notes ?? null,
