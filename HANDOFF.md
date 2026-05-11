@@ -14,6 +14,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+872b735  Estimaciones: separar media/fees + accuracy del mes anterior (#7)
+c922947  docs: reflejar editor bidireccional de métricas secundarias (#6)
 7ac41fd  Editor: cálculo bidireccional rate↔delivery en métricas secundarias (#5)
 0bd3d75  docs: reflejar cambios de la sesión 11/may/2026 (#4)
 8e44a64  Billing fixes + filtro global de cliente (#3)
@@ -22,7 +24,6 @@ c2a51e0  Filtro global de cliente vía ?client=slug
 a4ff8fd  Billing: derivar Total Fee de management fees por ratePct
 bc625f0  Proyectos: quitar columna Spark del listado principal (#2)
 71494f9  Excel export: layout estilo plan de medios (#1)
-d6fac21  docs: README + HANDOFF para retomar desde otra máquina
 ```
 
 ### Cambios de la sesión 11/may/2026 (PRs #3, #5)
@@ -57,7 +58,22 @@ d6fac21  docs: README + HANDOFF para retomar desde otra máquina
      insertar las 6 rows manualmente en Supabase si se quiere conservar
      la data actual sin re-seedear.
 
-4. **Parte B pendiente.** Markets y metrics siguen siendo catálogos
+4. **Estimaciones de facturación con detalle media/fees + accuracy
+   (PR #7).** La card "Estimación de facturación" ahora muestra:
+   - Bruto desglosado en **Media** (placements) y **Fees** (management/
+     setup/reporting/custom), tanto en el header del mes como en la tabla
+     por proyecto.
+   - Una card adicional del **mes anterior** con "Real vs Estimado"
+     recomputado, con variación coloreada (verde <5%, warn <15%, danger
+     ≥15%). Sirve como sanity check: si la magnitud es alta, o la
+     estimación está off o el plan se modificó después de facturar.
+   - La card también aparece ahora en **`/planes`** (antes solo en
+     `/proyectos` y `/proyectos/[code]`).
+   - `getBillingEstimate` ganó campos `grossMediaUsd`, `grossFeesUsd`,
+     `alreadyBilledMediaUsd`, `alreadyBilledFeesUsd` (los totales
+     `grossUsd` / `alreadyBilledUsd` se mantienen como sumas, back-compat).
+
+5. **Parte B pendiente.** Markets y metrics siguen siendo catálogos
    globales. Se pidió poder editarlos per-cliente (ver "Próximos pasos"
    abajo).
 
@@ -358,6 +374,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
 | Agregar/cambiar pares rate↔delivery del editor | `DIRECT_METRIC_RATES` en `lib/cost-methods.ts` + nueva calculated metric en `scripts/seed.ts` con fórmula `amount / <delivery>` |
 | Editor de métricas del placement       | `MetricsEditor` y `PrincipalPairEditor` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx` |
+| Cambiar la card de estimación de facturación | `components/billing-estimate-card.tsx` (UI) + `getBillingEstimate` en `db/queries/dashboard.ts` (datos) |
+| Agregar otra dimensión al desglose de la estimación | Extender el `ProjectAgg` interno de `getBillingEstimate` con el nuevo agregado, propagar a `MonthlyBillingEstimate`, y agregar columna en `EstimateMonthCard` |
 
 ---
 

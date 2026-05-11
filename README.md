@@ -202,6 +202,23 @@ lib/
   mes (la suma de imputaciones a lo largo del tiempo no debe pasar el total
   del fee — validado en server actions).
 
+### Estimación de facturación
+- `getBillingEstimate` en `db/queries/dashboard.ts` prorratea linealmente
+  placements y fees de planes `approved` / `ready_to_send` sobre sus meses
+  activos y resta lo ya facturado en cada mes (status `sent`/`paid`).
+- Devuelve **separado media de fees**: `grossMediaUsd` (placements) y
+  `grossFeesUsd` (management/setup/reporting/custom). Lo mismo para el
+  facturado (`alreadyBilledMediaUsd` viene de `plan_billing_publishers`;
+  `alreadyBilledFeesUsd` de `plan_billing_fees`). Los totales `grossUsd` y
+  `alreadyBilledUsd` se siguen exportando como sumas.
+- Acepta filtros opcionales: `months[]`, `budgetOriginId`, `projectId`,
+  `clientId`. Los usan `/proyectos`, `/proyectos/[code]` y `/planes`.
+- La UI (`components/billing-estimate-card.tsx`) renderiza 2 meses adelante
+  + 1 card del **mes anterior** con "Real vs Estimado recomputado" y
+  variación coloreada. El estimado del mes anterior se recomputa contra
+  los planes actuales — no es snapshot histórico; sirve como sanity check
+  para detectar planes modificados después de facturar.
+
 ### Audit log
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` + `after_json`.
 - Vista en `/auditoria` con diff campo a campo, filtros por entityType y
