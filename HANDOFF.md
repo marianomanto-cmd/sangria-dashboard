@@ -14,6 +14,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+7ac41fd  Editor: cálculo bidireccional rate↔delivery en métricas secundarias (#5)
+0bd3d75  docs: reflejar cambios de la sesión 11/may/2026 (#4)
 8e44a64  Billing fixes + filtro global de cliente (#3)
 c2a51e0  Filtro global de cliente vía ?client=slug
 4c1e75a  Billing: derivar cap de imputación de management fees por ratePct
@@ -21,27 +23,43 @@ a4ff8fd  Billing: derivar Total Fee de management fees por ratePct
 bc625f0  Proyectos: quitar columna Spark del listado principal (#2)
 71494f9  Excel export: layout estilo plan de medios (#1)
 d6fac21  docs: README + HANDOFF para retomar desde otra máquina
-9466453  db: max=5 + connect_timeout para evitar statement timeouts en serverless
 ```
 
-### Cambios de la sesión 11/may/2026 (PR #3)
+### Cambios de la sesión 11/may/2026 (PRs #3, #5)
 
-1. **Bug fix — Management Fee mostraba $0 en billing.** Para fees tipo
-   `management` con `ratePct`, el campo `amountUsd` se persiste como `0.00`
-   y el monto se deriva en runtime con `amount = TM × ratePct / (100 − ratePct)`.
-   La página de billing leía el `amountUsd` crudo y mostraba $0. Replicada
-   la fórmula en:
+1. **Bug fix — Management Fee mostraba $0 en billing (PR #3).** Para fees
+   tipo `management` con `ratePct`, el campo `amountUsd` se persiste como
+   `0.00` y el monto se deriva en runtime con
+   `amount = TM × ratePct / (100 − ratePct)`. La página de billing leía el
+   `amountUsd` crudo y mostraba $0. Replicada la fórmula en:
    - `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx` (display)
    - `app/actions/plan-billing.ts` `setFeeImputation` (validación del cap)
 
-2. **Filtro global de cliente vía `?client=slug`.** El picker arriba a la
-   derecha ahora preserva el cliente seleccionado al navegar entre vistas
-   globales (Dashboard, Proyectos, Planes, Billing). Antes sólo funcionaba
-   como atajo a `/clientes/[slug]` y la selección se perdía al cambiar de
-   página. Ver "Arquitectura: convenciones clave" en README.
+2. **Filtro global de cliente vía `?client=slug` (PR #3).** El picker
+   arriba a la derecha ahora preserva el cliente seleccionado al navegar
+   entre vistas globales (Dashboard, Proyectos, Planes, Billing). Antes
+   sólo funcionaba como atajo a `/clientes/[slug]` y la selección se
+   perdía al cambiar de página. Ver "Arquitectura: convenciones clave" en
+   README.
 
-3. **Parte B pendiente.** Markets y metrics siguen siendo catálogos globales.
-   Se pidió poder editarlos per-cliente (ver "Próximos pasos" abajo).
+3. **Editor: bidireccional rate↔delivery en métricas secundarias (PR #5).**
+   El bloque "Indicadores estimados" ahora tiene el mismo editor TARIFA +
+   DELIVERY que la métrica principal: editás uno y la app calcula el otro
+   desde el amount. Cubre las 10 métricas direct con rate canónico
+   (impressions/cpm, clicks/cpc, views/cpv, conversions/cpa, reach/cpr,
+   engagements/cpe, followers/cpf, leads/cpl, installs/cpi, visits/cpvis).
+   `frequency` queda como input único (es un ratio). La métrica principal
+   se excluye del dropdown Y del draft inicial para no duplicarse.
+   - **Requiere `npm run db:seed` para producción** — agrega 6 calculated
+     metrics al catálogo (`cpr`, `cpe`, `cpf`, `cpl`, `cpi`, `cpvis`).
+     Si no se siembra, las tarifas se persisten igual pero la sección
+     "Métricas calculadas" no las lista separadamente. Alternativa:
+     insertar las 6 rows manualmente en Supabase si se quiere conservar
+     la data actual sin re-seedear.
+
+4. **Parte B pendiente.** Markets y metrics siguen siendo catálogos
+   globales. Se pidió poder editarlos per-cliente (ver "Próximos pasos"
+   abajo).
 
 ### Lo que funciona end-to-end
 
@@ -267,6 +285,24 @@ ALTER DATABASE postgres SET statement_timeout = '60s';
   `import "server-only"` arriba del archivo para que falle en build si
   alguien lo importa mal.
 
+### MetricsEditor: principal vs secundarias sobre el mismo `metrics_json`
+- El `PrincipalPairEditor` y el `MetricsEditor` editan el MISMO
+  `media_plan_placements.metrics_json` (jsonb). Cada uno es dueño de un
+  subset de keys:
+  - `PrincipalPairEditor` — la delivery slug que corresponde al cost
+    method del placement + su rate (ej. `impressions` + `cpm` para dCPM).
+  - `MetricsEditor` — todas las DEMÁS direct con sus rates.
+- El draft del `MetricsEditor` EXCLUYE la métrica principal del placement.
+  Su `commit` PRESERVA las keys de la principal leyendo de `metrics_json`
+  antes de escribir el draft, así no las pisa.
+- Si agregás un nuevo cost method al schema, actualizá:
+  1. `COST_METHODS` + `CostMethod` type + `COST_METHOD_PRIMARY_METRIC` en
+     `lib/cost-methods.ts`.
+  2. Si la métrica principal es nueva, agregá la entrada en
+     `DIRECT_METRIC_RATES` con su rate slug + multiplier.
+  3. Si el rate es nuevo, agregalo al `metricsCatalog` seed con su
+     fórmula `amount / <delivery>`.
+
 ### Management fee con `rate_pct`
 - Schema (`db/schema.ts:357-359`): los management fees con `rate_pct`
   guardan `amount_usd = 0.00`. El monto se deriva siempre en runtime.
@@ -320,6 +356,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el picker / filtro global cliente| `components/topbar-client-picker.tsx`, `lib/client-filter*.ts` |
 | Agregar una ruta al filtro de cliente  | `CLIENT_FILTER_ROUTES` en `lib/client-filter.ts`          |
 | Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
+| Agregar/cambiar pares rate↔delivery del editor | `DIRECT_METRIC_RATES` en `lib/cost-methods.ts` + nueva calculated metric en `scripts/seed.ts` con fórmula `amount / <delivery>` |
+| Editor de métricas del placement       | `MetricsEditor` y `PrincipalPairEditor` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx` |
 
 ---
 
