@@ -23,6 +23,17 @@ function nextMonths(count: number): string[] {
   return out;
 }
 
+function previousMonth(): string {
+  const now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth(); // 0-indexed → ya es "mes anterior"
+  if (m === 0) {
+    y -= 1;
+    m = 12;
+  }
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
 type Props = { params: Promise<{ code: string }> };
 
 const PLAN_STATUS_STYLE: Record<
@@ -59,10 +70,13 @@ export default async function ProjectDetailPage({ params }: Props) {
   const { project, client, budgetOrigin, plans } = detail;
 
   const months = nextMonths(2);
-  const estimates = await getBillingEstimate({
-    months,
+  const prevMonth = previousMonth();
+  const allEstimates = await getBillingEstimate({
+    months: [prevMonth, ...months],
     projectId: project.id,
   });
+  const previousEstimate = allEstimates.find((e) => e.month === prevMonth) ?? null;
+  const estimates = allEstimates.filter((e) => e.month !== prevMonth);
 
   const totalPlanned = plans.reduce((s, p) => s + p.totalUsd, 0);
   const totalSpent = plans.reduce((s, p) => s + p.spentRealUsd, 0);
@@ -207,7 +221,11 @@ export default async function ProjectDetailPage({ params }: Props) {
         )}
       </section>
 
-      <BillingEstimateCard estimates={estimates} hideProjectBreakdown />
+      <BillingEstimateCard
+        estimates={estimates}
+        previousMonth={previousEstimate}
+        hideProjectBreakdown
+      />
     </main>
   );
 }
