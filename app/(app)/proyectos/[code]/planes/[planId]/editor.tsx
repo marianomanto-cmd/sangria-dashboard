@@ -1117,15 +1117,19 @@ function MetricsEditor({
   const calculatedMetrics = allMetrics.filter((m) => m.kind === "calculated");
   const directBySlug = new Map(directMetrics.map((m) => [m.slug, m]));
 
-  // Cada row del editor representa una métrica direct (delivery). Si la
-  // métrica tiene un rate pair en DIRECT_METRIC_RATES (lib/cost-methods.ts),
+  // Cada row del editor representa una métrica direct SECUNDARIA (delivery).
+  // La métrica principal NO entra en el draft — la maneja PrincipalPairEditor
+  // sobre el mismo metrics_json. Excluirla del draft evita que aparezca
+  // duplicada en la tabla, incluso para data vieja que la haya guardado
+  // explícitamente como secundaria.
+  // Si la métrica tiene un rate pair en DIRECT_METRIC_RATES (lib/cost-methods.ts),
   // mostramos dos inputs (tarifa + delivery) con cálculo bidireccional. Si
   // no, mostramos solo el input de delivery.
   const [draft, setDraft] = useState<
     Array<{ slug: string; delivery: string; rate: string }>
   >(
     Object.entries(metrics)
-      .filter(([k]) => directBySlug.has(k))
+      .filter(([k]) => directBySlug.has(k) && k !== primaryMetricSlug)
       .map(([k, v]) => {
         const pair = DIRECT_METRIC_RATES[k];
         const rateVal = pair ? metrics[pair.rate] : undefined;
@@ -1141,16 +1145,37 @@ function MetricsEditor({
   );
 
   // commit construye el metrics_json completo:
-  //  - los slugs direct con su valor de delivery
-  //  - los rates (slug cpX) con su valor cuando exista
-  //  - cualquier otra calculated que estuviera previamente almacenada se
-  //    descarta: las calculated se derivan al render. Los rates SÍ los
-  //    persistimos porque son entrada del usuario, no derivados.
+  //  - Las keys de la métrica principal (delivery + rate) se preservan
+  //    desde metrics_json: este editor NO debe pisarlas (las maneja
+  //    PrincipalPairEditor).
+  //  - Los slugs direct secundarios con su valor de delivery.
+  //  - Los rates (slug cpX) de cada secundaria cuando exista.
+  //  - El resto de calculated previamente almacenadas se descartan: se
+  //    derivan al render. Los rates SÍ se persisten porque son entrada
+  //    del usuario, no derivados.
   const commit = (next: typeof draft) => {
     const obj: Record<string, number> = {};
+
+    // Preservar la métrica principal (delivery + rate) intacta.
+    if (primaryMetricSlug) {
+      const pd = metrics[primaryMetricSlug];
+      if (typeof pd === "number" && Number.isFinite(pd)) {
+        obj[primaryMetricSlug] = pd;
+      }
+      const primaryPair = DIRECT_METRIC_RATES[primaryMetricSlug];
+      if (primaryPair) {
+        const pr = metrics[primaryPair.rate];
+        if (typeof pr === "number" && Number.isFinite(pr)) {
+          obj[primaryPair.rate] = pr;
+        }
+      }
+    }
+
+    // Secundarias del draft.
     for (const { slug, delivery, rate } of next) {
       const k = slug.trim();
       if (!k) continue;
+      if (k === primaryMetricSlug) continue; // safety: nunca duplicar la principal
       const d = Number.parseFloat(delivery);
       if (Number.isFinite(d)) obj[k] = d;
       const pair = DIRECT_METRIC_RATES[k];
