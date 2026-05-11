@@ -105,12 +105,20 @@ async function main() {
     { slug: "leads",       name: "Leads",       kind: "direct", unit: "leads", sortOrder: 8 },
     { slug: "installs",    name: "App Installs", kind: "direct", unit: "installs", sortOrder: 9 },
     { slug: "visits",      name: "Site Visits", kind: "direct", unit: "visits", sortOrder: 10 },
-    { slug: "ctr",  name: "CTR",  kind: "calculated", unit: "%", formula: "clicks / impressions", sortOrder: 50 },
-    { slug: "cpc",  name: "CPC",  kind: "calculated", unit: "$", formula: "amount / clicks", sortOrder: 51 },
-    { slug: "cpm",  name: "CPM",  kind: "calculated", unit: "$", formula: "amount / impressions × 1000", sortOrder: 52 },
-    { slug: "cpv",  name: "CPV",  kind: "calculated", unit: "$", formula: "amount / views", sortOrder: 53 },
-    { slug: "cpa",  name: "CPA",  kind: "calculated", unit: "$", formula: "amount / conversions", sortOrder: 54 },
-    { slug: "vtr",  name: "VTR (View-Through Rate)", kind: "calculated", unit: "%", formula: "views / impressions", sortOrder: 55 },
+    { slug: "ctr",   name: "CTR",  kind: "calculated", unit: "%", formula: "clicks / impressions", sortOrder: 50 },
+    { slug: "cpc",   name: "CPC",  kind: "calculated", unit: "$", formula: "amount / clicks", sortOrder: 51 },
+    { slug: "cpm",   name: "CPM",  kind: "calculated", unit: "$", formula: "amount / impressions × 1000", sortOrder: 52 },
+    { slug: "cpv",   name: "CPV",  kind: "calculated", unit: "$", formula: "amount / views", sortOrder: 53 },
+    { slug: "cpa",   name: "CPA",  kind: "calculated", unit: "$", formula: "amount / conversions", sortOrder: 54 },
+    { slug: "vtr",   name: "VTR (View-Through Rate)", kind: "calculated", unit: "%", formula: "views / impressions", sortOrder: 55 },
+    // Cost-per-X adicionales — habilitan editor bidireccional rate↔delivery
+    // para las direct que antes no tenían par (ver lib/cost-methods.ts).
+    { slug: "cpr",   name: "CPR (Cost per Reach)",       kind: "calculated", unit: "$", formula: "amount / reach",       sortOrder: 56 },
+    { slug: "cpe",   name: "CPE (Cost per Engagement)",  kind: "calculated", unit: "$", formula: "amount / engagements", sortOrder: 57 },
+    { slug: "cpf",   name: "CPF (Cost per Follower)",    kind: "calculated", unit: "$", formula: "amount / followers",   sortOrder: 58 },
+    { slug: "cpl",   name: "CPL (Cost per Lead)",        kind: "calculated", unit: "$", formula: "amount / leads",       sortOrder: 59 },
+    { slug: "cpi",   name: "CPI (Cost per Install)",     kind: "calculated", unit: "$", formula: "amount / installs",    sortOrder: 60 },
+    { slug: "cpvis", name: "CPVis (Cost per Visit)",     kind: "calculated", unit: "$", formula: "amount / visits",      sortOrder: 61 },
   ]);
 
   // ════════════════════════════════════════════════════════════════════════

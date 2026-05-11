@@ -42,6 +42,7 @@ import {
   COST_METHOD_PRIMARY_METRIC,
   COST_METHOD_PAIR,
   COST_METHODS,
+  DIRECT_METRIC_RATES,
   type CostMethod,
 } from "@/lib/cost-methods";
 
@@ -875,6 +876,7 @@ function PlacementDetails({
           allMetrics={allMetrics}
           amountUsd={placement.amountUsd}
           editable={editable}
+          primaryMetricSlug={primarySlug}
           onCommit={(m) => update({ metricsJson: m })}
         />
       </div>
@@ -1099,44 +1101,116 @@ function MetricsEditor({
   allMetrics,
   amountUsd,
   editable,
+  primaryMetricSlug,
   onCommit,
 }: {
   metrics: Record<string, number>;
   allMetrics: MetricCatalog[];
   amountUsd: number;
   editable: boolean;
+  primaryMetricSlug: string | null;
   onCommit: (m: Record<string, number>) => void;
 }) {
-  // Solo guardamos las métricas direct. Calculated se derivan al render.
+  // Solo guardamos las métricas direct + sus rates equivalentes. Las demás
+  // calculated se derivan al render desde el draft.
   const directMetrics = allMetrics.filter((m) => m.kind === "direct");
   const calculatedMetrics = allMetrics.filter((m) => m.kind === "calculated");
   const directBySlug = new Map(directMetrics.map((m) => [m.slug, m]));
 
-  const [draft, setDraft] = useState<Array<{ slug: string; value: string }>>(
+  // Cada row del editor representa una métrica direct (delivery). Si la
+  // métrica tiene un rate pair en DIRECT_METRIC_RATES (lib/cost-methods.ts),
+  // mostramos dos inputs (tarifa + delivery) con cálculo bidireccional. Si
+  // no, mostramos solo el input de delivery.
+  const [draft, setDraft] = useState<
+    Array<{ slug: string; delivery: string; rate: string }>
+  >(
     Object.entries(metrics)
       .filter(([k]) => directBySlug.has(k))
-      .map(([k, v]) => ({ slug: k, value: String(v) })),
+      .map(([k, v]) => {
+        const pair = DIRECT_METRIC_RATES[k];
+        const rateVal = pair ? metrics[pair.rate] : undefined;
+        return {
+          slug: k,
+          delivery: String(v),
+          rate:
+            typeof rateVal === "number" && Number.isFinite(rateVal)
+              ? String(rateVal)
+              : "",
+        };
+      }),
   );
 
+  // commit construye el metrics_json completo:
+  //  - los slugs direct con su valor de delivery
+  //  - los rates (slug cpX) con su valor cuando exista
+  //  - cualquier otra calculated que estuviera previamente almacenada se
+  //    descarta: las calculated se derivan al render. Los rates SÍ los
+  //    persistimos porque son entrada del usuario, no derivados.
   const commit = (next: typeof draft) => {
     const obj: Record<string, number> = {};
-    for (const { slug, value } of next) {
+    for (const { slug, delivery, rate } of next) {
       const k = slug.trim();
       if (!k) continue;
-      const v = Number.parseFloat(value);
-      if (Number.isFinite(v)) obj[k] = v;
+      const d = Number.parseFloat(delivery);
+      if (Number.isFinite(d)) obj[k] = d;
+      const pair = DIRECT_METRIC_RATES[k];
+      if (pair) {
+        const r = Number.parseFloat(rate);
+        if (Number.isFinite(r) && r > 0) obj[pair.rate] = Number(r.toFixed(6));
+      }
     }
     onCommit(obj);
   };
 
-  const updateRow = (idx: number, partial: Partial<{ slug: string; value: string }>) => {
+  // Editar la tarifa de una row: recomputa delivery desde el amount del
+  // placement. Idéntica lógica al PrincipalPairEditor pero indexada por row.
+  const onChangeRate = (idx: number, newRate: number) => {
+    const row = draft[idx];
+    const pair = DIRECT_METRIC_RATES[row.slug];
+    const next = draft.map((r, i) => {
+      if (i !== idx) return r;
+      if (newRate <= 0) return { ...r, rate: "", delivery: "" };
+      const newDelivery =
+        pair && amountUsd > 0 ? (amountUsd * pair.multiplier) / newRate : 0;
+      return {
+        ...r,
+        rate: String(Number(newRate.toFixed(6))),
+        delivery: pair ? String(Math.round(newDelivery)) : r.delivery,
+      };
+    });
+    setDraft(next);
+    commit(next);
+  };
+
+  const onChangeDelivery = (idx: number, newDelivery: number) => {
+    const row = draft[idx];
+    const pair = DIRECT_METRIC_RATES[row.slug];
+    const next = draft.map((r, i) => {
+      if (i !== idx) return r;
+      if (newDelivery <= 0) return { ...r, rate: "", delivery: "" };
+      const newRate =
+        pair && amountUsd > 0 ? (amountUsd * pair.multiplier) / newDelivery : 0;
+      return {
+        ...r,
+        delivery: String(Math.round(newDelivery)),
+        rate: pair ? String(Number(newRate.toFixed(6))) : r.rate,
+      };
+    });
+    setDraft(next);
+    commit(next);
+  };
+
+  const updateRow = (
+    idx: number,
+    partial: Partial<{ slug: string; delivery: string; rate: string }>,
+  ) => {
     const next = draft.map((r, i) => (i === idx ? { ...r, ...partial } : r));
     setDraft(next);
     commit(next);
   };
 
   const addRow = (slug = "") => {
-    setDraft((d) => [...d, { slug, value: "" }]);
+    setDraft((d) => [...d, { slug, delivery: "", rate: "" }]);
   };
 
   const removeRow = (idx: number) => {
@@ -1145,14 +1219,22 @@ function MetricsEditor({
     commit(next);
   };
 
-  // Slugs ya usados en el draft, para filtrar el dropdown
+  // Slugs ya usados en el draft + la métrica principal del placement, para
+  // filtrar el dropdown (no permitir duplicar).
   const usedSlugs = new Set(draft.map((d) => d.slug).filter(Boolean));
+  if (primaryMetricSlug) usedSlugs.add(primaryMetricSlug);
   const availableMetrics = directMetrics.filter((m) => !usedSlugs.has(m.slug));
 
-  // Cómputo de métricas calculadas desde el draft
+  // Cómputo de métricas calculadas: la principal vive en metrics_json
+  // (la setea PrincipalPairEditor y no aparece en el draft de este editor);
+  // las secundarias son la fuente de verdad desde el draft.
   const directValues: Record<string, number> = {};
-  for (const { slug, value } of draft) {
-    const v = Number.parseFloat(value);
+  if (primaryMetricSlug) {
+    const v = metrics[primaryMetricSlug];
+    if (typeof v === "number" && Number.isFinite(v)) directValues[primaryMetricSlug] = v;
+  }
+  for (const { slug, delivery } of draft) {
+    const v = Number.parseFloat(delivery);
     if (slug && Number.isFinite(v)) directValues[slug] = v;
   }
 
@@ -1195,16 +1277,39 @@ function MetricsEditor({
           </div>
         ) : (
           <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line-soft text-[10px] font-medium uppercase tracking-[0.06em] text-muted">
+                <th className="px-2 py-1.5 text-left">Métrica</th>
+                <th className="px-2 py-1.5 text-right w-[22%]">Tarifa</th>
+                <th className="px-2 py-1.5 text-right w-[22%]">Delivery</th>
+                {editable && <th className="w-8" aria-label="acciones" />}
+              </tr>
+            </thead>
             <tbody>
               {draft.map((row, idx) => {
                 const metric = directBySlug.get(row.slug);
+                const pair = row.slug ? DIRECT_METRIC_RATES[row.slug] : undefined;
+                // Effective values: si una está cargada, computamos la otra
+                // en pantalla para el display (no se persiste hasta blur).
+                const rateNum = Number.parseFloat(row.rate);
+                const deliveryNum = Number.parseFloat(row.delivery);
+                const hasRate = Number.isFinite(rateNum) && rateNum > 0;
+                const hasDelivery = Number.isFinite(deliveryNum) && deliveryNum > 0;
+                let effRate: number | null = hasRate ? rateNum : null;
+                let effDelivery: number | null = hasDelivery ? deliveryNum : null;
+                if (pair && effRate == null && effDelivery != null && amountUsd > 0) {
+                  effRate = (amountUsd * pair.multiplier) / effDelivery;
+                }
+                if (pair && effDelivery == null && effRate != null && amountUsd > 0) {
+                  effDelivery = (amountUsd * pair.multiplier) / effRate;
+                }
                 return (
                   <tr key={idx} className="border-b border-line-soft last:border-b-0">
-                    <td className="px-2 py-1 w-[45%]">
+                    <td className="px-2 py-1">
                       <select
                         value={row.slug}
                         disabled={!editable}
-                        onChange={(e) => updateRow(idx, { slug: e.target.value })}
+                        onChange={(e) => updateRow(idx, { slug: e.target.value, rate: "", delivery: "" })}
                         className="w-full text-xs bg-transparent focus:outline-none disabled:opacity-50"
                       >
                         {row.slug && !metric && (
@@ -1222,16 +1327,21 @@ function MetricsEditor({
                       </select>
                     </td>
                     <td className="px-2 py-1">
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={row.value}
-                        placeholder="0"
+                      {pair ? (
+                        <RateInput
+                          value={effRate}
+                          disabled={!editable}
+                          onCommit={(v) => onChangeRate(idx, v)}
+                        />
+                      ) : (
+                        <span className="block text-right text-[11px] text-stone-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1">
+                      <DeliveryInput
+                        value={effDelivery}
                         disabled={!editable}
-                        onChange={(e) =>
-                          updateRow(idx, { value: e.target.value })
-                        }
-                        className="w-full font-mono text-xs bg-transparent text-right focus:outline-none disabled:opacity-50"
+                        onCommit={(v) => onChangeDelivery(idx, v)}
                       />
                     </td>
                     {editable && (
