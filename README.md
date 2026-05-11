@@ -146,18 +146,37 @@ lib/
 ### Cost method principal por placement
 - `media_plan_placements.cost_method` (dCPV, dCPC, dCPM, etc.) marca la
   **métrica principal** del placement. Mapping en
-  [editor.tsx](app/(app)/proyectos/[code]/planes/[planId]/editor.tsx):
+  [`lib/cost-methods.ts`](lib/cost-methods.ts) (`COST_METHOD_PRIMARY_METRIC`):
   `dCPV→views`, `dCPM→impressions`, `dCPC→clicks`, etc.
 - El editor permite ingresar **rate** o **delivery** indistintamente (el
-  banner calcula el otro automáticamente).
+  banner principal calcula el otro automáticamente).
 - Las métricas se guardan en `media_plan_placements.metrics_json` (jsonb)
-  con keys = slugs del catálogo `metrics_catalog`.
+  con keys = slugs del catálogo `metrics_catalog`. Se persiste el delivery
+  (impressions, clicks, etc.) y el rate (cpm, cpc, etc.) ingresado.
+
+### Indicadores estimados (métricas secundarias)
+- El bloque debajo de la métrica principal permite agregar métricas
+  adicionales (reach, engagements, leads, etc.).
+- Cada secundaria con rate canónico tiene el **mismo editor bidireccional**
+  que la principal: ingresás tarifa o delivery, la app calcula el otro
+  desde `amount × multiplier`. Mapping en `DIRECT_METRIC_RATES` de
+  [`lib/cost-methods.ts`](lib/cost-methods.ts):
+  - `impressions ↔ cpm` (×1000)
+  - `clicks ↔ cpc`, `views ↔ cpv`, `conversions ↔ cpa`
+  - `reach ↔ cpr`, `engagements ↔ cpe`, `followers ↔ cpf`
+  - `leads ↔ cpl`, `installs ↔ cpi`, `visits ↔ cpvis`
+- `frequency` no tiene par (es un ratio `impressions/reach`) → solo input
+  de delivery.
+- La métrica principal del cost method queda **excluida del dropdown Y del
+  draft inicial** de secundarias para no duplicarse.
 
 ### Métricas: catálogo direct vs calculated
 - `metric_kind = 'direct'` → ingresadas por el planner (impressions, clicks,
-  views, conversions, etc.).
-- `metric_kind = 'calculated'` → derivadas por fórmula de otras (`ctr`,
-  `cpc`, `cpm`, etc.). La fórmula está en `metrics_catalog.formula`.
+  views, conversions, reach, engagements, followers, leads, installs,
+  visits, frequency).
+- `metric_kind = 'calculated'` → derivadas por fórmula de otras. Hoy en
+  catálogo: `ctr`, `cpc`, `cpm`, `cpv`, `cpa`, `vtr`, `cpr`, `cpe`, `cpf`,
+  `cpl`, `cpi`, `cpvis`. La fórmula está en `metrics_catalog.formula`.
 
 ### Mercados como catálogo editable
 - `markets` puede tener países (`costa-rica`, `panama`) o agrupaciones
