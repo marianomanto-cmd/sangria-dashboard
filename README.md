@@ -25,16 +25,29 @@ npm install
 
 ### 3. Variables de entorno
 
-Crear `.env.local` en la raíz del proyecto con:
+Copiar `.env.example` a `.env.local` y completar las 5 variables del
+proyecto Supabase de la **agencia** (pedir credenciales por canal seguro o
+acceso a la org Supabase con rol Developer):
 
 ```
-DATABASE_URL=postgresql://postgres.bgbqraoowtoyzgzubple:TU_PASSWORD@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
+DATABASE_URL              # postgres pooled (puerto 6543) — server-only
+NEXT_PUBLIC_SUPABASE_URL  # https://<ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY  # sb_publishable_... (pública, OK al cliente)
+SUPABASE_SERVICE_ROLE_KEY # sb_secret_... (server-only, NUNCA al cliente)
 ```
 
 **Importante:**
-- Usar el **Transaction Pooler** (puerto **6543**), no el Session Pooler (5432) ni la Direct Connection.
-- El password sale de Supabase → Settings → Database → Database password → Reset (Supabase no muestra el password antiguo).
-- El connection string completo se copia desde Supabase → Settings → Database → Connection string → tab **Transaction pooler**.
+- `DATABASE_URL` tiene que ser SIEMPRE la del **Transaction Pooler**
+  (puerto **6543**, host `aws-0-<region>.pooler.supabase.com`, user
+  `postgres.<project-ref>`). La direct connection
+  (`db.<ref>.supabase.co:5432`) en proyectos Supabase nuevos resuelve sólo
+  a IPv6 y falla desde Vercel/serverless con `getaddrinfo ENOTFOUND`. El
+  driver en `db/index.ts` está configurado con `prepare: false` + DNS
+  `ipv4first` justamente para el pooler.
+- El connection string completo se copia desde Supabase → Settings →
+  Database → Connection string → tab **Transaction pooler**.
+- Si necesitás resetear el password, Supabase no lo muestra de nuevo
+  (Settings → Database → Database password → Reset).
 
 ### 4. Correr el dev server
 
@@ -54,7 +67,29 @@ npm run db:studio   # Abre Drizzle Studio
 ```
 
 `db:push` usa `--force` (ver `package.json`). Útil para desarrollo; para
-producción real conviene migrar a `db:generate` + `db:migrate`.
+producción real, generar migración SQL con `db:generate` y aplicarla
+desde el SQL editor de Supabase (más seguro: deja registro en el historial
+de queries y no requiere apuntar `DATABASE_URL` a prod desde local).
+
+### 6. Inicializar un proyecto Supabase desde cero
+
+Si la DB todavía no fue creada (proyecto Supabase nuevo, agencia setea otro
+ambiente, staging propio):
+
+1. Crear el proyecto en Supabase.
+2. SQL editor → pegar [`db/migrations/0000_initial_schema.sql`](db/migrations/0000_initial_schema.sql)
+   → Run. Crea 16 tablas + 7 enums + FKs + índices.
+3. SQL editor → nueva query → pegar [`db/migrations/0001_seed_data.sql`](db/migrations/0001_seed_data.sql)
+   → Run. Carga datos dummy (4 clientes, 11 proyectos, 17 planes, etc.).
+4. Setear las 5 env vars en `.env.local` (o Vercel para deploy).
+5. Verificación rápida en SQL editor:
+   ```sql
+   SELECT 'clients' AS t, count(*) FROM clients
+   UNION ALL SELECT 'projects', count(*) FROM projects
+   UNION ALL SELECT 'media_plans', count(*) FROM media_plans
+   UNION ALL SELECT 'publishers', count(*) FROM publishers;
+   ```
+   Esperado: clients=4, projects=11, media_plans=17, publishers=11.
 
 ---
 
@@ -106,6 +141,10 @@ db/
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
     clients.ts, billing.ts, audit-log.ts, budget-origins.ts
+  migrations/               # SQL para inicializar una DB Supabase desde cero
+    0000_initial_schema.sql # schema completo (pegar 1ro en SQL editor)
+    0001_seed_data.sql      # datos dummy (pegar 2do, idéntico a scripts/seed.ts)
+    meta/                   # metadata de drizzle-kit (no tocar a mano)
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -267,7 +306,10 @@ static pages".
 ### IPv4-first en DNS
 [db/index.ts](db/index.ts) llama `dns.setDefaultResultOrder("ipv4first")`.
 Vercel a veces no tiene IPv6 funcional, y el pooler de Supabase resuelve a
-ambos; preferir IPv4 evita `ENETUNREACH`.
+ambos; preferir IPv4 evita `ENETUNREACH`. **Nota**: la "direct connection"
+(`db.<ref>.supabase.co:5432`) en proyectos nuevos resuelve sólo a IPv6 —
+ni siquiera con `ipv4first` se puede usar desde Vercel. Por eso la app
+está pensada para el pooler exclusivamente.
 
 ### Server Actions
 Todos los CRUD viven en `app/actions/*.ts` con `"use server"`. Cada uno
@@ -301,10 +343,22 @@ Y parsear con `new Date(str)` después.
 ## Despliegue (Vercel)
 
 - Branch principal: `main`. Cada push trigger un deploy.
-- Variable obligatoria en Vercel → Settings → Environment Variables:
-  - `DATABASE_URL` (mismo formato que `.env.local`, pegado en las 3 envs:
-    Production, Preview, Development).
-- Si cambiás la variable, Vercel **no aplica el cambio en deploys
+- 5 variables obligatorias en Vercel → Settings → Environment Variables
+  (pegadas en Production, Preview, Development):
+
+  | Variable | Valor | Sensitive |
+  |---|---|---|
+  | `DATABASE_URL` | Transaction Pooler URL (puerto 6543) | no |
+  | `NEXT_PUBLIC_SUPABASE_URL` | `https://<ref>.supabase.co` | no |
+  | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `sb_publishable_...` | no |
+  | `SUPABASE_SERVICE_ROLE_KEY` | `sb_secret_...` | **sí** |
+
+- ⚠️ `DATABASE_URL` **debe ser la del pooler**, no la direct connection.
+  La direct (`db.<ref>.supabase.co:5432`) en proyectos Supabase nuevos
+  resuelve sólo a IPv6 y Vercel falla con `getaddrinfo ENOTFOUND`.
+- La `SUPABASE_SERVICE_ROLE_KEY` marcala como **Sensitive** (checkbox en
+  Vercel) — la oculta del UI tras guardarla.
+- Si cambiás cualquier variable, Vercel **no aplica el cambio en deploys
   existentes**: hay que **Redeploy** (Deployments → último → ⋯ → Redeploy,
   desmarcando "Use existing Build Cache").
 
