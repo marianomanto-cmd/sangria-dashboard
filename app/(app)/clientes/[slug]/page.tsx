@@ -4,6 +4,12 @@ import { Sparkline } from "@/components/sparkline";
 import { StatusBadge } from "@/components/status-badge";
 import { getClientDetail } from "@/db/queries/client-detail";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+import {
+  DEFAULT_LANGUAGE,
+  formatDate,
+  type Language,
+  shortMonthName,
+} from "@/lib/i18n";
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -20,13 +26,14 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
 
   const detail = await getClientDetail(slug, originParam);
   if (!detail) notFound();
+  const lang: Language = detail.client.language ?? DEFAULT_LANGUAGE;
 
   return (
     <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="text-xs text-muted flex items-center gap-1.5 mb-3">
         <Link href="/clientes" className="hover:text-ink">
-          Clientes
+          {lang === "es" ? "Clientes" : "Clients"}
         </Link>
         <span className="text-stone-300">/</span>
         <span className="text-ink font-medium">{detail.client.name}</span>
@@ -36,7 +43,7 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
       <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] uppercase text-accent">
-            Cliente
+            {lang === "es" ? "Cliente" : "Client"}
           </p>
           <h1 className="text-3xl font-semibold tracking-tight mt-2 flex items-center gap-3">
             {detail.client.name}
@@ -57,7 +64,7 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
             tab={tab}
             originId={null}
             currentOriginId={detail.selectedOriginId}
-            label="Todos"
+            label={lang === "es" ? "Todos" : "All"}
             count={null}
           />
           {detail.origins.map((o) => (
@@ -77,17 +84,17 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
       {/* Resumen / Timeline tabs */}
       <div className="border-b border-line mb-6 flex gap-0">
         <TabLink slug={slug} originId={detail.selectedOriginId} target="resumen" current={tab}>
-          Resumen
+          {lang === "es" ? "Resumen" : "Summary"}
         </TabLink>
         <TabLink slug={slug} originId={detail.selectedOriginId} target="timeline" current={tab}>
-          Línea de tiempo
+          {lang === "es" ? "Línea de tiempo" : "Timeline"}
         </TabLink>
       </div>
 
       {tab === "resumen" ? (
-        <ResumenTab detail={detail} />
+        <ResumenTab detail={detail} lang={lang} />
       ) : (
-        <TimelineTab detail={detail} />
+        <TimelineTab detail={detail} lang={lang} />
       )}
     </main>
   );
@@ -99,8 +106,10 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
 
 function ResumenTab({
   detail,
+  lang,
 }: {
   detail: NonNullable<Awaited<ReturnType<typeof getClientDetail>>>;
+  lang: Language;
 }) {
   const { kpis, projects } = detail;
 
@@ -108,14 +117,20 @@ function ResumenTab({
     <>
       {/* KPIs banda */}
       <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 mb-6">
-        <Kpi label="Proyectos" value={String(kpis.totalProjects)} />
-        <Kpi label="Activos" value={String(kpis.activeProjects)} />
         <Kpi
-          label="Pipeline activo"
+          label={lang === "es" ? "Proyectos" : "Projects"}
+          value={String(kpis.totalProjects)}
+        />
+        <Kpi
+          label={lang === "es" ? "Activos" : "Active"}
+          value={String(kpis.activeProjects)}
+        />
+        <Kpi
+          label={lang === "es" ? "Pipeline activo" : "Active pipeline"}
           value={formatUsdCompact(kpis.pipelineActiveUsd)}
         />
         <Kpi
-          label="Avance"
+          label={lang === "es" ? "Avance" : "Progress"}
           value={formatPct(kpis.consumptionPct)}
         />
       </section>
@@ -123,29 +138,48 @@ function ResumenTab({
       {/* Projects table */}
       <section className="rounded-lg border border-line bg-white overflow-hidden">
         <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">Proyectos</h2>
+          <h2 className="text-sm font-semibold">
+            {lang === "es" ? "Proyectos" : "Projects"}
+          </h2>
           <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            {projects.length} {detail.selectedOriginId ? "en este origen" : "totales"}
+            {projects.length}{" "}
+            {detail.selectedOriginId
+              ? lang === "es"
+                ? "en este origen"
+                : "in this origin"
+              : lang === "es"
+                ? "totales"
+                : "total"}
           </span>
         </div>
         {projects.length === 0 ? (
           <div className="px-5 py-12 text-center text-sm text-muted">
-            No hay proyectos para esta selección.
+            {lang === "es"
+              ? "No hay proyectos para esta selección."
+              : "No projects match this selection."}
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="bg-paper">
               <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-                <th className="text-left font-medium px-5 py-2.5">Proyecto</th>
-                <th className="text-left font-medium px-5 py-2.5">Estado</th>
-                <th className="text-left font-medium px-5 py-2.5">Período</th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {lang === "es" ? "Proyecto" : "Project"}
+                </th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {lang === "es" ? "Estado" : "Status"}
+                </th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {lang === "es" ? "Período" : "Period"}
+                </th>
                 <th className="text-right font-medium px-5 py-2.5">Budget</th>
-                <th className="text-right font-medium px-5 py-2.5">Gastado</th>
+                <th className="text-right font-medium px-5 py-2.5">
+                  {lang === "es" ? "Gastado" : "Spent"}
+                </th>
                 <th className="text-left font-medium px-5 py-2.5 w-[140px]">
                   Spark
                 </th>
                 <th className="text-left font-medium px-5 py-2.5 w-[180px]">
-                  Avance
+                  {lang === "es" ? "Avance" : "Progress"}
                 </th>
               </tr>
             </thead>
@@ -173,7 +207,8 @@ function ResumenTab({
                       <StatusBadge status={p.status} />
                     </td>
                     <td className="px-5 py-3 text-ink-2 font-mono text-xs">
-                      {p.startDate} → {p.endDate}
+                      {formatDate(p.startDate, lang)} →{" "}
+                      {formatDate(p.endDate, lang)}
                     </td>
                     <td className="px-5 py-3 text-right font-mono text-ink-2">
                       {formatUsd(p.totalBudgetUsd)}
@@ -218,11 +253,6 @@ function ResumenTab({
 // Timeline tab — gantt chart con consumo en la barra
 // ────────────────────────────────────────────────────────────────────────────
 
-const MONTH_LABELS_ES = [
-  "Ene", "Feb", "Mar", "Abr", "May", "Jun",
-  "Jul", "Ago", "Sep", "Oct", "Nov", "Dic",
-];
-
 function enumerateMonths(start: string, end: string): string[] {
   const out: string[] = [];
   const [sy, sm] = start.split("-").map(Number);
@@ -257,15 +287,19 @@ function dateToMonthFraction(date: string, months: string[]): number {
 
 function TimelineTab({
   detail,
+  lang,
 }: {
   detail: NonNullable<Awaited<ReturnType<typeof getClientDetail>>>;
+  lang: Language;
 }) {
   const dated = detail.projects.filter((p) => p.startDate && p.endDate);
 
   if (dated.length === 0) {
     return (
       <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center text-sm text-muted">
-        No hay proyectos con fechas para mostrar en la línea de tiempo.
+        {lang === "es"
+          ? "No hay proyectos con fechas para mostrar en la línea de tiempo."
+          : "No projects with dates available for the timeline."}
       </div>
     );
   }
@@ -284,9 +318,14 @@ function TimelineTab({
   return (
     <section className="rounded-lg border border-line bg-white p-5">
       <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-sm font-semibold">Línea de tiempo</h2>
+        <h2 className="text-sm font-semibold">
+          {lang === "es" ? "Línea de tiempo" : "Timeline"}
+        </h2>
         <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-          {dated.length} proyecto{dated.length === 1 ? "" : "s"}
+          {dated.length}{" "}
+          {lang === "es"
+            ? `proyecto${dated.length === 1 ? "" : "s"}`
+            : `project${dated.length === 1 ? "" : "s"}`}
         </span>
       </div>
 
@@ -300,7 +339,10 @@ function TimelineTab({
               className="absolute top-0 text-[10px] font-medium uppercase tracking-[0.06em] text-muted -translate-x-1/2"
               style={{ left: `${((i + 0.5) / totalMonths) * 100}%` }}
             >
-              {MONTH_LABELS_ES[Number.parseInt(m.slice(5, 7), 10) - 1]}{" "}
+              {shortMonthName(
+                Number.parseInt(m.slice(5, 7), 10) - 1,
+                lang,
+              )}{" "}
               <span className="text-stone-400">{m.slice(2, 4)}</span>
             </span>
           ))}
@@ -345,7 +387,7 @@ function TimelineTab({
                 <div
                   className="absolute top-1 h-5 rounded bg-paper-2 border border-line overflow-hidden"
                   style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-                  title={`${p.startDate} → ${p.endDate} · ${p.consumptionPct.toFixed(0)}%`}
+                  title={`${formatDate(p.startDate, lang)} → ${formatDate(p.endDate, lang)} · ${p.consumptionPct.toFixed(0)}%`}
                 >
                   <div
                     className={`absolute inset-y-0 left-0 ${
@@ -364,8 +406,9 @@ function TimelineTab({
       </div>
 
       <p className="mt-4 text-[11px] text-muted">
-        Las barras muestran el rango de fechas del proyecto; el fill es el % de
-        consumo de budget. Proyectos no activos quedan tenues.
+        {lang === "es"
+          ? "Las barras muestran el rango de fechas del proyecto; el fill es el % de consumo de budget. Proyectos no activos quedan tenues."
+          : "Bars show the project date range; the fill is the budget consumption %. Non-active projects appear dimmed."}
       </p>
     </section>
   );

@@ -16,6 +16,7 @@ import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { getBillingEstimate } from "@/db/queries/dashboard";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
+import { DEFAULT_LANGUAGE, formatDate } from "@/lib/i18n";
 
 function nextMonths(count: number): string[] {
   const out: string[] = [];
@@ -60,6 +61,7 @@ export default async function PlanesPage({ searchParams }: Props) {
   const filter = sp.status;
   const client = await resolveClientFromSearchParams(sp);
   const clientId = client?.id ?? null;
+  const lang = client?.language ?? DEFAULT_LANGUAGE;
   const allOrigins = await listAllBudgetOrigins({ clientId });
   const validOrigin =
     sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
@@ -126,11 +128,24 @@ export default async function PlanesPage({ searchParams }: Props) {
     archived: allPlans.filter((p) => p.status === "archived").length,
   };
 
+  const titleLabel =
+    lang === "es"
+      ? client
+        ? `Planes · ${client.name}`
+        : "Todos los planes"
+      : client
+        ? `Plans · ${client.name}`
+        : "All plans";
+  const subtitleLabel =
+    lang === "es"
+      ? `Vista cross-proyectos del media planner. ${allPlans.length} plan${allPlans.length === 1 ? "" : "es"}${client ? ` de ${client.name}` : ""}.`
+      : `Cross-project view for the media planner. ${allPlans.length} plan${allPlans.length === 1 ? "" : "s"}${client ? ` for ${client.name}` : ""}.`;
+
   return (
     <PageShell
-      eyebrow="Planes de Medios"
-      title={client ? `Planes · ${client.name}` : "Todos los planes"}
-      subtitle={`Vista cross-proyectos del media planner. ${allPlans.length} plan${allPlans.length === 1 ? "" : "es"}${client ? ` de ${client.name}` : ""}.`}
+      eyebrow={lang === "es" ? "Planes de Medios" : "Media Plans"}
+      title={titleLabel}
+      subtitle={subtitleLabel}
     >
       <BudgetOriginSelector
         origins={allOrigins}
@@ -140,11 +155,11 @@ export default async function PlanesPage({ searchParams }: Props) {
       />
 
       <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
-        <FilterPill label="Estado">
+        <FilterPill label={lang === "es" ? "Estado" : "Status"}>
           <FilterChoice
             current={filter}
             value={undefined}
-            label={`Todos (${allPlans.length})`}
+            label={`${lang === "es" ? "Todos" : "All"} (${allPlans.length})`}
             originId={validOrigin}
             clientSlug={client?.slug ?? null}
           />
@@ -174,7 +189,9 @@ export default async function PlanesPage({ searchParams }: Props) {
 
       {allPlans.length === 0 ? (
         <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center text-sm text-muted">
-          Sin planes que coincidan con el filtro.
+          {lang === "es"
+            ? "Sin planes que coincidan con el filtro."
+            : "No plans match the filter."}
         </div>
       ) : (
         <section className="rounded-lg border border-line bg-white overflow-hidden">
@@ -182,12 +199,24 @@ export default async function PlanesPage({ searchParams }: Props) {
             <thead className="bg-paper">
               <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
                 <th className="text-left font-medium px-5 py-2.5">Plan</th>
-                <th className="text-left font-medium px-5 py-2.5">Proyecto</th>
-                <th className="text-left font-medium px-5 py-2.5">Cliente</th>
-                <th className="text-left font-medium px-5 py-2.5">Origen</th>
-                <th className="text-left font-medium px-5 py-2.5">Estado</th>
-                <th className="text-left font-medium px-5 py-2.5">Período</th>
-                <th className="text-right font-medium px-5 py-2.5">Total media</th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {lang === "es" ? "Proyecto" : "Project"}
+                </th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {lang === "es" ? "Cliente" : "Client"}
+                </th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {lang === "es" ? "Origen" : "Origin"}
+                </th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {lang === "es" ? "Estado" : "Status"}
+                </th>
+                <th className="text-left font-medium px-5 py-2.5">
+                  {lang === "es" ? "Período" : "Period"}
+                </th>
+                <th className="text-right font-medium px-5 py-2.5">
+                  {lang === "es" ? "Total media" : "Media total"}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -239,9 +268,9 @@ export default async function PlanesPage({ searchParams }: Props) {
                       </span>
                     </td>
                     <td className="px-5 py-2.5 font-mono text-[11px] text-ink-2">
-                      {p.periodStart ?? "—"}
+                      {formatDate(p.periodStart, lang)}
                       <span className="text-stone-300"> → </span>
-                      {p.periodEnd ?? "—"}
+                      {formatDate(p.periodEnd, lang)}
                     </td>
                     <td className="px-5 py-2.5 text-right font-mono text-ink">
                       {totalMedia > 0 ? formatUsd(totalMedia) : "—"}
@@ -257,6 +286,7 @@ export default async function PlanesPage({ searchParams }: Props) {
       <BillingEstimateCard
         estimates={estimates}
         previousMonth={previousEstimate}
+        lang={lang}
       />
     </PageShell>
   );

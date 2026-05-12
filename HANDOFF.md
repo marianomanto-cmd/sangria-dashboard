@@ -26,6 +26,34 @@ bc625f0  Proyectos: quitar columna Spark del listado principal (#2)
 71494f9  Excel export: layout estilo plan de medios (#1)
 ```
 
+### Cambios de la sesión 12/may/2026
+
+1. **Clientes CRUD + idioma operativo (en/es).** Nuevo schema enum
+   `client_language` y columna `clients.language` (default `'en'`).
+   Página de admin en `/configuracion/clientes` para alta/edición de
+   clientes con nombre, prefijo, idioma y estado. Server actions en
+   `app/actions/clients.ts` (`createClient`, `updateClient`). El idioma
+   se elige en alta y en cualquier momento desde el admin.
+
+2. **i18n: fechas + exports respetan el idioma del cliente.** Nuevo
+   módulo `lib/i18n.ts` con `Language`, `formatDate`, `formatMonth` y un
+   diccionario `t(key, lang)`. La pieza clave: cuando hay un cliente
+   seleccionado en el filtro global, las fechas y los exports se
+   renderizan en su idioma; sin filtro ("Todos"), default `'en'`.
+   Páginas actualizadas: Dashboard, `/proyectos`, `/planes`, `/billing`,
+   `/clientes/[slug]`, `/proyectos/[code]`, `/proyectos/[code]/planes/[planId]`.
+   Componentes: `billing-estimate-card`, `facturacion-chart`,
+   `projects-table-expandable`, `dashboard-view`. Exports PDF + Excel
+   del plan toman el `clients.language` del plan exportado y traducen
+   labels/headers/dates. Las **métricas** (clicks, views, impressions,
+   cpm, cpc) **quedan en inglés** por convención de la industria — esa
+   fue la regla explícita del pedido.
+
+3. **DB cambios**: necesario correr `npm run db:push` para aplicar el
+   enum `client_language` + columna `clients.language NOT NULL DEFAULT 'en'`.
+   El seed (`scripts/seed.ts`) asigna idiomas: Copa Airlines (es),
+   Cervecería Andina (es), Banco Pacífico (en), Tienda Roma (es).
+
 ### Cambios de la sesión 11/may/2026 (PRs #3, #5)
 
 1. **Bug fix — Management Fee mostraba $0 en billing (PR #3).** Para fees
@@ -371,6 +399,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Catálogo de cost methods, etc.         | `db/schema.ts` (enums) + `editor.tsx` (mapping principal) |
 | Tocar el picker / filtro global cliente| `components/topbar-client-picker.tsx`, `lib/client-filter*.ts` |
 | Agregar una ruta al filtro de cliente  | `CLIENT_FILTER_ROUTES` en `lib/client-filter.ts`          |
+| Cambiar el idioma de un cliente        | `/configuracion/clientes` o columna `clients.language`     |
+| Agregar/traducir strings nuevas        | `DICT` en `lib/i18n.ts` + usar `t(key, lang)` en JSX       |
+| Cambiar formato de fechas en la app    | `formatDate` / `formatMonth` en `lib/i18n.ts`              |
 | Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
 | Agregar/cambiar pares rate↔delivery del editor | `DIRECT_METRIC_RATES` en `lib/cost-methods.ts` + nueva calculated metric en `scripts/seed.ts` con fórmula `amount / <delivery>` |
 | Editor de métricas del placement       | `MetricsEditor` y `PrincipalPairEditor` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx` |

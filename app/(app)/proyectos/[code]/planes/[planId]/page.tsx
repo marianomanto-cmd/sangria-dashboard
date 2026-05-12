@@ -6,6 +6,7 @@ import {
   listMetrics,
   listPublishersForClient,
 } from "@/app/actions/plans";
+import { DEFAULT_LANGUAGE, type Language } from "@/lib/i18n";
 import { PlanEditor } from "./editor";
 
 type Props = {
@@ -17,6 +18,7 @@ export default async function PlanDetailPage({ params }: Props) {
   const detail = await getPlanDetail(planId);
   if (!detail) notFound();
   if (detail.project.code !== code) notFound();
+  const lang: Language = detail.client.language ?? DEFAULT_LANGUAGE;
 
   const [allPublishers, allMarkets, allMetrics] = await Promise.all([
     listPublishersForClient(detail.client.id),
@@ -31,7 +33,7 @@ export default async function PlanDetailPage({ params }: Props) {
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
         <Link href="/proyectos" className="hover:text-ink">
-          Proyectos
+          {lang === "es" ? "Proyectos" : "Projects"}
         </Link>
         <span className="text-stone-300">/</span>
         <Link href={`/clientes/${detail.client.slug}`} className="hover:text-ink">
@@ -50,6 +52,7 @@ export default async function PlanDetailPage({ params }: Props) {
         allPublishers={allPublishers}
         allMarkets={allMarkets}
         allMetrics={allMetrics}
+        lang={lang}
       />
     </main>
   );

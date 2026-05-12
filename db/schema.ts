@@ -25,6 +25,12 @@ export const clientStatus = pgEnum("client_status", [
   "archived",
 ]);
 
+// Idioma en el que se opera el cliente. Default 'en' para todos. Afecta
+// dates, exports (PDF/Excel) y labels de la UI cuando el filtro global de
+// cliente apunta a ese cliente. Las métricas (clicks, views, impressions)
+// quedan siempre en inglés.
+export const clientLanguage = pgEnum("client_language", ["en", "es"]);
+
 export const projectStatus = pgEnum("project_status", [
   "planning",
   "active",
@@ -153,6 +159,7 @@ export const clients = pgTable("clients", {
   prefix: text("prefix"),                        // "COPA" — se usa en code de proyectos
   logoUrl: text("logo_url"),
   status: clientStatus("status").notNull().default("active"),
+  language: clientLanguage("language").notNull().default("en"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

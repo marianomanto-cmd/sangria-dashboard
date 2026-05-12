@@ -6,6 +6,11 @@ import { StatusBadge } from "@/components/status-badge";
 import { getBillingEstimate } from "@/db/queries/dashboard";
 import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+import {
+  DEFAULT_LANGUAGE,
+  formatDate,
+  type Language,
+} from "@/lib/i18n";
 
 function nextMonths(count: number): string[] {
   const out: string[] = [];
@@ -68,6 +73,7 @@ export default async function ProjectDetailPage({ params }: Props) {
   if (!detail) notFound();
 
   const { project, client, budgetOrigin, plans } = detail;
+  const lang: Language = client.language ?? DEFAULT_LANGUAGE;
 
   const months = nextMonths(2);
   const prevMonth = previousMonth();
@@ -91,7 +97,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
         <Link href="/proyectos" className="hover:text-ink">
-          Proyectos
+          {lang === "es" ? "Proyectos" : "Projects"}
         </Link>
         <span className="text-stone-300">/</span>
         <Link href={`/clientes/${client.slug}`} className="hover:text-ink">
@@ -104,7 +110,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       <header className="mb-6 flex items-end justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] uppercase text-accent">
-            Proyecto
+            {lang === "es" ? "Proyecto" : "Project"}
           </p>
           <h1 className="text-3xl font-semibold tracking-tight mt-2 flex items-center gap-3 flex-wrap">
             {project.name}
@@ -117,13 +123,13 @@ export default async function ProjectDetailPage({ params }: Props) {
           className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 transition-colors"
         >
           <Plus size={14} strokeWidth={2.5} />
-          Nuevo plan
+          {lang === "es" ? "Nuevo plan" : "New plan"}
         </Link>
       </header>
 
       {/* Metadata strip */}
       <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-3 mb-6">
-        <Meta label="Cliente">
+        <Meta label={lang === "es" ? "Cliente" : "Client"}>
           <Link
             href={`/clientes/${client.slug}`}
             className="text-ink hover:underline font-medium text-sm"
@@ -143,25 +149,27 @@ export default async function ProjectDetailPage({ params }: Props) {
             {budgetOrigin.name}
           </span>
         </Meta>
-        <Meta label="Período">
+        <Meta label={lang === "es" ? "Período" : "Period"}>
           <span className="font-mono text-sm text-ink-2">
-            {project.startDate ?? "—"}
+            {formatDate(project.startDate, lang)}
             <span className="text-stone-300"> → </span>
             {(() => {
               const ends = plans.map((p) => p.periodEnd).filter((d): d is string => !!d).sort();
-              return ends.length > 0 ? ends[ends.length - 1] : "—";
+              return ends.length > 0 ? formatDate(ends[ends.length - 1], lang) : "—";
             })()}
           </span>
           <p className="text-[10px] text-muted mt-0.5">
-            fin derivado del último placement
+            {lang === "es"
+              ? "fin derivado del último placement"
+              : "end derived from the latest placement"}
           </p>
         </Meta>
-        <Meta label="Total gross budget">
+        <Meta label={lang === "es" ? "Total gross budget" : "Total gross budget"}>
           <span className="font-mono text-sm font-semibold tabular-nums text-ink">
             {totalBudget > 0 ? formatUsd(totalBudget) : "—"}
           </span>
         </Meta>
-        <Meta label="Cobertura planificada">
+        <Meta label={lang === "es" ? "Cobertura planificada" : "Planned coverage"}>
           <span
             className={`font-mono text-sm font-semibold tabular-nums ${
               planningCoveragePct > 100 ? "text-warn" : "text-ink"
@@ -170,7 +178,9 @@ export default async function ProjectDetailPage({ params }: Props) {
             {totalBudget > 0 ? formatPct(planningCoveragePct, 0) : "—"}
             {totalBudget > 0 && (
               <span className="text-muted text-xs font-normal ml-1">
-                ({formatUsdCompact(totalPlanned)} de {formatUsdCompact(totalBudget)})
+                ({formatUsdCompact(totalPlanned)}{" "}
+                {lang === "es" ? "de" : "of"}{" "}
+                {formatUsdCompact(totalBudget)})
               </span>
             )}
           </span>
@@ -181,30 +191,33 @@ export default async function ProjectDetailPage({ params }: Props) {
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">
-            Planes
+            {lang === "es" ? "Planes" : "Plans"}
             <span className="ml-2 text-xs font-normal text-muted">
               ({plans.length} peer{plans.length === 1 ? "" : "s"})
             </span>
           </h2>
           <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
-            gastado: {formatUsdCompact(totalSpent)}
+            {lang === "es" ? "gastado" : "spent"}:{" "}
+            {formatUsdCompact(totalSpent)}
           </span>
         </div>
 
         {plans.length === 0 ? (
           <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">
-            <p className="text-sm font-medium text-ink-2">Sin planes todavía</p>
+            <p className="text-sm font-medium text-ink-2">
+              {lang === "es" ? "Sin planes todavía" : "No plans yet"}
+            </p>
             <p className="text-xs text-muted mt-1 max-w-md mx-auto">
-              El media planner crea acá los planes del proyecto (Awareness,
-              Consideration, Performance, etc.). Cada plan tiene su lifecycle
-              de aprobación independiente.
+              {lang === "es"
+                ? "El media planner crea acá los planes del proyecto (Awareness, Consideration, Performance, etc.). Cada plan tiene su lifecycle de aprobación independiente."
+                : "The media planner creates the project's plans here (Awareness, Consideration, Performance, etc.). Each plan has its own approval lifecycle."}
             </p>
             <Link
               href={`/proyectos/${project.code}/planes/nuevo`}
               className="inline-flex items-center gap-1.5 mt-4 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2"
             >
               <Plus size={14} strokeWidth={2.5} />
-              Crear primer plan
+              {lang === "es" ? "Crear primer plan" : "Create first plan"}
             </Link>
           </div>
         ) : (
@@ -215,6 +228,7 @@ export default async function ProjectDetailPage({ params }: Props) {
                 plan={p}
                 projectCode={project.code}
                 clientName={client.name}
+                lang={lang}
               />
             ))}
           </div>
@@ -225,6 +239,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         estimates={estimates}
         previousMonth={previousEstimate}
         hideProjectBreakdown
+        lang={lang}
       />
     </main>
   );
@@ -233,10 +248,12 @@ export default async function ProjectDetailPage({ params }: Props) {
 function PlanCard({
   plan,
   projectCode,
+  lang,
 }: {
   plan: ProjectPlanSummary;
   projectCode: string;
   clientName: string;
+  lang: Language;
 }) {
   const style = PLAN_STATUS_STYLE[plan.status] ?? PLAN_STATUS_STYLE.draft;
   const consumption =
@@ -281,17 +298,17 @@ function PlanCard({
       <div className="mt-3 grid grid-cols-2 gap-3">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
-            Período
+            {lang === "es" ? "Período" : "Period"}
           </p>
           <p className="font-mono text-[12px] text-ink-2 mt-0.5">
-            {plan.periodStart ?? "—"}
+            {formatDate(plan.periodStart, lang)}
             <span className="text-stone-300"> → </span>
-            {plan.periodEnd ?? "—"}
+            {formatDate(plan.periodEnd, lang)}
           </p>
         </div>
         <div>
           <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
-            Inversión
+            {lang === "es" ? "Inversión" : "Investment"}
           </p>
           <p className="font-mono text-sm font-semibold tabular-nums mt-0.5">
             {formatUsdCompact(plan.totalMediaUsd)}
@@ -309,7 +326,8 @@ function PlanCard({
             <span>
               {" · "}
               <span className={consumption > 100 ? "text-warn" : ""}>
-                {formatPct(consumption, 0)} consumido
+                {formatPct(consumption, 0)}{" "}
+                {lang === "es" ? "consumido" : "consumed"}
               </span>
             </span>
           )}
@@ -328,7 +346,8 @@ function PlanCard({
 
       {plan.lastSnapshotAt && (
         <p className="text-[10px] text-muted mt-3 font-mono">
-          última aprobación: {plan.lastSnapshotAt.toISOString().slice(0, 10)}
+          {lang === "es" ? "última aprobación" : "last approval"}:{" "}
+          {formatDate(plan.lastSnapshotAt.toISOString().slice(0, 10), lang)}
         </p>
       )}
     </Link>

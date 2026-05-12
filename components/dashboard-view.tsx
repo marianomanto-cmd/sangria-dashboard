@@ -11,6 +11,7 @@ import type {
   MonthlyTotal,
 } from "@/db/queries/dashboard";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+import type { Language } from "@/lib/i18n";
 
 type DashboardLayout = "A" | "C";
 const STORAGE_KEY = "sangria-dashboard-layout";
@@ -40,39 +41,52 @@ type Props = {
   projects: DashboardProjects;
   monthly: MonthlyTotal[];
   clientName?: string | null;
+  lang?: Language;
 };
 
-export function DashboardView({ kpis, projects, monthly, clientName }: Props) {
+export function DashboardView({
+  kpis,
+  projects,
+  monthly,
+  clientName,
+  lang = "en",
+}: Props) {
   const layout = useSyncExternalStore<DashboardLayout>(
     subscribeLayout,
     readLayout,
     () => "A",
   );
   const setLayout = writeLayout;
+  const labels = LABELS[lang];
 
   return (
     <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
       <header className="mb-8 flex items-end justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs font-semibold tracking-[0.16em] uppercase text-accent">
-            Sangria · Project OS
+            {labels.eyebrow}
           </p>
           <h1 className="text-3xl font-semibold tracking-tight mt-2">
-            Dashboard
+            {labels.title}
           </h1>
           <p className="text-sm text-muted mt-1">
             {clientName
-              ? `Filtrado por ${clientName}`
-              : "Resumen ejecutivo · todos los clientes"}
+              ? labels.filteredBy(clientName)
+              : labels.executiveSummary}
           </p>
         </div>
-        <LayoutToggle value={layout} onChange={setLayout} />
+        <LayoutToggle value={layout} onChange={setLayout} lang={lang} />
       </header>
 
       {layout === "A" ? (
-        <LayoutA kpis={kpis} projects={projects} monthly={monthly} />
+        <LayoutA
+          kpis={kpis}
+          projects={projects}
+          monthly={monthly}
+          lang={lang}
+        />
       ) : (
-        <LayoutC kpis={kpis} projects={projects} />
+        <LayoutC kpis={kpis} projects={projects} lang={lang} />
       )}
     </main>
   );
@@ -85,10 +99,13 @@ export function DashboardView({ kpis, projects, monthly, clientName }: Props) {
 function LayoutToggle({
   value,
   onChange,
+  lang,
 }: {
   value: DashboardLayout;
   onChange: (v: DashboardLayout) => void;
+  lang: Language;
 }) {
+  const labels = LABELS[lang];
   return (
     <div className="inline-flex border border-line rounded-md p-0.5 bg-paper-2">
       <button
@@ -98,7 +115,7 @@ function LayoutToggle({
         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted data-[active=true]:bg-white data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
       >
         <LayoutGrid size={13} strokeWidth={2} />
-        KPIs Hero
+        {labels.layoutA}
       </button>
       <button
         type="button"
@@ -107,7 +124,7 @@ function LayoutToggle({
         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted data-[active=true]:bg-white data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
       >
         <Table2 size={13} strokeWidth={2} />
-        Tabla protagonista
+        {labels.layoutC}
       </button>
     </div>
   );
@@ -117,22 +134,28 @@ function LayoutToggle({
 // Layout A — KPIs Hero (presentación / management)
 // ────────────────────────────────────────────────────────────────────────────
 
-function LayoutA({ kpis, projects, monthly }: Props) {
+function LayoutA({
+  kpis,
+  projects,
+  monthly,
+  lang = "en",
+}: Props) {
+  const labels = LABELS[lang];
   return (
     <>
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Pipeline activo"
+          label={labels.pipelineActive}
           value={formatUsdCompact(kpis.pipelineActiveUsd)}
-          hint={`${formatUsd(kpis.pipelineActiveUsd)} en proyectos activos`}
+          hint={`${formatUsd(kpis.pipelineActiveUsd)} ${labels.inActiveProjects}`}
         />
         <KpiCard
-          label="Clientes activos"
+          label={labels.activeClients}
           value={String(kpis.activeClients)}
-          hint="con al menos un proyecto en curso"
+          hint={labels.activeClientsHint}
         />
         <KpiCard
-          label="Facturado YTD"
+          label={labels.invoicedYtd}
           value={
             kpis.invoicedYtdUsd > 0
               ? formatUsdCompact(kpis.invoicedYtdUsd)
@@ -141,23 +164,23 @@ function LayoutA({ kpis, projects, monthly }: Props) {
           hint={
             kpis.invoicedYtdUsd > 0
               ? formatUsd(kpis.invoicedYtdUsd)
-              : "se actualiza al emitir billings"
+              : labels.invoicedYtdEmpty
           }
           variant={kpis.invoicedYtdUsd > 0 ? "default" : "empty"}
         />
         <KpiCard
-          label="Avance promedio"
+          label={labels.avgProgress}
           value={formatPct(kpis.consumptionPct)}
-          hint="gasto real / pipeline activo"
+          hint={labels.avgProgressHint}
           variant="ink"
         />
       </section>
 
       <section className="mt-6">
-        <FacturacionChart data={monthly} />
+        <FacturacionChart data={monthly} lang={lang} />
       </section>
 
-      <ProjectsSection rows={projects.rows} dense={false} />
+      <ProjectsSection rows={projects.rows} dense={false} lang={lang} />
     </>
   );
 }
@@ -169,23 +192,26 @@ function LayoutA({ kpis, projects, monthly }: Props) {
 function LayoutC({
   kpis,
   projects,
+  lang,
 }: {
   kpis: DashboardKpis;
   projects: DashboardProjects;
+  lang: Language;
 }) {
+  const labels = LABELS[lang];
   return (
     <>
       <section className="rounded-lg border border-line bg-white px-5 py-3 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
         <CompactKpi
-          label="Pipeline activo"
+          label={labels.pipelineActive}
           value={formatUsdCompact(kpis.pipelineActiveUsd)}
         />
         <CompactKpi
-          label="Clientes activos"
+          label={labels.activeClients}
           value={String(kpis.activeClients)}
         />
         <CompactKpi
-          label="Facturado YTD"
+          label={labels.invoicedYtd}
           value={
             kpis.invoicedYtdUsd > 0
               ? formatUsdCompact(kpis.invoicedYtdUsd)
@@ -194,12 +220,12 @@ function LayoutC({
           dim={kpis.invoicedYtdUsd === 0}
         />
         <CompactKpi
-          label="Avance promedio"
+          label={labels.avgProgress}
           value={formatPct(kpis.consumptionPct)}
         />
       </section>
 
-      <ProjectsSection rows={projects.rows} dense />
+      <ProjectsSection rows={projects.rows} dense lang={lang} />
     </>
   );
 }
@@ -236,9 +262,11 @@ function CompactKpi({
 function ProjectsSection({
   rows,
   dense,
+  lang,
 }: {
   rows: DashboardProjects["rows"];
   dense: boolean;
+  lang: Language;
 }) {
   const headerPad = dense ? "px-5 py-2" : "px-5 py-2.5";
   return (
@@ -246,12 +274,52 @@ function ProjectsSection({
       <div
         className={`${headerPad} border-b border-line flex items-baseline justify-between`}
       >
-        <h2 className="text-sm font-semibold">Proyectos</h2>
+        <h2 className="text-sm font-semibold">
+          {lang === "es" ? "Proyectos" : "Projects"}
+        </h2>
         <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-          {rows.length} totales · click ▶ para ver planes
+          {rows.length}{" "}
+          {lang === "es"
+            ? "totales · click ▶ para ver planes"
+            : "total · click ▶ to see plans"}
         </span>
       </div>
-      <ProjectsTableExpandable rows={rows} showClient dense={dense} />
+      <ProjectsTableExpandable rows={rows} showClient dense={dense} lang={lang} />
     </section>
   );
 }
+
+const LABELS = {
+  en: {
+    title: "Dashboard",
+    eyebrow: "Sangria · Project OS",
+    filteredBy: (n: string) => `Filtered by ${n}`,
+    executiveSummary: "Executive summary · all clients",
+    layoutA: "KPIs Hero",
+    layoutC: "Table-focused",
+    pipelineActive: "Active pipeline",
+    inActiveProjects: "across active projects",
+    activeClients: "Active clients",
+    activeClientsHint: "with at least one project in progress",
+    invoicedYtd: "Invoiced YTD",
+    invoicedYtdEmpty: "updates as billings are issued",
+    avgProgress: "Average progress",
+    avgProgressHint: "real spend / active pipeline",
+  },
+  es: {
+    title: "Dashboard",
+    eyebrow: "Sangria · Project OS",
+    filteredBy: (n: string) => `Filtrado por ${n}`,
+    executiveSummary: "Resumen ejecutivo · todos los clientes",
+    layoutA: "KPIs Hero",
+    layoutC: "Tabla protagonista",
+    pipelineActive: "Pipeline activo",
+    inActiveProjects: "en proyectos activos",
+    activeClients: "Clientes activos",
+    activeClientsHint: "con al menos un proyecto en curso",
+    invoicedYtd: "Facturado YTD",
+    invoicedYtdEmpty: "se actualiza al emitir billings",
+    avgProgress: "Avance promedio",
+    avgProgressHint: "gasto real / pipeline activo",
+  },
+} as const;

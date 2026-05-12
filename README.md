@@ -88,13 +88,15 @@ app/
     auditoria/              # /auditoria — log con diff
     configuracion/
       markets/, metricas/, publishers/   # admin de catálogos
+      clientes/               # alta/edición de clientes (nombre, prefijo, idioma, estado)
     reportes/               # placeholders por ahora
   api/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan
       export.pdf/route.ts   # PDF del plan
   actions/                  # Server Actions (CRUD)
-    plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts
+    plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
+    clients.ts
   globals.css
 
 components/                 # UI compartida
@@ -111,8 +113,9 @@ scripts/
   db-check.mjs, db-reset.mjs
 lib/
   format.ts                 # formatUsd, formatPct, formatUsdCompact
+  i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
   client-filter.ts          # helpers puros del filtro global ?client=slug
-  client-filter.server.ts   # resolver server-only slug → {id, slug, name}
+  client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
   cost-methods.ts           # mapping cost method → métrica principal
 ```
 
@@ -223,6 +226,29 @@ lib/
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` + `after_json`.
 - Vista en `/auditoria` con diff campo a campo, filtros por entityType y
   action.
+
+### Idioma operativo del cliente (i18n)
+- `clients.language` (`'en' | 'es'`, default `'en'`) define el idioma en
+  el que la UI y los exports se renderizan **cuando ese cliente está
+  seleccionado** en el filtro global (`?client=slug`). Sin filtro
+  ("Todos") se usa el default global `'en'`.
+- El idioma afecta: formato de fechas (`12 may 2026` vs `May 12, 2026`),
+  meses (`Mayo 2026` vs `May 2026`), labels visibles (page titles,
+  table headers, badges) y los **exports** (Excel + PDF del plan).
+- **Excepción**: nombres de métricas (clicks, views, impressions, cpm,
+  cpc, ctr…) quedan siempre en inglés, por convención de la industria.
+- Helpers en [`lib/i18n.ts`](lib/i18n.ts):
+  - `Language` type + `DEFAULT_LANGUAGE`
+  - `formatDate(iso, lang)` / `formatDateLong` / `formatMonth(yyyymm, lang)`
+    / `formatMonthShort` / `shortMonthName`
+  - `t(key, lang)` con un diccionario de strings comunes (status,
+    common labels, export labels)
+- Server resolver: `resolveLanguageFromSearchParams` y
+  `resolveClientFromSearchParams` (en `lib/client-filter.server.ts`)
+  devuelven `language` ya tipado.
+- Para vistas detalle (`/proyectos/[code]`, `/proyectos/.../planes/[planId]`)
+  que no llevan `?client=`, el idioma se lee del cliente del proyecto
+  (incluido en `getProjectWithPlans` y `getPlanDetail`).
 
 ### Filtro global de cliente vía `?client=slug`
 - El picker arriba a la derecha (`components/topbar-client-picker.tsx`) setea
@@ -360,8 +386,9 @@ Idempotente: limpia las tablas antes de insertar.
 - **Auth/permisos**: aún no hay autenticación. La idea es Supabase Auth con
   roles (Account Manager, Media Planner, Finance, Viewer).
 - **Reportes**: `/reportes` son specs sin implementar.
-- **Admin de clientes**: `/configuracion/clientes` y `/configuracion/usuarios`
-  son placeholders ("próximamente").
+- **Admin de clientes**: `/configuracion/clientes` ya existe (CRUD básico
+  con idioma operativo). `/configuracion/usuarios` sigue siendo placeholder
+  ("próximamente").
 - **Publishers per-cliente UI**: la edición del mapping `client_publishers`
   hoy es vía seed; no hay UI para que el AM lo administre.
 - **Markets/metrics per-cliente (Parte B)**: hoy son catálogos globales. Se
@@ -369,5 +396,11 @@ Idempotente: limpia las tablas antes de insertar.
   tablas `client_markets` / `client_metrics` o agregar `client_id`) +
   decisión de qué hacer con la data existente. Ver detalle en HANDOFF.md.
 - **Excel/PDF**: formato básico, no es producción-ready. Especialmente el
-  PDF (lista de texto plano, sin tablas estilizadas).
+  PDF (lista de texto plano, sin tablas estilizadas). Sí respetan el
+  `clients.language` del plan exportado.
+- **i18n parcial**: las áreas de mayor visibilidad (dashboard, listas
+  globales, exports, dates) están traducidas a `en`/`es`. Quedan strings
+  hardcodeados en formularios secundarios (`/proyectos/nuevo`, editor
+  del plan en lo más profundo, `/auditoria`, billing editor del plan).
+  Plan: ir traduciendo a medida que se toque cada archivo.
 - **Drive integration**: en discusión, fuera del scope MVP.
