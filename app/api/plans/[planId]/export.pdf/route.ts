@@ -1,5 +1,12 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { getPlanDetail } from "@/db/queries/project-detail";
+import {
+  DEFAULT_LANGUAGE,
+  formatDate,
+  formatDateLong,
+  type Language,
+  t,
+} from "@/lib/i18n";
 
 const PAGE_W = 612; // letter
 const PAGE_H = 792;
@@ -13,8 +20,10 @@ export async function GET(
   const { planId } = await params;
   const detail = await getPlanDetail(planId);
   if (!detail) {
-    return new Response("Plan no encontrado", { status: 404 });
+    return new Response("Plan not found", { status: 404 });
   }
+
+  const lang: Language = detail.client.language ?? DEFAULT_LANGUAGE;
 
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -45,7 +54,6 @@ export async function GET(
       .replace(/‘|’/g, "'")
       .replace(/×/g, "x")
       .replace(/…/g, "...")
-      // Cualquier otro char fuera de Latin-1 lo bajamos a "?"
       .replace(/[^\x00-\xFF]/g, "?");
   }
 
@@ -126,44 +134,64 @@ export async function GET(
     y -= 8;
   }
 
+  // Locale para formatear números/moneda en el body del PDF. Las métricas
+  // se mantienen como en runtime (numbers como locale del cliente, no como
+  // anglicismos — la decisión "métricas en inglés" aplica a NAMES, no a
+  // dígitos).
+  const numberLocale = lang === "es" ? "es-AR" : "en-US";
   function fmtUsd(v: number): string {
-    return `$${v.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+    return `$${v.toLocaleString(numberLocale, { maximumFractionDigits: 0 })}`;
+  }
+  function fmtNum(v: number): string {
+    return v.toLocaleString(numberLocale);
   }
 
   // ─── Header ──────────────────────────────────────────────────────────
-  writeLine("MEDIA PLAN", { size: 8, bold: true, color: [0.5, 0.1, 0.25] });
+  writeLine(t("export.mediaPlan", lang), {
+    size: 8,
+    bold: true,
+    color: [0.5, 0.1, 0.25],
+  });
   writeLine(detail.plan.name, { size: 20, bold: true });
   writeLine(detail.project.code, { size: 10, mono: true, color: [0.45, 0.45, 0.45] });
   y -= 4;
 
   // ─── Metadata ────────────────────────────────────────────────────────
-  writeLine(`Cliente: ${detail.client.name}`);
-  writeLine(`Proyecto: ${detail.project.name}`);
-  writeLine(`Budget Origin: ${detail.budgetOrigin.name}`);
+  writeLine(`${t("common.client", lang)}: ${detail.client.name}`);
+  writeLine(`${t("common.project", lang)}: ${detail.project.name}`);
+  writeLine(`${t("common.budgetOrigin", lang)}: ${detail.budgetOrigin.name}`);
+  const statusLabel = t(`status.${detail.plan.status}`, lang);
   writeLine(
-    `Status: ${detail.plan.status}${detail.plan.currentVersion > 0 ? `   ·   v${detail.plan.currentVersion}` : ""}`,
+    `${t("common.status", lang)}: ${statusLabel}${detail.plan.currentVersion > 0 ? `   ·   v${detail.plan.currentVersion}` : ""}`,
   );
 
   writeSeparator();
 
   // ─── Totales ─────────────────────────────────────────────────────────
-  writeLine("Totales", { size: 12, bold: true });
-  writeLine(`Media:  ${fmtUsd(detail.totals.media)}`, { mono: true });
-  writeLine(`Fees:   ${fmtUsd(detail.totals.fees)}`, { mono: true });
+  writeLine(t("export.totals", lang), { size: 12, bold: true });
+  writeLine(`${t("common.media", lang)}:  ${fmtUsd(detail.totals.media)}`, { mono: true });
+  writeLine(`${t("common.fees", lang)}:   ${fmtUsd(detail.totals.fees)}`, { mono: true });
   writeLine(`Grand:  ${fmtUsd(detail.totals.grand)}`, { mono: true, bold: true });
 
   writeSeparator();
 
   // ─── Publishers + placements ─────────────────────────────────────────
-  writeLine("Publishers & Placements", { size: 12, bold: true });
+  writeLine(t("export.publishersPlacements", lang), { size: 12, bold: true });
   y -= 2;
   for (const grp of detail.publishers) {
+    const paysTag = grp.agencyPays
+      ? `[${t("common.agencyPays", lang)}]`
+      : `[${t("common.clientPays", lang)}]`;
     writeLine(
-      `${grp.publisherName}   —   ${fmtUsd(grp.totalPlannedUsd)}   ${grp.agencyPays ? "[agencia paga]" : "[cliente paga directo]"}`,
+      `${grp.publisherName}   —   ${fmtUsd(grp.totalPlannedUsd)}   ${paysTag}`,
       { bold: true, size: 11 },
     );
     if (grp.placements.length === 0) {
-      writeLine("(sin placements)", { size: 9, color: [0.6, 0.6, 0.6], indent: 12 });
+      writeLine(t("common.noPlacements", lang), {
+        size: 9,
+        color: [0.6, 0.6, 0.6],
+        indent: 12,
+      });
     } else {
       for (const pl of grp.placements) {
         writeLine(`• ${pl.placementName}`, { size: 10, indent: 12 });
@@ -172,7 +200,9 @@ export async function GET(
           pl.audience || "",
           pl.costMethod ?? "",
           fmtUsd(pl.amountUsd),
-          pl.startDate && pl.endDate ? `${pl.startDate} → ${pl.endDate}` : "",
+          pl.startDate && pl.endDate
+            ? `${formatDate(pl.startDate, lang)} → ${formatDate(pl.endDate, lang)}`
+            : "",
         ]
           .filter(Boolean)
           .join("   ·   ");
@@ -181,7 +211,9 @@ export async function GET(
         if (metricEntries.length > 0) {
           writeWrapped(
             metricEntries
-              .map(([k, v]) => `${k}: ${typeof v === "number" ? v.toLocaleString("en-US") : String(v)}`)
+              .map(([k, v]) =>
+                `${k}: ${typeof v === "number" ? fmtNum(v) : String(v)}`,
+              )
               .join(" · "),
             { size: 8.5, mono: true, indent: 24 },
           );
@@ -197,15 +229,16 @@ export async function GET(
   writeSeparator();
 
   // ─── Fees ────────────────────────────────────────────────────────────
-  writeLine("Fees", { size: 12, bold: true });
+  writeLine(t("common.fees", lang), { size: 12, bold: true });
   y -= 2;
   if (detail.fees.length === 0) {
-    writeLine("(sin fees)", { size: 9, color: [0.6, 0.6, 0.6] });
+    writeLine(t("common.noFees", lang), { size: 9, color: [0.6, 0.6, 0.6] });
   } else {
     for (const f of detail.fees) {
       const rate = f.ratePct != null ? `   (${f.ratePct}%)` : "";
+      const autoTag = f.isAutoComputed ? "  [auto]" : "";
       writeLine(
-        `${f.feeType.padEnd(10)} ${f.name}${rate}   ${fmtUsd(f.amountUsd)}${f.isAutoComputed ? "  [auto]" : ""}`,
+        `${f.feeType.padEnd(10)} ${f.name}${rate}   ${fmtUsd(f.amountUsd)}${autoTag}`,
         { mono: true, size: 9.5 },
       );
       if (f.notes) {
@@ -216,8 +249,13 @@ export async function GET(
 
   // ─── Footer ──────────────────────────────────────────────────────────
   writeSeparator();
+  const generatedDate = formatDateLong(
+    new Date().toISOString().slice(0, 10),
+    lang,
+  );
+  const timeUtc = new Date().toISOString().slice(11, 19);
   writeLine(
-    `Generado: ${new Date().toISOString().replace("T", " ").slice(0, 19)} UTC   ·   Sangria Media OS`,
+    `${t("common.generated", lang)}: ${generatedDate} ${timeUtc} UTC   ·   Sangria Media OS`,
     { size: 8, color: [0.55, 0.55, 0.55], mono: true },
   );
 

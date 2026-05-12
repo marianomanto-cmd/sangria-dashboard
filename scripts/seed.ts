@@ -129,10 +129,10 @@ async function main() {
   const [copa, cra, bpac, tr] = await db
     .insert(s.clients)
     .values([
-      { name: "Copa Airlines",      slug: "copa", prefix: "COPA", status: "active" },
-      { name: "Cervecería Andina",  slug: "andina", prefix: "CRA", status: "active" },
-      { name: "Banco Pacífico",     slug: "bpac", prefix: "BPAC", status: "active" },
-      { name: "Tienda Roma",        slug: "tienda-roma", prefix: "TR", status: "paused" },
+      { name: "Copa Airlines",      slug: "copa", prefix: "COPA", status: "active", language: "es" },
+      { name: "Cervecería Andina",  slug: "andina", prefix: "CRA", status: "active", language: "es" },
+      { name: "Banco Pacífico",     slug: "bpac", prefix: "BPAC", status: "active", language: "en" },
+      { name: "Tienda Roma",        slug: "tienda-roma", prefix: "TR", status: "paused", language: "es" },
     ])
     .returning();
 

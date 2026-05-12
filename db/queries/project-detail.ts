@@ -39,7 +39,12 @@ export type ProjectPlanSummary = {
 
 export type ProjectWithPlans = {
   project: typeof projects.$inferSelect;
-  client: { id: string; name: string; slug: string };
+  client: {
+    id: string;
+    name: string;
+    slug: string;
+    language: (typeof clients.$inferSelect)["language"];
+  };
   budgetOrigin: { id: string; name: string; colorHex: string | null };
   plans: ProjectPlanSummary[];
 };
@@ -50,7 +55,12 @@ export async function getProjectWithPlans(
   const [row] = await db
     .select({
       project: projects,
-      client: { id: clients.id, name: clients.name, slug: clients.slug },
+      client: {
+        id: clients.id,
+        name: clients.name,
+        slug: clients.slug,
+        language: clients.language,
+      },
       origin: {
         id: budgetOrigins.id,
         name: budgetOrigins.name,
@@ -256,7 +266,12 @@ export type PlanSnapshot = {
 export type PlanDetail = {
   plan: typeof mediaPlans.$inferSelect;
   project: { id: string; code: string; name: string; totalGrossBudgetUsd: string | null };
-  client: { id: string; name: string; slug: string };
+  client: {
+    id: string;
+    name: string;
+    slug: string;
+    language: (typeof clients.$inferSelect)["language"];
+  };
   budgetOrigin: { id: string; name: string };
   publishers: PlanPublisherGroup[];
   fees: PlanFee[];
@@ -278,7 +293,12 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
         name: projects.name,
         totalGrossBudgetUsd: projects.totalGrossBudgetUsd,
       },
-      client: { id: clients.id, name: clients.name, slug: clients.slug },
+      client: {
+        id: clients.id,
+        name: clients.name,
+        slug: clients.slug,
+        language: clients.language,
+      },
       origin: { id: budgetOrigins.id, name: budgetOrigins.name },
     })
     .from(mediaPlans)

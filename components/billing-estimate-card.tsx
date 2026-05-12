@@ -1,26 +1,7 @@
 import Link from "next/link";
 import type { MonthlyBillingEstimate } from "@/db/queries/dashboard";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
-
-const MONTH_NAMES_ES = [
-  "Enero",
-  "Febrero",
-  "Marzo",
-  "Abril",
-  "Mayo",
-  "Junio",
-  "Julio",
-  "Agosto",
-  "Septiembre",
-  "Octubre",
-  "Noviembre",
-  "Diciembre",
-];
-
-function monthLabel(yyyymm: string): string {
-  const [y, m] = yyyymm.split("-").map(Number);
-  return `${MONTH_NAMES_ES[m - 1]} ${y}`;
-}
+import { formatMonth, type Language, t } from "@/lib/i18n";
 
 // Variación entre real y estimado, en %. Si la estimación es 0 devolvemos
 // null para evitar dividir por cero / mostrar Infinity.
@@ -43,12 +24,14 @@ type Props = {
   // Cuando es true, no renderiza la tabla "por proyecto" — útil cuando ya
   // estamos viendo un solo proyecto. Se muestra solo el total del mes.
   hideProjectBreakdown?: boolean;
+  lang?: Language;
 };
 
 export function BillingEstimateCard({
   estimates,
   previousMonth = null,
   hideProjectBreakdown = false,
+  lang = "en",
 }: Props) {
   if (estimates.length === 0 && !previousMonth) return null;
 
@@ -56,17 +39,20 @@ export function BillingEstimateCard({
     <section className="mt-8">
       <header className="mb-3">
         <h2 className="text-sm font-semibold text-ink">
-          Estimación de facturación
+          {lang === "es"
+            ? "Estimación de facturación"
+            : "Billing estimate"}
         </h2>
         <p className="text-xs text-muted">
-          Prorrateo lineal de placements (media) y fees de planes approved /
-          ready_to_send sobre sus meses activos. Neto = bruto − ya facturado.
+          {lang === "es"
+            ? "Prorrateo lineal de placements (media) y fees de planes approved / ready_to_send sobre sus meses activos. Neto = bruto − ya facturado."
+            : "Linear proration of placements (media) and fees from approved / ready_to_send plans across their active months. Net = gross − already invoiced."}
         </p>
       </header>
 
       {previousMonth && (
         <div className="mb-3">
-          <PreviousMonthCard estimate={previousMonth} />
+          <PreviousMonthCard estimate={previousMonth} lang={lang} />
         </div>
       )}
 
@@ -76,6 +62,7 @@ export function BillingEstimateCard({
             key={e.month}
             estimate={e}
             hideProjectBreakdown={hideProjectBreakdown}
+            lang={lang}
           />
         ))}
       </div>
@@ -83,14 +70,13 @@ export function BillingEstimateCard({
   );
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Card del mes anterior: lo realmente facturado vs lo que se estimaría hoy.
-// La "estimación" se recomputa con los planes actuales — no es histórica
-// snapshot. Sirve como sanity check: si difiere mucho, o la estimación está
-// off, o los placements/fees del plan se modificaron después de facturar.
-// ────────────────────────────────────────────────────────────────────────────
-
-function PreviousMonthCard({ estimate }: { estimate: MonthlyBillingEstimate }) {
+function PreviousMonthCard({
+  estimate,
+  lang,
+}: {
+  estimate: MonthlyBillingEstimate;
+  lang: Language;
+}) {
   const realMedia = estimate.alreadyBilledMediaUsd;
   const realFees = estimate.alreadyBilledFeesUsd;
   const real = estimate.alreadyBilledUsd;
@@ -102,10 +88,12 @@ function PreviousMonthCard({ estimate }: { estimate: MonthlyBillingEstimate }) {
       <div className="px-5 py-3 border-b border-line-soft bg-paper-2/40 flex items-baseline justify-between">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            {monthLabel(estimate.month)} · cerrado
+            {formatMonth(estimate.month, lang)} · {t("common.closed", lang)}
           </p>
           <p className="text-[10px] text-muted mt-0.5">
-            Real facturado vs estimación recomputada con los planes actuales.
+            {lang === "es"
+              ? "Real facturado vs estimación recomputada con los planes actuales."
+              : "Actual invoiced vs estimate recomputed against current plans."}
           </p>
         </div>
       </div>
@@ -113,14 +101,20 @@ function PreviousMonthCard({ estimate }: { estimate: MonthlyBillingEstimate }) {
         <thead>
           <tr className="text-[10px] uppercase tracking-[0.06em] text-muted border-b border-line-soft">
             <th className="text-left font-medium px-5 py-1.5"></th>
-            <th className="text-right font-medium px-5 py-1.5">Media</th>
-            <th className="text-right font-medium px-5 py-1.5">Fees</th>
-            <th className="text-right font-medium px-5 py-1.5">Total</th>
+            <th className="text-right font-medium px-5 py-1.5">
+              {t("common.media", lang)}
+            </th>
+            <th className="text-right font-medium px-5 py-1.5">
+              {t("common.fees", lang)}
+            </th>
+            <th className="text-right font-medium px-5 py-1.5">
+              {t("common.total", lang)}
+            </th>
           </tr>
         </thead>
         <tbody>
           <tr className="border-b border-line-soft">
-            <td className="px-5 py-1.5 text-ink-2">Real (sent/paid)</td>
+            <td className="px-5 py-1.5 text-ink-2">{t("common.real", lang)}</td>
             <td className="px-5 py-1.5 text-right font-mono text-ink-2 tabular-nums">
               {formatUsdCompact(realMedia)}
             </td>
@@ -132,7 +126,9 @@ function PreviousMonthCard({ estimate }: { estimate: MonthlyBillingEstimate }) {
             </td>
           </tr>
           <tr className="border-b border-line-soft">
-            <td className="px-5 py-1.5 text-muted">Estimado</td>
+            <td className="px-5 py-1.5 text-muted">
+              {t("common.estimated", lang)}
+            </td>
             <td className="px-5 py-1.5 text-right font-mono text-muted tabular-nums">
               {formatUsdCompact(estMedia)}
             </td>
@@ -145,7 +141,7 @@ function PreviousMonthCard({ estimate }: { estimate: MonthlyBillingEstimate }) {
           </tr>
           <tr>
             <td className="px-5 py-1.5 text-[11px] uppercase tracking-[0.06em] text-muted">
-              Variación
+              {t("common.variance", lang)}
             </td>
             <td
               className={`px-5 py-1.5 text-right font-mono tabular-nums ${varianceColor(variancePct(realMedia, estMedia))}`}
@@ -183,9 +179,11 @@ function varianceColor(v: number | null): string {
 function EstimateMonthCard({
   estimate,
   hideProjectBreakdown,
+  lang,
 }: {
   estimate: MonthlyBillingEstimate;
   hideProjectBreakdown: boolean;
+  lang: Language;
 }) {
   const hasData = estimate.byProject.length > 0;
   return (
@@ -193,7 +191,7 @@ function EstimateMonthCard({
       <div className="px-5 py-3 border-b border-line-soft bg-paper-2/40">
         <div className="flex items-baseline justify-between">
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            {monthLabel(estimate.month)}
+            {formatMonth(estimate.month, lang)}
           </p>
           <p className="font-mono text-lg font-semibold text-ink tabular-nums">
             {formatUsd(estimate.netUsd)}
@@ -201,25 +199,25 @@ function EstimateMonthCard({
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
           <span>
-            Media:{" "}
+            {t("common.media", lang)}:{" "}
             <span className="font-mono text-ink-2">
               {formatUsdCompact(estimate.grossMediaUsd)}
             </span>
           </span>
           <span>
-            Fees:{" "}
+            {t("common.fees", lang)}:{" "}
             <span className="font-mono text-ink-2">
               {formatUsdCompact(estimate.grossFeesUsd)}
             </span>
           </span>
           <span>
-            Bruto:{" "}
+            {t("common.gross", lang)}:{" "}
             <span className="font-mono text-ink-2">
               {formatUsdCompact(estimate.grossUsd)}
             </span>
           </span>
           <span>
-            Ya facturado:{" "}
+            {t("common.alreadyInvoiced", lang)}:{" "}
             <span className="font-mono text-success">
               {formatUsdCompact(estimate.alreadyBilledUsd)}
             </span>
@@ -229,17 +227,29 @@ function EstimateMonthCard({
 
       {!hasData ? (
         <div className="px-5 py-6 text-center text-xs text-muted">
-          Sin planes activos este mes.
+          {lang === "es"
+            ? "Sin planes activos este mes."
+            : "No active plans this month."}
         </div>
       ) : hideProjectBreakdown ? null : (
         <table className="w-full text-[12px]">
           <thead>
             <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
-              <th className="text-left font-medium px-5 py-1.5">Proyecto</th>
-              <th className="text-right font-medium px-5 py-1.5">Media</th>
-              <th className="text-right font-medium px-5 py-1.5">Fees</th>
-              <th className="text-right font-medium px-5 py-1.5">Facturado</th>
-              <th className="text-right font-medium px-5 py-1.5">Neto</th>
+              <th className="text-left font-medium px-5 py-1.5">
+                {t("common.project", lang)}
+              </th>
+              <th className="text-right font-medium px-5 py-1.5">
+                {t("common.media", lang)}
+              </th>
+              <th className="text-right font-medium px-5 py-1.5">
+                {t("common.fees", lang)}
+              </th>
+              <th className="text-right font-medium px-5 py-1.5">
+                {t("common.invoiced", lang)}
+              </th>
+              <th className="text-right font-medium px-5 py-1.5">
+                {t("common.net", lang)}
+              </th>
             </tr>
           </thead>
           <tbody>

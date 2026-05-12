@@ -45,6 +45,7 @@ import {
   DIRECT_METRIC_RATES,
   type CostMethod,
 } from "@/lib/cost-methods";
+import { formatDate, type Language } from "@/lib/i18n";
 
 // Solo los campos que el editor consume — viene de listPublishersForClient.
 type PublisherCatalog = {
@@ -70,11 +71,13 @@ export function PlanEditor({
   allPublishers,
   allMarkets,
   allMetrics,
+  lang = "en",
 }: {
   detail: PlanDetail;
   allPublishers: PublisherCatalog[];
   allMarkets: Market[];
   allMetrics: MetricCatalog[];
+  lang?: Language;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -279,11 +282,11 @@ export function PlanEditor({
 
       {/* Plan metadata strip — todas las fechas son derivadas de los placements */}
       <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
-        <Field label="Período (derivado)">
+        <Field label={lang === "es" ? "Período (derivado)" : "Period (derived)"}>
           <span className="font-mono text-sm text-ink-2">
-            {periodStart ?? "—"}
+            {formatDate(periodStart, lang)}
             <span className="text-stone-300"> → </span>
-            {periodEnd ?? "—"}
+            {formatDate(periodEnd, lang)}
           </span>
           <p className="text-[10px] text-muted mt-0.5">
             min/max de los placements

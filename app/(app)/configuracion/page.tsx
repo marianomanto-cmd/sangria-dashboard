@@ -36,8 +36,8 @@ const SECTIONS: Array<{
   {
     href: "/configuracion/clientes",
     title: "Clientes",
-    description: "Gestión de clientes y sus budget origins.",
-    status: "soon",
+    description: "Alta y edición de clientes (nombre, prefijo, idioma operativo, estado). El idioma afecta fechas y exports.",
+    status: "ready",
   },
 ];
 

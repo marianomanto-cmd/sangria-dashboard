@@ -11,6 +11,7 @@ import type {
   PublisherBreakdownRow,
 } from "@/db/queries/dashboard";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+import { formatDate, type Language } from "@/lib/i18n";
 
 const PLAN_STATUS_STYLE: Record<
   string,
@@ -28,12 +29,14 @@ type Props = {
   // que ya filtra por cliente.
   showClient?: boolean;
   dense?: boolean;
+  lang?: Language;
 };
 
 export function ProjectsTableExpandable({
   rows,
   showClient = true,
   dense = false,
+  lang = "en",
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
@@ -78,6 +81,7 @@ export function ProjectsTableExpandable({
             onToggle={() => toggle(p.id)}
             showClient={showClient}
             cellPad={cellPad}
+            lang={lang}
           />
         ))}
       </tbody>
@@ -91,12 +95,14 @@ function ProjectRowExpandable({
   onToggle,
   showClient,
   cellPad,
+  lang,
 }: {
   project: DashboardProjectRow;
   isOpen: boolean;
   onToggle: () => void;
   showClient: boolean;
   cellPad: string;
+  lang: Language;
 }) {
   const overConsumed = project.consumptionPct > 100;
   const barWidth = Math.min(project.consumptionPct, 100);
@@ -185,6 +191,7 @@ function ProjectRowExpandable({
             <PlansSubTable
               projectCode={project.code}
               plans={project.plans}
+              lang={lang}
             />
           </td>
         </tr>
@@ -196,9 +203,11 @@ function ProjectRowExpandable({
 function PlansSubTable({
   projectCode,
   plans,
+  lang,
 }: {
   projectCode: string;
   plans: DashboardPlanSummary[];
+  lang: Language;
 }) {
   const [expandedPlans, setExpandedPlans] = useState<Set<string>>(new Set());
 
@@ -244,6 +253,7 @@ function PlansSubTable({
                   onToggle={() => togglePlan(p.id)}
                   style={style}
                   projectCode={projectCode}
+                  lang={lang}
                 />
               );
             })}
@@ -261,6 +271,7 @@ function PlanWithBreakdown({
   onToggle,
   style,
   projectCode,
+  lang,
 }: {
   plan: DashboardPlanSummary;
   isOpen: boolean;
@@ -268,6 +279,7 @@ function PlanWithBreakdown({
   onToggle: () => void;
   style: { label: string; cls: string; dot: string };
   projectCode: string;
+  lang: Language;
 }) {
   return (
     <>
@@ -312,9 +324,9 @@ function PlanWithBreakdown({
           </span>
         </td>
         <td className="px-3 py-1.5 font-mono text-[11px] text-ink-2">
-          {plan.periodStart ?? "—"}
+          {formatDate(plan.periodStart, lang)}
           <span className="text-stone-300"> → </span>
-          {plan.periodEnd ?? "—"}
+          {formatDate(plan.periodEnd, lang)}
         </td>
         <td className="px-3 py-1.5 text-right font-mono font-semibold text-ink tabular-nums">
           {formatUsdCompact(plan.totalUsd)}
