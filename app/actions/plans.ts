@@ -634,18 +634,44 @@ export async function listPublishersForClient(clientId: string) {
   }));
 }
 
-export async function listMarkets() {
+// Markets per-cliente. clientId requerido — el listado es del subset del
+// cliente que aplica al plan en cuestión.
+export async function listMarketsForClient(clientId: string) {
   return db
     .select()
     .from(markets)
-    .where(eq(markets.enabled, true))
+    .where(and(eq(markets.clientId, clientId), eq(markets.enabled, true)))
     .orderBy(asc(markets.sortOrder), asc(markets.name));
 }
 
-export async function listMetrics() {
+// Métricas per-cliente. clientId requerido.
+export async function listMetricsForClient(clientId: string) {
   return db
     .select()
     .from(metricsCatalog)
-    .where(eq(metricsCatalog.enabled, true))
+    .where(
+      and(
+        eq(metricsCatalog.clientId, clientId),
+        eq(metricsCatalog.enabled, true),
+      ),
+    )
+    .orderBy(asc(metricsCatalog.sortOrder), asc(metricsCatalog.name));
+}
+
+// Versiones que devuelven TODAS las filas (incluyendo deshabilitadas) — para
+// la página de admin per-cliente que necesita poder editar el flag enabled.
+export async function listAllMarketsForClient(clientId: string) {
+  return db
+    .select()
+    .from(markets)
+    .where(eq(markets.clientId, clientId))
+    .orderBy(asc(markets.sortOrder), asc(markets.name));
+}
+
+export async function listAllMetricsForClient(clientId: string) {
+  return db
+    .select()
+    .from(metricsCatalog)
+    .where(eq(metricsCatalog.clientId, clientId))
     .orderBy(asc(metricsCatalog.sortOrder), asc(metricsCatalog.name));
 }

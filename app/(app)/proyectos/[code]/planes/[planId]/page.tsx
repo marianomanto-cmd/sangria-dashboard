@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlanDetail } from "@/db/queries/project-detail";
 import {
-  listMarkets,
-  listMetrics,
+  listMarketsForClient,
+  listMetricsForClient,
   listPublishersForClient,
 } from "@/app/actions/plans";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/i18n";
@@ -22,8 +22,8 @@ export default async function PlanDetailPage({ params }: Props) {
 
   const [allPublishers, allMarkets, allMetrics] = await Promise.all([
     listPublishersForClient(detail.client.id),
-    listMarkets(),
-    listMetrics(),
+    listMarketsForClient(detail.client.id),
+    listMetricsForClient(detail.client.id),
   ]);
 
   return (

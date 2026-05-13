@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { auditLog, metricsCatalog } from "@/db/schema";
@@ -18,13 +18,21 @@ function slugify(name: string): string {
     .replace(/^_+|_+$/g, "");
 }
 
+function pathsToRevalidate(clientSlug?: string) {
+  revalidatePath("/configuracion/metricas");
+  if (clientSlug) revalidatePath(`/configuracion/clientes/${clientSlug}`);
+}
+
 export async function createMetric(input: {
+  clientId: string;
+  clientSlug?: string;
   name: string;
   slug?: string;
   kind: "direct" | "calculated";
   unit?: string | null;
   formula?: string | null;
 }): Promise<Result<{ id: string }>> {
+  if (!input.clientId) return { ok: false, error: "Cliente requerido" };
   if (!input.name.trim()) return { ok: false, error: "Nombre requerido" };
   const slug = (input.slug?.trim() || slugify(input.name)).slice(0, 64);
   if (!slug) return { ok: false, error: "No se pudo generar el slug" };
@@ -36,12 +44,14 @@ export async function createMetric(input: {
     .select({
       next: sql<number>`coalesce(max(${metricsCatalog.sortOrder}), -1) + 1`,
     })
-    .from(metricsCatalog);
+    .from(metricsCatalog)
+    .where(eq(metricsCatalog.clientId, input.clientId));
 
   try {
     const [m] = await db
       .insert(metricsCatalog)
       .values({
+        clientId: input.clientId,
         name: input.name.trim(),
         slug,
         kind: input.kind,
@@ -59,12 +69,15 @@ export async function createMetric(input: {
       afterJson: m,
     });
 
-    revalidatePath("/configuracion/metricas");
+    pathsToRevalidate(input.clientSlug);
     return { ok: true, id: m.id };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error desconocido";
     if (msg.includes("unique") || msg.includes("duplicate")) {
-      return { ok: false, error: `Ya existe una métrica con slug "${slug}"` };
+      return {
+        ok: false,
+        error: `Ya existe una métrica con slug "${slug}" para este cliente`,
+      };
     }
     return { ok: false, error: msg };
   }
@@ -72,6 +85,7 @@ export async function createMetric(input: {
 
 export async function updateMetric(input: {
   id: string;
+  clientSlug?: string;
   name?: string;
   unit?: string | null;
   formula?: string | null;
@@ -105,27 +119,30 @@ export async function updateMetric(input: {
     afterJson: after,
   });
 
-  revalidatePath("/configuracion/metricas");
+  pathsToRevalidate(input.clientSlug);
   return { ok: true };
 }
 
-export async function deleteMetric(id: string): Promise<Result> {
+export async function deleteMetric(input: {
+  id: string;
+  clientSlug?: string;
+}): Promise<Result> {
   const [before] = await db
     .select()
     .from(metricsCatalog)
-    .where(eq(metricsCatalog.id, id))
+    .where(eq(metricsCatalog.id, input.id))
     .limit(1);
   if (!before) return { ok: false, error: "No encontrada" };
 
-  await db.delete(metricsCatalog).where(eq(metricsCatalog.id, id));
+  await db.delete(metricsCatalog).where(eq(metricsCatalog.id, input.id));
 
   await db.insert(auditLog).values({
     entityType: "metric",
-    entityId: id,
+    entityId: input.id,
     action: "delete",
     beforeJson: before,
   });
 
-  revalidatePath("/configuracion/metricas");
+  pathsToRevalidate(input.clientSlug);
   return { ok: true };
 }

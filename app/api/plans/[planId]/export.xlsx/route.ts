@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { getPlanDetail, type PlanPlacement } from "@/db/queries/project-detail";
-import { listMetrics } from "@/app/actions/plans";
+import { listMetricsForClient } from "@/app/actions/plans";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
 
 const PURPLE = "FF6D28D9";       // header principal
@@ -140,7 +140,7 @@ export async function GET(
   // views, impressions, cpm, etc.) quedan siempre en inglés.
   const lang: Language = detail.client.language ?? DEFAULT_LANGUAGE;
 
-  const allMetrics = await listMetrics();
+  const allMetrics = await listMetricsForClient(detail.client.id);
   const metricBySlug = new Map(allMetrics.map((m) => [m.slug, m]));
 
   // ─── Slugs de métricas presentes en el plan (direct + calculated) ────────

@@ -1,9 +1,9 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { auditLog, publishers } from "@/db/schema";
+import { auditLog, clientPublishers, publishers } from "@/db/schema";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -129,6 +129,93 @@ export async function deletePublisher(id: string): Promise<Result> {
           "Este publisher está en uso en planes existentes. Marcalo como deshabilitado en lugar de borrarlo.",
       };
     }
+    return { ok: false, error: msg };
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Client_publishers — per-cliente mapping. Habilita/deshabilita publishers
+// y sobrescribe el default global de "agencia paga" por cliente.
+// ════════════════════════════════════════════════════════════════════════════
+
+export async function upsertClientPublisher(input: {
+  clientId: string;
+  publisherId: string;
+  enabled?: boolean;
+  agencyPays?: boolean;
+  clientSlug?: string;
+}): Promise<Result> {
+  if (!input.clientId) return { ok: false, error: "Cliente requerido" };
+  if (!input.publisherId) return { ok: false, error: "Publisher requerido" };
+
+  const [existing] = await db
+    .select()
+    .from(clientPublishers)
+    .where(
+      and(
+        eq(clientPublishers.clientId, input.clientId),
+        eq(clientPublishers.publisherId, input.publisherId),
+      ),
+    )
+    .limit(1);
+
+  // sortOrder por defecto: max + 1 dentro del cliente.
+  let sortOrder = existing?.sortOrder ?? 0;
+  if (!existing) {
+    const [{ next }] = await db
+      .select({
+        next: sql<number>`coalesce(max(${clientPublishers.sortOrder}), -1) + 1`,
+      })
+      .from(clientPublishers)
+      .where(eq(clientPublishers.clientId, input.clientId));
+    sortOrder = next;
+  }
+
+  // Defaults para insert: enabled=true; agencyPays viene del catálogo global
+  // si no se especifica. En update sólo tocamos lo que vino.
+  const baseAgencyPays = await (async () => {
+    if (input.agencyPays !== undefined) return input.agencyPays;
+    if (existing) return existing.agencyPays;
+    const [pub] = await db
+      .select({ agencyPaysDefault: publishers.agencyPaysDefault })
+      .from(publishers)
+      .where(eq(publishers.id, input.publisherId))
+      .limit(1);
+    return pub?.agencyPaysDefault ?? true;
+  })();
+
+  const enabled = input.enabled ?? existing?.enabled ?? true;
+
+  try {
+    if (existing) {
+      await db
+        .update(clientPublishers)
+        .set({ enabled, agencyPays: baseAgencyPays })
+        .where(eq(clientPublishers.id, existing.id));
+    } else {
+      await db.insert(clientPublishers).values({
+        clientId: input.clientId,
+        publisherId: input.publisherId,
+        enabled,
+        agencyPays: baseAgencyPays,
+        sortOrder,
+      });
+    }
+
+    await db.insert(auditLog).values({
+      entityType: "client_publisher",
+      entityId: input.publisherId,
+      action: existing ? "update" : "create",
+      beforeJson: existing ?? null,
+      afterJson: { clientId: input.clientId, publisherId: input.publisherId, enabled, agencyPays: baseAgencyPays },
+    });
+
+    if (input.clientSlug) {
+      revalidatePath(`/configuracion/clientes/${input.clientSlug}`);
+    }
+    return { ok: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "error desconocido";
     return { ok: false, error: msg };
   }
 }

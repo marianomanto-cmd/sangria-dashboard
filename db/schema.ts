@@ -87,16 +87,20 @@ export const costMethod = pgEnum("cost_method", [
 export const metricKind = pgEnum("metric_kind", ["direct", "calculated"]);
 
 // ════════════════════════════════════════════════════════════════════════════
-// Catálogo de mercados (editable desde /configuracion/markets).
-// Puede incluir países individuales (Costa Rica, Panama) o agrupaciones
-// (Centroamérica, LATAM). El planner elige UN mercado por placement.
+// Catálogo de mercados — per-cliente.
+// Antes era global. Ahora cada cliente tiene su propia lista; podés tener
+// "Centroamérica" definido distinto para Copa vs Banco. Unique en
+// (client_id, slug).
 // ════════════════════════════════════════════════════════════════════════════
 
 export const markets = pgTable(
   "markets",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    slug: text("slug").notNull().unique(),  // costa-rica, latam, centroamerica
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),            // costa-rica, latam, centroamerica
     name: text("name").notNull(),            // Costa Rica, LATAM, Centroamérica
     enabled: boolean("enabled").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
@@ -104,11 +108,17 @@ export const markets = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("idx_markets_enabled").on(t.enabled, t.sortOrder)],
+  (t) => [
+    unique("markets_client_slug_uq").on(t.clientId, t.slug),
+    index("idx_markets_client_enabled").on(t.clientId, t.enabled, t.sortOrder),
+  ],
 );
 
 // ════════════════════════════════════════════════════════════════════════════
-// Catálogo de métricas / KPIs (editable desde /configuracion/metricas).
+// Catálogo de métricas / KPIs — per-cliente.
+// Antes era global. Ahora cada cliente puede definir conversiones custom
+// (ej. "Solicitud de tarjeta" para un banco) además del estándar
+// impressions/clicks/views/etc. Unique en (client_id, slug).
 // Direct: views, clicks, impressions, conversions, etc.
 // Calculated: ctr, cpc, cpm, cpv, etc. (derivadas de otras + amount).
 // ════════════════════════════════════════════════════════════════════════════
@@ -117,7 +127,10 @@ export const metricsCatalog = pgTable(
   "metrics_catalog",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    slug: text("slug").notNull().unique(),    // impressions, ctr, cpc
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),              // impressions, ctr, cpc
     name: text("name").notNull(),              // Impressions, CTR, CPC
     kind: metricKind("kind").notNull(),
     unit: text("unit"),                        // imp, %, $, click, view (descriptivo)
@@ -128,7 +141,10 @@ export const metricsCatalog = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("idx_metrics_enabled").on(t.enabled, t.sortOrder)],
+  (t) => [
+    unique("metrics_catalog_client_slug_uq").on(t.clientId, t.slug),
+    index("idx_metrics_client_enabled").on(t.clientId, t.enabled, t.sortOrder),
+  ],
 );
 
 // ════════════════════════════════════════════════════════════════════════════

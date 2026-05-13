@@ -1,0 +1,597 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Plus, Trash2 } from "lucide-react";
+import {
+  createMarket,
+  deleteMarket,
+  updateMarket,
+} from "@/app/actions/markets";
+import {
+  createMetric,
+  deleteMetric,
+  updateMetric,
+} from "@/app/actions/metrics";
+import { upsertClientPublisher } from "@/app/actions/publishers";
+import type {
+  markets as marketsTable,
+  metricsCatalog as metricsTable,
+} from "@/db/schema";
+
+type PublisherRow = {
+  publisherId: string;
+  publisherName: string;
+  publisherSlug: string;
+  enabled: boolean;
+  agencyPays: boolean;
+};
+
+type Metric = typeof metricsTable.$inferSelect;
+type Market = typeof marketsTable.$inferSelect;
+
+export function ClientConfigSections({
+  clientId,
+  clientSlug,
+  clientName,
+  publishers,
+  metrics,
+  markets,
+}: {
+  clientId: string;
+  clientSlug: string;
+  clientName: string;
+  publishers: PublisherRow[];
+  metrics: Metric[];
+  markets: Market[];
+}) {
+  return (
+    <div className="space-y-8">
+      <PublishersSection
+        clientId={clientId}
+        clientSlug={clientSlug}
+        rows={publishers}
+      />
+      <MetricsSection
+        clientId={clientId}
+        clientSlug={clientSlug}
+        rows={metrics}
+      />
+      <MarketsSection
+        clientId={clientId}
+        clientSlug={clientSlug}
+        rows={markets}
+      />
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Publishers — toggle enabled + agency_pays. El catálogo de publishers sigue
+// siendo global; lo que se edita acá es la columna client_publishers
+// (mapping enable/disable + agency_pays per cliente).
+// ────────────────────────────────────────────────────────────────────────────
+
+function PublishersSection({
+  clientId,
+  clientSlug,
+  rows,
+}: {
+  clientId: string;
+  clientSlug: string;
+  rows: PublisherRow[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  const toggle = (publisherId: string, field: "enabled" | "agencyPays", v: boolean) => {
+    startTransition(async () => {
+      const r = await upsertClientPublisher({
+        clientId,
+        publisherId,
+        clientSlug,
+        ...(field === "enabled" ? { enabled: v } : { agencyPays: v }),
+      });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  return (
+    <section id="publishers">
+      <header className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-base font-semibold">Publishers</h2>
+        <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+          {rows.filter((r) => r.enabled).length} de {rows.length} habilitados
+        </span>
+      </header>
+      <p className="text-xs text-muted mb-3 max-w-2xl">
+        Habilitá los publishers que este cliente usa y definí si la agencia
+        paga directo o el cliente paga al publisher. El catálogo de publishers
+        es global; agregás nuevos en{" "}
+        <a href="/configuracion/publishers" className="text-accent hover:underline">
+          /configuracion/publishers
+        </a>
+        .
+      </p>
+      <div className="rounded-lg border border-line bg-white overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-paper">
+            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+              <th className="text-left font-medium px-5 py-2.5">Publisher</th>
+              <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
+              <th className="text-left font-medium px-5 py-2.5">Pago</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={r.publisherId}
+                className="border-t border-line-soft hover:bg-paper-2/50"
+              >
+                <td className="px-5 py-2">
+                  <span className="font-medium text-ink">{r.publisherName}</span>
+                  <span className="ml-2 text-[11px] font-mono text-muted">
+                    {r.publisherSlug}
+                  </span>
+                </td>
+                <td className="px-5 py-2">
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={r.enabled}
+                      disabled={pending}
+                      onChange={(e) =>
+                        toggle(r.publisherId, "enabled", e.target.checked)
+                      }
+                    />
+                    <span className="text-muted">{r.enabled ? "Sí" : "No"}</span>
+                  </label>
+                </td>
+                <td className="px-5 py-2">
+                  <select
+                    value={r.agencyPays ? "agency" : "client"}
+                    disabled={pending || !r.enabled}
+                    onChange={(e) =>
+                      toggle(r.publisherId, "agencyPays", e.target.value === "agency")
+                    }
+                    className="rounded-md border border-line bg-white px-2 py-1 text-xs disabled:opacity-50"
+                  >
+                    <option value="agency">Agencia paga</option>
+                    <option value="client">Cliente paga directo</option>
+                  </select>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Métricas per-cliente. Permite crear conversiones custom, renombrar y
+// deshabilitar las existentes. Cada cliente tiene su lista propia.
+// ────────────────────────────────────────────────────────────────────────────
+
+function MetricsSection({
+  clientId,
+  clientSlug,
+  rows,
+}: {
+  clientId: string;
+  clientSlug: string;
+  rows: Metric[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [showAdd, setShowAdd] = useState(false);
+  const [draft, setDraft] = useState<{
+    name: string;
+    slug: string;
+    kind: "direct" | "calculated";
+    unit: string;
+    formula: string;
+  }>({ name: "", slug: "", kind: "direct", unit: "", formula: "" });
+  const [error, setError] = useState<string | null>(null);
+
+  const onCreate = () => {
+    if (!draft.name.trim()) {
+      setError("Nombre requerido");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const r = await createMetric({
+        clientId,
+        clientSlug,
+        name: draft.name.trim(),
+        slug: draft.slug.trim() || undefined,
+        kind: draft.kind,
+        unit: draft.unit.trim() || null,
+        formula: draft.kind === "calculated" ? draft.formula.trim() || null : null,
+      });
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      setDraft({ name: "", slug: "", kind: "direct", unit: "", formula: "" });
+      setShowAdd(false);
+      router.refresh();
+    });
+  };
+
+  const onUpdate = (
+    id: string,
+    partial: { name?: string; unit?: string | null; formula?: string | null; enabled?: boolean },
+  ) => {
+    startTransition(async () => {
+      const r = await updateMetric({ id, clientSlug, ...partial });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  const onDelete = (id: string, name: string) => {
+    if (!confirm(`¿Eliminar la métrica "${name}"?`)) return;
+    startTransition(async () => {
+      const r = await deleteMetric({ id, clientSlug });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  return (
+    <section id="metricas">
+      <header className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-base font-semibold">Métricas e indicadores</h2>
+        <button
+          type="button"
+          onClick={() => setShowAdd((s) => !s)}
+          className="inline-flex items-center gap-1 rounded-md bg-ink text-white px-2.5 py-1 text-xs font-medium hover:bg-ink-2"
+        >
+          <Plus size={12} />
+          Nueva métrica
+        </button>
+      </header>
+      <p className="text-xs text-muted mb-3 max-w-2xl">
+        Direct = el planner ingresa el valor. Calculated = se deriva con una
+        fórmula a partir de directs + amount (ej. CTR = clicks / impressions).
+        Acá podés crear conversiones custom (ej. "Solicitudes de tarjeta").
+      </p>
+      {showAdd && (
+        <div className="rounded-lg border border-line bg-paper-2 p-4 mb-3 space-y-2">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+            <input
+              type="text"
+              placeholder="Nombre"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              className="rounded-md border border-line bg-white px-2 py-1.5 col-span-2"
+            />
+            <input
+              type="text"
+              placeholder="slug (opcional)"
+              value={draft.slug}
+              onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
+              className="rounded-md border border-line bg-white px-2 py-1.5 font-mono"
+            />
+            <select
+              value={draft.kind}
+              onChange={(e) =>
+                setDraft({ ...draft, kind: e.target.value as "direct" | "calculated" })
+              }
+              className="rounded-md border border-line bg-white px-2 py-1.5"
+            >
+              <option value="direct">direct</option>
+              <option value="calculated">calculated</option>
+            </select>
+            <input
+              type="text"
+              placeholder="unit (imp, %, $, …)"
+              value={draft.unit}
+              onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
+              className="rounded-md border border-line bg-white px-2 py-1.5"
+            />
+          </div>
+          {draft.kind === "calculated" && (
+            <input
+              type="text"
+              placeholder="Fórmula (ej. amount / clicks o clicks / impressions)"
+              value={draft.formula}
+              onChange={(e) => setDraft({ ...draft, formula: e.target.value })}
+              className="w-full rounded-md border border-line bg-white px-2 py-1.5 text-xs font-mono"
+            />
+          )}
+          {error && <p className="text-xs text-danger">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onCreate}
+              disabled={pending}
+              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
+            >
+              Crear
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAdd(false);
+                setError(null);
+              }}
+              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs text-muted hover:text-ink"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="rounded-lg border border-line bg-white overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-paper">
+            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+              <th className="text-left font-medium px-5 py-2.5">Nombre</th>
+              <th className="text-left font-medium px-5 py-2.5">Slug</th>
+              <th className="text-left font-medium px-5 py-2.5">Kind</th>
+              <th className="text-left font-medium px-5 py-2.5">Unit</th>
+              <th className="text-left font-medium px-5 py-2.5">Fórmula</th>
+              <th className="text-left font-medium px-5 py-2.5">Habilitada</th>
+              <th className="w-10" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-5 py-8 text-center text-xs text-muted italic">
+                  Sin métricas. Agregá la primera con el botón de arriba.
+                </td>
+              </tr>
+            ) : (
+              rows.map((m) => (
+                <tr
+                  key={m.id}
+                  className="border-t border-line-soft hover:bg-paper-2/50"
+                >
+                  <td className="px-5 py-2">
+                    <input
+                      type="text"
+                      defaultValue={m.name}
+                      disabled={pending}
+                      onBlur={(e) =>
+                        e.target.value !== m.name &&
+                        onUpdate(m.id, { name: e.target.value })
+                      }
+                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
+                    />
+                  </td>
+                  <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
+                  <td className="px-5 py-2 font-mono text-xs text-muted">{m.kind}</td>
+                  <td className="px-5 py-2 font-mono text-xs text-muted">{m.unit ?? "—"}</td>
+                  <td className="px-5 py-2">
+                    {m.kind === "calculated" ? (
+                      <input
+                        type="text"
+                        defaultValue={m.formula ?? ""}
+                        disabled={pending}
+                        onBlur={(e) =>
+                          e.target.value !== (m.formula ?? "") &&
+                          onUpdate(m.id, { formula: e.target.value || null })
+                        }
+                        className="w-full bg-transparent text-xs font-mono text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
+                      />
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-2">
+                    <input
+                      type="checkbox"
+                      checked={m.enabled}
+                      disabled={pending}
+                      onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <button
+                      type="button"
+                      onClick={() => onDelete(m.id, m.name)}
+                      disabled={pending}
+                      className="text-muted hover:text-danger p-1"
+                      aria-label="Eliminar"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Mercados per-cliente. Misma idea que métricas: cada cliente tiene la suya.
+// ────────────────────────────────────────────────────────────────────────────
+
+function MarketsSection({
+  clientId,
+  clientSlug,
+  rows,
+}: {
+  clientId: string;
+  clientSlug: string;
+  rows: Market[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [showAdd, setShowAdd] = useState(false);
+  const [draft, setDraft] = useState({ name: "", slug: "" });
+  const [error, setError] = useState<string | null>(null);
+
+  const onCreate = () => {
+    if (!draft.name.trim()) {
+      setError("Nombre requerido");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const r = await createMarket({
+        clientId,
+        clientSlug,
+        name: draft.name.trim(),
+        slug: draft.slug.trim() || undefined,
+      });
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      setDraft({ name: "", slug: "" });
+      setShowAdd(false);
+      router.refresh();
+    });
+  };
+
+  const onUpdate = (id: string, partial: { name?: string; enabled?: boolean }) => {
+    startTransition(async () => {
+      const r = await updateMarket({ id, clientSlug, ...partial });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  const onDelete = (id: string, name: string) => {
+    if (!confirm(`¿Eliminar el mercado "${name}"?`)) return;
+    startTransition(async () => {
+      const r = await deleteMarket({ id, clientSlug });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  return (
+    <section id="mercados">
+      <header className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-base font-semibold">Mercados</h2>
+        <button
+          type="button"
+          onClick={() => setShowAdd((s) => !s)}
+          className="inline-flex items-center gap-1 rounded-md bg-ink text-white px-2.5 py-1 text-xs font-medium hover:bg-ink-2"
+        >
+          <Plus size={12} />
+          Nuevo mercado
+        </button>
+      </header>
+      <p className="text-xs text-muted mb-3 max-w-2xl">
+        Puede incluir países individuales (Costa Rica, Argentina) o
+        agrupaciones (Centroamérica, LATAM). Cada cliente tiene su propia
+        lista — podés deshabilitar los que no usa o renombrar.
+      </p>
+      {showAdd && (
+        <div className="rounded-lg border border-line bg-paper-2 p-4 mb-3 space-y-2">
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <input
+              type="text"
+              placeholder="Nombre (ej. Brasil)"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              className="rounded-md border border-line bg-white px-2 py-1.5"
+            />
+            <input
+              type="text"
+              placeholder="slug (opcional, ej. brasil)"
+              value={draft.slug}
+              onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
+              className="rounded-md border border-line bg-white px-2 py-1.5 font-mono"
+            />
+          </div>
+          {error && <p className="text-xs text-danger">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onCreate}
+              disabled={pending}
+              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
+            >
+              Crear
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAdd(false);
+                setError(null);
+              }}
+              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs text-muted hover:text-ink"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="rounded-lg border border-line bg-white overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-paper">
+            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+              <th className="text-left font-medium px-5 py-2.5">Nombre</th>
+              <th className="text-left font-medium px-5 py-2.5">Slug</th>
+              <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
+              <th className="w-10" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="px-5 py-8 text-center text-xs text-muted italic">
+                  Sin mercados. Agregá el primero con el botón de arriba.
+                </td>
+              </tr>
+            ) : (
+              rows.map((m) => (
+                <tr
+                  key={m.id}
+                  className="border-t border-line-soft hover:bg-paper-2/50"
+                >
+                  <td className="px-5 py-2">
+                    <input
+                      type="text"
+                      defaultValue={m.name}
+                      disabled={pending}
+                      onBlur={(e) =>
+                        e.target.value !== m.name &&
+                        onUpdate(m.id, { name: e.target.value })
+                      }
+                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
+                    />
+                  </td>
+                  <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
+                  <td className="px-5 py-2">
+                    <input
+                      type="checkbox"
+                      checked={m.enabled}
+                      disabled={pending}
+                      onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <button
+                      type="button"
+                      onClick={() => onDelete(m.id, m.name)}
+                      disabled={pending}
+                      className="text-muted hover:text-danger p-1"
+                      aria-label="Eliminar"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
