@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   ensureBillingForMonth,
+  markBillingInvoiced,
   setFeeImputation,
   setPublisherConsumption,
   transitionBillingStatus,
@@ -119,10 +120,30 @@ export function BillingMonthEditor({
     });
   };
 
-  const onTransition = (to: "draft" | "ready" | "sent" | "paid") => {
-    if (to === "sent" && !confirm(`¿Emitir factura para ${month}? Se asigna número y fecha de vencimiento (30d).`)) return;
+  const onTransition = (to: "draft" | "ready" | "sent" | "paid" | "invoiced") => {
     startTransition(async () => {
       const r = await transitionBillingStatus({ billingId: billing.id, to });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  // "Reportar" = transición ready → sent + descarga del PDF de finanzas.
+  // El PDF se abre en una nueva pestaña ANTES de la transición para evitar
+  // pop-up blockers; si la transición falla la descarga ya está en curso.
+  const onReportar = () => {
+    if (!confirm(`¿Reportar el billing de ${month}? Se descarga el PDF para finanzas y el estado pasa a "reportado".`)) return;
+    window.open(`/api/billings/${billing.id}/report.pdf`, "_blank");
+    startTransition(async () => {
+      const r = await transitionBillingStatus({ billingId: billing.id, to: "sent" });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  const onFacturar = (invoiceNumber: string) => {
+    startTransition(async () => {
+      const r = await markBillingInvoiced({ billingId: billing.id, invoiceNumber });
       if (!r.ok) alert(r.error);
       router.refresh();
     });
@@ -152,48 +173,15 @@ export function BillingMonthEditor({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {billing.status === "draft" && (
-            <button
-              type="button"
-              onClick={() => onTransition("ready")}
-              disabled={pending}
-              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
-            >
-              Marcar listo
-            </button>
-          )}
-          {billing.status === "ready" && (
-            <>
-              <button
-                type="button"
-                onClick={() => onTransition("draft")}
-                disabled={pending}
-                className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
-              >
-                Volver a draft
-              </button>
-              <button
-                type="button"
-                onClick={() => onTransition("sent")}
-                disabled={pending}
-                className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
-              >
-                Emitir factura
-              </button>
-            </>
-          )}
-          {billing.status === "sent" && (
-            <button
-              type="button"
-              onClick={() => onTransition("paid")}
-              disabled={pending}
-              className="rounded-md bg-success text-white px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50"
-            >
-              Marcar como pagada
-            </button>
-          )}
-        </div>
+        <BillingStatusActions
+          status={billing.status}
+          pending={pending}
+          onTransition={onTransition}
+          onReportar={onReportar}
+          onFacturar={onFacturar}
+          billingId={billing.id}
+          currentInvoiceNumber={billing.invoiceNumber}
+        />
       </div>
 
       {/* Publishers — consumo del mes */}
@@ -397,10 +385,11 @@ export function BillingMonthEditor({
 
 function BillingStatusPillInline({ status }: { status: string }) {
   const styles: Record<string, { label: string; cls: string; dot: string }> = {
-    draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
+    draft: { label: "borrador", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
     ready: { label: "listo", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-    sent: { label: "emitida", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
-    paid: { label: "pagada", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
+    sent: { label: "reportado", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
+    invoiced: { label: "facturado", cls: "bg-accent-soft text-accent border-accent-soft", dot: "bg-accent" },
+    paid: { label: "pagado", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
   };
   const s = styles[status] ?? styles.draft;
   return (
@@ -408,6 +397,204 @@ function BillingStatusPillInline({ status }: { status: string }) {
       <span className={`inline-block h-1.5 w-1.5 rounded-full ${s.dot}`} />
       {s.label}
     </span>
+  );
+}
+
+// Botones del header del editor: muestran las acciones disponibles según el
+// status. El "Reportar" descarga el PDF + transiciona a sent. El "Facturar"
+// pide el número de factura y llama a markBillingInvoiced.
+function BillingStatusActions({
+  status,
+  pending,
+  onTransition,
+  onReportar,
+  onFacturar,
+  billingId,
+  currentInvoiceNumber,
+}: {
+  status: string;
+  pending: boolean;
+  onTransition: (to: "draft" | "ready" | "sent" | "paid" | "invoiced") => void;
+  onReportar: () => void;
+  onFacturar: (invoiceNumber: string) => void;
+  billingId: string;
+  currentInvoiceNumber: string | null;
+}) {
+  const [showInvoiceInput, setShowInvoiceInput] = useState(false);
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {status === "draft" && (
+        <button
+          type="button"
+          onClick={() => onTransition("ready")}
+          disabled={pending}
+          className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
+        >
+          Marcar listo
+        </button>
+      )}
+      {status === "ready" && (
+        <>
+          <button
+            type="button"
+            onClick={() => onTransition("draft")}
+            disabled={pending}
+            className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+          >
+            Volver a borrador
+          </button>
+          <button
+            type="button"
+            onClick={onReportar}
+            disabled={pending}
+            className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
+          >
+            Reportar (PDF)
+          </button>
+        </>
+      )}
+      {status === "sent" && (
+        <>
+          <button
+            type="button"
+            onClick={() => onTransition("ready")}
+            disabled={pending}
+            className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+          >
+            Volver a listo
+          </button>
+          <a
+            href={`/api/billings/${billingId}/report.pdf`}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-md border border-line bg-white px-3 py-1.5 text-xs text-ink-2 hover:bg-paper-2"
+          >
+            Bajar PDF de nuevo
+          </a>
+          {showInvoiceInput ? (
+            <InvoiceInput
+              initial=""
+              pending={pending}
+              onCancel={() => setShowInvoiceInput(false)}
+              onSubmit={(v) => {
+                setShowInvoiceInput(false);
+                onFacturar(v);
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowInvoiceInput(true)}
+              disabled={pending}
+              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
+            >
+              Cargar número de factura
+            </button>
+          )}
+        </>
+      )}
+      {status === "invoiced" && (
+        <>
+          <button
+            type="button"
+            onClick={() => onTransition("sent")}
+            disabled={pending}
+            className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+          >
+            Volver a reportado
+          </button>
+          {showInvoiceInput ? (
+            <InvoiceInput
+              initial={currentInvoiceNumber ?? ""}
+              pending={pending}
+              onCancel={() => setShowInvoiceInput(false)}
+              onSubmit={(v) => {
+                setShowInvoiceInput(false);
+                onFacturar(v);
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowInvoiceInput(true)}
+              disabled={pending}
+              className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+            >
+              Editar número
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onTransition("paid")}
+            disabled={pending}
+            className="rounded-md bg-success text-white px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            Marcar como pagado
+          </button>
+        </>
+      )}
+      {status === "paid" && (
+        <button
+          type="button"
+          onClick={() => onTransition("invoiced")}
+          disabled={pending}
+          className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+        >
+          Revertir a facturado
+        </button>
+      )}
+    </div>
+  );
+}
+
+function InvoiceInput({
+  initial,
+  pending,
+  onSubmit,
+  onCancel,
+}: {
+  initial: string;
+  pending: boolean;
+  onSubmit: (v: string) => void;
+  onCancel: () => void;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const v = value.trim();
+        if (!v) return;
+        onSubmit(v);
+      }}
+      className="flex items-center gap-1.5"
+    >
+      <input
+        type="text"
+        autoFocus
+        value={value}
+        placeholder="N° de factura"
+        onChange={(e) => setValue(e.target.value)}
+        disabled={pending}
+        className="rounded-md border border-line bg-white px-2 py-1.5 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
+      />
+      <button
+        type="submit"
+        disabled={pending || !value.trim()}
+        className="rounded-md bg-ink text-white px-2.5 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
+      >
+        Guardar
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={pending}
+        className="text-xs text-muted hover:text-ink px-1.5 disabled:opacity-50"
+      >
+        Cancelar
+      </button>
+    </form>
   );
 }
 

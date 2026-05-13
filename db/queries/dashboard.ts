@@ -78,7 +78,7 @@ export async function getDashboardKpis(
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(
       and(
-        inArray(planBillings.status, ["sent", "paid"]),
+        inArray(planBillings.status, ["invoiced", "paid"]),
         sql`${planBillings.month} >= ${yearStartMonth}`,
         ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
       ),
@@ -141,7 +141,8 @@ export type DashboardPlanSummary = {
   totalUsd: number;
   spentRealUsd: number;
   // Para drilldown del proyecto: facturado / pendiente por publisher y fee.
-  // Solo cuenta facturas con status sent/paid; drafts no son "facturado".
+  // Solo cuenta facturas con status invoiced/paid; draft/ready/sent (reportado)
+  // todavía no son "facturado" en el sentido contable.
   billedTotalUsd: number;
   pendingTotalUsd: number;
   publisherBreakdown: PublisherBreakdownRow[];
@@ -363,7 +364,7 @@ async function getPlansSummaryForProjects(
       .where(
         and(
           inArray(planBillings.mediaPlanId, planIds),
-          inArray(planBillings.status, ["sent", "paid"]),
+          inArray(planBillings.status, ["invoiced", "paid"]),
         ),
       )
       .groupBy(planBillings.mediaPlanId, planBillingPublishers.publisherId),
@@ -381,7 +382,7 @@ async function getPlansSummaryForProjects(
       .where(
         and(
           inArray(planBillings.mediaPlanId, planIds),
-          inArray(planBillings.status, ["sent", "paid"]),
+          inArray(planBillings.status, ["invoiced", "paid"]),
         ),
       )
       .groupBy(planBillingFees.mediaPlanFeeId),
@@ -847,7 +848,7 @@ export async function getBillingEstimate(options: {
     .where(
       and(
         inArray(planBillings.month, options.months),
-        inArray(planBillings.status, ["sent", "paid"]),
+        inArray(planBillings.status, ["invoiced", "paid"]),
         ...(filterOrigin
           ? [eq(projects.budgetOriginId, filterOrigin)]
           : []),
@@ -873,7 +874,7 @@ export async function getBillingEstimate(options: {
     .where(
       and(
         inArray(planBillings.month, options.months),
-        inArray(planBillings.status, ["sent", "paid"]),
+        inArray(planBillings.status, ["invoiced", "paid"]),
         ...(filterOrigin
           ? [eq(projects.budgetOriginId, filterOrigin)]
           : []),

@@ -399,9 +399,21 @@ export async function setFeeImputation(input: {
 // Status transitions
 // ════════════════════════════════════════════════════════════════════════════
 
+// Transiciones permitidas en el lifecycle de un plan_billing:
+//   draft     ↔ ready                       (analista edita / marca listo)
+//   ready     → sent (reportado)            (manager descargó el PDF → finanzas)
+//   sent      → invoiced                    (manager carga el número de factura;
+//                                            usa markBillingInvoiced — NO esta action)
+//   sent      → ready                       (revertir si el manager se equivocó)
+//   invoiced  → paid                        (cliente pagó)
+//   invoiced  → sent                        (revertir invoicing)
+//   paid      → invoiced                    (revertir el pago)
+//
+// El paso sent → invoiced está en markBillingInvoiced porque requiere un
+// número de factura del sistema de finanzas y no es una transición "vacía".
 export async function transitionBillingStatus(input: {
   billingId: string;
-  to: "draft" | "ready" | "sent" | "paid";
+  to: "draft" | "ready" | "sent" | "paid" | "invoiced";
 }): Promise<Result> {
   const [before] = await db
     .select()
@@ -413,56 +425,96 @@ export async function transitionBillingStatus(input: {
   const valid: Record<string, string[]> = {
     draft: ["ready"],
     ready: ["draft", "sent"],
-    sent: ["paid"],
-    paid: [],
+    sent: ["ready"],          // invoiced sale por markBillingInvoiced
+    invoiced: ["sent", "paid"],
+    paid: ["invoiced"],
   };
-  if (!valid[before.status].includes(input.to)) {
+  if (!valid[before.status]?.includes(input.to)) {
     return {
       ok: false,
-      error: `Transición ${before.status} → ${input.to} no permitida`,
+      error: `Transición ${before.status} → ${input.to} no permitida desde acá`,
     };
   }
 
   const update: Record<string, unknown> = { status: input.to };
 
   if (input.to === "sent") {
-    // Asignar número de factura sequential YYYY-NNNN si no tiene.
-    if (!before.invoiceNumber) {
-      const year = Number.parseInt(before.month.slice(0, 4), 10);
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(planBillings)
-        .where(
-          and(
-            sql`${planBillings.month} >= ${`${year}-01`}`,
-            sql`${planBillings.month} < ${`${year + 1}-01`}`,
-            sql`${planBillings.invoiceNumber} IS NOT NULL`,
-          ),
-        );
-      update.invoiceNumber = `${year}-${String(count + 1).padStart(4, "0")}`;
-    }
+    // Reportado: marca el momento del PDF/handoff a finanzas. Ya no asigna
+    // número de factura automático (eso pasa con markBillingInvoiced).
     update.sentAt = new Date();
-    const due = new Date();
-    due.setDate(due.getDate() + 30);
-    update.dueDate = due.toISOString().slice(0, 10);
   }
   if (input.to === "paid") update.paidAt = new Date();
+  // Revertir desde paid limpia el paidAt; desde invoiced/sent no hay
+  // timestamps "que limpiar" — quedan como historial.
+  if (before.status === "paid" && input.to !== "paid") update.paidAt = null;
 
+  return persistTransition(before, update, input.billingId);
+}
+
+// Marca el billing como facturado: el manager recibió el número de factura
+// de finanzas y lo carga. Se acepta desde 'sent' (path normal) o desde
+// 'invoiced'/'paid' como edición del número en su lugar.
+export async function markBillingInvoiced(input: {
+  billingId: string;
+  invoiceNumber: string;
+  dueDate?: string | null; // YYYY-MM-DD; default = today + 30d
+}): Promise<Result> {
+  const invoiceNumber = input.invoiceNumber.trim();
+  if (!invoiceNumber) {
+    return { ok: false, error: "El número de factura es requerido" };
+  }
+
+  const [before] = await db
+    .select()
+    .from(planBillings)
+    .where(eq(planBillings.id, input.billingId))
+    .limit(1);
+  if (!before) return { ok: false, error: "Billing no encontrado" };
+
+  // Se permite cargar el número de factura desde:
+  //   • 'sent' (reportado) → pasa a invoiced
+  //   • 'invoiced' / 'paid' → como edición del número, sin cambiar estado
+  const allowed = ["sent", "invoiced", "paid"];
+  if (!allowed.includes(before.status)) {
+    return {
+      ok: false,
+      error: `No se puede cargar número de factura cuando el billing está en estado '${before.status}'`,
+    };
+  }
+
+  const update: Record<string, unknown> = { invoiceNumber };
+  if (before.status === "sent") {
+    update.status = "invoiced";
+    if (!before.dueDate) {
+      const due = input.dueDate ? new Date(input.dueDate) : new Date();
+      if (!input.dueDate) due.setDate(due.getDate() + 30);
+      update.dueDate = due.toISOString().slice(0, 10);
+    }
+  }
+  if (input.dueDate) update.dueDate = input.dueDate;
+
+  return persistTransition(before, update, input.billingId);
+}
+
+async function persistTransition(
+  before: typeof planBillings.$inferSelect,
+  update: Record<string, unknown>,
+  billingId: string,
+): Promise<Result> {
   const [after] = await db
     .update(planBillings)
     .set(update)
-    .where(eq(planBillings.id, input.billingId))
+    .where(eq(planBillings.id, billingId))
     .returning();
 
   await db.insert(auditLog).values({
     entityType: "plan_billing",
-    entityId: input.billingId,
+    entityId: billingId,
     action: "update",
     beforeJson: before,
     afterJson: after,
   });
 
-  // Find project for revalidate
   const [plan] = await db
     .select({ projectId: mediaPlans.projectId })
     .from(mediaPlans)

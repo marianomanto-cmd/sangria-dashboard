@@ -55,10 +55,11 @@ export const planStatus = pgEnum("plan_status", [
 ]);
 
 export const billingStatus = pgEnum("billing_status", [
-  "draft",
-  "ready",
-  "sent",
-  "paid",
+  "draft",     // borrador / abierto — el analista edita consumo y fees
+  "ready",     // listo — analista marcó como listo para revisión del manager
+  "sent",      // reportado — el manager descargó el PDF para finanzas
+  "invoiced",  // facturado — manager cargó el número de factura de finanzas
+  "paid",      // pagado — cliente notificó el pago
 ]);
 
 export const feeType = pgEnum("fee_type", [
