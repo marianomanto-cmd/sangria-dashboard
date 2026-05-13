@@ -1,11 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { getBillingDetail } from "@/db/queries/billing";
-import {
-  DEFAULT_LANGUAGE,
-  formatDateLong,
-  formatMonth,
-  type Language,
-} from "@/lib/i18n";
+import { DEFAULT_LANGUAGE, formatMonth, type Language } from "@/lib/i18n";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Reporte PDF de un plan_billing — formato pedido por finanzas:
@@ -129,15 +124,6 @@ export async function GET(
     });
   }
 
-  function drawHLine(yPos: number, color: [number, number, number] = [0.75, 0.75, 0.75]) {
-    page.drawLine({
-      start: { x: MARGIN, y: yPos },
-      end: { x: PAGE_W - MARGIN, y: yPos },
-      thickness: 0.5,
-      color: rgb(color[0], color[1], color[2]),
-    });
-  }
-
   function drawTableHeader() {
     const purple: [number, number, number] = [0.48, 0.12, 0.24];
     // fondo
@@ -186,44 +172,11 @@ export async function GET(
     y -= 16;
   }
 
-  // ───── Header ──────────────────────────────────────────────────────────
-  drawText("BILLING REPORT", 0, { size: 8, bold: true, color: [0.48, 0.12, 0.24] });
-  y -= 14;
-  drawText(`${detail.project.code} - ${formatMonth(detail.billing.month, headerLang)}`, 0, {
-    size: 18,
-    bold: true,
-  });
-  y -= 22;
-
-  // Metadata
-  drawText(`Client: ${detail.client.name}`, 0, { size: 9.5 });
-  y -= 12;
-  drawText(`Project: ${detail.project.name}`, 0, { size: 9.5 });
-  y -= 12;
-  drawText(`Budget Origin: ${detail.budgetOrigin.name}`, 0, { size: 9.5 });
-  y -= 12;
-  drawText(`Plan: ${detail.plan.name}`, 0, { size: 9.5 });
-  y -= 12;
-  drawText(`Month: ${formatMonth(detail.billing.month, headerLang)}`, 0, {
-    size: 9.5,
-  });
-  y -= 12;
-  if (detail.billing.invoiceNumber) {
-    drawText(`Invoice number: ${detail.billing.invoiceNumber}`, 0, {
-      size: 9.5,
-      bold: true,
-    });
-    y -= 12;
-  }
-  y -= 8;
-  drawHLine(y);
-  y -= 14;
-
   // ───── Tabla ───────────────────────────────────────────────────────────
+  // Sin header de documento ni metadata — solo la tabla pedida por finanzas.
   drawTableHeader();
 
   let rowIdx = 1;
-  let runningTotal = 0;
   let alt = false;
 
   // Publishers facturables con consumo > 0
@@ -235,7 +188,6 @@ export async function GET(
     drawRow(rowIdx, "Media Placement", description, p.amountThisMonthUsd, {
       altBg: alt,
     });
-    runningTotal += p.amountThisMonthUsd;
     rowIdx++;
     alt = !alt;
   }
@@ -247,7 +199,6 @@ export async function GET(
     drawRow(rowIdx, "Services", description, f.imputedThisMonthUsd, {
       altBg: alt,
     });
-    runningTotal += f.imputedThisMonthUsd;
     rowIdx++;
     alt = !alt;
   }
@@ -260,43 +211,6 @@ export async function GET(
     });
     y -= 16;
   }
-
-  // Total
-  newPageIfNeeded(28);
-  y -= 4;
-  drawHLine(y, [0.4, 0.4, 0.4]);
-  y -= 14;
-  page.drawRectangle({
-    x: MARGIN,
-    y: y - 4,
-    width: PAGE_W - MARGIN * 2,
-    height: 18,
-    color: rgb(0.93, 0.88, 0.91),
-  });
-  drawText("TOTAL", COL_DESC_X, { bold: true, size: 11 });
-  drawText(fmtUsd(runningTotal), COL_AMT_X, {
-    bold: true,
-    align: "right",
-    maxWidth: 50,
-    mono: true,
-    size: 11,
-  });
-  y -= 28;
-
-  // ───── Footer ──────────────────────────────────────────────────────────
-  newPageIfNeeded(20);
-  drawHLine(y, [0.85, 0.85, 0.85]);
-  y -= 12;
-  const generatedDate = formatDateLong(
-    new Date().toISOString().slice(0, 10),
-    headerLang,
-  );
-  const timeUtc = new Date().toISOString().slice(11, 19);
-  drawText(
-    `Generated: ${generatedDate} ${timeUtc} UTC - Sangria Media OS`,
-    0,
-    { size: 7.5, color: [0.55, 0.55, 0.55], mono: true },
-  );
 
   const bytes = await pdf.save();
   const filename = `${detail.project.code}.${detail.plan.name}.${detail.billing.month}.report.pdf`.replace(
