@@ -36,6 +36,10 @@ export const projectStatus = pgEnum("project_status", [
   "active",
   "paused",
   "closed",
+  // 'reportado' es el estado final: el proyecto cerró sus campañas y ya se
+  // entregó el reporte final al cliente. Se entra acá automáticamente cuando
+  // se marca el project_report como delivered desde /reportes/calendario.
+  "reportado",
 ]);
 
 // Lifecycle de un plan dentro de un proyecto:
@@ -479,6 +483,48 @@ export const planBillingFees = pgTable(
     notes: text("notes"),
   },
   (t) => [unique("uq_pbf_billing_fee").on(t.planBillingId, t.mediaPlanFeeId)],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Project reports — un row por proyecto cuando pasa a "closed".
+// Lifecycle:
+//   1. Project status pasa a 'closed' → action crea project_report con
+//      closed_at = now() y todo lo demás null (idempotente vía unique).
+//   2. Manager asigna fecha → delivery_date + delivery_date_assigned_at
+//      = now(). En cada re-edición, delivery_date_assigned_at se reescribe
+//      al día de la última asignación (el "compromiso vigente").
+//   3. Manager marca delivered → delivered_at = now() + audit log + el
+//      proyecto pasa a status 'reportado' y desaparece del calendario.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const projectReports = pgTable(
+  "project_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .unique()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    closedAt: timestamp("closed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deliveryDate: date("delivery_date"),
+    deliveryDateAssignedAt: timestamp("delivery_date_assigned_at", {
+      withTimezone: true,
+    }),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    // Para el listado del calendario: filtramos delivered_at IS NULL.
+    index("idx_project_reports_pending").on(t.deliveredAt, t.deliveryDate),
+  ],
 );
 
 // ════════════════════════════════════════════════════════════════════════════

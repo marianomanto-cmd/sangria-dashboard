@@ -13,6 +13,7 @@ import {
   History,
   Settings,
   BarChart3,
+  CalendarClock,
   ChevronsLeft,
   ChevronsRight,
   type LucideIcon,
@@ -23,6 +24,7 @@ type NavEntry = {
   href: string;
   label: string;
   icon: LucideIcon;
+  exact?: boolean;
 };
 
 const PRIMARY: NavEntry[] = [
@@ -31,7 +33,8 @@ const PRIMARY: NavEntry[] = [
   { href: "/proyectos", label: "Proyectos", icon: Briefcase },
   { href: "/planes", label: "Planes de Medios", icon: FileText },
   { href: "/billing", label: "Billing", icon: FileCheck },
-  { href: "/reportes", label: "Reportes", icon: BarChart3 },
+  { href: "/reportes/calendario", label: "Calendario de reportes", icon: CalendarClock },
+  { href: "/reportes", label: "Reportes", icon: BarChart3, exact: true },
 ];
 
 const FOOTER: NavEntry[] = [
@@ -65,7 +68,7 @@ export function Sidebar() {
             key={entry.href}
             entry={entry}
             href={buildHrefWithClient(entry.href, clientSlug)}
-            active={isActive(pathname, entry.href)}
+            active={isActive(pathname, entry.href, entry.exact)}
             collapsed={collapsed}
           />
         ))}
@@ -79,7 +82,7 @@ export function Sidebar() {
             key={entry.href}
             entry={entry}
             href={buildHrefWithClient(entry.href, clientSlug)}
-            active={isActive(pathname, entry.href)}
+            active={isActive(pathname, entry.href, entry.exact)}
             collapsed={collapsed}
           />
         ))}
@@ -142,7 +145,7 @@ function NavItem({
   );
 }
 
-function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+function isActive(pathname: string, href: string, exact = false) {
+  if (href === "/" || exact) return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }

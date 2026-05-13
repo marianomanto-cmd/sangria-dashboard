@@ -1,4 +1,4 @@
-# Handoff — miércoles 13/may/2026
+# Handoff — miércoles 13/may/2026 (tarde)
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
@@ -14,6 +14,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+508dc6a  Excel: métricas en subtotales/totales + tab budget por mercado (#12)
 7131c46  Clientes CRUD + idioma operativo (en/es) por cliente (#11)
 3cb0076  docs: estimación media/fees + accuracy + regla doc-upkeep en AGENTS.md (#8)
 872b735  Estimaciones: separar media/fees + accuracy del mes anterior (#7)
@@ -28,7 +29,69 @@ bc625f0  Proyectos: quitar columna Spark del listado principal (#2)
 71494f9  Excel export: layout estilo plan de medios (#1)
 ```
 
-### Cambios de la sesión 13/may/2026
+### Cambios de la sesión 13/may/2026 (tarde) — Reporting Calendar
+
+1. **Nuevo lifecycle stage `reportado`.** Enum `project_status` ahora incluye
+   `'reportado'` después de `'closed'`. Es el estado terminal: el reporte
+   final fue entregado al cliente y el proyecto ya no tiene entregables
+   nuestros. Solo se entra acá marcando el reporte como delivered desde el
+   calendario; no es seteable manualmente vía `setProjectStatus`. El
+   `StatusBadge` muestra el badge con color accent.
+
+2. **Nueva tabla `project_reports`** (`db/schema.ts`). Una fila por
+   proyecto, creada cuando el proyecto pasa a `'closed'`. Campos:
+   `closed_at` (timestamp), `delivery_date` (date), `delivery_date_assigned_at`
+   (timestamp, se reescribe en cada edición del compromiso), `delivered_at`
+   (timestamp, no null = entregado y desaparece del calendario), `notes`.
+   Unique en `project_id`. **Requiere `npm run db:push` + un backfill** (ver
+   abajo).
+
+3. **Página `/reportes/calendario`** (`app/(app)/reportes/calendario/page.tsx`).
+   - Tabla arriba con proyectos closed sin `delivery_date` asignada. Botón
+     "Asignar fecha" abre un modal con date picker.
+   - Gantt abajo (`components/reporting-gantt.tsx`) — ventana fija de
+     **-30 / hoy / +30 días**. Una fila por reporte en curso. Por fila:
+     círculo gris (closed_at), cuadrado violeta (delivery_date_assigned_at),
+     línea punteada de compromiso, rombo accent (delivery_date). Si hoy >
+     delivery_date, el rombo se pinta rojo y hay una línea horizontal roja
+     hasta la vertical azul punteada de "hoy". Símbolos que caen fuera de
+     la ventana se renderizan como flechita ◄ / ► en el borde.
+   - Modal "Marcar entregado" — al confirmar: `delivered_at = now()`, el
+     proyecto pasa a `'reportado'`, se loguea en audit log
+     (`entity_type='project_report', action='delivered'`) y el reporte
+     desaparece del calendario.
+   - Cualquier reasignación de fecha **reescribe** `delivery_date_assigned_at`
+     (representa el compromiso vigente, no el original).
+
+4. **Server actions** (`app/actions/reports.ts`):
+   - `setProjectStatus({projectId, status})` — bloquea pasaje manual a
+     `'reportado'` y desde `'reportado'`; cuando entra a `'closed'` crea la
+     fila de project_reports vía `ensureProjectReport` (idempotente).
+   - `setReportDeliveryDate({reportId, deliveryDate})` — escribe la fecha y
+     `delivery_date_assigned_at = now()`. Bloqueado si ya está delivered.
+   - `markReportDelivered({reportId})` — exige `delivery_date` no null,
+     setea `delivered_at`, transiciona el proyecto a `'reportado'`, loguea.
+
+5. **Status changer en `/proyectos/[code]`**
+   (`components/project-status-changer.tsx`). Botones rápidos para mover
+   entre planning/active/paused/closed. No expone `'reportado'` ni permite
+   volver atrás desde ahí.
+
+6. **Backfill obligatorio en prod.** Script
+   `scripts/backfill-reports.mjs` (alias `npm run db:backfill-reports`)
+   inserta una fila por cada proyecto closed sin report, usando el último
+   `status_change → closed` del audit log como `closed_at` (o `created_at`
+   como fallback). Idempotente vía ON CONFLICT.
+
+7. **Sidebar**: nueva entry "Calendario de reportes" (icono `CalendarClock`)
+   arriba de "Reportes". El active state de `/reportes` ahora es exacto para
+   no marcarse cuando estás en el calendario. `/reportes/calendario` también
+   está en `CLIENT_FILTER_ROUTES` para respetar `?client=`.
+
+8. **getOpenProjectsForPlanCreation** (`db/queries/project-detail.ts`) ahora
+   excluye también `'reportado'` (no solo `'closed'`).
+
+### Cambios de la sesión 13/may/2026 (mañana)
 
 1. **Excel export — tab 1 con métricas completas + tab 2 budget por
    mercado.** El export `app/api/plans/[planId]/export.xlsx/route.ts` ahora:
@@ -424,6 +487,10 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el PDF/Excel del plan          | `app/api/plans/[planId]/export.{pdf,xlsx}/route.ts`       |
 | Agregar/cambiar columnas de métricas en el Excel | `app/api/plans/[planId]/export.xlsx/route.ts` — la sección "Tab 1" arma `metricSlugs` desde `metrics_json`; los subtotales por publisher usan `sumDirects` + `evalFormula`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` en `app/api/plans/[planId]/export.xlsx/route.ts` (días-overlap inclusive). |
+| Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
+| Ajustar la ventana del Gantt o los símbolos | `components/reporting-gantt.tsx`. Constants `WINDOW_BEFORE_DAYS`, `WINDOW_AFTER_DAYS`, colores `COLOR_*`. |
+| Cambiar el flow closed → reportado | `app/actions/reports.ts` `markReportDelivered` (delivered_at + project.status='reportado' + audit log). |
+| Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
 | Configurar conexión DB                 | `db/index.ts`                                             |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |

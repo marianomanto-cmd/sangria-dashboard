@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowUpRight, Plus } from "lucide-react";
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
+import { ProjectStatusChanger } from "@/components/project-status-changer";
 import { StatusBadge } from "@/components/status-badge";
 import { getBillingEstimate } from "@/db/queries/dashboard";
 import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
@@ -117,6 +118,13 @@ export default async function ProjectDetailPage({ params }: Props) {
             <StatusBadge status={project.status} />
           </h1>
           <p className="text-sm text-muted mt-1 font-mono">{project.code}</p>
+          <div className="mt-3">
+            <ProjectStatusChanger
+              projectId={project.id}
+              currentStatus={project.status}
+              lang={lang}
+            />
+          </div>
         </div>
         <Link
           href={`/proyectos/${project.code}/planes/nuevo`}

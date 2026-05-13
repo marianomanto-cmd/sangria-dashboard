@@ -1,4 +1,5 @@
-import { BarChart3, LineChart, Map, TrendingUp } from "lucide-react";
+import Link from "next/link";
+import { BarChart3, CalendarClock, LineChart, Map, TrendingUp } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
 
 const REPORTS = [
@@ -47,6 +48,28 @@ export default function ReportesPage() {
       title="Insights operativos"
       subtitle="Reportes que se vuelven posibles a medida que el equipo carga planes y consume actuals. Por ahora son specs — la implementación llega después de tener data acumulada."
     >
+      <Link
+        href="/reportes/calendario"
+        className="block rounded-lg border border-line bg-white p-5 mb-6 hover:border-accent transition-colors group"
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+            <CalendarClock size={16} strokeWidth={2} className="text-accent" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-medium text-ink group-hover:text-accent transition-colors">
+              Calendario de reportes
+            </h3>
+            <p className="text-xs text-muted mt-1 leading-relaxed">
+              Proyectos cerrados pendientes de reporte final. Asigná fechas de
+              entrega y trackeá los compromisos en un Gantt de 60 días. Al
+              marcar como entregado, el proyecto pasa a estado{" "}
+              <em>reportado</em>.
+            </p>
+          </div>
+        </div>
+      </Link>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {REPORTS.map((r) => {
           const Icon = r.icon;
