@@ -1,22 +1,38 @@
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { asc } from "drizzle-orm";
 import { db } from "@/db";
-import { markets } from "@/db/schema";
+import { clients } from "@/db/schema";
 import { PageShell } from "@/components/page-shell";
-import { MarketsAdmin } from "./admin";
 
-export default async function MarketsPage() {
-  const rows = await db
-    .select()
-    .from(markets)
-    .orderBy(asc(markets.sortOrder), asc(markets.name));
+// El catálogo global de mercados dejó de existir: cada cliente tiene su
+// propia lista. Esta página redirige al admin per-cliente.
+export default async function MarketsRedirectPage() {
+  const allClients = await db
+    .select({ slug: clients.slug, name: clients.name })
+    .from(clients)
+    .orderBy(asc(clients.name));
 
   return (
     <PageShell
       eyebrow="Configuración"
       title="Mercados"
-      subtitle="Catálogo editable de mercados que el media planner puede asignar a un placement. Incluye países individuales y agrupaciones (Centroamérica, LATAM, etc.)."
+      subtitle="El catálogo de mercados ahora es por cliente. Entrá al cliente para administrar los suyos."
     >
-      <MarketsAdmin initialRows={rows} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {allClients.map((c) => (
+          <Link
+            key={c.slug}
+            href={`/configuracion/clientes/${c.slug}#mercados`}
+            className="rounded-lg border border-line bg-white px-5 py-4 flex items-center justify-between hover:border-accent transition-colors group"
+          >
+            <span className="font-medium text-ink group-hover:text-accent">
+              {c.name}
+            </span>
+            <ArrowRight size={16} className="text-muted group-hover:text-accent" />
+          </Link>
+        ))}
+      </div>
     </PageShell>
   );
 }

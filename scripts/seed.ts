@@ -14,6 +14,7 @@
 // Idempotente: limpia las tablas en orden inverso de FK antes de insertar.
 // Uso: `npm run db:seed`
 
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 
@@ -66,61 +67,9 @@ async function main() {
     return p;
   };
 
-  console.log("⏳ Catálogo de mercados...");
-  const mkts = await db
-    .insert(s.markets)
-    .values([
-      { slug: "costa-rica", name: "Costa Rica", sortOrder: 0 },
-      { slug: "panama", name: "Panama", sortOrder: 1 },
-      { slug: "guatemala", name: "Guatemala", sortOrder: 2 },
-      { slug: "honduras", name: "Honduras", sortOrder: 3 },
-      { slug: "el-salvador", name: "El Salvador", sortOrder: 4 },
-      { slug: "nicaragua", name: "Nicaragua", sortOrder: 5 },
-      { slug: "mexico", name: "México", sortOrder: 6 },
-      { slug: "argentina", name: "Argentina", sortOrder: 7 },
-      { slug: "brasil", name: "Brasil", sortOrder: 8 },
-      { slug: "chile", name: "Chile", sortOrder: 9 },
-      { slug: "colombia", name: "Colombia", sortOrder: 10 },
-      { slug: "peru", name: "Perú", sortOrder: 11 },
-      { slug: "centroamerica", name: "Centroamérica", sortOrder: 50 },
-      { slug: "latam", name: "LATAM", sortOrder: 51 },
-    ])
-    .returning();
-  const mktBySlug = new Map(mkts.map((m) => [m.slug, m]));
-  const mkt = (slug: string) => {
-    const m = mktBySlug.get(slug);
-    if (!m) throw new Error(`Market slug ${slug} no existe`);
-    return m;
-  };
-
-  console.log("⏳ Catálogo de métricas...");
-  await db.insert(s.metricsCatalog).values([
-    { slug: "impressions", name: "Impressions", kind: "direct", unit: "imp", sortOrder: 0 },
-    { slug: "clicks",      name: "Clicks",      kind: "direct", unit: "click", sortOrder: 1 },
-    { slug: "views",       name: "Video Views", kind: "direct", unit: "view", sortOrder: 2 },
-    { slug: "conversions", name: "Conversions", kind: "direct", unit: "conv", sortOrder: 3 },
-    { slug: "reach",       name: "Reach único", kind: "direct", unit: "users", sortOrder: 4 },
-    { slug: "frequency",   name: "Frequency",   kind: "direct", unit: "freq", sortOrder: 5 },
-    { slug: "engagements", name: "Engagements", kind: "direct", unit: "eng", sortOrder: 6 },
-    { slug: "followers",   name: "Followers",   kind: "direct", unit: "users", sortOrder: 7 },
-    { slug: "leads",       name: "Leads",       kind: "direct", unit: "leads", sortOrder: 8 },
-    { slug: "installs",    name: "App Installs", kind: "direct", unit: "installs", sortOrder: 9 },
-    { slug: "visits",      name: "Site Visits", kind: "direct", unit: "visits", sortOrder: 10 },
-    { slug: "ctr",   name: "CTR",  kind: "calculated", unit: "%", formula: "clicks / impressions", sortOrder: 50 },
-    { slug: "cpc",   name: "CPC",  kind: "calculated", unit: "$", formula: "amount / clicks", sortOrder: 51 },
-    { slug: "cpm",   name: "CPM",  kind: "calculated", unit: "$", formula: "amount / impressions × 1000", sortOrder: 52 },
-    { slug: "cpv",   name: "CPV",  kind: "calculated", unit: "$", formula: "amount / views", sortOrder: 53 },
-    { slug: "cpa",   name: "CPA",  kind: "calculated", unit: "$", formula: "amount / conversions", sortOrder: 54 },
-    { slug: "vtr",   name: "VTR (View-Through Rate)", kind: "calculated", unit: "%", formula: "views / impressions", sortOrder: 55 },
-    // Cost-per-X adicionales — habilitan editor bidireccional rate↔delivery
-    // para las direct que antes no tenían par (ver lib/cost-methods.ts).
-    { slug: "cpr",   name: "CPR (Cost per Reach)",       kind: "calculated", unit: "$", formula: "amount / reach",       sortOrder: 56 },
-    { slug: "cpe",   name: "CPE (Cost per Engagement)",  kind: "calculated", unit: "$", formula: "amount / engagements", sortOrder: 57 },
-    { slug: "cpf",   name: "CPF (Cost per Follower)",    kind: "calculated", unit: "$", formula: "amount / followers",   sortOrder: 58 },
-    { slug: "cpl",   name: "CPL (Cost per Lead)",        kind: "calculated", unit: "$", formula: "amount / leads",       sortOrder: 59 },
-    { slug: "cpi",   name: "CPI (Cost per Install)",     kind: "calculated", unit: "$", formula: "amount / installs",    sortOrder: 60 },
-    { slug: "cpvis", name: "CPVis (Cost per Visit)",     kind: "calculated", unit: "$", formula: "amount / visits",      sortOrder: 61 },
-  ]);
+  // El catálogo de markets y metricas ahora es per-cliente. Lo armamos
+  // después de insertar los clientes — ver más abajo.
+  console.log("⏳ Catálogo de mercados y métricas: skipped (per cliente, después)");
 
   // ════════════════════════════════════════════════════════════════════════
   // Clientes — 4 con perfiles distintos
@@ -136,6 +85,92 @@ async function main() {
       { name: "Tienda Roma",        slug: "tienda-roma", prefix: "TR", status: "paused", language: "es" },
     ])
     .returning();
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Markets y métricas per-cliente — replicamos la misma lista para cada uno
+  // para demo. En prod cada cliente edita los suyos.
+  // ════════════════════════════════════════════════════════════════════════
+
+  console.log("⏳ Markets per cliente (replicados)...");
+  const MARKETS_TEMPLATE = [
+    { slug: "costa-rica", name: "Costa Rica", sortOrder: 0 },
+    { slug: "panama", name: "Panama", sortOrder: 1 },
+    { slug: "guatemala", name: "Guatemala", sortOrder: 2 },
+    { slug: "honduras", name: "Honduras", sortOrder: 3 },
+    { slug: "el-salvador", name: "El Salvador", sortOrder: 4 },
+    { slug: "nicaragua", name: "Nicaragua", sortOrder: 5 },
+    { slug: "mexico", name: "México", sortOrder: 6 },
+    { slug: "argentina", name: "Argentina", sortOrder: 7 },
+    { slug: "brasil", name: "Brasil", sortOrder: 8 },
+    { slug: "chile", name: "Chile", sortOrder: 9 },
+    { slug: "colombia", name: "Colombia", sortOrder: 10 },
+    { slug: "peru", name: "Perú", sortOrder: 11 },
+    { slug: "centroamerica", name: "Centroamérica", sortOrder: 50 },
+    { slug: "latam", name: "LATAM", sortOrder: 51 },
+  ] as const;
+
+  const allClientsForCatalog = [copa, cra, bpac, tr];
+  const mktRows = await db
+    .insert(s.markets)
+    .values(
+      allClientsForCatalog.flatMap((c) =>
+        MARKETS_TEMPLATE.map((m) => ({ ...m, clientId: c.id })),
+      ),
+    )
+    .returning();
+  const mktByClientAndSlug = new Map(
+    mktRows.map((m) => [`${m.clientId}|${m.slug}`, m]),
+  );
+  const mkt = (clientId: string, slug: string) => {
+    const k = `${clientId}|${slug}`;
+    const m = mktByClientAndSlug.get(k);
+    if (!m)
+      throw new Error(`Market ${slug} no existe para cliente ${clientId}`);
+    return m;
+  };
+
+  console.log("⏳ Métricas per cliente (replicadas)...");
+  const METRICS_TEMPLATE = [
+    { slug: "impressions", name: "Impressions", kind: "direct" as const, unit: "imp", sortOrder: 0 },
+    { slug: "clicks",      name: "Clicks",      kind: "direct" as const, unit: "click", sortOrder: 1 },
+    { slug: "views",       name: "Video Views", kind: "direct" as const, unit: "view", sortOrder: 2 },
+    { slug: "conversions", name: "Conversions", kind: "direct" as const, unit: "conv", sortOrder: 3 },
+    { slug: "reach",       name: "Reach único", kind: "direct" as const, unit: "users", sortOrder: 4 },
+    { slug: "frequency",   name: "Frequency",   kind: "direct" as const, unit: "freq", sortOrder: 5 },
+    { slug: "engagements", name: "Engagements", kind: "direct" as const, unit: "eng", sortOrder: 6 },
+    { slug: "followers",   name: "Followers",   kind: "direct" as const, unit: "users", sortOrder: 7 },
+    { slug: "leads",       name: "Leads",       kind: "direct" as const, unit: "leads", sortOrder: 8 },
+    { slug: "installs",    name: "App Installs", kind: "direct" as const, unit: "installs", sortOrder: 9 },
+    { slug: "visits",      name: "Site Visits", kind: "direct" as const, unit: "visits", sortOrder: 10 },
+    { slug: "ctr",   name: "CTR",  kind: "calculated" as const, unit: "%", formula: "clicks / impressions", sortOrder: 50 },
+    { slug: "cpc",   name: "CPC",  kind: "calculated" as const, unit: "$", formula: "amount / clicks", sortOrder: 51 },
+    { slug: "cpm",   name: "CPM",  kind: "calculated" as const, unit: "$", formula: "amount / impressions × 1000", sortOrder: 52 },
+    { slug: "cpv",   name: "CPV",  kind: "calculated" as const, unit: "$", formula: "amount / views", sortOrder: 53 },
+    { slug: "cpa",   name: "CPA",  kind: "calculated" as const, unit: "$", formula: "amount / conversions", sortOrder: 54 },
+    { slug: "vtr",   name: "VTR (View-Through Rate)", kind: "calculated" as const, unit: "%", formula: "views / impressions", sortOrder: 55 },
+    { slug: "cpr",   name: "CPR (Cost per Reach)",       kind: "calculated" as const, unit: "$", formula: "amount / reach",       sortOrder: 56 },
+    { slug: "cpe",   name: "CPE (Cost per Engagement)",  kind: "calculated" as const, unit: "$", formula: "amount / engagements", sortOrder: 57 },
+    { slug: "cpf",   name: "CPF (Cost per Follower)",    kind: "calculated" as const, unit: "$", formula: "amount / followers",   sortOrder: 58 },
+    { slug: "cpl",   name: "CPL (Cost per Lead)",        kind: "calculated" as const, unit: "$", formula: "amount / leads",       sortOrder: 59 },
+    { slug: "cpi",   name: "CPI (Cost per Install)",     kind: "calculated" as const, unit: "$", formula: "amount / installs",    sortOrder: 60 },
+    { slug: "cpvis", name: "CPVis (Cost per Visit)",     kind: "calculated" as const, unit: "$", formula: "amount / visits",      sortOrder: 61 },
+  ];
+  await db.insert(s.metricsCatalog).values(
+    allClientsForCatalog.flatMap((c) =>
+      METRICS_TEMPLATE.map((m) => ({ ...m, clientId: c.id })),
+    ),
+  );
+
+  // Banco Pacífico además tiene una conversión custom — demo de la nueva
+  // capacidad per-cliente.
+  await db.insert(s.metricsCatalog).values({
+    clientId: bpac.id,
+    slug: "card_applications",
+    name: "Solicitudes de tarjeta",
+    kind: "direct",
+    unit: "apps",
+    sortOrder: 11,
+  });
 
   // ════════════════════════════════════════════════════════════════════════
   // Mapping per-cliente del catálogo de publishers.
@@ -387,6 +422,19 @@ async function main() {
     fees: FeeSpec[];
     snapshots?: { version: number; approvedAt: Date; notes?: string }[];
   }) {
+    // Cada placement necesita el market_id del cliente correspondiente. Los
+    // markets ahora son per-cliente, así que lo resolvemos por el cliente
+    // del proyecto en el que vive el plan.
+    const projRows = await db
+      .select({ clientId: s.projects.clientId })
+      .from(s.projects)
+      .where(eq(s.projects.id, args.projectId))
+      .limit(1);
+    const planClientId = projRows[0]?.clientId;
+    if (!planClientId) {
+      throw new Error(`Proyecto ${args.projectId} no encontrado al crear plan ${args.name}`);
+    }
+
     const [plan] = await db
       .insert(s.mediaPlans)
       .values({
@@ -421,7 +469,7 @@ async function main() {
             mediaPlanPublisherId: mpp.id,
             sortOrder: j,
             placementName: pl.name,
-            marketId: mkt(pl.marketSlug).id,
+            marketId: mkt(planClientId, pl.marketSlug).id,
             audience: pl.audience ?? null,
             amountUsd: pl.amount.toFixed(2),
             costMethod: pl.costMethod ?? null,

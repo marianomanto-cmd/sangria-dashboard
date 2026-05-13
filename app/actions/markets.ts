@@ -18,10 +18,18 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function pathsToRevalidate(clientSlug?: string) {
+  revalidatePath("/configuracion/markets");
+  if (clientSlug) revalidatePath(`/configuracion/clientes/${clientSlug}`);
+}
+
 export async function createMarket(input: {
+  clientId: string;
+  clientSlug?: string;
   name: string;
   slug?: string;
 }): Promise<Result<{ id: string }>> {
+  if (!input.clientId) return { ok: false, error: "Cliente requerido" };
   if (!input.name.trim()) return { ok: false, error: "Nombre requerido" };
   const slug = (input.slug?.trim() || slugify(input.name)).slice(0, 64);
   if (!slug) return { ok: false, error: "No se pudo generar el slug" };
@@ -30,12 +38,14 @@ export async function createMarket(input: {
     .select({
       next: sql<number>`coalesce(max(${markets.sortOrder}), -1) + 1`,
     })
-    .from(markets);
+    .from(markets)
+    .where(eq(markets.clientId, input.clientId));
 
   try {
     const [m] = await db
       .insert(markets)
       .values({
+        clientId: input.clientId,
         name: input.name.trim(),
         slug,
         sortOrder: next,
@@ -50,12 +60,15 @@ export async function createMarket(input: {
       afterJson: m,
     });
 
-    revalidatePath("/configuracion/markets");
+    pathsToRevalidate(input.clientSlug);
     return { ok: true, id: m.id };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error desconocido";
     if (msg.includes("unique") || msg.includes("duplicate")) {
-      return { ok: false, error: `Ya existe un mercado con slug "${slug}"` };
+      return {
+        ok: false,
+        error: `Ya existe un mercado con slug "${slug}" para este cliente`,
+      };
     }
     return { ok: false, error: msg };
   }
@@ -63,6 +76,7 @@ export async function createMarket(input: {
 
 export async function updateMarket(input: {
   id: string;
+  clientSlug?: string;
   name?: string;
   enabled?: boolean;
 }): Promise<Result> {
@@ -92,29 +106,31 @@ export async function updateMarket(input: {
     afterJson: after,
   });
 
-  revalidatePath("/configuracion/markets");
+  pathsToRevalidate(input.clientSlug);
   return { ok: true };
 }
 
-export async function deleteMarket(id: string): Promise<Result> {
+export async function deleteMarket(input: {
+  id: string;
+  clientSlug?: string;
+}): Promise<Result> {
   const [before] = await db
     .select()
     .from(markets)
-    .where(eq(markets.id, id))
+    .where(eq(markets.id, input.id))
     .limit(1);
   if (!before) return { ok: false, error: "No encontrado" };
 
   // El FK en placements tiene onDelete: "set null", así que se permite.
-  // Igual avisamos si hay placements usándolo.
-  await db.delete(markets).where(eq(markets.id, id));
+  await db.delete(markets).where(eq(markets.id, input.id));
 
   await db.insert(auditLog).values({
     entityType: "market",
-    entityId: id,
+    entityId: input.id,
     action: "delete",
     beforeJson: before,
   });
 
-  revalidatePath("/configuracion/markets");
+  pathsToRevalidate(input.clientSlug);
   return { ok: true };
 }

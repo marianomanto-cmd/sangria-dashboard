@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ArrowUpRight, Plus } from "lucide-react";
+import { ArrowUpRight, Plus, Settings } from "lucide-react";
 import {
   createClient as createClientAction,
   updateClient,
@@ -152,13 +152,22 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   </select>
                 </td>
                 <td className="px-2 py-2 text-center">
-                  <Link
-                    href={`/clientes/${c.slug}`}
-                    className="text-muted hover:text-ink inline-flex p-1"
-                    title="Ver cliente"
-                  >
-                    <ArrowUpRight size={14} />
-                  </Link>
+                  <div className="inline-flex items-center gap-0.5">
+                    <Link
+                      href={`/configuracion/clientes/${c.slug}`}
+                      className="text-muted hover:text-accent inline-flex p-1"
+                      title="Publishers / métricas / mercados de este cliente"
+                    >
+                      <Settings size={14} />
+                    </Link>
+                    <Link
+                      href={`/clientes/${c.slug}`}
+                      className="text-muted hover:text-ink inline-flex p-1"
+                      title="Ver cliente"
+                    >
+                      <ArrowUpRight size={14} />
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}

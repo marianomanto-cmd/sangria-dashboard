@@ -10,21 +10,27 @@ const SECTIONS: Array<{
   status: "ready" | "soon";
 }> = [
   {
+    href: "/configuracion/clientes",
+    title: "Clientes",
+    description: "Alta y edición de clientes (nombre, prefijo, idioma, estado). Click en el ⚙ de cada cliente para configurar sus publishers, métricas y mercados.",
+    status: "ready",
+  },
+  {
     href: "/configuracion/publishers",
-    title: "Publishers",
-    description: "Catálogo editable de publishers (YouTube, Meta, TikTok, etc.) que el media planner puede usar al armar un plan.",
+    title: "Publishers (catálogo global)",
+    description: "Catálogo maestro de publishers (YouTube, Meta, TikTok, …). El subset y agency_pays se configura per cliente en /configuracion/clientes/[slug].",
     status: "ready",
   },
   {
     href: "/configuracion/markets",
-    title: "Mercados",
-    description: "Países y agrupaciones (Centroamérica, LATAM) que el planner asigna a cada placement.",
+    title: "Mercados (per cliente)",
+    description: "Cada cliente tiene su propia lista de mercados. Click para ir al cliente y editarlos.",
     status: "ready",
   },
   {
     href: "/configuracion/metricas",
-    title: "Métricas e indicadores",
-    description: "KPIs direct (views, clicks, impressions) y calculated (cpc, ctr, cpm — derivadas con fórmula).",
+    title: "Métricas (per cliente)",
+    description: "Cada cliente tiene su lista de métricas (incluyendo conversiones custom). Click para ir al cliente.",
     status: "ready",
   },
   {
@@ -32,12 +38,6 @@ const SECTIONS: Array<{
     title: "Usuarios y roles",
     description: "Gestión de usuarios (Account Manager, Media Planner, Finance, Viewer). Llega después de Auth.",
     status: "soon",
-  },
-  {
-    href: "/configuracion/clientes",
-    title: "Clientes",
-    description: "Alta y edición de clientes (nombre, prefijo, idioma operativo, estado). El idioma afecta fechas y exports.",
-    status: "ready",
   },
 ];
 
@@ -56,21 +56,25 @@ export default async function ConfiguracionPage({ searchParams }: Props) {
       subtitle="Catálogos editables, gestión de usuarios y configuración general."
     >
       {client && (
-        <div className="mb-5 rounded-lg border border-warn-soft bg-warn-soft/40 px-4 py-3 flex items-start gap-3">
+        <div className="mb-5 rounded-lg border border-info-soft bg-info-soft/40 px-4 py-3 flex items-start gap-3">
           <Info
             size={16}
             strokeWidth={2}
-            className="text-warn shrink-0 mt-0.5"
+            className="text-info shrink-0 mt-0.5"
           />
           <div className="text-xs leading-relaxed text-ink-2">
             <p className="font-medium text-ink">
-              Configuración compartida entre clientes
+              Configurando {client.name}
             </p>
             <p className="mt-0.5">
-              Publishers, mercados y métricas se editan como catálogo global por
-              ahora. La edición per-cliente (que cada cliente tenga sus propios
-              publishers/mercados/métricas) llega en una próxima iteración. Los
-              budget origins ya son per-cliente y se filtran por {client.name}.
+              Para editar publishers, métricas y mercados de este cliente entrá a{" "}
+              <Link
+                href={`/configuracion/clientes/${client.slug}`}
+                className="text-accent hover:underline"
+              >
+                /configuracion/clientes/{client.slug}
+              </Link>
+              .
             </p>
           </div>
         </div>

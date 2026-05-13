@@ -1,6 +1,41 @@
-# Handoff — miércoles 13/may/2026 (noche-2)
+# Handoff — miércoles 13/may/2026 (noche-3)
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 13/may/2026 (noche-3) — Markets + métricas per-cliente
+
+- **Schema**: agregamos `client_id` (NOT NULL FK a `clients`) tanto a
+  `markets` como a `metrics_catalog`. La unique constraint pasa de
+  `(slug)` a `(client_id, slug)`. Cada cliente tiene su propia lista,
+  incluyendo conversiones custom (ej. "Solicitudes de tarjeta" en
+  Banco Pacífico).
+- **Publishers**: se queda como estaba — catálogo global +
+  `client_publishers` para subset/enable/agency_pays per cliente.
+- **Queries**: `listMarketsForClient(clientId)`, `listMetricsForClient(clientId)`
+  reemplazan a las versiones globales. El editor del plan y el export
+  Excel ahora pasan `detail.client.id`.
+- **Actions**: `createMarket`, `updateMarket`, `deleteMarket`,
+  `createMetric`, `updateMetric`, `deleteMetric` ahora todas requieren
+  `clientId` (y opcionalmente `clientSlug` para revalidatePath).
+- **Nueva action** `upsertClientPublisher` para toggle enabled +
+  agency_pays per (cliente, publisher) desde la UI.
+- **Página nueva** `/configuracion/clientes/[slug]` con tres secciones:
+  Publishers (checkbox + dropdown agency/client), Métricas (CRUD per
+  cliente con kind direct/calculated + fórmula), Mercados (CRUD per
+  cliente).
+- **Páginas viejas** `/configuracion/markets` y `/configuracion/metricas`
+  ahora son redirects al admin per-cliente (lista de clientes con
+  links). Bookmarks viejos siguen funcionando.
+- **Seed** reorganizado: clientes primero, después markets+metrics
+  replicados para cada cliente. Banco Pacífico tiene además la
+  conversión custom de demo.
+
+**Acciones requeridas en prod**: schema + datos. Ver el bloque SQL en el
+PR. Es invasivo porque hay que reescribir FKs de
+`media_plan_placements.market_id` para apuntar a las nuevas filas
+per-cliente.
+
+### Cambios de la sesión 13/may/2026 (noche-2) — Billing lifecycle + PDF report
 
 ### Cambios de la sesión 13/may/2026 (noche-2) — Billing lifecycle + PDF report
 
