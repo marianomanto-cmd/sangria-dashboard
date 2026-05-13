@@ -17,13 +17,15 @@ const STATUS_STYLE_BY_LANG: Record<
   es: {
     draft: { label: "borrador", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
     ready: { label: "listo", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-    sent: { label: "emitida", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
-    paid: { label: "pagada", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
+    sent: { label: "reportado", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
+    invoiced: { label: "facturado", cls: "bg-accent-soft text-accent border-accent-soft", dot: "bg-accent" },
+    paid: { label: "pagado", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
   },
   en: {
     draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
     ready: { label: "ready", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-    sent: { label: "sent", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
+    sent: { label: "reported", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
+    invoiced: { label: "invoiced", cls: "bg-accent-soft text-accent border-accent-soft", dot: "bg-accent" },
     paid: { label: "paid", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
   },
 };

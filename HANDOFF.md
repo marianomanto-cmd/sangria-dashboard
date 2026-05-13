@@ -1,6 +1,46 @@
-# Handoff — miércoles 13/may/2026 (noche)
+# Handoff — miércoles 13/may/2026 (noche-2)
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 13/may/2026 (noche-2) — Billing lifecycle + PDF report
+
+Nuevo lifecycle de `plan_billings`:
+
+```
+draft (borrador) → ready (listo) → sent (reportado) → invoiced (facturado) → paid (pagado)
+```
+
+- `draft → ready` (analista termina de cargar consumos / fees y marca listo).
+- `ready → sent`: el manager aprieta "Reportar" en el editor; descarga un
+  PDF para finanzas con el formato de tabla solicitado (una fila por
+  publisher facturable con consumo > 0 + una fila por fee imputado en el
+  mes). Este paso ya **NO** asigna número de factura automático.
+- `sent → invoiced`: el manager recibe el número de factura de finanzas y
+  lo carga vía un input inline (`markBillingInvoiced`). En esta transición
+  se setea `due_date = today + 30d` si no había uno.
+- `invoiced → paid`: el cliente notificó el pago.
+
+Reversiones permitidas: ready ↔ draft, sent ↔ ready, invoiced ↔ sent,
+paid ↔ invoiced.
+
+PDF: nuevo endpoint `app/api/billings/[id]/report.pdf/route.ts`.
+Layout: header con metadata + tabla "# | Product/service | Description |
+Qty | Rate | Amount" y fila de TOTAL al final. Una fila por
+`Media Placement` (publishers facturables con consumo > 0) + una por
+`Services` (fees con imputación > 0).
+
+### Acciones requeridas en prod
+
+1. Agregar `'invoiced'` al enum `billing_status` (SQL adjunto en el PR).
+2. Migrar `sent` (legacy con invoice_number) → `invoiced`: las facturas
+   que ya estaban "sent" bajo el viejo significado tienen `invoice_number`
+   no null → bajo el nuevo significado son `invoiced`.
+3. `db/queries/dashboard.ts` ahora cuenta `[invoiced, paid]` en lugar de
+   `[sent, paid]` como "facturado". Tras la migración el resultado es
+   idéntico, pero rows nuevas en `sent` (reportado) ya no se contabilizan
+   como facturadas.
+
+### Cambios de la sesión 13/may/2026 (noche) — Billing filters + row click
 
 > **Para setup inicial en una máquina nueva** ver [README.md](README.md).
 > Este documento asume que ya está clonado el repo y `npm install`-eado.
@@ -525,6 +565,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el PDF/Excel del plan          | `app/api/plans/[planId]/export.{pdf,xlsx}/route.ts`       |
 | Agregar/cambiar columnas de métricas en el Excel | `app/api/plans/[planId]/export.xlsx/route.ts` — la sección "Tab 1" arma `metricSlugs` desde `metrics_json`; los subtotales por publisher usan `sumDirects` + `evalFormula`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` en `app/api/plans/[planId]/export.xlsx/route.ts` (días-overlap inclusive). |
+| Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert) y `markBillingInvoiced` (sent → invoiced con número de factura). Labels: `STATUS_STYLE_BY_LANG` en `app/(app)/billing/page.tsx` y `BillingStatusPillInline` en el editor. |
+| Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers facturables con consumo > 0) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
 | Cambiar el destino del click en una fila de /billing | `app/(app)/billing/page.tsx` — variable `detailHref` por row. Apunta a `/proyectos/[code]/planes/[planId]/billing?month=YYYY-MM`. |
