@@ -47,10 +47,11 @@ Abre `http://localhost:3000`.
 ### 5. Operaciones útiles de DB
 
 ```powershell
-npm run db:push     # Aplica el schema (db/schema.ts) sin generar migraciones
-npm run db:seed     # Limpia y repuebla la DB con datos de demo
-npm run db:check    # Conecta y muestra info básica de las tablas
-npm run db:studio   # Abre Drizzle Studio
+npm run db:push                # Aplica el schema (db/schema.ts) sin generar migraciones
+npm run db:seed                # Limpia y repuebla la DB con datos de demo
+npm run db:check               # Conecta y muestra info básica de las tablas
+npm run db:studio              # Abre Drizzle Studio
+npm run db:backfill-reports    # Crea project_reports para proyectos closed existentes (idempotente)
 ```
 
 `db:push` usa `--force` (ver `package.json`). Útil para desarrollo; para
@@ -89,14 +90,16 @@ app/
     configuracion/
       markets/, metricas/, publishers/   # admin de catálogos
       clientes/               # alta/edición de clientes (nombre, prefijo, idioma, estado)
-    reportes/               # placeholders por ahora
+    reportes/
+      page.tsx              # placeholders de los 6 reports analíticos
+      calendario/           # Reporting Calendar (closed → reportado)
   api/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan
       export.pdf/route.ts   # PDF del plan
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
-    clients.ts
+    clients.ts, reports.ts
   globals.css
 
 components/                 # UI compartida
@@ -107,7 +110,7 @@ db/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
-    clients.ts, billing.ts, audit-log.ts, budget-origins.ts
+    clients.ts, billing.ts, audit-log.ts, budget-origins.ts, reports.ts
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -127,6 +130,14 @@ lib/
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).
 - Cada plan tiene su propio lifecycle: `draft` → `ready_to_send` → `approved` → `archived`.
 - Los planes pueden solapar fechas y estar todos `approved` al mismo tiempo.
+
+### Lifecycle del proyecto
+- Estados: `planning` → `active` → `paused` → `closed` → **`reportado`**.
+- `reportado` es el estado terminal: el proyecto cerró sus campañas Y se
+  entregó el reporte final al cliente. Solo se entra acá marcando el reporte
+  como delivered desde `/reportes/calendario` — no es seteable manualmente.
+- Cuando un proyecto pasa a `closed`, automáticamente se crea una fila en
+  `project_reports` (idempotente). Ver `app/actions/reports.ts`.
 
 ### Naming
 - Proyectos: `<CLIENT_PREFIX>.m<id>.<ProjectName>` — ej. `COPA.m2026A01.CostaRica2026`.
@@ -400,6 +411,12 @@ Idempotente: limpia las tablas antes de insertar.
   con la fórmula del catálogo sobre el subtotal/total correspondiente). Tab 2
   (Budget por mercado) prorratea la inversión de cada placement por días entre
   los meses que abarca y la agrega por mercado × mes. Sin métricas, solo USD.
+- **Reporting Calendar** (`/reportes/calendario`): listado de proyectos
+  closed pendientes de reporte + Gantt de 60 días (-30/+30 desde hoy). Una
+  fila por reporte en curso con símbolos para closed/assigned/delivery y
+  línea de atraso si hoy > delivery_date. Marcar entregado transiciona el
+  proyecto a `reportado`. **Requiere `npm run db:push` + `npm run db:backfill-reports`**
+  en prod para sembrar la nueva tabla y dar de alta los closed existentes.
 - **PDF**: formato básico (lista de texto plano, sin tablas estilizadas).
   Respeta el `clients.language` del plan exportado.
 - **i18n parcial**: las áreas de mayor visibilidad (dashboard, listas

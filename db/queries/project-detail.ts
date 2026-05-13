@@ -475,7 +475,7 @@ export async function getOpenProjectsForPlanCreation() {
     .from(projects)
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
-    .where(and(sql`${projects.status} != 'closed'`))
+    .where(and(sql`${projects.status} not in ('closed', 'reportado')`))
     .orderBy(asc(projects.code));
   return rows;
 }

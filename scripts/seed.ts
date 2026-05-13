@@ -28,6 +28,7 @@ async function main() {
   await db.delete(s.mediaPlanPlacements);
   await db.delete(s.mediaPlanPublishers);
   await db.delete(s.mediaPlans);
+  await db.delete(s.projectReports);
   await db.delete(s.projects);
   await db.delete(s.budgetOrigins);
   await db.delete(s.clientPublishers);
@@ -318,6 +319,38 @@ async function main() {
       },
     ])
     .returning();
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Reporting Calendar — un row por proyecto closed. Tres escenarios de demo:
+  //   · projLegacy        → cerrado hace ~50d, sin delivery_date (pending).
+  //   · projBpacCierre    → cerrado hace ~30d, delivery_date a +7d desde hoy
+  //                         (assigned hace 3d) — caso "en plazo".
+  //   · projTrBF          → cerrado hace ~25d, delivery_date a -5d desde hoy
+  //                         (assigned hace 15d) — caso "atrasado".
+  // ════════════════════════════════════════════════════════════════════════
+  console.log("⏳ Project reports (reporting calendar demo)...");
+  const now = new Date();
+  const daysAgo = (d: number) => {
+    const t = new Date(now);
+    t.setDate(t.getDate() - d);
+    return t;
+  };
+  const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+  await db.insert(s.projectReports).values([
+    { projectId: projLegacy.id, closedAt: daysAgo(50) },
+    {
+      projectId: projBpacCierre.id,
+      closedAt: daysAgo(30),
+      deliveryDate: isoDate(daysAgo(-7)),
+      deliveryDateAssignedAt: daysAgo(3),
+    },
+    {
+      projectId: projTrBF.id,
+      closedAt: daysAgo(25),
+      deliveryDate: isoDate(daysAgo(5)),
+      deliveryDateAssignedAt: daysAgo(15),
+    },
+  ]);
 
   // ════════════════════════════════════════════════════════════════════════
   // Helpers para insertar planes con publishers + placements + fees

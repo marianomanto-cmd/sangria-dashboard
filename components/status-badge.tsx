@@ -1,4 +1,4 @@
-type ProjectStatus = "planning" | "active" | "paused" | "closed";
+type ProjectStatus = "planning" | "active" | "paused" | "closed" | "reportado";
 
 const STYLES: Record<ProjectStatus, { label: string; className: string; dot: string }> = {
   planning: {
@@ -20,6 +20,11 @@ const STYLES: Record<ProjectStatus, { label: string; className: string; dot: str
     label: "cerrado",
     className: "bg-paper-2 text-muted border-line",
     dot: "bg-muted",
+  },
+  reportado: {
+    label: "reportado",
+    className: "bg-accent/10 text-accent border-accent/20",
+    dot: "bg-accent",
   },
 };
 
