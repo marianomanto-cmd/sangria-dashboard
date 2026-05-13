@@ -35,6 +35,9 @@ const COLOR_ASSIGNED = "#7C3AED";     // violeta
 const COLOR_TARGET = "#7a1f3d";       // accent
 const COLOR_LATE = "#DC2626";         // rojo
 const COLOR_TODAY = "#3B82F6";        // azul
+const COLOR_WEEKEND_BG = "#F1F5F9";   // slate-100 — banda de fin de semana
+const COLOR_DAY_TICK = "#E5E7EB";     // gray-200 — tick diario
+const COLOR_WEEK_TICK = "#94A3B8";    // slate-400 — tick semanal (lunes)
 
 export function ReportingGantt({
   reports,
@@ -74,6 +77,58 @@ export function ReportingGantt({
     return out;
   }, [windowStart, windowEnd, lang]);
 
+  // Eje de días: para cada día de la ventana, dejamos un tick. Los lunes
+  // ganan un tick más marcado + label "18 may" / "May 18". Sábados y
+  // domingos se marcan para pintar el fondo en cada fila.
+  const dayTicks = useMemo(() => {
+    const out: {
+      offset: number;
+      isWeekend: boolean;
+      isMonday: boolean;
+      isFirstOfMonth: boolean;
+      label?: string;
+    }[] = [];
+    for (let i = 0; i <= TOTAL_DAYS; i++) {
+      const d = addDays(windowStart, i);
+      const dow = d.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+      const isWeekend = dow === 0 || dow === 6;
+      const isMonday = dow === 1;
+      const isFirstOfMonth = d.getDate() === 1;
+      let label: string | undefined;
+      if (isMonday) {
+        const monthShort = shortMonthName(d.getMonth(), lang);
+        label =
+          lang === "es"
+            ? `${d.getDate()} ${monthShort.toLowerCase()}`
+            : `${monthShort} ${d.getDate()}`;
+      }
+      out.push({ offset: i, isWeekend, isMonday, isFirstOfMonth, label });
+    }
+    return out;
+  }, [windowStart, lang]);
+
+  // Pre-computamos los rangos de bandas de fin de semana en porcentaje, para
+  // renderizarlas como divs absolutos en cada track. Cada sábado + domingo
+  // queda como una banda de 2 días contiguos (o 1 día si la ventana corta).
+  const weekendBands = useMemo(() => {
+    const bands: { leftPct: number; widthPct: number }[] = [];
+    let i = 0;
+    while (i <= TOTAL_DAYS) {
+      if (dayTicks[i]?.isWeekend) {
+        const start = i;
+        while (i <= TOTAL_DAYS && dayTicks[i]?.isWeekend) i++;
+        const len = i - start;
+        bands.push({
+          leftPct: (start / TOTAL_DAYS) * 100,
+          widthPct: (len / TOTAL_DAYS) * 100,
+        });
+      } else {
+        i++;
+      }
+    }
+    return bands;
+  }, [dayTicks]);
+
   if (reports.length === 0) {
     return (
       <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center text-sm text-muted">
@@ -88,9 +143,9 @@ export function ReportingGantt({
 
   return (
     <section className="rounded-lg border border-line bg-white p-5">
-      {/* Header eje */}
+      {/* Header eje — meses */}
       <div
-        className="grid gap-3 mb-3"
+        className="grid gap-3 mb-1"
         style={{ gridTemplateColumns: `${LABEL_W}px 1fr` }}
       >
         <div />
@@ -107,6 +162,60 @@ export function ReportingGantt({
         </div>
       </div>
 
+      {/* Header eje — días: ticks diarios + label en cada lunes */}
+      <div
+        className="grid gap-3 mb-2"
+        style={{ gridTemplateColumns: `${LABEL_W}px 1fr` }}
+      >
+        <div />
+        <div className="relative h-7">
+          {/* bandas de fin de semana en el header (para que el eje también se vea sombrado) */}
+          {weekendBands.map((b, i) => (
+            <div
+              key={`wkend-${i}`}
+              className="absolute top-0 bottom-0"
+              style={{
+                left: `${b.leftPct}%`,
+                width: `${b.widthPct}%`,
+                background: COLOR_WEEKEND_BG,
+              }}
+              aria-hidden
+            />
+          ))}
+          {/* ticks diarios */}
+          {dayTicks.map((t) => (
+            <div
+              key={`tick-${t.offset}`}
+              className="absolute top-0"
+              style={{
+                left: `${(t.offset / TOTAL_DAYS) * 100}%`,
+                height: t.isMonday ? "10px" : "5px",
+                borderLeft: `1px solid ${
+                  t.isMonday ? COLOR_WEEK_TICK : COLOR_DAY_TICK
+                }`,
+                opacity: t.isMonday ? 1 : 0.7,
+              }}
+              aria-hidden
+            />
+          ))}
+          {/* labels de lunes */}
+          {dayTicks
+            .filter((t) => t.label)
+            .map((t) => (
+              <span
+                key={`label-${t.offset}`}
+                className="absolute text-[10px] tabular-nums text-muted -translate-x-1/2"
+                style={{
+                  left: `${(t.offset / TOTAL_DAYS) * 100}%`,
+                  top: "12px",
+                }}
+              >
+                {t.label}
+              </span>
+            ))}
+        </div>
+      </div>
+
       {/* Filas */}
       <div className="flex flex-col gap-1">
         {reports.map((r) => (
@@ -117,6 +226,8 @@ export function ReportingGantt({
             today={today}
             windowStart={windowStart}
             todayPct={todayPct}
+            weekendBands={weekendBands}
+            dayTicks={dayTicks}
             onAssignDate={() => onAssignDate(r.reportId, r.deliveryDate)}
             onMarkDelivered={() => onMarkDelivered(r.reportId)}
           />
@@ -160,6 +271,13 @@ export function ReportingGantt({
           />
           {lang === "es" ? "Hoy" : "Today"}
         </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            className="inline-block w-4 h-3 rounded-sm"
+            style={{ background: COLOR_WEEKEND_BG }}
+          />
+          {lang === "es" ? "Fin de semana" : "Weekend"}
+        </span>
       </div>
     </section>
   );
@@ -171,6 +289,8 @@ function GanttRow({
   today,
   windowStart,
   todayPct,
+  weekendBands,
+  dayTicks,
   onAssignDate,
   onMarkDelivered,
 }: {
@@ -179,6 +299,14 @@ function GanttRow({
   today: Date;
   windowStart: Date;
   todayPct: number;
+  weekendBands: { leftPct: number; widthPct: number }[];
+  dayTicks: {
+    offset: number;
+    isWeekend: boolean;
+    isMonday: boolean;
+    isFirstOfMonth: boolean;
+    label?: string;
+  }[];
   onAssignDate: () => void;
   onMarkDelivered: () => void;
 }) {
@@ -260,7 +388,35 @@ function GanttRow({
       </div>
 
       {/* Track */}
-      <div className="relative" style={{ height: ROW_H }}>
+      <div className="relative overflow-hidden" style={{ height: ROW_H }}>
+        {/* bandas de fin de semana (atrás de todo) */}
+        {weekendBands.map((b, i) => (
+          <div
+            key={`wkend-${i}`}
+            className="absolute top-0 bottom-0"
+            style={{
+              left: `${b.leftPct}%`,
+              width: `${b.widthPct}%`,
+              background: COLOR_WEEKEND_BG,
+            }}
+            aria-hidden
+          />
+        ))}
+        {/* ticks de lunes (verticales suaves, encima de los weekend bands) */}
+        {dayTicks
+          .filter((t) => t.isMonday)
+          .map((t) => (
+            <div
+              key={`mon-${t.offset}`}
+              className="absolute top-0 bottom-0"
+              style={{
+                left: `${(t.offset / TOTAL_DAYS) * 100}%`,
+                borderLeft: `1px solid ${COLOR_DAY_TICK}`,
+                opacity: 0.7,
+              }}
+              aria-hidden
+            />
+          ))}
         {/* base line */}
         <div
           className="absolute left-0 right-0 top-1/2 -translate-y-1/2 border-t border-line-soft"
