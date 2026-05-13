@@ -85,7 +85,7 @@ app/
         editor.tsx          # editor del plan (publishers + placements + fees)
         billing/            # editor de facturación mensual
     planes/                 # /planes — vista cross-proyectos
-    billing/                # /billing — lista de facturas
+    billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
     auditoria/              # /auditoria — log con diff
     configuracion/
       markets/, metricas/, publishers/   # admin de catálogos

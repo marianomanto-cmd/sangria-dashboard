@@ -1,4 +1,4 @@
-# Handoff — miércoles 13/may/2026 (tarde)
+# Handoff — miércoles 13/may/2026 (noche)
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
@@ -14,6 +14,9 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+2bea4ae  Gantt: feriados argentinos se renderizan como días de fin de semana (#15)
+f334113  Gantt: eje diario con marcadores semanales + bandas de fin de semana (#14)
+6c81be4  Reporting Calendar: closed → reportado con Gantt de 60 días (#13)
 508dc6a  Excel: métricas en subtotales/totales + tab budget por mercado (#12)
 7131c46  Clientes CRUD + idioma operativo (en/es) por cliente (#11)
 3cb0076  docs: estimación media/fees + accuracy + regla doc-upkeep en AGENTS.md (#8)
@@ -28,6 +31,41 @@ a4ff8fd  Billing: derivar Total Fee de management fees por ratePct
 bc625f0  Proyectos: quitar columna Spark del listado principal (#2)
 71494f9  Excel export: layout estilo plan de medios (#1)
 ```
+
+### Cambios de la sesión 13/may/2026 (noche) — Billing filters + row click
+
+1. **Filtros en `/billing`**: nueva barra arriba con Budget Origin (dropdown),
+   Proyecto (dropdown) y Rango de meses (slider dual con dos handles). Los
+   valores se persisten en URL como `?budgetOrigin=`, `?project=`, `?from=`,
+   `?to=` y se combinan con el `?client=` global. Componente client:
+   `components/billing-filters.tsx`. Las opciones del dropdown se computan
+   server-side desde billings existentes (scoped por cliente si aplica) vía
+   nueva query `getBillingFilterOptions`.
+
+2. **Filas clickeables**: cada fila de la tabla linkea a
+   `/proyectos/[code]/planes/[planId]/billing?month=YYYY-MM`. La página
+   destino ya tenía el editor completo (status transitions draft → ready →
+   sent → paid, consumo por publisher, imputación de fees). Visual de chevron
+   al final de cada fila refuerza la affordance.
+
+3. **CSS del dual-range slider**: nuevos estilos en `app/globals.css` para la
+   clase `.month-slider-thumb`. Dos `<input type="range">` superpuestos con
+   `pointer-events: none` en el track y `pointer-events: auto` en el thumb,
+   para que ambos handles sean arrastrables sobre el mismo track.
+
+### Cambios de la sesión 13/may/2026 (tarde-2) — Gantt: feriados AR
+
+Los feriados nacionales argentinos se rendean en el Gantt igual que los
+fines de semana (banda slate-100). Nuevo módulo `lib/holidays-ar.ts` con
+inamovibles + trasladables (ley 27.399) + Carnaval/Viernes Santo (Easter
+gregoriano anónimo). No incluye feriados puente del PEN ni provinciales.
+
+### Cambios de la sesión 13/may/2026 (tarde-1) — Gantt: eje diario
+
+Debajo del eje de meses ahora hay un tick por día y un label en cada lunes
+("18 may" / "May 18"). Bandas verticales slate-100 cubren sábados y
+domingos en cada track + en el header del eje. Leyenda con entrada
+"Fin de semana o feriado AR".
 
 ### Cambios de la sesión 13/may/2026 (tarde) — Reporting Calendar
 
@@ -488,6 +526,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Agregar/cambiar columnas de métricas en el Excel | `app/api/plans/[planId]/export.xlsx/route.ts` — la sección "Tab 1" arma `metricSlugs` desde `metrics_json`; los subtotales por publisher usan `sumDirects` + `evalFormula`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` en `app/api/plans/[planId]/export.xlsx/route.ts` (días-overlap inclusive). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
+| Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
+| Cambiar el destino del click en una fila de /billing | `app/(app)/billing/page.tsx` — variable `detailHref` por row. Apunta a `/proyectos/[code]/planes/[planId]/billing?month=YYYY-MM`. |
+| Estilos del slider dual-range de meses | `app/globals.css` — clase `.month-slider-thumb` (Webkit + Firefox). |
 | Ajustar la ventana del Gantt o los símbolos | `components/reporting-gantt.tsx`. Constants `WINDOW_BEFORE_DAYS`, `WINDOW_AFTER_DAYS`, colores `COLOR_*`. |
 | Cambiar el flow closed → reportado | `app/actions/reports.ts` `markReportDelivered` (delivered_at + project.status='reportado' + audit log). |
 | Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |

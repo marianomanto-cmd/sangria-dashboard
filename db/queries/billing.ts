@@ -1,4 +1,4 @@
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -39,10 +39,25 @@ export type BillingListRow = {
   dueDate: string | null;
 };
 
+export type BillingsListFilters = {
+  clientId?: string | null;
+  budgetOriginId?: string | null;
+  projectId?: string | null;
+  fromMonth?: string | null;  // YYYY-MM inclusive
+  toMonth?: string | null;    // YYYY-MM inclusive
+};
+
 export async function getBillingsList(
-  options: { clientId?: string | null } = {},
+  filters: BillingsListFilters = {},
 ): Promise<BillingListRow[]> {
-  const filterClient = options.clientId ?? null;
+  const conds: SQL[] = [];
+  if (filters.clientId) conds.push(eq(projects.clientId, filters.clientId));
+  if (filters.budgetOriginId)
+    conds.push(eq(projects.budgetOriginId, filters.budgetOriginId));
+  if (filters.projectId) conds.push(eq(projects.id, filters.projectId));
+  if (filters.fromMonth) conds.push(gte(planBillings.month, filters.fromMonth));
+  if (filters.toMonth) conds.push(lte(planBillings.month, filters.toMonth));
+
   const base = db
     .select({
       id: planBillings.id,
@@ -72,9 +87,8 @@ export async function getBillingsList(
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
     .orderBy(desc(planBillings.createdAt));
 
-  const rows = filterClient
-    ? await base.where(eq(projects.clientId, filterClient))
-    : await base;
+  const rows =
+    conds.length > 0 ? await base.where(and(...conds)) : await base;
 
   return rows.map((r) => ({
     ...r,
@@ -83,6 +97,73 @@ export async function getBillingsList(
     totalFeeUsd: Number.parseFloat(r.totalFeeUsd),
   }));
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Opciones para los filtros del top de /billing.
+//
+// Devuelve solo budget origins / proyectos que tienen al menos una factura
+// (sino el dropdown muestra opciones irrelevantes). El rango de meses es
+// min/max sobre planBillings.month. Todo se scopea por clientId si está.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type BillingFilterOptions = {
+  budgetOrigins: { id: string; name: string }[];
+  projects: { id: string; code: string; name: string; clientId: string }[];
+  minMonth: string | null;
+  maxMonth: string | null;
+};
+
+export async function getBillingFilterOptions(
+  clientId?: string | null,
+): Promise<BillingFilterOptions> {
+  const conds: SQL[] = [];
+  if (clientId) conds.push(eq(projects.clientId, clientId));
+  const where = conds.length > 0 ? and(...conds) : undefined;
+
+  const originsQuery = db
+    .selectDistinct({
+      id: budgetOrigins.id,
+      name: budgetOrigins.name,
+    })
+    .from(planBillings)
+    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id));
+
+  const projectsQuery = db
+    .selectDistinct({
+      id: projects.id,
+      code: projects.code,
+      name: projects.name,
+      clientId: projects.clientId,
+    })
+    .from(planBillings)
+    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id));
+
+  const monthsQuery = db
+    .select({
+      minMonth: sql<string | null>`min(${planBillings.month})`,
+      maxMonth: sql<string | null>`max(${planBillings.month})`,
+    })
+    .from(planBillings)
+    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id));
+
+  const [originsRows, projectsRows, monthsRow] = await Promise.all([
+    where ? originsQuery.where(where) : originsQuery,
+    where ? projectsQuery.where(where) : projectsQuery,
+    where ? monthsQuery.where(where) : monthsQuery,
+  ]);
+
+  return {
+    budgetOrigins: originsRows.sort((a, b) => a.name.localeCompare(b.name)),
+    projects: projectsRows.sort((a, b) => a.code.localeCompare(b.code)),
+    minMonth: monthsRow[0]?.minMonth ?? null,
+    maxMonth: monthsRow[0]?.maxMonth ?? null,
+  };
+}
+
 
 // ────────────────────────────────────────────────────────────────────────────
 // Detalle de un plan_billing — para la página de carga del AM.
