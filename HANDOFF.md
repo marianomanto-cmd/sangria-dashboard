@@ -1,4 +1,4 @@
-# Handoff — lunes 11/may/2026
+# Handoff — miércoles 13/may/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
@@ -14,6 +14,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+7131c46  Clientes CRUD + idioma operativo (en/es) por cliente (#11)
+3cb0076  docs: estimación media/fees + accuracy + regla doc-upkeep en AGENTS.md (#8)
 872b735  Estimaciones: separar media/fees + accuracy del mes anterior (#7)
 c922947  docs: reflejar editor bidireccional de métricas secundarias (#6)
 7ac41fd  Editor: cálculo bidireccional rate↔delivery en métricas secundarias (#5)
@@ -25,6 +27,33 @@ a4ff8fd  Billing: derivar Total Fee de management fees por ratePct
 bc625f0  Proyectos: quitar columna Spark del listado principal (#2)
 71494f9  Excel export: layout estilo plan de medios (#1)
 ```
+
+### Cambios de la sesión 13/may/2026
+
+1. **Excel export — tab 1 con métricas completas + tab 2 budget por
+   mercado.** El export `app/api/plans/[planId]/export.xlsx/route.ts` ahora:
+   - **Tab 1 (Media plan)**: se elimina la columna ambigua "Primary metric".
+     En su lugar, cada métrica que aparece en `metrics_json` de algún
+     placement obtiene su propia columna (primero las `direct`, después las
+     `calculated`, ambas ordenadas por `metrics_catalog.sortOrder`). Las filas
+     de **subtotal por publisher** y de **TOTAL MEDIA** ahora suman las
+     direct y **recomputan** las calculated aplicando la fórmula del
+     catálogo (`metrics_catalog.formula`) sobre `(publisherSubtotalUsd,
+     directSubtotals)` y `(detail.totals.media, directTotals)`
+     respectivamente. Así CPM/CPC/CTR/CPA del publisher reflejan los
+     subtotales del publisher y los del plan reflejan los totales del plan,
+     no un promedio mecánico de los placements.
+   - **Tab 2 (Budget por mercado)**: nueva hoja `Budget por mercado` / `Budget
+     by market`. Filas = mercados (orden alfabético en el locale del cliente),
+     columnas = meses derivados del rango global, valores = USD prorrateados
+     por días que cada placement cubre en cada mes (overlap inclusive en
+     ambos extremos). Footer con total mensual + grand total y columna Total
+     por mercado. Placements sin fechas caen en una columna `Sin fecha` /
+     `Undated`; placements sin market en una fila `(sin mercado)` /
+     `(no market)`. No lleva métricas.
+   - El evaluador de fórmulas (`evalFormula`) soporta los mismos patrones que
+     el editor: `amount / X`, `X / Y`, multiplier `× N`. Si la fórmula no
+     encaja o falta input, la celda queda vacía (no aparece `#DIV/0!`).
 
 ### Cambios de la sesión 12/may/2026
 
@@ -393,6 +422,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar la tabla expandible            | `components/projects-table-expandable.tsx`                |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
 | Cambiar el PDF/Excel del plan          | `app/api/plans/[planId]/export.{pdf,xlsx}/route.ts`       |
+| Agregar/cambiar columnas de métricas en el Excel | `app/api/plans/[planId]/export.xlsx/route.ts` — la sección "Tab 1" arma `metricSlugs` desde `metrics_json`; los subtotales por publisher usan `sumDirects` + `evalFormula`. |
+| Cambiar el prorrateo del budget split por mercado | `prorateByMonth` en `app/api/plans/[planId]/export.xlsx/route.ts` (días-overlap inclusive). |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
 | Configurar conexión DB                 | `db/index.ts`                                             |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |
