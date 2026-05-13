@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import type { CalendarReport } from "@/db/queries/reports";
+import { getArgentineHolidaysForYears } from "@/lib/holidays-ar";
 import { formatDate, shortMonthName, type Language } from "@/lib/i18n";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -77,13 +78,26 @@ export function ReportingGantt({
     return out;
   }, [windowStart, windowEnd, lang]);
 
+  // Set de feriados argentinos para los años que cubre la ventana. La ventana
+  // puede cruzar año (ej. Dec → Feb), por eso pedimos ambos endpoints.
+  const holidaySet = useMemo(
+    () =>
+      getArgentineHolidaysForYears([
+        windowStart.getFullYear(),
+        windowEnd.getFullYear(),
+      ]),
+    [windowStart, windowEnd],
+  );
+
   // Eje de días: para cada día de la ventana, dejamos un tick. Los lunes
-  // ganan un tick más marcado + label "18 may" / "May 18". Sábados y
-  // domingos se marcan para pintar el fondo en cada fila.
+  // ganan un tick más marcado + label "18 may" / "May 18". Sábados,
+  // domingos y feriados AR se marcan como "off days" para pintar el fondo.
   const dayTicks = useMemo(() => {
     const out: {
       offset: number;
       isWeekend: boolean;
+      isHoliday: boolean;
+      isOff: boolean;
       isMonday: boolean;
       isFirstOfMonth: boolean;
       label?: string;
@@ -92,6 +106,7 @@ export function ReportingGantt({
       const d = addDays(windowStart, i);
       const dow = d.getDay(); // 0=Sun, 1=Mon ... 6=Sat
       const isWeekend = dow === 0 || dow === 6;
+      const isHoliday = holidaySet.has(toISO(d));
       const isMonday = dow === 1;
       const isFirstOfMonth = d.getDate() === 1;
       let label: string | undefined;
@@ -102,21 +117,30 @@ export function ReportingGantt({
             ? `${d.getDate()} ${monthShort.toLowerCase()}`
             : `${monthShort} ${d.getDate()}`;
       }
-      out.push({ offset: i, isWeekend, isMonday, isFirstOfMonth, label });
+      out.push({
+        offset: i,
+        isWeekend,
+        isHoliday,
+        isOff: isWeekend || isHoliday,
+        isMonday,
+        isFirstOfMonth,
+        label,
+      });
     }
     return out;
-  }, [windowStart, lang]);
+  }, [windowStart, lang, holidaySet]);
 
-  // Pre-computamos los rangos de bandas de fin de semana en porcentaje, para
-  // renderizarlas como divs absolutos en cada track. Cada sábado + domingo
-  // queda como una banda de 2 días contiguos (o 1 día si la ventana corta).
-  const weekendBands = useMemo(() => {
+  // Pre-computamos los rangos contiguos de off-days (fin de semana o feriado
+  // AR) como bandas en porcentaje. Un feriado entre semana queda como banda
+  // aislada; un viernes feriado se une con el sábado+domingo en una banda
+  // de 3 días.
+  const offDayBands = useMemo(() => {
     const bands: { leftPct: number; widthPct: number }[] = [];
     let i = 0;
     while (i <= TOTAL_DAYS) {
-      if (dayTicks[i]?.isWeekend) {
+      if (dayTicks[i]?.isOff) {
         const start = i;
-        while (i <= TOTAL_DAYS && dayTicks[i]?.isWeekend) i++;
+        while (i <= TOTAL_DAYS && dayTicks[i]?.isOff) i++;
         const len = i - start;
         bands.push({
           leftPct: (start / TOTAL_DAYS) * 100,
@@ -170,9 +194,9 @@ export function ReportingGantt({
         <div />
         <div className="relative h-7">
           {/* bandas de fin de semana en el header (para que el eje también se vea sombrado) */}
-          {weekendBands.map((b, i) => (
+          {offDayBands.map((b, i) => (
             <div
-              key={`wkend-${i}`}
+              key={`off-${i}`}
               className="absolute top-0 bottom-0"
               style={{
                 left: `${b.leftPct}%`,
@@ -226,7 +250,7 @@ export function ReportingGantt({
             today={today}
             windowStart={windowStart}
             todayPct={todayPct}
-            weekendBands={weekendBands}
+            offDayBands={offDayBands}
             dayTicks={dayTicks}
             onAssignDate={() => onAssignDate(r.reportId, r.deliveryDate)}
             onMarkDelivered={() => onMarkDelivered(r.reportId)}
@@ -276,7 +300,9 @@ export function ReportingGantt({
             className="inline-block w-4 h-3 rounded-sm"
             style={{ background: COLOR_WEEKEND_BG }}
           />
-          {lang === "es" ? "Fin de semana" : "Weekend"}
+          {lang === "es"
+            ? "Fin de semana o feriado AR"
+            : "Weekend or AR holiday"}
         </span>
       </div>
     </section>
@@ -289,7 +315,7 @@ function GanttRow({
   today,
   windowStart,
   todayPct,
-  weekendBands,
+  offDayBands,
   dayTicks,
   onAssignDate,
   onMarkDelivered,
@@ -299,7 +325,7 @@ function GanttRow({
   today: Date;
   windowStart: Date;
   todayPct: number;
-  weekendBands: { leftPct: number; widthPct: number }[];
+  offDayBands: { leftPct: number; widthPct: number }[];
   dayTicks: {
     offset: number;
     isWeekend: boolean;
@@ -390,9 +416,9 @@ function GanttRow({
       {/* Track */}
       <div className="relative overflow-hidden" style={{ height: ROW_H }}>
         {/* bandas de fin de semana (atrás de todo) */}
-        {weekendBands.map((b, i) => (
+        {offDayBands.map((b, i) => (
           <div
-            key={`wkend-${i}`}
+            key={`off-${i}`}
             className="absolute top-0 bottom-0"
             style={{
               left: `${b.leftPct}%`,
@@ -583,6 +609,10 @@ function addDays(d: Date, n: number): Date {
 
 function daysBetween(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+function toISO(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function parseISODate(iso: string): Date | null {
