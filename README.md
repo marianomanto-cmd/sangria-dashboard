@@ -395,9 +395,13 @@ Idempotente: limpia las tablas antes de insertar.
   pidió poder editarlos per-cliente. Requiere migración de schema (nuevas
   tablas `client_markets` / `client_metrics` o agregar `client_id`) +
   decisión de qué hacer con la data existente. Ver detalle en HANDOFF.md.
-- **Excel/PDF**: formato básico, no es producción-ready. Especialmente el
-  PDF (lista de texto plano, sin tablas estilizadas). Sí respetan el
-  `clients.language` del plan exportado.
+- **Excel**: tab 1 (Media plan) muestra placements + subtotal por publisher
+  + TOTAL MEDIA, todos con sus métricas (direct = suma, calculated = recomputado
+  con la fórmula del catálogo sobre el subtotal/total correspondiente). Tab 2
+  (Budget por mercado) prorratea la inversión de cada placement por días entre
+  los meses que abarca y la agrega por mercado × mes. Sin métricas, solo USD.
+- **PDF**: formato básico (lista de texto plano, sin tablas estilizadas).
+  Respeta el `clients.language` del plan exportado.
 - **i18n parcial**: las áreas de mayor visibilidad (dashboard, listas
   globales, exports, dates) están traducidas a `en`/`es`. Quedan strings
   hardcodeados en formularios secundarios (`/proyectos/nuevo`, editor
