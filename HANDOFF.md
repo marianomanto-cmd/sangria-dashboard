@@ -2,6 +2,26 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 14/may/2026 — Proyectos: editar / eliminar / sin identificador
+
+- **Alta sin identificador**: el form de `/proyectos/nuevo` ya no pide un
+  `m<id>`. El `code` (que sigue existiendo como URL slug + base de la
+  convención de nombres de planes) se deriva del nombre vía `slugify`,
+  con sufijo `-N` si colisiona. Se sacó también la columna `code` de la
+  vista (detalle del proyecto + tabla expandible).
+- **Editar proyecto**: nuevo panel `app/(app)/proyectos/[code]/edit-panel.tsx`
+  (botón "Editar proyecto" en el detalle) con nombre, budget origin,
+  total gross budget, fecha de inicio y notas. Action `updateProject`
+  en `app/actions/projects.ts` — valida que el budget origin pertenezca
+  al cliente del proyecto. El `code` NO se reescribe al renombrar (las
+  URLs quedan estables).
+- **Eliminar proyecto**: botón con `confirm()` en el mismo panel. Action
+  `deleteProject` — la cascada se lleva planes, publishers, placements,
+  fees, billings, snapshots y reportes.
+- `getNewProjectFormData` se simplificó (ya no calcula `currentYear`).
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código.
+
 ### Cambios de la sesión 14/may/2026 — Excel del plan: Fees + grand total
 
 - **Sección Fees**: se eliminó la columna "Auto" (Sí/No, indicaba si el
@@ -254,6 +274,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+3b1a674  Proyectos: editar/eliminar + sacar el identificador del alta y la vista (#35)
 953ac29  Excel del plan: quitar columna Auto de Fees + grand total legible (#33)
 d0ac3bc  Excel del plan: quitar "(agencia paga)" del nombre del publisher (#31)
 afa3d1f  Cost methods: agregar dCPA a la lista (#29)
@@ -795,6 +816,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Ajustar la ventana del Gantt o los símbolos | `components/reporting-gantt.tsx`. Constants `WINDOW_BEFORE_DAYS`, `WINDOW_AFTER_DAYS`, colores `COLOR_*`. |
 | Cambiar el flow closed → reportado | `app/actions/reports.ts` `markReportDelivered` (delivered_at + project.status='reportado' + audit log). |
 | Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |
+| Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
 | Configurar conexión DB                 | `db/index.ts`                                             |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |
