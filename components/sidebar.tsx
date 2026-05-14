@@ -6,7 +6,6 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { buildHrefWithClient } from "@/lib/client-filter";
 import {
   LayoutGrid,
-  Users,
   Briefcase,
   FileText,
   FileCheck,
@@ -14,6 +13,7 @@ import {
   Settings,
   BarChart3,
   CalendarClock,
+  Receipt,
   ChevronsLeft,
   ChevronsRight,
   type LucideIcon,
@@ -29,12 +29,12 @@ type NavEntry = {
 
 const PRIMARY: NavEntry[] = [
   { href: "/", label: "Dashboard", icon: LayoutGrid },
-  { href: "/clientes", label: "Clientes", icon: Users },
   { href: "/proyectos", label: "Proyectos", icon: Briefcase },
   { href: "/planes", label: "Planes de Medios", icon: FileText },
   { href: "/billing", label: "Billing", icon: FileCheck },
   { href: "/reportes/calendario", label: "Calendario de reportes", icon: CalendarClock },
   { href: "/reportes", label: "Reportes", icon: BarChart3, exact: true },
+  { href: "/billing-tracker", label: "Billing Tracker", icon: Receipt },
 ];
 
 const FOOTER: NavEntry[] = [

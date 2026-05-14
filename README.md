@@ -86,6 +86,7 @@ app/
         billing/            # editor de facturación mensual
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
+    billing-tracker/        # /billing-tracker — vista jerárquica proyecto → planes → facturas emitidas con desglose media/fee
     auditoria/              # /auditoria — log con diff
     configuracion/
       markets/, metricas/, publishers/   # admin de catálogos

@@ -6,36 +6,27 @@ import { X } from "lucide-react";
 import { MonthRangeSlider } from "@/components/month-range-slider";
 import { type Language } from "@/lib/i18n";
 
-// ════════════════════════════════════════════════════════════════════════════
-// Filtros del top de /billing:
-//   • Budget Origin (dropdown)
+// Filtros del Billing Tracker:
 //   • Proyecto (dropdown)
-//   • Rango de meses (slider dual con dos handles)
+//   • Rango de meses (slider dual)
 //
-// Persistimos cada filtro como query param. El filtro global ?client= se
-// preserva sin tocar. Si todos los filtros están en sus valores neutros, los
-// params se eliminan de la URL.
-// ════════════════════════════════════════════════════════════════════════════
+// Persistimos como ?project= ?from= ?to=. El filtro global ?client= no se toca.
 
-type Project = { id: string; code: string; name: string; clientId: string };
-type BudgetOrigin = { id: string; name: string };
+type Project = { id: string; code: string; name: string };
 
-export function BillingFilters({
-  budgetOrigins,
+export function BillingTrackerFilters({
   projects,
   monthsList,
   lang,
 }: {
-  budgetOrigins: BudgetOrigin[];
   projects: Project[];
-  monthsList: string[]; // YYYY-MM ordenado ascendente
+  monthsList: string[];
   lang: Language;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const currentOrigin = searchParams?.get("budgetOrigin") ?? "";
   const currentProject = searchParams?.get("project") ?? "";
   const currentFrom = searchParams?.get("from") ?? "";
   const currentTo = searchParams?.get("to") ?? "";
@@ -53,12 +44,7 @@ export function BillingFilters({
   }, [currentTo, monthsList, monthCount]);
 
   const updateParams = (
-    updates: Partial<{
-      budgetOrigin: string;
-      project: string;
-      from: string;
-      to: string;
-    }>,
+    updates: Partial<{ project: string; from: string; to: string }>,
   ) => {
     const next = new URLSearchParams(searchParams?.toString() ?? "");
     for (const [k, v] of Object.entries(updates)) {
@@ -71,7 +57,6 @@ export function BillingFilters({
 
   const reset = () => {
     const next = new URLSearchParams(searchParams?.toString() ?? "");
-    next.delete("budgetOrigin");
     next.delete("project");
     next.delete("from");
     next.delete("to");
@@ -79,27 +64,11 @@ export function BillingFilters({
     router.push(qs ? `${pathname}?${qs}` : pathname);
   };
 
-  const isFiltered =
-    !!currentOrigin || !!currentProject || !!currentFrom || !!currentTo;
+  const isFiltered = !!currentProject || !!currentFrom || !!currentTo;
 
   return (
     <section className="rounded-lg border border-line bg-white px-5 py-4 mb-5">
       <div className="flex items-end gap-4 flex-wrap">
-        <Field label={lang === "es" ? "Budget Origin" : "Budget Origin"}>
-          <select
-            value={currentOrigin}
-            onChange={(e) => updateParams({ budgetOrigin: e.target.value })}
-            className="rounded-md border border-line bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[180px]"
-          >
-            <option value="">{lang === "es" ? "Todos" : "All"}</option>
-            {budgetOrigins.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-
         <Field label={lang === "es" ? "Proyecto" : "Project"}>
           <select
             value={currentProject}
@@ -135,8 +104,7 @@ export function BillingFilters({
               onCommit={(f, t) => {
                 const fromMonth = monthsList[f];
                 const toMonth = monthsList[t];
-                const isFullRange =
-                  f === 0 && t === monthsList.length - 1;
+                const isFullRange = f === 0 && t === monthsList.length - 1;
                 updateParams({
                   from: isFullRange ? "" : fromMonth,
                   to: isFullRange ? "" : toMonth,
@@ -179,4 +147,3 @@ function Field({
     </div>
   );
 }
-

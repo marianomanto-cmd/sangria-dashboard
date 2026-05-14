@@ -1,5 +1,5 @@
 import { Moon } from "lucide-react";
-import { asc } from "drizzle-orm";
+import { asc, ne } from "drizzle-orm";
 import { Suspense } from "react";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
@@ -39,9 +39,12 @@ export async function Topbar() {
 }
 
 async function ClientPickerLoader() {
+  // Los clientes archivados no aparecen en el filtro global. Se siguen
+  // gestionando desde /configuracion/clientes.
   const rows = await db
     .select({ slug: clients.slug, name: clients.name })
     .from(clients)
+    .where(ne(clients.status, "archived"))
     .orderBy(asc(clients.name));
   return <TopbarClientPicker clients={rows} />;
 }
