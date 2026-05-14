@@ -201,6 +201,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+eae28ff  Excel del plan: formato cosmético alineado a la marca (#23)
+7a32be3  docs: hashes reales en Commits recientes (#20, #21) (#22)
 a0d80a9  Campaign Tracker: carga de consumo real vs goal + histórico de cargas (#21)
 660ae33  Archivar clientes los saca del filtro + nueva /billing-tracker (#20)
 c09dc6a  Markets y métricas per-cliente + admin /configuracion/clientes/[slug] (#19)
