@@ -2,6 +2,23 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 14/may/2026 — Excel del plan: formato cosmético
+
+- **Colores de marca**: el `export.xlsx` usaba una paleta violeta
+  (`#6D28D9`) que no era la marca. Ahora usa los design tokens —
+  sangría (`#7A1F3D`), `accent-soft`, `ink` para el grand total,
+  `line` para bordes, `muted` para textos secundarios.
+- **Banner de título** a todo el ancho ("PLAN DE MEDIOS — <plan>") +
+  fila "Generado" en el encabezado.
+- **Indentación real** de placements bajo su publisher
+  (`alignment.indent` en vez de espacios), y **outline levels** para
+  que cada grupo de publisher sea colapsable en Excel (control +/-
+  sobre la fila de subtotal, `outlineProperties.summaryBelow = false`).
+- Freeze panes recalculado según el alto real del encabezado.
+- Sin cambios de comportamiento ni de datos — solo formato.
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código.
+
 ### Cambios de la sesión 14/may/2026 — Campaign Tracker
 
 > Feature en branch `claude/add-campaign-tracker-zLUnE` — testing antes de
