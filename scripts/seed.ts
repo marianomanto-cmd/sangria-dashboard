@@ -396,7 +396,7 @@ async function main() {
     marketSlug: string;
     audience?: string;
     amount: number;
-    costMethod?: "dCPV" | "dCPC" | "dCPM" | "CPM" | "CPC" | "CPV" | "CPA" | "Flat" | "Other";
+    costMethod?: "dCPV" | "dCPC" | "dCPM" | "dCPA" | "CPM" | "CPC" | "CPV" | "CPA" | "Flat" | "Other";
     startDate: string;
     endDate: string;
     metricsJson?: Record<string, number>;

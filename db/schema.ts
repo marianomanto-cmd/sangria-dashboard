@@ -73,6 +73,7 @@ export const costMethod = pgEnum("cost_method", [
   "dCPV",
   "dCPC",
   "dCPM",
+  "dCPA",
   "CPM",
   "CPC",
   "CPV",
