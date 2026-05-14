@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { asc, eq, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, projects } from "@/db/schema";
 
@@ -25,6 +25,7 @@ export async function getClientsList(): Promise<ClientListRow[]> {
     })
     .from(clients)
     .leftJoin(projects, eq(projects.clientId, clients.id))
+    .where(ne(clients.status, "archived"))
     .groupBy(clients.id)
     .orderBy(asc(clients.name));
 

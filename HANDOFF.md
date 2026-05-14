@@ -1,6 +1,36 @@
-# Handoff — miércoles 13/may/2026 (noche-3)
+# Handoff — jueves 14/may/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 14/may/2026 — Archivar clientes + Billing Tracker
+
+- **Clientes archivados desaparecen del filtro global.** El topbar
+  `TopbarClientPicker` y la lista pública `/clientes` ahora filtran
+  `clients.status != 'archived'`. Los archivados siguen siendo
+  gestionables desde `/configuracion/clientes` para des-archivarlos. El
+  detalle `/clientes/[slug]` sigue accesible por URL directa para evitar
+  romper deep-links desde proyectos/planes/billings históricos.
+- **Nueva página `/billing-tracker`** (`app/(app)/billing-tracker/page.tsx`).
+  Vista jerárquica proyecto → planes → facturas emitidas. Una factura
+  cuenta como "emitida" cuando ya tiene `invoice_number` cargado, es
+  decir, estado `invoiced` o `paid`. Para cada factura muestra: número,
+  mes, subtotal medios (`totalNetUsd`), subtotal fees (`totalFeeUsd`) y
+  total. Sin desglose de medios/fees individuales.
+  - Filtros (`components/billing-tracker-filters.tsx`): proyecto
+    (dropdown) y rango de meses (slider dual). Persisten como
+    `?project=`, `?from=`, `?to=`. Respeta `?client=` global.
+  - Query: `getBillingTracker` + `getBillingTrackerFilterOptions` en
+    `db/queries/billing-tracker.ts`. Excluye clientes archivados.
+- **Sidebar**: se sacó la entry "Clientes" y se agregó "Billing Tracker"
+  (icono `Receipt`) al final de `PRIMARY` en `components/sidebar.tsx`.
+- **Slider de meses extraído** a `components/month-range-slider.tsx` como
+  componente self-contained (no expone draft state al parent). Ahora lo
+  comparten `billing-filters.tsx` y `billing-tracker-filters.tsx`. De
+  paso se eliminaron las 2 violaciones del lint `set-state-in-effect`
+  que tenía `billing-filters.tsx`.
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código,
+sin migraciones ni seeds.
 
 ### Cambios de la sesión 13/may/2026 (noche-3) — Markets + métricas per-cliente
 
@@ -89,6 +119,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+(pendiente) Archivar clientes desaparece del filtro + nueva /billing-tracker
+c09dc6a  Markets y métricas per-cliente + admin /configuracion/clientes/[slug] (#19)
 2bea4ae  Gantt: feriados argentinos se renderizan como días de fin de semana (#15)
 f334113  Gantt: eje diario con marcadores semanales + bandas de fin de semana (#14)
 6c81be4  Reporting Calendar: closed → reportado con Gantt de 60 días (#13)
@@ -604,6 +636,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers facturables con consumo > 0) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
+| Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
+| Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
+| Ocultar/mostrar un cliente en el filtro global | `clients.status` — `archived` lo saca del topbar picker y de `/clientes`. Se sigue gestionando desde `/configuracion/clientes`. |
 | Cambiar el destino del click en una fila de /billing | `app/(app)/billing/page.tsx` — variable `detailHref` por row. Apunta a `/proyectos/[code]/planes/[planId]/billing?month=YYYY-MM`. |
 | Estilos del slider dual-range de meses | `app/globals.css` — clase `.month-slider-thumb` (Webkit + Firefox). |
 | Ajustar la ventana del Gantt o los símbolos | `components/reporting-gantt.tsx`. Constants `WINDOW_BEFORE_DAYS`, `WINDOW_AFTER_DAYS`, colores `COLOR_*`. |
