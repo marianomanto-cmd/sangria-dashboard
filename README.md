@@ -145,8 +145,11 @@ lib/
   `project_reports` (idempotente). Ver `app/actions/reports.ts`.
 
 ### Naming
-- Proyectos: `<CLIENT_PREFIX>.m<id>.<ProjectName>` — ej. `COPA.m2026A01.CostaRica2026`.
-- Planes: `<Project.code>.<PlanName>` — ej. `COPA.m2026A01.CostaRica2026.Awareness`.
+- Proyectos: el `code` es interno (URL slug + base de la convención de
+  planes). Se deriva del nombre del proyecto vía slug, con sufijo `-N` si
+  colisiona — ej. nombre "Costa Rica 2026" → `code` `costa-rica-2026`. No
+  se pide en el alta ni se muestra en la UI.
+- Planes: `<Project.code>.<PlanName>` — ej. `costa-rica-2026.Awareness`.
 
 ### Períodos derivados, no almacenados
 - El **plan** no guarda `period_start` / `period_end`: se derivan con
