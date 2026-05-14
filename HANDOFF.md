@@ -6,8 +6,8 @@ Estado del repo al cierre y plan para retomar en otra sesión.
 
 - **Nueva sección "Budget origins"** en `/configuracion/clientes/[slug]`
   (`sections.tsx`), junto a Métricas y Mercados. Permite crear, editar
-  inline (nombre / target mensual USD / color hex) y eliminar budget
-  origins de cada cliente desde la UI — antes solo se cargaban vía seed.
+  inline (nombre / color hex) y eliminar budget origins de cada cliente
+  desde la UI — antes solo se cargaban vía seed.
 - **Nuevas server actions** en `app/actions/budget-origins.ts`:
   `createBudgetOrigin` / `updateBudgetOrigin` / `deleteBudgetOrigin`,
   con el mismo patrón que markets/metrics (audit log + `revalidatePath`
@@ -15,9 +15,13 @@ Estado del repo al cierre y plan para retomar en otra sesión.
 - `deleteBudgetOrigin` chequea proyectos asociados **antes** de borrar
   (`projects.budget_origin_id` tiene `onDelete: "restrict"`) y devuelve
   un error claro si el origin está en uso, en vez de reventar la FK.
-- Sin cambios de schema — no requiere migración ni seed.
+- **Se eliminó la columna `monthly_target_usd`** de `budget_origins`
+  (schema + seed + action + UI). No se usaba en ninguna vista ni query;
+  era solo un campo del form. **Requiere `npm run db:push`** en prod
+  para dropear la columna.
 
-**Acciones requeridas en prod**: ninguna. Solo cambios de código.
+**Acciones requeridas en prod**: `npm run db:push` para dropear
+`budget_origins.monthly_target_usd`. No hay backfill.
 
 ### Cambios de la sesión 14/may/2026 — Excel del plan: formato cosmético
 
@@ -218,6 +222,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+bc550df  Budget origins: quitar el campo target mensual (#27)
+4d7ca1f  docs: reflejar CRUD de budget origins per-cliente (#26)
 d9ae34c  Config de cliente: CRUD de budget origins per-cliente (#25)
 b714024  docs: hashes reales en Commits recientes (#22, #23) (#24)
 eae28ff  Excel del plan: formato cosmético alineado a la marca (#23)
