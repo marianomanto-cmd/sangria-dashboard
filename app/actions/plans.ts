@@ -385,6 +385,7 @@ export async function updatePlacement(input: {
     | "dCPV"
     | "dCPC"
     | "dCPM"
+    | "dCPA"
     | "CPM"
     | "CPC"
     | "CPV"

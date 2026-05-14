@@ -7,6 +7,7 @@ export const COST_METHOD_PRIMARY_METRIC: Record<string, string | null> = {
   CPM: "impressions",
   dCPC: "clicks",
   CPC: "clicks",
+  dCPA: "conversions",
   CPA: "conversions",
   Flat: null,
   Other: null,
@@ -59,6 +60,7 @@ export type CostMethod =
   | "dCPV"
   | "dCPC"
   | "dCPM"
+  | "dCPA"
   | "CPM"
   | "CPC"
   | "CPV"
@@ -67,5 +69,5 @@ export type CostMethod =
   | "Other";
 
 export const COST_METHODS: CostMethod[] = [
-  "dCPV", "dCPC", "dCPM", "CPM", "CPC", "CPV", "CPA", "Flat", "Other",
+  "dCPV", "dCPC", "dCPM", "dCPA", "CPM", "CPC", "CPV", "CPA", "Flat", "Other",
 ];
