@@ -2,6 +2,14 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 14/may/2026 — Excel del plan: nombre de publisher
+
+- En el `export.xlsx` del plan, la fila de subtotal de cada publisher
+  mostraba `<nombre> (agencia paga)`. Ahora muestra solo el nombre del
+  publisher. Cambio cosmético, sin datos ni schema.
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código.
+
 ### Cambios de la sesión 14/may/2026 — Cost method dCPA
 
 - **Nuevo cost method `dCPA`** en el enum `cost_method` (`db/schema.ts`).
@@ -236,6 +244,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+d0ac3bc  Excel del plan: quitar "(agencia paga)" del nombre del publisher (#31)
 afa3d1f  Cost methods: agregar dCPA a la lista (#29)
 bc550df  Budget origins: quitar el campo target mensual (#27)
 4d7ca1f  docs: reflejar CRUD de budget origins per-cliente (#26)
