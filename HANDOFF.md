@@ -2,6 +2,16 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 14/may/2026 — Excel del plan: Fees + grand total
+
+- **Sección Fees**: se eliminó la columna "Auto" (Sí/No, indicaba si el
+  monto era auto-computado). Quedan Tipo, Nombre, Rate %, Monto y Notas.
+- **Fila GRAND TOTAL**: tiene fondo INK (gris/negro); la fuente no tenía
+  color seteado y quedaba ilegible. Se fuerza a blanco.
+- Cambios cosméticos del `export.xlsx`, sin datos ni schema.
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código.
+
 ### Cambios de la sesión 14/may/2026 — Excel del plan: nombre de publisher
 
 - En el `export.xlsx` del plan, la fila de subtotal de cada publisher
@@ -244,6 +254,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+953ac29  Excel del plan: quitar columna Auto de Fees + grand total legible (#33)
 d0ac3bc  Excel del plan: quitar "(agencia paga)" del nombre del publisher (#31)
 afa3d1f  Cost methods: agregar dCPA a la lista (#29)
 bc550df  Budget origins: quitar el campo target mensual (#27)
