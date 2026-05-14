@@ -14,6 +14,7 @@ import {
   BarChart3,
   CalendarClock,
   Receipt,
+  LineChart,
   ChevronsLeft,
   ChevronsRight,
   type LucideIcon,
@@ -35,6 +36,7 @@ const PRIMARY: NavEntry[] = [
   { href: "/reportes/calendario", label: "Calendario de reportes", icon: CalendarClock },
   { href: "/reportes", label: "Reportes", icon: BarChart3, exact: true },
   { href: "/billing-tracker", label: "Billing Tracker", icon: Receipt },
+  { href: "/campaign-tracker", label: "Campaign Tracker", icon: LineChart },
 ];
 
 const FOOTER: NavEntry[] = [

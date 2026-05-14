@@ -1,0 +1,262 @@
+// Métricas del Campaign Tracker.
+//
+// Los GOALS salen del plan vigente: `amount` = placement.amountUsd y cada
+// métrica delivery (impressions, views, clicks…) = placement.metricsJson[key].
+// La trafficker carga el valor REAL acumulado de esas mismas métricas direct.
+// Las métricas calculadas (CPM, CTR, CPV, CPA, frequency) NO se cargan ni se
+// persisten: se derivan on-the-fly tanto para el goal como para el real, con
+// las mismas fórmulas que usa el resto de la app (ver lib/cost-methods.ts).
+
+import { DIRECT_METRIC_RATES } from "@/lib/cost-methods";
+
+export type MetricUnit = "$" | "%" | "x" | "count";
+
+// Una métrica direct es editable en el tracker si la trafficker puede leer su
+// valor acumulado en la consola del publisher. `amount` siempre lo es; el
+// resto son las claves de DIRECT_METRIC_RATES (impressions, clicks, views,
+// conversions, reach, engagements, followers, leads, installs, visits).
+export function isDirectMetricKey(key: string): boolean {
+  return key === "amount" || key in DIRECT_METRIC_RATES;
+}
+
+// Extrae las claves direct de un metrics_json de placement (descarta rates
+// como cpm/cpc que se guardan junto a las delivery pero son calculadas).
+export function directKeysFromMetricsJson(
+  metricsJson: Record<string, number>,
+): string[] {
+  return Object.keys(metricsJson).filter((k) => k in DIRECT_METRIC_RATES);
+}
+
+// Labels fallback en español para las métricas direct. Si el cliente tiene
+// la métrica en su metrics_catalog se usa ese nombre; esto cubre el resto.
+export const DIRECT_METRIC_LABELS: Record<string, string> = {
+  amount: "Inversión (USD)",
+  impressions: "Impresiones",
+  clicks: "Clicks",
+  views: "Views",
+  conversions: "Conversiones",
+  reach: "Reach",
+  engagements: "Engagements",
+  followers: "Followers",
+  leads: "Leads",
+  installs: "Installs",
+  visits: "Visitas",
+};
+
+export type CalcMetricDef = {
+  key: string;
+  name: string;
+  unit: MetricUnit;
+  inputs: string[]; // claves direct necesarias para derivarla
+  compute: (v: Record<string, number>) => number | null;
+  // Para CPM/CPC/etc. consumir por debajo del goal es bueno; para CTR es malo.
+  lowerIsBetter: boolean;
+};
+
+export const CALC_METRICS: CalcMetricDef[] = [
+  {
+    key: "cpm",
+    name: "CPM",
+    unit: "$",
+    inputs: ["amount", "impressions"],
+    compute: (v) =>
+      v.impressions > 0 ? (v.amount / v.impressions) * 1000 : null,
+    lowerIsBetter: true,
+  },
+  {
+    key: "cpc",
+    name: "CPC",
+    unit: "$",
+    inputs: ["amount", "clicks"],
+    compute: (v) => (v.clicks > 0 ? v.amount / v.clicks : null),
+    lowerIsBetter: true,
+  },
+  {
+    key: "cpv",
+    name: "CPV",
+    unit: "$",
+    inputs: ["amount", "views"],
+    compute: (v) => (v.views > 0 ? v.amount / v.views : null),
+    lowerIsBetter: true,
+  },
+  {
+    key: "cpa",
+    name: "CPA",
+    unit: "$",
+    inputs: ["amount", "conversions"],
+    compute: (v) => (v.conversions > 0 ? v.amount / v.conversions : null),
+    lowerIsBetter: true,
+  },
+  {
+    key: "ctr",
+    name: "CTR",
+    unit: "%",
+    inputs: ["clicks", "impressions"],
+    compute: (v) =>
+      v.impressions > 0 ? (v.clicks / v.impressions) * 100 : null,
+    lowerIsBetter: false,
+  },
+  {
+    key: "frequency",
+    name: "Frequency",
+    unit: "x",
+    inputs: ["impressions", "reach"],
+    compute: (v) => (v.reach > 0 ? v.impressions / v.reach : null),
+    lowerIsBetter: false,
+  },
+];
+
+// Posición temporal de "hoy" dentro de un período [start, end] en %. 0 antes
+// de empezar, 100 después de terminar. Las fechas son YYYY-MM-DD; se parsean
+// como locales para evitar el off-by-one de timezone (ver lib/i18n.ts).
+export function computePacePct(
+  periodStart: string | null,
+  periodEnd: string | null,
+  today: Date = new Date(),
+): number {
+  if (!periodStart || !periodEnd) return 0;
+  const start = parseLocalDate(periodStart);
+  const end = parseLocalDate(periodEnd);
+  if (!start || !end || end <= start) return 0;
+  const now = today.getTime();
+  if (now <= start.getTime()) return 0;
+  if (now >= end.getTime()) return 100;
+  return ((now - start.getTime()) / (end.getTime() - start.getTime())) * 100;
+}
+
+export function parseLocalDate(iso: string): Date | null {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  return new Date(
+    Number.parseInt(m[1], 10),
+    Number.parseInt(m[2], 10) - 1,
+    Number.parseInt(m[3], 10),
+  );
+}
+
+// Estado de pace de un plan/placement comparando avance real vs pace esperado.
+//   behind    → consumo por debajo del pace (se está atrasando)
+//   over_pace → consumo muy por encima del pace o cerca de agotar el goal
+//   on_pace   → dentro de la banda razonable
+export type PaceStatus = "behind" | "on_pace" | "over_pace";
+
+export function computePaceStatus(
+  progressPct: number,
+  pacePct: number,
+): PaceStatus {
+  if (progressPct > pacePct + 25 || progressPct > 90) return "over_pace";
+  if (progressPct < pacePct - 10) return "behind";
+  return "on_pace";
+}
+
+// Formato de valores para mostrar (no para el input editable).
+export function formatMetricValue(
+  value: number | null,
+  unit: MetricUnit,
+): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  switch (unit) {
+    case "$":
+      return `$${value.toLocaleString("en-US", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+    case "%":
+      return `${value.toFixed(1)}%`;
+    case "x":
+      return `${value.toFixed(1)}x`;
+    default:
+      return value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  }
+}
+
+// Valor crudo para el input editable: agrupa miles, decimales solo si el
+// monto los tiene (mismo criterio visual que el mockup).
+export function formatCellValue(value: number, unit: MetricUnit): string {
+  if (!value) return "";
+  if (unit === "$") {
+    return value.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+  return value.toLocaleString("en-US", { maximumFractionDigits: 4 });
+}
+
+export function parseCellValue(raw: string): number {
+  const n = Number.parseFloat(raw.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+
+// ── Construcción de filas de métrica ────────────────────────────────────────
+// Misma lógica para el server (query) y el client (editor con autosave): a
+// partir de los goals direct del placement + los valores reales cargados,
+// produce las filas direct (editables) y las calculadas (derivadas).
+
+export type MetricRow = {
+  key: string;
+  label: string;
+  kind: "direct" | "calculated";
+  unit: MetricUnit;
+  goal: number | null;
+  actual: number;
+  goalPct: number | null;
+  lowerIsBetter: boolean;
+};
+
+export type DirectGoal = { key: string; goal: number };
+
+export function buildMetricRows(
+  directGoals: DirectGoal[],
+  actuals: Record<string, number>,
+  labelFor: (key: string, fallback: string) => string,
+): MetricRow[] {
+  const directKeys = directGoals.map((d) => d.key);
+  const goalByKey: Record<string, number> = {};
+  for (const d of directGoals) goalByKey[d.key] = d.goal;
+
+  const rows: MetricRow[] = [];
+
+  for (const d of directGoals) {
+    const actual = actuals[d.key] ?? 0;
+    const goal = d.goal > 0 ? d.goal : null;
+    rows.push({
+      key: d.key,
+      label: labelFor(
+        d.key,
+        DIRECT_METRIC_LABELS[d.key] ?? d.key,
+      ),
+      kind: "direct",
+      unit: d.key === "amount" ? "$" : "count",
+      goal,
+      actual,
+      goalPct: goal != null ? (actual / goal) * 100 : null,
+      lowerIsBetter: false,
+    });
+  }
+
+  for (const def of CALC_METRICS) {
+    if (!def.inputs.every((i) => directKeys.includes(i))) continue;
+    const goalInputs: Record<string, number> = {};
+    const actualInputs: Record<string, number> = {};
+    for (const i of def.inputs) {
+      goalInputs[i] = goalByKey[i] ?? 0;
+      actualInputs[i] = actuals[i] ?? 0;
+    }
+    const goalRaw = def.compute(goalInputs);
+    const actualRaw = def.compute(actualInputs);
+    const goal = goalRaw != null && goalRaw > 0 ? goalRaw : null;
+    rows.push({
+      key: def.key,
+      label: labelFor(def.key, def.name),
+      kind: "calculated",
+      unit: def.unit,
+      goal,
+      actual: actualRaw ?? 0,
+      goalPct: goal != null && actualRaw != null ? (actualRaw / goal) * 100 : null,
+      lowerIsBetter: def.lowerIsBetter,
+    });
+  }
+
+  return rows;
+}

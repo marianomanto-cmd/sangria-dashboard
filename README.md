@@ -87,6 +87,8 @@ app/
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
     billing-tracker/        # /billing-tracker — vista jerárquica proyecto → planes → facturas emitidas con desglose media/fee
+    campaign-tracker/       # /campaign-tracker — hub de planes vigentes + vista de carga de consumo real vs goal
+      [planId]/             # vista de carga: tabla editable (autosave) + chart de progreso
     auditoria/              # /auditoria — log con diff
     configuracion/
       markets/, metricas/, publishers/   # admin de catálogos
@@ -100,7 +102,7 @@ app/
       export.pdf/route.ts   # PDF del plan
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
-    clients.ts, reports.ts
+    clients.ts, reports.ts, campaign-tracker.ts
   globals.css
 
 components/                 # UI compartida
@@ -111,7 +113,8 @@ db/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
-    clients.ts, billing.ts, audit-log.ts, budget-origins.ts, reports.ts
+    clients.ts, billing.ts, billing-tracker.ts, audit-log.ts, budget-origins.ts,
+    reports.ts, campaign-tracker.ts
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -121,6 +124,7 @@ lib/
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
   cost-methods.ts           # mapping cost method → métrica principal
+  campaign-metrics.ts       # Campaign Tracker: métricas calculadas + pace + buildMetricRows
 ```
 
 ---
@@ -216,6 +220,30 @@ lib/
 - `plan_billing_fees` es la imputación manual de cada fee del plan en cada
   mes (la suma de imputaciones a lo largo del tiempo no debe pasar el total
   del fee — validado en server actions).
+
+### Campaign Tracker: consumo real vs goal
+- `campaign_placement_actuals (placement_id, metric_key, value_actual,
+  updated_at)`: **capa viva** — el estado actual que edita la trafficker
+  con autosave (debounce 300ms). Un row por `(placement, métrica)`, el
+  valor se reemplaza en cada edición. Unique en `(placement_id, metric_key)`.
+- `campaign_actual_snapshots`: **histórico append-only**. El botón "Cerrar
+  carga del día" toma un snapshot del estado actual fechado con el día de
+  hoy (`closeDailyLoad`). Re-cerrar el mismo día actualiza el snapshot
+  (unique `placement_id + metric_key + snapshot_date`), no bloquea la
+  edición. Es **self-contained**: denormaliza `client_id / project_id /
+  media_plan_id / publisher_id / market_id` + congela el `goal_value` del
+  momento, para que la futura sección de Reportes cruce sin depender de la
+  estructura viva del plan y el histórico quede intacto ante ediciones.
+- Los **goals NO se persisten** (en la capa viva): salen del plan vigente —
+  `amount_usd` y `metrics_json` de cada `media_plan_placement` ya son los
+  goals. Las métricas calculadas (CPM, CTR, CPV, CPA, frequency) se derivan
+  on-the-fly para goal y real con las fórmulas de `lib/campaign-metrics.ts`.
+- "Plan vigente" en el hub = `status='approved'` Y la fecha de hoy cae
+  dentro del período derivado (min/max de fechas de placements).
+- Solo se persisten métricas direct (`amount` + claves de
+  `DIRECT_METRIC_RATES`), tanto en la capa viva como en los snapshots. El
+  sistema es independiente de Billing / Gastos Reales aunque haya
+  solapamiento conceptual con la inversión.
 
 ### Estimación de facturación
 - `getBillingEstimate` en `db/queries/dashboard.ts` prorratea linealmente
@@ -426,3 +454,13 @@ Idempotente: limpia las tablas antes de insertar.
   del plan en lo más profundo, `/auditoria`, billing editor del plan).
   Plan: ir traduciendo a medida que se toque cada archivo.
 - **Drive integration**: en discusión, fuera del scope MVP.
+- **Campaign Tracker** (`/campaign-tracker`): hub de planes vigentes + vista
+  de carga de consumo real vs goal con autosave, chart de progreso, cierre
+  de día (snapshot al histórico) y comparación contra la última carga.
+  **Requiere `npm run db:push`** en prod para crear las tablas
+  `campaign_placement_actuals` (capa viva) y `campaign_actual_snapshots`
+  (histórico) — ambas aditivas, sin backfill. Pendiente: la sección de
+  Reportes que consume `campaign_actual_snapshots` todavía no existe.
+  Elementos del mockup que siguen "próximamente": stepper de fecha y tabs
+  Histórico / Resumen acumulado (dependen de una vista de histórico
+  diario, fuera de alcance de esta entrega).
