@@ -140,7 +140,6 @@ function ProjectRowExpandable({
           >
             {project.name}
           </Link>
-          <div className="font-mono text-[11px] text-muted">{project.code}</div>
         </td>
         {showClient && (
           <td className={`${cellPad} text-ink-2`}>

@@ -26,18 +26,14 @@ export default async function NuevoProyectoPage() {
     <PageShell
       eyebrow="Proyectos"
       title="Crear nuevo proyecto"
-      subtitle="El AM define cliente, budget origin, código y total gross budget. Después el media planner crea los planes adentro."
+      subtitle="El AM define cliente, budget origin, nombre y total gross budget. Después el media planner crea los planes adentro."
     >
       <nav className="text-xs text-muted mb-3">
         <Link href="/proyectos" className="hover:text-ink">
           ← Volver a Proyectos
         </Link>
       </nav>
-      <NewProjectForm
-        clients={data.clients}
-        origins={data.origins}
-        currentYear={data.currentYear}
-      />
+      <NewProjectForm clients={data.clients} origins={data.origins} />
     </PageShell>
   );
 }
