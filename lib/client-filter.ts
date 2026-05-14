@@ -14,6 +14,7 @@ const CLIENT_FILTER_ROUTES = [
   "/planes",
   "/billing",
   "/billing-tracker",
+  "/campaign-tracker",
   "/auditoria",
   "/reportes",
   "/reportes/calendario",
@@ -35,6 +36,7 @@ export function redirectTargetForClientChange(pathname: string): string {
   if (pathname.startsWith("/proyectos/")) return "/proyectos";
   if (pathname.startsWith("/planes/")) return "/planes";
   if (pathname.startsWith("/billing-tracker/")) return "/billing-tracker";
+  if (pathname.startsWith("/campaign-tracker/")) return "/campaign-tracker";
   if (pathname.startsWith("/billing/")) return "/billing";
   if (pathname.startsWith("/clientes/")) return "/proyectos";
   if (pathname.startsWith("/configuracion/")) return "/configuracion";

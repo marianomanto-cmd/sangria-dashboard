@@ -2,6 +2,56 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 14/may/2026 — Campaign Tracker
+
+> Feature en branch `claude/add-campaign-tracker-zLUnE` — testing antes de
+> ir a prod.
+
+- **Nueva sección Campaign Tracker** para que la trafficker cargue el
+  consumo real + métricas reales de las campañas vigentes en un solo
+  lugar, sin tener que entrar a la consola de cada publisher y anotar
+  aparte.
+- **Schema**: nueva tabla `campaign_placement_actuals` (`db/schema.ts`).
+  Un row por `(placement_id, metric_key)` con `value_actual` +
+  `updated_at`. **NO es time-series**: el valor se reemplaza en cada
+  edición (autosave), no hay histórico diario. `metric_key` = `'amount'`
+  para inversión o un slug de `metrics_catalog` para el resto. Solo se
+  persisten métricas direct; las calculadas (CPM, CTR, CPV, CPA,
+  frequency) se derivan on-the-fly.
+- **Goals**: NO se persisten ni se duplican. Salen del plan vigente —
+  `amount_usd` + `metrics_json` de cada `media_plan_placement` ya son
+  los goals. "Plan vigente" = status `approved` Y la fecha de hoy cae
+  dentro del período derivado (min/max de fechas de placements).
+- **Hub** (`/campaign-tracker`): listado de planes vigentes agrupados
+  por cliente, ordenado por más rezagado primero (pace − progreso).
+  Cada plan muestra barra de consumo con tick de pace, badge de pace
+  (on pace / atrasado / sobre-pace) y freshness dots. Las filas sin
+  update ≥48h se resaltan en amarillo.
+- **Vista de carga** (`/campaign-tracker/[planId]`): header con KPIs +
+  tabla densa de placements agrupada por publisher. Cada métrica direct
+  tiene goal read-only, input editable amarillo (autosave, debounce
+  300ms) y goal-bar con tick de pace. Las métricas calculadas aparecen
+  como filas con input deshabilitado y badge "calc.". Abajo, chart de
+  barras horizontales (recharts) con consumo / restante / exceso + línea
+  de pace + línea de meta al 100%, reactivo al editar sin reload.
+- **Elementos visuales / próximamente** (dependen de features fuera de
+  alcance — sin histórico diario, sin cierre de día): stepper de fecha,
+  tabs Histórico / Resumen acumulado, botones "Comparar con ayer" y
+  "Cerrar carga del día". Quedan en el JSX `disabled` con tooltip.
+- **Sidebar**: nueva entry "Campaign Tracker" (icono `LineChart`) al
+  final de `PRIMARY`, después de Billing Tracker.
+- **Deuda técnica**: la tabla `campaign_placement_actuals` es la base
+  para la futura comparación real-vs-goal en Reportes (data histórica).
+  Por ahora guarda solo el estado actual. La clasificación direct vs
+  calculated de métricas usa `DIRECT_METRIC_RATES` (`lib/cost-methods.ts`)
+  como fuente — si el `metrics_json` de un placement trae keys que no
+  están ahí, se ignoran para la carga.
+
+**Acciones requeridas en prod**: `npm run db:push` para crear la tabla
+`campaign_placement_actuals`. Es **aditiva** — no toca tablas existentes,
+no hay backfill ni migración de datos. Sin esto, las páginas
+`/campaign-tracker*` fallan al hacer la query.
+
 ### Cambios de la sesión 14/may/2026 — Archivar clientes + Billing Tracker
 
 - **Clientes archivados desaparecen del filtro global.** El topbar
@@ -119,6 +169,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+(pendiente) Campaign Tracker: carga de consumo real + métricas vs goal
 (pendiente) Archivar clientes desaparece del filtro + nueva /billing-tracker
 c09dc6a  Markets y métricas per-cliente + admin /configuracion/clientes/[slug] (#19)
 2bea4ae  Gantt: feriados argentinos se renderizan como días de fin de semana (#15)
@@ -638,6 +689,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
+| Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Action: `setPlacementActual` en `app/actions/campaign-tracker.ts`. |
+| Cambiar la lógica de métricas del tracker (calculadas, pace, labels) | `lib/campaign-metrics.ts` — `CALC_METRICS` (CPM/CTR/…), `buildMetricRows` (compartido server+client), `computePacePct` / `computePaceStatus`. Piezas visuales (barras, badges, freshness dots) en `components/campaign-tracker-bits.tsx`. |
+| Cambiar qué planes aparecen como "vigentes" | `getCampaignTrackerHub` en `db/queries/campaign-tracker.ts` — filtra `status='approved'` + período (min/max de placements) incluye hoy. |
 | Ocultar/mostrar un cliente en el filtro global | `clients.status` — `archived` lo saca del topbar picker y de `/clientes`. Se sigue gestionando desde `/configuracion/clientes`. |
 | Cambiar el destino del click en una fila de /billing | `app/(app)/billing/page.tsx` — variable `detailHref` por row. Apunta a `/proyectos/[code]/planes/[planId]/billing?month=YYYY-MM`. |
 | Estilos del slider dual-range de meses | `app/globals.css` — clase `.month-slider-thumb` (Webkit + Firefox). |

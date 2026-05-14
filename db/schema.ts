@@ -545,6 +545,43 @@ export const projectReports = pgTable(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// Campaign Tracker — valores reales acumulados que carga la trafficker por
+// placement y métrica. NO es time-series: hay un solo row por (placement,
+// metric_key) y el valor se reemplaza en cada edición (autosave). El
+// updated_at es la fuente de la "frescura" del plan en el hub.
+//
+// Los GOALS no viven acá — se derivan del plan vigente (amount_usd +
+// metrics_json de cada placement). Solo se persisten métricas direct
+// (amount, impressions, views, clicks, conversions, reach…); las
+// calculadas (CPM, CTR, CPV, CPA, frequency) se derivan on-the-fly.
+//
+// metric_key = 'amount' para inversión, o un slug de metrics_catalog para
+// el resto. Unique en (placement_id, metric_key).
+// ════════════════════════════════════════════════════════════════════════════
+
+export const campaignPlacementActuals = pgTable(
+  "campaign_placement_actuals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    placementId: uuid("placement_id")
+      .notNull()
+      .references(() => mediaPlanPlacements.id, { onDelete: "cascade" }),
+    metricKey: text("metric_key").notNull(), // 'amount' | slug de metrics_catalog
+    valueActual: numeric("value_actual", { precision: 16, scale: 4 })
+      .notNull()
+      .default("0"),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedByUserId: uuid("updated_by_user_id"),
+  },
+  (t) => [
+    unique("uq_cpa_placement_metric").on(t.placementId, t.metricKey),
+    index("idx_cpa_placement").on(t.placementId),
+  ],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // Audit log — sin cambios respecto al schema anterior.
 // ════════════════════════════════════════════════════════════════════════════
 
