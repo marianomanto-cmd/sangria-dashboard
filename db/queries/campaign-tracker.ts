@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
+  campaignActualSnapshots,
   campaignPlacementActuals,
   clients,
   markets,
@@ -283,6 +284,9 @@ export type TrackerPlacement = {
   endDate: string | null;
   pacePct: number;
   metrics: TrackerMetricRow[];
+  // Valores direct de la última carga cerrada (para "Comparar con última
+  // carga"). Vacío si el plan nunca se cerró.
+  previousActuals: Record<string, number>;
   goalInvestmentUsd: number;
   actualInvestmentUsd: number;
   progressPct: number;
@@ -318,6 +322,9 @@ export type CampaignTrackerPlan = {
   goalInvestmentUsd: number;
   actualInvestmentUsd: number;
   lastUpdateAt: Date | null;
+  // Fecha (YYYY-MM-DD) de la última vez que se cerró la carga del plan, o
+  // null si nunca se cerró.
+  lastCloseDate: string | null;
   hasGoals: boolean;
 };
 
@@ -398,6 +405,37 @@ export async function getCampaignTrackerPlan(
     if (!lastUpdateAt || a.updatedAt > lastUpdateAt) lastUpdateAt = a.updatedAt;
   }
 
+  // Histórico: valores de la última carga cerrada, para "Comparar con última
+  // carga". lastCloseDate = snapshot_date más reciente del plan.
+  const snapshotRows =
+    placementIds.length === 0
+      ? []
+      : await db
+          .select({
+            placementId: campaignActualSnapshots.placementId,
+            metricKey: campaignActualSnapshots.metricKey,
+            valueAccumulated: campaignActualSnapshots.valueAccumulated,
+            snapshotDate: campaignActualSnapshots.snapshotDate,
+          })
+          .from(campaignActualSnapshots)
+          .where(inArray(campaignActualSnapshots.placementId, placementIds))
+          .orderBy(desc(campaignActualSnapshots.snapshotDate));
+
+  let lastCloseDate: string | null = null;
+  for (const s of snapshotRows) {
+    if (!lastCloseDate || s.snapshotDate > lastCloseDate)
+      lastCloseDate = s.snapshotDate;
+  }
+  const previousByPlacement = new Map<string, Record<string, number>>();
+  if (lastCloseDate) {
+    for (const s of snapshotRows) {
+      if (s.snapshotDate !== lastCloseDate) continue;
+      const rec = previousByPlacement.get(s.placementId) ?? {};
+      rec[s.metricKey] = Number.parseFloat(s.valueAccumulated);
+      previousByPlacement.set(s.placementId, rec);
+    }
+  }
+
   // Catálogo de métricas del cliente para los labels.
   const catalogRows = await db
     .select({
@@ -463,6 +501,7 @@ export async function getCampaignTrackerPlan(
       endDate: p.endDate,
       pacePct,
       metrics,
+      previousActuals: previousByPlacement.get(p.id) ?? {},
       goalInvestmentUsd: goalAmount,
       actualInvestmentUsd,
       progressPct,
@@ -532,6 +571,7 @@ export async function getCampaignTrackerPlan(
     goalInvestmentUsd,
     actualInvestmentUsd,
     lastUpdateAt,
+    lastCloseDate,
     hasGoals,
   };
 }

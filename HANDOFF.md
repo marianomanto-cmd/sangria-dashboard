@@ -40,17 +40,32 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   "Cerrar carga del día". Quedan en el JSX `disabled` con tooltip.
 - **Sidebar**: nueva entry "Campaign Tracker" (icono `LineChart`) al
   final de `PRIMARY`, después de Billing Tracker.
-- **Deuda técnica**: la tabla `campaign_placement_actuals` es la base
-  para la futura comparación real-vs-goal en Reportes (data histórica).
-  Por ahora guarda solo el estado actual. La clasificación direct vs
-  calculated de métricas usa `DIRECT_METRIC_RATES` (`lib/cost-methods.ts`)
-  como fuente — si el `metrics_json` de un placement trae keys que no
-  están ahí, se ignoran para la carga.
+- **Histórico de cargas (Cerrar carga del día)**: segunda tabla
+  `campaign_actual_snapshots` (`db/schema.ts`), **append-only**. El botón
+  "Cerrar carga del día" (`closeDailyLoad` en `app/actions/campaign-tracker.ts`)
+  toma un snapshot del estado actual de la capa viva y lo persiste fechado
+  con el día de hoy. Re-cerrar el mismo día actualiza el snapshot (unique
+  `placement+métrica+fecha`), **no bloquea la edición**. Snapshotea todas
+  las métricas direct de cada placement (aunque estén en 0) + el goal del
+  plan congelado al momento. La tabla es **self-contained**: denormaliza
+  `client_id / project_id / media_plan_id / publisher_id / market_id` para
+  que la futura sección de Reportes cruce sin depender de la estructura
+  viva del plan y el histórico quede intacto si después se edita/borra.
+- **"Comparar con última carga"**: toggle en el editor que agrega dos
+  columnas (Última carga + Δ) comparando el estado actual contra el último
+  snapshot. Las calculadas se derivan también del snapshot anterior. Se
+  deshabilita si el plan nunca se cerró.
+- **Deuda técnica**: la clasificación direct vs calculated de métricas usa
+  `DIRECT_METRIC_RATES` (`lib/cost-methods.ts`) como fuente — si el
+  `metrics_json` de un placement trae keys que no están ahí, se ignoran
+  para la carga. La query de snapshots trae todo el histórico del plan;
+  si crece mucho, conviene un subquery por `max(snapshot_date)`.
 
-**Acciones requeridas en prod**: `npm run db:push` para crear la tabla
-`campaign_placement_actuals`. Es **aditiva** — no toca tablas existentes,
-no hay backfill ni migración de datos. Sin esto, las páginas
-`/campaign-tracker*` fallan al hacer la query.
+**Acciones requeridas en prod**: `npm run db:push` para crear las tablas
+`campaign_placement_actuals` (capa viva) y `campaign_actual_snapshots`
+(histórico). Ambas son **aditivas** — no tocan tablas existentes, no hay
+backfill ni migración de datos. Sin esto, las páginas `/campaign-tracker*`
+fallan al hacer la query.
 
 ### Cambios de la sesión 14/may/2026 — Archivar clientes + Billing Tracker
 
@@ -689,7 +704,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
-| Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Action: `setPlacementActual` en `app/actions/campaign-tracker.ts`. |
+| Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave + cerrar día + comparar) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Actions: `setPlacementActual`, `closeDailyLoad` en `app/actions/campaign-tracker.ts`. |
+| Tocar el histórico de cargas / "Cerrar día" | Tabla `campaign_actual_snapshots` (`db/schema.ts`), action `closeDailyLoad`. La query `getCampaignTrackerPlan` arma `lastCloseDate` + `previousActuals` por placement leyendo el snapshot más reciente. |
 | Cambiar la lógica de métricas del tracker (calculadas, pace, labels) | `lib/campaign-metrics.ts` — `CALC_METRICS` (CPM/CTR/…), `buildMetricRows` (compartido server+client), `computePacePct` / `computePaceStatus`. Piezas visuales (barras, badges, freshness dots) en `components/campaign-tracker-bits.tsx`. |
 | Cambiar qué planes aparecen como "vigentes" | `getCampaignTrackerHub` en `db/queries/campaign-tracker.ts` — filtra `status='approved'` + período (min/max de placements) incluye hoy. |
 | Ocultar/mostrar un cliente en el filtro global | `clients.status` — `archived` lo saca del topbar picker y de `/clientes`. Se sigue gestionando desde `/configuracion/clientes`. |

@@ -1,8 +1,12 @@
 "use client";
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { setPlacementActual } from "@/app/actions/campaign-tracker";
+import {
+  closeDailyLoad,
+  setPlacementActual,
+} from "@/app/actions/campaign-tracker";
 import { GoalBar, PaceBadge } from "@/components/campaign-tracker-bits";
 import type { TrackerPublisherGroup } from "@/db/queries/campaign-tracker";
 import {
@@ -11,6 +15,7 @@ import {
   formatCellValue,
   formatMetricValue,
   parseCellValue,
+  parseLocalDate,
   type DirectGoal,
   type MetricUnit,
 } from "@/lib/campaign-metrics";
@@ -28,6 +33,7 @@ type EditorPlacement = {
   directGoals: DirectGoal[];
   labelByKey: Record<string, string>;
   initialActuals: Record<string, number>;
+  previousActuals: Record<string, number>;
 };
 
 type EditorPublisher = {
@@ -37,15 +43,21 @@ type EditorPublisher = {
   placements: EditorPlacement[];
 };
 
+type MetricRow = ReturnType<typeof buildMetricRows>[number];
+
 export function CampaignTrackerEditor({
   planId,
   pacePct,
   publishers,
+  lastCloseDate,
 }: {
   planId: string;
   pacePct: number;
   publishers: TrackerPublisherGroup[];
+  lastCloseDate: string | null;
 }) {
+  const router = useRouter();
+
   // Normalización (una vez): de la estructura del query a la del editor.
   const editorPublishers = useMemo<EditorPublisher[]>(
     () =>
@@ -74,6 +86,7 @@ export function CampaignTrackerEditor({
             directGoals,
             labelByKey,
             initialActuals,
+            previousActuals: pl.previousActuals,
           };
         }),
       })),
@@ -98,7 +111,10 @@ export function CampaignTrackerEditor({
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">(
     "idle",
   );
+  const [compareMode, setCompareMode] = useState(false);
+  const [closeFeedback, setCloseFeedback] = useState<string | null>(null);
   const [, startTransition] = useTransition();
+  const [closing, startClose] = useTransition();
   const timers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   // Autosave con debounce de 300ms. El estado local se actualiza al instante
@@ -143,12 +159,31 @@ export function CampaignTrackerEditor({
     timers.current.set(cellKey, t);
   };
 
+  const handleClose = () => {
+    if (
+      !confirm(
+        "¿Cerrar la carga de hoy? Se guarda un snapshot del estado actual en el histórico para Reportes. Podés seguir editando y volver a cerrar.",
+      )
+    )
+      return;
+    startClose(async () => {
+      const r = await closeDailyLoad({ planId });
+      if (!r.ok) {
+        alert(r.error);
+        return;
+      }
+      setCloseFeedback(
+        `Carga cerrada · ${r.rowCount} valor${
+          r.rowCount === 1 ? "" : "es"
+        } guardado${r.rowCount === 1 ? "" : "s"} en el histórico`,
+      );
+      router.refresh();
+    });
+  };
+
   // Filas de métricas recomputadas para cada placement con el estado actual.
   const placementRows = useMemo(() => {
-    const map = new Map<
-      string,
-      ReturnType<typeof buildMetricRows>
-    >();
+    const map = new Map<string, MetricRow[]>();
     for (const pub of editorPublishers) {
       for (const pl of pub.placements) {
         map.set(
@@ -163,6 +198,23 @@ export function CampaignTrackerEditor({
     }
     return map;
   }, [editorPublishers, actuals]);
+
+  // Filas de la última carga cerrada, por placement → métrica. Para el modo
+  // "Comparar con última carga".
+  const previousRows = useMemo(() => {
+    const map = new Map<string, Map<string, MetricRow>>();
+    for (const pub of editorPublishers) {
+      for (const pl of pub.placements) {
+        const rows = buildMetricRows(
+          pl.directGoals,
+          pl.previousActuals,
+          (k, fb) => pl.labelByKey[k] ?? fb,
+        );
+        map.set(pl.id, new Map(rows.map((r) => [r.key, r])));
+      }
+    }
+    return map;
+  }, [editorPublishers]);
 
   // Datos del chart: % de consumo de inversión por placement.
   const chartData = useMemo(() => {
@@ -187,6 +239,16 @@ export function CampaignTrackerEditor({
         ? "Auto-guardado"
         : "Auto-guardado activo";
 
+  const lastCloseLabel = lastCloseDate
+    ? (parseLocalDate(lastCloseDate)?.toLocaleDateString("es-AR", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }) ?? lastCloseDate)
+    : null;
+
+  const colCount = compareMode ? 9 : 7;
+
   return (
     <div className="space-y-5">
       {/* Tabs internas — Histórico / Resumen son visual / próximamente */}
@@ -197,7 +259,7 @@ export function CampaignTrackerEditor({
         <button
           type="button"
           disabled
-          title="Próximamente — esta entrega no maneja histórico diario"
+          title="Próximamente — esta entrega no maneja vista de histórico diario"
           className="px-4 py-2.5 text-[13px] font-medium text-muted/60 cursor-not-allowed"
         >
           Histórico
@@ -233,6 +295,14 @@ export function CampaignTrackerEditor({
               <th className="text-right font-medium px-4 py-2 w-[130px]">
                 Actual
               </th>
+              {compareMode && (
+                <>
+                  <th className="text-right font-medium px-4 py-2">
+                    Última carga
+                  </th>
+                  <th className="text-right font-medium px-4 py-2">Δ</th>
+                </>
+              )}
               <th className="text-right font-medium px-4 py-2">% goal</th>
               <th className="text-right font-medium px-4 py-2">% pace</th>
               <th className="text-left font-medium px-4 py-2 w-[18%]">
@@ -267,7 +337,10 @@ export function CampaignTrackerEditor({
                   }
                   pubPct={pubPct}
                   pubStatus={pubStatus}
+                  colCount={colCount}
+                  compareMode={compareMode}
                   placementRows={placementRows}
+                  previousRows={previousRows}
                   commitCell={commitCell}
                 />
               );
@@ -277,7 +350,7 @@ export function CampaignTrackerEditor({
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-line flex items-center justify-between flex-wrap gap-2 text-xs">
-          <div className="flex items-center gap-3 text-muted">
+          <div className="flex items-center gap-3 text-muted flex-wrap">
             <span>
               <b className="text-ink-2">{editedKeys.size}</b> valor
               {editedKeys.size === 1 ? "" : "es"} editado
@@ -292,23 +365,41 @@ export function CampaignTrackerEditor({
               />
               {saveLabel}
             </span>
+            <span className="text-stone-300">·</span>
+            <span>
+              Última carga cerrada:{" "}
+              <b className="text-ink-2">{lastCloseLabel ?? "nunca"}</b>
+            </span>
+            {closeFeedback && (
+              <span className="text-success font-medium">{closeFeedback}</span>
+            )}
           </div>
           <div className="flex gap-2">
             <button
               type="button"
-              disabled
-              title="Próximamente — esta entrega no maneja histórico diario"
-              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-muted/60 cursor-not-allowed"
+              onClick={() => setCompareMode((m) => !m)}
+              disabled={!lastCloseDate}
+              title={
+                lastCloseDate
+                  ? "Compara el estado actual contra la última carga cerrada"
+                  : "Todavía no hay ninguna carga cerrada para comparar"
+              }
+              className={`rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
+                compareMode
+                  ? "border-accent bg-accent-soft text-accent"
+                  : "border-line bg-white text-ink hover:bg-paper-2"
+              }`}
             >
-              Comparar con ayer
+              {compareMode ? "Ocultar comparación" : "Comparar con última carga"}
             </button>
             <button
               type="button"
-              disabled
-              title="Próximamente — el autosave es el flujo completo, no hay cierre de día"
-              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-muted/60 cursor-not-allowed"
+              onClick={handleClose}
+              disabled={closing}
+              title="Guarda un snapshot del estado actual en el histórico (para Reportes). No bloquea la edición."
+              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
             >
-              Cerrar carga del día
+              {closing ? "Cerrando…" : "Cerrar carga del día"}
             </button>
           </div>
         </div>
@@ -354,7 +445,10 @@ function PublisherBlock({
   onToggle,
   pubPct,
   pubStatus,
+  colCount,
+  compareMode,
   placementRows,
+  previousRows,
   commitCell,
 }: {
   pub: EditorPublisher;
@@ -362,13 +456,16 @@ function PublisherBlock({
   onToggle: () => void;
   pubPct: number;
   pubStatus: ReturnType<typeof computePaceStatus>;
-  placementRows: Map<string, ReturnType<typeof buildMetricRows>>;
+  colCount: number;
+  compareMode: boolean;
+  placementRows: Map<string, MetricRow[]>;
+  previousRows: Map<string, Map<string, MetricRow>>;
   commitCell: (placementId: string, metricKey: string, value: number) => void;
 }) {
   return (
     <>
       <tr className="bg-paper-2">
-        <td colSpan={7} className="px-4 py-2">
+        <td colSpan={colCount} className="px-4 py-2">
           <button
             type="button"
             onClick={onToggle}
@@ -399,6 +496,7 @@ function PublisherBlock({
       {!isCollapsed &&
         pub.placements.map((pl) => {
           const rows = placementRows.get(pl.id) ?? [];
+          const prev = previousRows.get(pl.id);
           return rows.map((row, idx) => (
             <tr
               key={`${pl.id}:${row.key}`}
@@ -426,6 +524,8 @@ function PublisherBlock({
                 placementId={pl.id}
                 placementPace={pl.pacePct}
                 row={row}
+                previousRow={compareMode ? prev?.get(row.key) : undefined}
+                compareMode={compareMode}
                 commitCell={commitCell}
               />
             </tr>
@@ -439,11 +539,15 @@ function MetricRowCells({
   placementId,
   placementPace,
   row,
+  previousRow,
+  compareMode,
   commitCell,
 }: {
   placementId: string;
   placementPace: number;
-  row: ReturnType<typeof buildMetricRows>[number];
+  row: MetricRow;
+  previousRow: MetricRow | undefined;
+  compareMode: boolean;
   commitCell: (placementId: string, metricKey: string, value: number) => void;
 }) {
   const isCalc = row.kind === "calculated";
@@ -479,6 +583,14 @@ function MetricRowCells({
     pacePctCell = `${d >= 0 ? "+" : ""}${d.toFixed(0)}%`;
   }
 
+  // Δ vs última carga cerrada.
+  const delta =
+    compareMode && previousRow ? row.actual - previousRow.actual : 0;
+  const deltaCell =
+    delta === 0
+      ? "—"
+      : `${delta > 0 ? "+" : "−"}${formatMetricValue(Math.abs(delta), row.unit)}`;
+
   return (
     <>
       <td className="px-4 py-2 text-ink-2">
@@ -512,6 +624,26 @@ function MetricRowCells({
           />
         )}
       </td>
+      {compareMode && (
+        <>
+          <td className="px-4 py-2 text-right font-mono text-[12.5px] text-muted">
+            {previousRow
+              ? formatMetricValue(previousRow.actual, row.unit)
+              : "—"}
+          </td>
+          <td
+            className={`px-4 py-2 text-right font-mono text-[12.5px] ${
+              delta > 0
+                ? "text-success"
+                : delta < 0
+                  ? "text-warn"
+                  : "text-muted"
+            }`}
+          >
+            {deltaCell}
+          </td>
+        </>
+      )}
       <td
         className={`px-4 py-2 text-right font-mono text-[12.5px] ${goalPctCls}`}
       >

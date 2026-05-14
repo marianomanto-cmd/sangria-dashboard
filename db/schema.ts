@@ -582,6 +582,72 @@ export const campaignPlacementActuals = pgTable(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// Campaign Tracker — histórico de cargas cerradas ("Cerrar carga del día").
+//
+// Append-only. Cada vez que la trafficker cierra la carga de un plan se
+// escribe (o se reescribe, si re-cierra el mismo día) un row por
+// (placement, métrica) con el valor acumulado a esa fecha + el goal del plan
+// al momento. Es self-contained: denormaliza client/project/plan/publisher/
+// market para que la futura sección de Reportes pueda cruzar sin depender de
+// la estructura viva del plan, y para que el histórico quede intacto si
+// después se edita o borra un placement.
+//
+// Solo métricas direct (igual que campaign_placement_actuals); las calculadas
+// (CTR, CPV, CPM…) se derivan on-the-fly en Reportes.
+//
+// Unique en (placement_id, metric_key, snapshot_date) → re-cerrar el mismo
+// día actualiza el snapshot en vez de duplicarlo.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const campaignActualSnapshots = pgTable(
+  "campaign_actual_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    mediaPlanId: uuid("media_plan_id")
+      .notNull()
+      .references(() => mediaPlans.id, { onDelete: "cascade" }),
+    publisherId: uuid("publisher_id")
+      .notNull()
+      .references(() => publishers.id, { onDelete: "restrict" }),
+    marketId: uuid("market_id").references(() => markets.id, {
+      onDelete: "set null",
+    }),
+    placementId: uuid("placement_id")
+      .notNull()
+      .references(() => mediaPlanPlacements.id, { onDelete: "cascade" }),
+    metricKey: text("metric_key").notNull(), // 'amount' | slug de metrics_catalog
+    valueAccumulated: numeric("value_accumulated", {
+      precision: 16,
+      scale: 4,
+    }).notNull(),
+    // Goal del plan para esa métrica al momento del cierre. Se congela para
+    // que el histórico no se mueva si después se edita el plan.
+    goalValue: numeric("goal_value", { precision: 16, scale: 4 }),
+    snapshotDate: date("snapshot_date").notNull(), // día de cierre (YYYY-MM-DD)
+    closedAt: timestamp("closed_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    closedByUserId: uuid("closed_by_user_id"),
+  },
+  (t) => [
+    unique("uq_cas_placement_metric_date").on(
+      t.placementId,
+      t.metricKey,
+      t.snapshotDate,
+    ),
+    index("idx_cas_plan_date").on(t.mediaPlanId, t.snapshotDate),
+    index("idx_cas_client_date").on(t.clientId, t.snapshotDate),
+    index("idx_cas_placement").on(t.placementId),
+  ],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // Audit log — sin cambios respecto al schema anterior.
 // ════════════════════════════════════════════════════════════════════════════
 
