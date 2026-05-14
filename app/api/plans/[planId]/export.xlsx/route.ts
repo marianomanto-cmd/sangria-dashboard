@@ -461,10 +461,9 @@ export async function GET(
       t("common.name", lang),
       "Rate %",
       lang === "es" ? "Monto (USD)" : "Amount (USD)",
-      t("common.auto", lang),
       t("common.notes", lang),
     ];
-    const feeColsSpan = [1, 1, 1, 1, 1, Math.max(1, totalCols - 5)];
+    const feeColsSpan = [1, 1, 1, 1, Math.max(1, totalCols - 4)];
     const feeHdrRow = ws.getRow(currentRow);
     let col = 1;
     feeHeaders.forEach((label, i) => {
@@ -498,10 +497,7 @@ export async function GET(
       row.getCell(c).value = f.amountUsd;
       row.getCell(c).numFmt = '"$"#,##0.00';
       c++;
-      row.getCell(c++).value = f.isAutoComputed
-        ? t("common.yes", lang)
-        : t("common.no", lang);
-      const notesSpan = feeColsSpan[5];
+      const notesSpan = feeColsSpan[4];
       row.getCell(c).value = f.notes ?? "";
       row.getCell(c).alignment = { wrapText: true, vertical: "top" };
       if (notesSpan > 1) {
@@ -542,7 +538,7 @@ export async function GET(
       pattern: "solid",
       fgColor: { argb: INK },
     };
-    cell.font = { bold: true, size: 12 };
+    cell.font = { bold: true, size: 12, color: { argb: WHITE } };
     cell.border = allBorders;
   }
   grandRow.height = 24;
