@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  budgetOrigins,
   clientPublishers,
   clients,
   markets,
@@ -72,11 +73,18 @@ export default async function ClientConfigPage({ params }: Props) {
     .where(eq(markets.clientId, client.id))
     .orderBy(asc(markets.sortOrder), asc(markets.name));
 
+  // Budget origins del cliente.
+  const budgetOriginRows = await db
+    .select()
+    .from(budgetOrigins)
+    .where(eq(budgetOrigins.clientId, client.id))
+    .orderBy(asc(budgetOrigins.name));
+
   return (
     <PageShell
       eyebrow="Configuración / Clientes"
       title={`Configuración · ${client.name}`}
-      subtitle={`Publishers, métricas y mercados habilitados para ${client.name}. Cada cliente tiene su set propio — podés crear conversiones custom, renombrar mercados, etc.`}
+      subtitle={`Publishers, métricas, mercados y budget origins habilitados para ${client.name}. Cada cliente tiene su set propio — podés crear conversiones custom, renombrar mercados, etc.`}
     >
       <nav
         aria-label="Breadcrumb"
@@ -93,6 +101,7 @@ export default async function ClientConfigPage({ params }: Props) {
         publishers={publisherRows}
         metrics={metricRows}
         markets={marketRows}
+        budgetOrigins={budgetOriginRows}
       />
     </PageShell>
   );
