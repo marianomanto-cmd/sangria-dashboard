@@ -184,8 +184,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(pendiente) Campaign Tracker: carga de consumo real + métricas vs goal
-(pendiente) Archivar clientes desaparece del filtro + nueva /billing-tracker
+a0d80a9  Campaign Tracker: carga de consumo real vs goal + histórico de cargas (#21)
+660ae33  Archivar clientes los saca del filtro + nueva /billing-tracker (#20)
 c09dc6a  Markets y métricas per-cliente + admin /configuracion/clientes/[slug] (#19)
 2bea4ae  Gantt: feriados argentinos se renderizan como días de fin de semana (#15)
 f334113  Gantt: eje diario con marcadores semanales + bandas de fin de semana (#14)
