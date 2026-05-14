@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 14/may/2026 — Cost method dCPA
+
+- **Nuevo cost method `dCPA`** en el enum `cost_method` (`db/schema.ts`).
+  Se actualizaron los 4 lugares con la lista hardcodeada:
+  `db/schema.ts`, `lib/cost-methods.ts` (`COST_METHOD_PRIMARY_METRIC`,
+  tipo `CostMethod`, array `COST_METHODS`), `app/actions/plans.ts` y
+  `scripts/seed.ts`.
+- `dCPA` comparte métrica principal (`conversions`) y rate (`cpa`) con
+  `CPA`, que ya están en `DIRECT_METRIC_RATES` y en el seed de
+  `metrics_catalog` — no hizo falta tocar eso.
+
+**Acciones requeridas en prod**: `npm run db:push` para agregar el valor
+`dCPA` al enum `cost_method`. Aditivo, sin backfill.
+
 ### Cambios de la sesión 14/may/2026 — Budget origins per-cliente CRUD
 
 - **Nueva sección "Budget origins"** en `/configuracion/clientes/[slug]`
@@ -222,6 +236,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+afa3d1f  Cost methods: agregar dCPA a la lista (#29)
 bc550df  Budget origins: quitar el campo target mensual (#27)
 4d7ca1f  docs: reflejar CRUD de budget origins per-cliente (#26)
 d9ae34c  Config de cliente: CRUD de budget origins per-cliente (#25)
