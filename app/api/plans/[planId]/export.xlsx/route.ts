@@ -326,8 +326,6 @@ export async function GET(
   let currentRow = tableHeaderRowIdx + 1;
 
   // ─── Filas por publisher: subtotal + placements ─────────────────────────
-  const agencyPaysLabel =
-    lang === "es" ? "  (agencia paga)" : "  (agency pays)";
   const noPlacementsLabel = t("common.noPlacements", lang);
   for (const grp of detail.publishers) {
     // Subtotal del publisher: direct = sum, calculated = formula sobre el
@@ -335,8 +333,7 @@ export async function GET(
     const pubDirects = sumDirects(grp.placements, directSlugs);
 
     const subRow = ws.getRow(currentRow);
-    subRow.getCell(1).value =
-      grp.publisherName + (grp.agencyPays ? agencyPaysLabel : "");
+    subRow.getCell(1).value = grp.publisherName;
     subRow.getCell(7).value = grp.totalPlannedUsd;
     subRow.getCell(7).numFmt = '"$"#,##0.00';
     directSlugs.forEach((slug, i) => {
