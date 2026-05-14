@@ -9,17 +9,6 @@ type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
   | { ok: false; error: string };
 
-// numeric(14,2) — drizzle espera string. Devolvemos null si viene vacío o no
-// es un número finito.
-function normalizeNumeric(v: string | null | undefined): string | null {
-  if (v === null || v === undefined) return null;
-  const t = String(v).trim();
-  if (!t) return null;
-  const n = Number(t);
-  if (!Number.isFinite(n)) return null;
-  return n.toFixed(2);
-}
-
 function pathsToRevalidate(clientSlug?: string) {
   revalidatePath("/proyectos");
   revalidatePath("/planes");
@@ -30,7 +19,6 @@ export async function createBudgetOrigin(input: {
   clientId: string;
   clientSlug?: string;
   name: string;
-  monthlyTargetUsd?: string | null;
   colorHex?: string | null;
 }): Promise<Result<{ id: string }>> {
   if (!input.clientId) return { ok: false, error: "Cliente requerido" };
@@ -42,7 +30,6 @@ export async function createBudgetOrigin(input: {
       .values({
         clientId: input.clientId,
         name: input.name.trim(),
-        monthlyTargetUsd: normalizeNumeric(input.monthlyTargetUsd),
         colorHex: input.colorHex?.trim() || null,
       })
       .returning();
@@ -66,7 +53,6 @@ export async function updateBudgetOrigin(input: {
   id: string;
   clientSlug?: string;
   name?: string;
-  monthlyTargetUsd?: string | null;
   colorHex?: string | null;
 }): Promise<Result> {
   const [before] = await db
@@ -78,8 +64,6 @@ export async function updateBudgetOrigin(input: {
 
   const update: Record<string, unknown> = {};
   if (input.name !== undefined) update.name = input.name.trim();
-  if (input.monthlyTargetUsd !== undefined)
-    update.monthlyTargetUsd = normalizeNumeric(input.monthlyTargetUsd);
   if (input.colorHex !== undefined)
     update.colorHex = input.colorHex?.trim() || null;
   if (Object.keys(update).length === 0) return { ok: true };

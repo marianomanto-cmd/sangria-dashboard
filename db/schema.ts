@@ -229,7 +229,6 @@ export const budgetOrigins = pgTable("budget_origins", {
     .notNull()
     .references(() => clients.id, { onDelete: "cascade" }),
   name: text("name").notNull(),                 // "Online", "CMI", "Trade", "Cargo"
-  monthlyTargetUsd: numeric("monthly_target_usd", { precision: 14, scale: 2 }),
   colorHex: text("color_hex"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

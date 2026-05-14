@@ -628,11 +628,7 @@ function BudgetOriginsSection({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
-  const [draft, setDraft] = useState({
-    name: "",
-    monthlyTargetUsd: "",
-    colorHex: "",
-  });
+  const [draft, setDraft] = useState({ name: "", colorHex: "" });
   const [error, setError] = useState<string | null>(null);
 
   const onCreate = () => {
@@ -646,14 +642,13 @@ function BudgetOriginsSection({
         clientId,
         clientSlug,
         name: draft.name.trim(),
-        monthlyTargetUsd: draft.monthlyTargetUsd.trim() || null,
         colorHex: draft.colorHex.trim() || null,
       });
       if (!r.ok) {
         setError(r.error);
         return;
       }
-      setDraft({ name: "", monthlyTargetUsd: "", colorHex: "" });
+      setDraft({ name: "", colorHex: "" });
       setShowAdd(false);
       router.refresh();
     });
@@ -661,11 +656,7 @@ function BudgetOriginsSection({
 
   const onUpdate = (
     id: string,
-    partial: {
-      name?: string;
-      monthlyTargetUsd?: string | null;
-      colorHex?: string | null;
-    },
+    partial: { name?: string; colorHex?: string | null },
   ) => {
     startTransition(async () => {
       const r = await updateBudgetOrigin({ id, clientSlug, ...partial });
@@ -698,27 +689,16 @@ function BudgetOriginsSection({
       </header>
       <p className="text-xs text-muted mb-3 max-w-2xl">
         Centros de costo o fuentes de presupuesto del cliente (ej. Online,
-        CMI, Trade). Cada proyecto pertenece a uno. El target mensual es
-        opcional y se usa como referencia en las vistas de presupuesto.
+        CMI, Trade). Cada proyecto pertenece a uno.
       </p>
       {showAdd && (
         <div className="rounded-lg border border-line bg-paper-2 p-4 mb-3 space-y-2">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+          <div className="grid grid-cols-2 gap-2 text-xs">
             <input
               type="text"
               placeholder="Nombre (ej. Online)"
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="rounded-md border border-line bg-white px-2 py-1.5"
-            />
-            <input
-              type="text"
-              inputMode="decimal"
-              placeholder="Target mensual USD (opcional)"
-              value={draft.monthlyTargetUsd}
-              onChange={(e) =>
-                setDraft({ ...draft, monthlyTargetUsd: e.target.value })
-              }
               className="rounded-md border border-line bg-white px-2 py-1.5"
             />
             <input
@@ -759,9 +739,6 @@ function BudgetOriginsSection({
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
               <th className="text-left font-medium px-5 py-2.5">Nombre</th>
-              <th className="text-left font-medium px-5 py-2.5">
-                Target mensual USD
-              </th>
               <th className="text-left font-medium px-5 py-2.5">Color</th>
               <th className="w-10" />
             </tr>
@@ -770,7 +747,7 @@ function BudgetOriginsSection({
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={3}
                   className="px-5 py-8 text-center text-xs text-muted italic"
                 >
                   Sin budget origins. Agregá el primero con el botón de arriba.
@@ -790,22 +767,6 @@ function BudgetOriginsSection({
                       onBlur={(e) =>
                         e.target.value !== b.name &&
                         onUpdate(b.id, { name: e.target.value })
-                      }
-                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
-                    />
-                  </td>
-                  <td className="px-5 py-2">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      defaultValue={b.monthlyTargetUsd ?? ""}
-                      disabled={pending}
-                      placeholder="—"
-                      onBlur={(e) =>
-                        e.target.value !== (b.monthlyTargetUsd ?? "") &&
-                        onUpdate(b.id, {
-                          monthlyTargetUsd: e.target.value || null,
-                        })
                       }
                       className="w-full bg-transparent text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
                     />
