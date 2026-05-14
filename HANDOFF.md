@@ -2,6 +2,23 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 14/may/2026 — Budget origins per-cliente CRUD
+
+- **Nueva sección "Budget origins"** en `/configuracion/clientes/[slug]`
+  (`sections.tsx`), junto a Métricas y Mercados. Permite crear, editar
+  inline (nombre / target mensual USD / color hex) y eliminar budget
+  origins de cada cliente desde la UI — antes solo se cargaban vía seed.
+- **Nuevas server actions** en `app/actions/budget-origins.ts`:
+  `createBudgetOrigin` / `updateBudgetOrigin` / `deleteBudgetOrigin`,
+  con el mismo patrón que markets/metrics (audit log + `revalidatePath`
+  de `/proyectos`, `/planes` y la página del cliente).
+- `deleteBudgetOrigin` chequea proyectos asociados **antes** de borrar
+  (`projects.budget_origin_id` tiene `onDelete: "restrict"`) y devuelve
+  un error claro si el origin está en uso, en vez de reventar la FK.
+- Sin cambios de schema — no requiere migración ni seed.
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código.
+
 ### Cambios de la sesión 14/may/2026 — Excel del plan: formato cosmético
 
 - **Colores de marca**: el `export.xlsx` usaba una paleta violeta
@@ -201,6 +218,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+d9ae34c  Config de cliente: CRUD de budget origins per-cliente (#25)
+b714024  docs: hashes reales en Commits recientes (#22, #23) (#24)
 eae28ff  Excel del plan: formato cosmético alineado a la marca (#23)
 7a32be3  docs: hashes reales en Commits recientes (#20, #21) (#22)
 a0d80a9  Campaign Tracker: carga de consumo real vs goal + histórico de cargas (#21)
@@ -583,8 +602,10 @@ per-cliente conviene tenerlas en el mismo lugar visual.
 
 ### 4. Admin UI para clientes y budget origins
 
-Mismo razonamiento. Crear un cliente o budget origin hoy es vía seed.
-Sería `/configuracion/clientes` (ya está en placeholders).
+Los **budget origins** ya tienen CRUD per-cliente en
+`/configuracion/clientes/[slug]` (sesión 14/may). Lo que falta es el alta
+de **clientes** desde la UI — hoy crear un cliente sigue siendo vía seed.
+Sería en `/configuracion/clientes` (ya está en placeholders).
 
 ### 5. Polish del PDF/Excel
 
@@ -740,6 +761,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el picker / filtro global cliente| `components/topbar-client-picker.tsx`, `lib/client-filter*.ts` |
 | Agregar una ruta al filtro de cliente  | `CLIENT_FILTER_ROUTES` en `lib/client-filter.ts`          |
 | Cambiar el idioma de un cliente        | `/configuracion/clientes` o columna `clients.language`     |
+| Editar publishers/métricas/mercados/budget origins de un cliente | `app/(app)/configuracion/clientes/[slug]/sections.tsx` (UI) + actions en `app/actions/{publishers,metrics,markets,budget-origins}.ts`. La page (`page.tsx`) trae las 4 listas por `clientId`. |
 | Agregar/traducir strings nuevas        | `DICT` en `lib/i18n.ts` + usar `t(key, lang)` en JSX       |
 | Cambiar formato de fechas en la app    | `formatDate` / `formatMonth` en `lib/i18n.ts`              |
 | Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
