@@ -227,32 +227,32 @@ async function main() {
   const [bgOnline, bgCmi, bgTrade] = await db
     .insert(s.budgetOrigins)
     .values([
-      { clientId: copa.id, name: "Online", monthlyTargetUsd: "200000.00", colorHex: "#7a1f3d" },
-      { clientId: copa.id, name: "CMI", monthlyTargetUsd: "80000.00", colorHex: "#5e1730" },
-      { clientId: copa.id, name: "Trade", monthlyTargetUsd: "50000.00", colorHex: "#8b2a52" },
+      { clientId: copa.id, name: "Online", colorHex: "#7a1f3d" },
+      { clientId: copa.id, name: "CMI", colorHex: "#5e1730" },
+      { clientId: copa.id, name: "Trade", colorHex: "#8b2a52" },
     ])
     .returning();
 
   const [bgCraBrand, bgCraPromo] = await db
     .insert(s.budgetOrigins)
     .values([
-      { clientId: cra.id, name: "Brand", monthlyTargetUsd: "60000.00", colorHex: "#b56a17" },
-      { clientId: cra.id, name: "Promo", monthlyTargetUsd: "30000.00", colorHex: "#d18a3b" },
+      { clientId: cra.id, name: "Brand", colorHex: "#b56a17" },
+      { clientId: cra.id, name: "Promo", colorHex: "#d18a3b" },
     ])
     .returning();
 
   const [bgBpacRetail, bgBpacCorp] = await db
     .insert(s.budgetOrigins)
     .values([
-      { clientId: bpac.id, name: "Retail", monthlyTargetUsd: "70000.00", colorHex: "#1f4d8c" },
-      { clientId: bpac.id, name: "Corporate", monthlyTargetUsd: "40000.00", colorHex: "#2c6bb8" },
+      { clientId: bpac.id, name: "Retail", colorHex: "#1f4d8c" },
+      { clientId: bpac.id, name: "Corporate", colorHex: "#2c6bb8" },
     ])
     .returning();
 
   const [bgTrGen] = await db
     .insert(s.budgetOrigins)
     .values([
-      { clientId: tr.id, name: "General", monthlyTargetUsd: "20000.00", colorHex: "#4f4f4f" },
+      { clientId: tr.id, name: "General", colorHex: "#4f4f4f" },
     ])
     .returning();
 
