@@ -538,7 +538,7 @@ export async function GET(
       pattern: "solid",
       fgColor: { argb: INK },
     };
-    cell.font = { bold: true, size: 12 };
+    cell.font = { bold: true, size: 12, color: { argb: WHITE } };
     cell.border = allBorders;
   }
   grandRow.height = 24;
