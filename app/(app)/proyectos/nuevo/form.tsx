@@ -7,25 +7,19 @@ import { createProject } from "@/app/actions/projects";
 export function NewProjectForm({
   clients,
   origins,
-  currentYear,
 }: {
-  clients: Array<{ id: string; name: string; prefix: string | null; slug: string }>;
+  clients: Array<{ id: string; name: string }>;
   origins: Array<{ id: string; clientId: string; name: string }>;
-  currentYear: number;
 }) {
   const router = useRouter();
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [budgetOriginId, setBudgetOriginId] = useState("");
-  const [shortId, setShortId] = useState("");
   const [name, setName] = useState("");
   const [totalGrossBudget, setTotalGrossBudget] = useState("");
   const [startDate, setStartDate] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const selectedClient = clients.find((c) => c.id === clientId);
-  const clientPrefix = selectedClient?.prefix ?? selectedClient?.slug?.toUpperCase() ?? "X";
 
   const filteredOrigins = useMemo(
     () => origins.filter((o) => o.clientId === clientId),
@@ -42,24 +36,14 @@ export function NewProjectForm({
     }
   }, [filteredOrigins, budgetOriginId]);
 
-  const computedCode = useMemo(() => {
-    const cleanId = shortId.trim().replace(/[^a-zA-Z0-9]/g, "");
-    const cleanName = name.trim().replace(/[^a-zA-Z0-9]/g, "");
-    if (!cleanId || !cleanName) return "";
-    // Si shortId ya empieza con "m", la usamos tal cual; si no, le agregamos.
-    const idPart = /^m/i.test(cleanId) ? cleanId : `m${cleanId}`;
-    return `${clientPrefix}.${idPart}.${cleanName}`;
-  }, [clientPrefix, shortId, name]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!computedCode) return;
+    if (!name.trim()) return;
     setError(null);
     setSubmitting(true);
     const r = await createProject({
       clientId,
       budgetOriginId,
-      code: computedCode,
       name: name.trim(),
       totalGrossBudgetUsd: totalGrossBudget
         ? Number.parseFloat(totalGrossBudget)
@@ -113,45 +97,16 @@ export function NewProjectForm({
         </Field>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <Field label={`Identificador (m<id>)`}>
-          <input
-            type="text"
-            value={shortId}
-            onChange={(e) => setShortId(e.target.value)}
-            placeholder={`m${currentYear}A01 o mCostaRica${currentYear}`}
-            required
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm font-mono focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
-          />
-          <p className="mt-1 text-[11px] text-muted">
-            Si no empieza con &quot;m&quot;, se le agrega automáticamente.
-          </p>
-        </Field>
-        <Field label="Nombre del proyecto">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="CostaRica2026"
-            required
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
-          />
-          <p className="mt-1 text-[11px] text-muted">
-            Sin espacios ni caracteres especiales (se limpian automáticamente).
-          </p>
-        </Field>
-      </div>
-
-      <div className="rounded-md bg-paper-2 border border-line px-3 py-2 text-sm">
-        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted mb-1">
-          Code resultante
-        </p>
-        <p className="font-mono">
-          {computedCode || (
-            <span className="text-stone-300">{clientPrefix}.m&lt;id&gt;.&lt;Nombre&gt;</span>
-          )}
-        </p>
-      </div>
+      <Field label="Nombre del proyecto">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Costa Rica 2026"
+          required
+          className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+        />
+      </Field>
 
       <Field label="Total gross budget (USD)">
         <input
@@ -195,7 +150,7 @@ export function NewProjectForm({
       <div className="flex items-center gap-3 border-t border-line-soft pt-4">
         <button
           type="submit"
-          disabled={submitting || !computedCode || !budgetOriginId}
+          disabled={submitting || !name.trim() || !budgetOriginId}
           className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-4 py-2 text-sm font-medium hover:bg-ink-2 transition-colors disabled:opacity-50"
         >
           {submitting ? "Creando…" : "Crear proyecto"}

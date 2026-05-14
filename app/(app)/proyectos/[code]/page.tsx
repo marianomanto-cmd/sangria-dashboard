@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowUpRight, Plus } from "lucide-react";
+import { asc, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { budgetOrigins } from "@/db/schema";
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { ProjectStatusChanger } from "@/components/project-status-changer";
 import { StatusBadge } from "@/components/status-badge";
 import { getBillingEstimate } from "@/db/queries/dashboard";
 import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
+import { ProjectEditPanel } from "./edit-panel";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 import {
   DEFAULT_LANGUAGE,
@@ -76,6 +80,13 @@ export default async function ProjectDetailPage({ params }: Props) {
   const { project, client, budgetOrigin, plans } = detail;
   const lang: Language = client.language ?? DEFAULT_LANGUAGE;
 
+  // Budget origins del cliente — para el dropdown del panel de edición.
+  const clientOrigins = await db
+    .select({ id: budgetOrigins.id, name: budgetOrigins.name })
+    .from(budgetOrigins)
+    .where(eq(budgetOrigins.clientId, client.id))
+    .orderBy(asc(budgetOrigins.name));
+
   const months = nextMonths(2);
   const prevMonth = previousMonth();
   const allEstimates = await getBillingEstimate({
@@ -117,7 +128,6 @@ export default async function ProjectDetailPage({ params }: Props) {
             {project.name}
             <StatusBadge status={project.status} />
           </h1>
-          <p className="text-sm text-muted mt-1 font-mono">{project.code}</p>
           <div className="mt-3">
             <ProjectStatusChanger
               projectId={project.id}
@@ -134,6 +144,18 @@ export default async function ProjectDetailPage({ params }: Props) {
           {lang === "es" ? "Nuevo plan" : "New plan"}
         </Link>
       </header>
+
+      <div className="mb-6">
+        <ProjectEditPanel
+          projectId={project.id}
+          name={project.name}
+          budgetOriginId={project.budgetOriginId}
+          totalGrossBudgetUsd={project.totalGrossBudgetUsd}
+          startDate={project.startDate}
+          notesMd={project.notesMd}
+          budgetOrigins={clientOrigins}
+        />
+      </div>
 
       {/* Metadata strip */}
       <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-3 mb-6">
