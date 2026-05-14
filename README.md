@@ -102,7 +102,7 @@ app/
       export.pdf/route.ts   # PDF del plan
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
-    clients.ts, reports.ts, campaign-tracker.ts
+    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts
   globals.css
 
 components/                 # UI compartida
