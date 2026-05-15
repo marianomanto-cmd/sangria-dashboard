@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import type {
   DashboardPlanSummary,
@@ -20,7 +20,7 @@ const PLAN_STATUS_STYLE: Record<
   draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
   ready_to_send: { label: "ready", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
   approved: { label: "approved", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  archived: { label: "archived", cls: "bg-paper-2 text-stone-400 border-line", dot: "bg-stone-400" },
+  archived: { label: "archived", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
 };
 
 type Props = {
@@ -49,12 +49,17 @@ export function ProjectsTableExpandable({
     });
   };
 
+  // Densidades unificadas. Antes había una mezcla de py-2 / py-2.5 / py-3
+  // según componente; ahora los dos modos son consistentes y reusables.
   const cellPad = dense ? "px-5 py-2" : "px-5 py-3";
   const headerPad = dense ? "px-5 py-2" : "px-5 py-2.5";
 
   return (
-    <table className="w-full text-sm">
-      <thead className="bg-paper">
+    // overflow-x-auto + min-w-[820px] para que en pantallas chicas la tabla
+    // siga siendo legible (scroll horizontal) en vez de comprimirse.
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[820px] text-sm">
+      <thead className="bg-paper-2/60">
         <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
           <th className="w-8"></th>
           <th className={`text-left font-medium ${headerPad}`}>Proyecto</th>
@@ -85,7 +90,8 @@ export function ProjectsTableExpandable({
           />
         ))}
       </tbody>
-    </table>
+      </table>
+    </div>
   );
 }
 
@@ -113,7 +119,7 @@ function ProjectRowExpandable({
   return (
     <>
       <tr
-        className={`border-t border-line-soft hover:bg-paper-2 transition-colors ${
+        className={`border-t border-line-soft hover:bg-paper-2 transition-colors duration-150 ${
           isOpen ? "bg-paper-2/40" : ""
         }`}
       >
@@ -122,15 +128,19 @@ function ProjectRowExpandable({
             type="button"
             onClick={onToggle}
             disabled={!hasPlans}
-            className="text-muted hover:text-ink disabled:opacity-30"
+            className="text-muted hover:text-ink disabled:opacity-30 transition-transform duration-150 hover:scale-110 inline-flex"
             aria-label={isOpen ? "Colapsar" : "Expandir"}
+            aria-expanded={isOpen}
             title={hasPlans ? "Ver planes" : "Sin planes"}
           >
-            {isOpen ? (
-              <ChevronDown size={14} />
-            ) : (
-              <ChevronRight size={14} />
-            )}
+            {/* Rotación animada del chevron en vez de swap de íconos:
+                permite micro-interaction suave al abrir/cerrar. */}
+            <ChevronRight
+              size={14}
+              className={`transition-transform duration-200 ${
+                isOpen ? "rotate-90" : "rotate-0"
+              }`}
+            />
           </button>
         </td>
         <td className={cellPad}>
@@ -164,8 +174,8 @@ function ProjectRowExpandable({
           <div className="flex items-center gap-3">
             <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
               <div
-                className={`h-full rounded-full ${
-                  overConsumed ? "bg-warn" : "bg-ink"
+                className={`h-full rounded-full transition-[width] duration-300 ease-out ${
+                  overConsumed ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"
                 }`}
                 style={{ width: `${barWidth}%` }}
               />
@@ -185,7 +195,7 @@ function ProjectRowExpandable({
       </tr>
 
       {isOpen && hasPlans && (
-        <tr className="bg-paper">
+        <tr className="bg-paper animate-row-in">
           <td colSpan={colSpan} className="p-0">
             <PlansSubTable
               projectCode={project.code}
@@ -224,7 +234,7 @@ function PlansSubTable({
       <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted mb-2">
         Planes del proyecto · {plans.length}
       </p>
-      <div className="rounded-md border border-line-soft bg-white overflow-hidden">
+      <div className="rounded-md border border-line-soft bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-[13px]">
           <thead>
             <tr className="text-[10px] uppercase tracking-[0.06em] text-muted bg-paper-2/50">
@@ -283,7 +293,7 @@ function PlanWithBreakdown({
   return (
     <>
       <tr
-        className={`border-t border-line-soft hover:bg-paper-2/30 ${
+        className={`border-t border-line-soft hover:bg-paper-2/30 transition-colors duration-150 ${
           isOpen ? "bg-paper-2/40" : ""
         }`}
       >
@@ -292,11 +302,17 @@ function PlanWithBreakdown({
             type="button"
             onClick={onToggle}
             disabled={!hasBreakdown}
-            className="text-muted hover:text-ink disabled:opacity-30"
+            className="text-muted hover:text-ink disabled:opacity-30 inline-flex"
             aria-label={isOpen ? "Colapsar" : "Expandir"}
+            aria-expanded={isOpen}
             title={hasBreakdown ? "Ver desglose por publisher y fee" : "Sin desglose"}
           >
-            {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            <ChevronRight
+              size={12}
+              className={`transition-transform duration-200 ${
+                isOpen ? "rotate-90" : "rotate-0"
+              }`}
+            />
           </button>
         </td>
         <td className="px-3 py-1.5">
@@ -324,7 +340,7 @@ function PlanWithBreakdown({
         </td>
         <td className="px-3 py-1.5 font-mono text-[11px] text-ink-2">
           {formatDate(plan.periodStart, lang)}
-          <span className="text-stone-300"> → </span>
+          <span className="text-line"> → </span>
           {formatDate(plan.periodEnd, lang)}
         </td>
         <td className="px-3 py-1.5 text-right font-mono font-semibold text-ink tabular-nums">
@@ -336,7 +352,7 @@ function PlanWithBreakdown({
               {formatUsdCompact(plan.billedTotalUsd)}
             </span>
           ) : (
-            <span className="text-stone-300">—</span>
+            <span className="text-line">—</span>
           )}
         </td>
         <td className="px-3 py-1.5 text-right font-mono tabular-nums">
@@ -350,7 +366,7 @@ function PlanWithBreakdown({
         </td>
       </tr>
       {isOpen && hasBreakdown && (
-        <tr className="bg-paper">
+        <tr className="bg-paper animate-row-in">
           <td colSpan={7} className="p-0">
             <BillingBreakdown plan={plan} />
           </td>
@@ -372,7 +388,7 @@ function BillingBreakdown({ plan }: { plan: DashboardPlanSummary }) {
 function BreakdownPublishersTable({ rows }: { rows: PublisherBreakdownRow[] }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-line-soft bg-white p-3 text-[11px] text-muted text-center">
+      <div className="rounded-md border border-line-soft bg-white dark:bg-paper-2 p-3 text-[11px] text-muted text-center">
         Sin publishers cargados.
       </div>
     );
@@ -381,7 +397,7 @@ function BreakdownPublishersTable({ rows }: { rows: PublisherBreakdownRow[] }) {
   const totalBilled = rows.reduce((s, r) => s + r.billedUsd, 0);
   const totalPending = rows.reduce((s, r) => s + r.pendingUsd, 0);
   return (
-    <div className="rounded-md border border-line-soft bg-white overflow-hidden">
+    <div className="rounded-md border border-line-soft bg-white dark:bg-paper-2 overflow-hidden">
       <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted px-3 py-1.5 bg-paper-2/40 border-b border-line-soft">
         Publishers
       </p>
@@ -430,7 +446,7 @@ function BreakdownPublishersTable({ rows }: { rows: PublisherBreakdownRow[] }) {
 function BreakdownFeesTable({ rows }: { rows: FeeBreakdownRow[] }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-md border border-line-soft bg-white p-3 text-[11px] text-muted text-center">
+      <div className="rounded-md border border-line-soft bg-white dark:bg-paper-2 p-3 text-[11px] text-muted text-center">
         Sin fees cargados.
       </div>
     );
@@ -439,7 +455,7 @@ function BreakdownFeesTable({ rows }: { rows: FeeBreakdownRow[] }) {
   const totalBilled = rows.reduce((s, r) => s + r.billedUsd, 0);
   const totalPending = rows.reduce((s, r) => s + r.pendingUsd, 0);
   return (
-    <div className="rounded-md border border-line-soft bg-white overflow-hidden">
+    <div className="rounded-md border border-line-soft bg-white dark:bg-paper-2 overflow-hidden">
       <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted px-3 py-1.5 bg-paper-2/40 border-b border-line-soft">
         Fees
       </p>

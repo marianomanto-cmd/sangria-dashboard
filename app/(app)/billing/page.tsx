@@ -124,7 +124,7 @@ export default async function BillingPage({ searchParams }: Props) {
           </p>
         </div>
       ) : (
-        <section className="rounded-lg border border-line bg-white overflow-hidden">
+        <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-paper">
               <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">

@@ -128,7 +128,7 @@ function PublishersSection({
         </a>
         .
       </p>
-      <div className="rounded-lg border border-line bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -169,7 +169,7 @@ function PublishersSection({
                     onChange={(e) =>
                       toggle(r.publisherId, "agencyPays", e.target.value === "agency")
                     }
-                    className="rounded-md border border-line bg-white px-2 py-1 text-xs disabled:opacity-50"
+                    className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs disabled:opacity-50"
                   >
                     <option value="agency">Agencia paga</option>
                     <option value="client">Cliente paga directo</option>
@@ -282,21 +282,21 @@ function MetricsSection({
               placeholder="Nombre"
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="rounded-md border border-line bg-white px-2 py-1.5 col-span-2"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 col-span-2"
             />
             <input
               type="text"
               placeholder="slug (opcional)"
               value={draft.slug}
               onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
-              className="rounded-md border border-line bg-white px-2 py-1.5 font-mono"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
             />
             <select
               value={draft.kind}
               onChange={(e) =>
                 setDraft({ ...draft, kind: e.target.value as "direct" | "calculated" })
               }
-              className="rounded-md border border-line bg-white px-2 py-1.5"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
             >
               <option value="direct">direct</option>
               <option value="calculated">calculated</option>
@@ -306,7 +306,7 @@ function MetricsSection({
               placeholder="unit (imp, %, $, …)"
               value={draft.unit}
               onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
-              className="rounded-md border border-line bg-white px-2 py-1.5"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
             />
           </div>
           {draft.kind === "calculated" && (
@@ -315,7 +315,7 @@ function MetricsSection({
               placeholder="Fórmula (ej. amount / clicks o clicks / impressions)"
               value={draft.formula}
               onChange={(e) => setDraft({ ...draft, formula: e.target.value })}
-              className="w-full rounded-md border border-line bg-white px-2 py-1.5 text-xs font-mono"
+              className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-xs font-mono"
             />
           )}
           {error && <p className="text-xs text-danger">{error}</p>}
@@ -334,14 +334,14 @@ function MetricsSection({
                 setShowAdd(false);
                 setError(null);
               }}
-              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs text-muted hover:text-ink"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-muted hover:text-ink"
             >
               Cancelar
             </button>
           </div>
         </div>
       )}
-      <div className="rounded-lg border border-line bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -376,7 +376,7 @@ function MetricsSection({
                         e.target.value !== m.name &&
                         onUpdate(m.id, { name: e.target.value })
                       }
-                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
+                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
                     />
                   </td>
                   <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
@@ -392,7 +392,7 @@ function MetricsSection({
                           e.target.value !== (m.formula ?? "") &&
                           onUpdate(m.id, { formula: e.target.value || null })
                         }
-                        className="w-full bg-transparent text-xs font-mono text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
+                        className="w-full bg-transparent text-xs font-mono text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
                       />
                     ) : (
                       <span className="text-muted">—</span>
@@ -512,14 +512,14 @@ function MarketsSection({
               placeholder="Nombre (ej. Brasil)"
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="rounded-md border border-line bg-white px-2 py-1.5"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
             />
             <input
               type="text"
               placeholder="slug (opcional, ej. brasil)"
               value={draft.slug}
               onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
-              className="rounded-md border border-line bg-white px-2 py-1.5 font-mono"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
             />
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
@@ -538,14 +538,14 @@ function MarketsSection({
                 setShowAdd(false);
                 setError(null);
               }}
-              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs text-muted hover:text-ink"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-muted hover:text-ink"
             >
               Cancelar
             </button>
           </div>
         </div>
       )}
-      <div className="rounded-lg border border-line bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -577,7 +577,7 @@ function MarketsSection({
                         e.target.value !== m.name &&
                         onUpdate(m.id, { name: e.target.value })
                       }
-                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
+                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
                     />
                   </td>
                   <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
@@ -699,7 +699,7 @@ function BudgetOriginsSection({
               placeholder="Nombre (ej. Online)"
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="rounded-md border border-line bg-white px-2 py-1.5"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
             />
             <input
               type="text"
@@ -708,7 +708,7 @@ function BudgetOriginsSection({
               onChange={(e) =>
                 setDraft({ ...draft, colorHex: e.target.value })
               }
-              className="rounded-md border border-line bg-white px-2 py-1.5 font-mono"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
             />
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
@@ -727,14 +727,14 @@ function BudgetOriginsSection({
                 setShowAdd(false);
                 setError(null);
               }}
-              className="rounded-md border border-line bg-white px-3 py-1.5 text-xs text-muted hover:text-ink"
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-muted hover:text-ink"
             >
               Cancelar
             </button>
           </div>
         </div>
       )}
-      <div className="rounded-lg border border-line bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -768,7 +768,7 @@ function BudgetOriginsSection({
                         e.target.value !== b.name &&
                         onUpdate(b.id, { name: e.target.value })
                       }
-                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
+                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
                     />
                   </td>
                   <td className="px-5 py-2">
@@ -786,7 +786,7 @@ function BudgetOriginsSection({
                           e.target.value !== (b.colorHex ?? "") &&
                           onUpdate(b.id, { colorHex: e.target.value || null })
                         }
-                        className="w-24 bg-transparent text-xs font-mono text-ink focus:outline-none focus:bg-white focus:ring-1 focus:ring-accent rounded-sm px-1"
+                        className="w-24 bg-transparent text-xs font-mono text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
                       />
                     </div>
                   </td>

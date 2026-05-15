@@ -68,7 +68,7 @@ export function BillingMonthEditor({
       });
     };
     return (
-      <div className="rounded-lg border border-line bg-white px-5 py-8 text-center">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-8 text-center">
         <p className="text-sm font-medium text-ink-2 mb-2">
           Sin carga para {month}
         </p>
@@ -158,7 +158,7 @@ export function BillingMonthEditor({
   return (
     <div className="space-y-4">
       {/* Header del mes */}
-      <div className="rounded-lg border border-line bg-white px-5 py-4 flex items-center justify-between flex-wrap gap-3">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 flex items-center justify-between flex-wrap gap-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
             Billing · {month}
@@ -185,7 +185,7 @@ export function BillingMonthEditor({
       </div>
 
       {/* Publishers — consumo del mes */}
-      <section className="rounded-lg border border-line bg-white overflow-hidden">
+      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
           <h3 className="text-sm font-semibold">Consumo por publisher</h3>
           <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
@@ -281,7 +281,7 @@ export function BillingMonthEditor({
       </section>
 
       {/* Fees */}
-      <section className="rounded-lg border border-line bg-white overflow-hidden">
+      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
           <h3 className="text-sm font-semibold">Imputación de fees</h3>
           <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
@@ -429,7 +429,7 @@ function BillingStatusActions({
           type="button"
           onClick={() => onTransition("ready")}
           disabled={pending}
-          className="rounded-md border border-line bg-white px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
+          className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
         >
           Marcar listo
         </button>
@@ -468,7 +468,7 @@ function BillingStatusActions({
             href={`/api/billings/${billingId}/report.pdf`}
             target="_blank"
             rel="noreferrer"
-            className="rounded-md border border-line bg-white px-3 py-1.5 text-xs text-ink-2 hover:bg-paper-2"
+            className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-ink-2 hover:bg-paper-2"
           >
             Bajar PDF de nuevo
           </a>
@@ -577,7 +577,7 @@ function InvoiceInput({
         placeholder="N° de factura"
         onChange={(e) => setValue(e.target.value)}
         disabled={pending}
-        className="rounded-md border border-line bg-white px-2 py-1.5 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
+        className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
       />
       <button
         type="submit"

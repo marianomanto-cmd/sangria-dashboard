@@ -77,7 +77,7 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
         />
       ) : (
         <>
-          <section className="rounded-lg border border-line bg-white overflow-hidden">
+          <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-paper">
                 <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -141,7 +141,7 @@ function ClientGroup({
       <tr className="bg-paper-2">
         <td colSpan={7} className="px-5 py-2">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-white border border-line flex items-center justify-center shrink-0">
+            <div className="w-5 h-5 rounded-full bg-white dark:bg-paper-2 border border-line flex items-center justify-center shrink-0">
               <Building2 size={12} strokeWidth={2} className="text-ink-2" />
             </div>
             <span className="font-semibold text-ink">{group.clientName}</span>
@@ -187,7 +187,7 @@ function ClientGroup({
                 className="block font-mono text-[11px] text-ink-2"
               >
                 {formatDate(plan.periodStart, lang)}
-                <span className="text-stone-300"> → </span>
+                <span className="text-line"> → </span>
                 {formatDate(plan.periodEnd, lang)}
               </Link>
             </td>
@@ -257,12 +257,12 @@ function KpiCard({
   return (
     <div
       className={`rounded-lg border px-4 py-3 ${
-        ink ? "border-ink bg-ink text-white" : "border-line bg-white"
+        ink ? "border-ink bg-ink text-white" : "border-line bg-white dark:bg-paper-2"
       }`}
     >
       <p
         className={`text-[11px] font-medium uppercase tracking-[0.08em] ${
-          ink ? "text-stone-400" : "text-muted"
+          ink ? "text-muted" : "text-muted"
         }`}
       >
         {label}
@@ -274,7 +274,7 @@ function KpiCard({
         <p
           className={`text-xs mt-0.5 ${
             ink
-              ? "text-stone-400"
+              ? "text-muted"
               : tone === "warn"
                 ? "text-warn"
                 : "text-muted"

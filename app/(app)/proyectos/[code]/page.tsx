@@ -67,8 +67,8 @@ const PLAN_STATUS_STYLE: Record<
   },
   archived: {
     label: "archived",
-    cls: "bg-paper-2 text-stone-400 border-line",
-    dot: "bg-stone-400",
+    cls: "bg-paper-2 text-muted border-line",
+    dot: "bg-muted",
   },
 };
 
@@ -111,11 +111,11 @@ export default async function ProjectDetailPage({ params }: Props) {
         <Link href="/proyectos" className="hover:text-ink">
           {lang === "es" ? "Proyectos" : "Projects"}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <Link href={`/clientes/${client.slug}`} className="hover:text-ink">
           {client.name}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <span className="text-ink font-medium">{project.name}</span>
       </nav>
 
@@ -158,7 +158,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       </div>
 
       {/* Metadata strip */}
-      <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-3 mb-6">
+      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-3 mb-6">
         <Meta label={lang === "es" ? "Cliente" : "Client"}>
           <Link
             href={`/clientes/${client.slug}`}
@@ -182,7 +182,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         <Meta label={lang === "es" ? "Período" : "Period"}>
           <span className="font-mono text-sm text-ink-2">
             {formatDate(project.startDate, lang)}
-            <span className="text-stone-300"> → </span>
+            <span className="text-line"> → </span>
             {(() => {
               const ends = plans.map((p) => p.periodEnd).filter((d): d is string => !!d).sort();
               return ends.length > 0 ? formatDate(ends[ends.length - 1], lang) : "—";
@@ -294,7 +294,7 @@ function PlanCard({
   return (
     <Link
       href={`/proyectos/${projectCode}/planes/${plan.id}`}
-      className="group rounded-lg border border-line bg-white p-4 hover:border-ink-2 transition-colors"
+      className="group rounded-lg border border-line bg-white dark:bg-paper-2 p-4 hover:border-ink-2 transition-colors"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -332,7 +332,7 @@ function PlanCard({
           </p>
           <p className="font-mono text-[12px] text-ink-2 mt-0.5">
             {formatDate(plan.periodStart, lang)}
-            <span className="text-stone-300"> → </span>
+            <span className="text-line"> → </span>
             {formatDate(plan.periodEnd, lang)}
           </p>
         </div>

@@ -1,19 +1,22 @@
 type ProjectStatus = "planning" | "active" | "paused" | "closed" | "reportado";
 
+// Todos los soft backgrounds usan tokens que swappean en dark mode
+// (ver app/globals.css). Las clases con borde explícito a soft también
+// migran solas: el token de bg se reescribe automáticamente bajo `.dark`.
 const STYLES: Record<ProjectStatus, { label: string; className: string; dot: string }> = {
   planning: {
     label: "planificación",
-    className: "bg-info-soft text-info border-info-soft",
+    className: "bg-info-soft text-info border-info-soft/80",
     dot: "bg-info",
   },
   active: {
     label: "activo",
-    className: "bg-success-soft text-success border-success-soft",
+    className: "bg-success-soft text-success border-success-soft/80",
     dot: "bg-success",
   },
   paused: {
     label: "pausado",
-    className: "bg-warn-soft text-warn border-warn-soft",
+    className: "bg-warn-soft text-warn border-warn-soft/80",
     dot: "bg-warn",
   },
   closed: {
@@ -23,7 +26,7 @@ const STYLES: Record<ProjectStatus, { label: string; className: string; dot: str
   },
   reportado: {
     label: "reportado",
-    className: "bg-accent/10 text-accent border-accent/20",
+    className: "bg-accent-soft text-accent border-accent/20",
     dot: "bg-accent",
   },
 };

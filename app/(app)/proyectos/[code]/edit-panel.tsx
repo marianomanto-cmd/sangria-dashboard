@@ -100,7 +100,7 @@ export function ProjectEditPanel({
           reset();
           setOpen(true);
         }}
-        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink-2 hover:border-ink-2 hover:text-ink transition-colors"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink-2 hover:border-ink-2 hover:text-ink transition-colors"
       >
         <Pencil size={14} />
         Editar proyecto
@@ -109,14 +109,14 @@ export function ProjectEditPanel({
   }
 
   return (
-    <div className="rounded-lg border border-line bg-white p-5 w-full space-y-4">
+    <div className="rounded-lg border border-line bg-white dark:bg-paper-2 p-5 w-full space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Field label="Nombre del proyecto">
           <input
             type="text"
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+            className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
           />
         </Field>
         <Field label="Budget Origin">
@@ -125,7 +125,7 @@ export function ProjectEditPanel({
             onChange={(e) =>
               setDraft({ ...draft, budgetOriginId: e.target.value })
             }
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+            className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
           >
             {budgetOrigins.map((o) => (
               <option key={o.id} value={o.id}>
@@ -146,7 +146,7 @@ export function ProjectEditPanel({
               })
             }
             placeholder="300000"
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm font-mono focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+            className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm font-mono focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
           />
         </Field>
         <Field label="Fecha estimada de inicio">
@@ -154,7 +154,7 @@ export function ProjectEditPanel({
             type="date"
             value={draft.startDate}
             onChange={(e) => setDraft({ ...draft, startDate: e.target.value })}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+            className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
           />
         </Field>
       </div>
@@ -163,7 +163,7 @@ export function ProjectEditPanel({
           value={draft.notes}
           onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
           rows={3}
-          className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
         />
       </Field>
 
@@ -199,7 +199,7 @@ export function ProjectEditPanel({
           type="button"
           onClick={onDelete}
           disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-md border border-danger bg-white px-3 py-2 text-sm font-medium text-danger hover:bg-danger-soft transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-md border border-danger bg-white dark:bg-paper-2 px-3 py-2 text-sm font-medium text-danger hover:bg-danger-soft transition-colors disabled:opacity-50"
         >
           <Trash2 size={14} />
           Eliminar proyecto

@@ -1,6 +1,54 @@
-# Handoff — jueves 14/may/2026
+# Handoff — viernes 15/may/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 15/may/2026 — Aesthetic / cosmetic pass
+
+- **Dark mode real**. El toggle del topbar (antes decorativo) ahora
+  togglea entre claro y oscuro. La implementación es CSS-vars puras:
+  los tokens (`--color-paper`, `--color-ink`, `--color-accent`, etc.)
+  se redefinen bajo `.dark` en `app/globals.css`, así toda utility
+  Tailwind que use esos tokens (`bg-paper`, `text-ink`, `border-line`)
+  swappea sola sin tocar componentes. La preferencia se persiste en
+  `localStorage.sangria-theme` y se sincroniza con el OS al primer
+  load. Anti-FOUC con script inline en `<head>` (ver `app/layout.tsx`).
+- **Sidebar siempre oscuro**: tokens nuevos `--color-rail` / `--color-rail-2`
+  que NO swappean. Antes usaba `bg-ink` (rompía en dark mode).
+- **Refinamiento del acento sangría**: nuevo tono medio
+  `--color-accent-2` (`#a8345f`) para gradientes (barra de avance,
+  avatar topbar) y hover states. La barra de consumo ahora usa
+  `bg-gradient-to-r from-accent to-accent-2` en vez del ink plano.
+- **Jerarquía tipográfica**: PageShell y dashboard tienen header con
+  `gap-2.5` entre eyebrow/h1/subtitle, `h1` a `text-[32px]
+  leading-[1.1]`, eyebrow con tracking `0.18em`. Más editorial, menos
+  comprimido.
+- **Microinteractions**: chevrons de tablas rotan en vez de swap,
+  hover de filas con transición de 150ms, scale en botones del
+  sidebar, sidebar con gradiente `rail-2 → rail`.
+- **Focus ring global** con color de acento (`:focus-visible`) en
+  vez del azul nativo.
+- **Skeletons**: nuevo `components/skeleton.tsx` con animación
+  shimmer (definida en globals.css). `SkeletonRow` y `SkeletonKpiCard`
+  reutilizables para `loading.tsx` futuros.
+- **EmptyState** mejorado en PageShell: ahora soporta `icon` y
+  `action`, con círculo neutro alrededor del ícono.
+- **Recharts dark-aware**: el `FacturacionChart` lee CSS vars vía
+  `getComputedStyle` y observa cambios de clase en `<html>` para
+  re-renderizar al togglear tema (Recharts no acepta CSS vars en
+  fills directamente).
+- **Reemplazos de hardcoded colors**: ~40 archivos con
+  `text-stone-300/400` y `bg-stone-400` migrados a `text-line`,
+  `text-muted`, `bg-muted` para que dark mode sea coherente. Todos
+  los `bg-white` recibieron `dark:bg-paper-2` para que las cards y
+  popovers tengan superficie elevada en ambos temas.
+- **Topbar**: `bg-paper/80 backdrop-blur` da efecto frosted (antes
+  `bg-white` plano). Avatar pasa de fondo plano a gradient burgundy
+  con ring de acento.
+- **Scrollbars** discretas (10px, color `line`) y `::selection` con
+  acento — pequeños toques que dan cohesión.
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código,
+sin schema ni migraciones.
 
 ### Cambios de la sesión 14/may/2026 — Proyectos: editar / eliminar / sin identificador
 

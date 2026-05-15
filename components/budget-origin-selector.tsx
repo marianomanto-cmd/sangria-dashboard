@@ -77,7 +77,7 @@ export function BudgetOriginSelector({
           onClick={() => setOpen((o) => !o)}
           aria-haspopup="listbox"
           aria-expanded={open}
-          className="inline-flex items-center gap-2 min-w-[260px] justify-between rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:border-ink-2 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft transition-colors"
+          className="inline-flex items-center gap-2 min-w-[260px] justify-between rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:border-ink-2 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft transition-colors"
         >
           <span className="inline-flex items-center gap-2 truncate">
             {currentOrigin?.colorHex && (
@@ -99,7 +99,7 @@ export function BudgetOriginSelector({
         {open && (
           <div
             role="listbox"
-            className="absolute left-0 top-full mt-1 w-[320px] rounded-md border border-line bg-white shadow-lg z-30 max-h-[480px] overflow-auto py-1"
+            className="absolute left-0 top-full mt-1 w-[320px] rounded-md border border-line bg-white dark:bg-paper-2 shadow-lg z-30 max-h-[480px] overflow-auto py-1"
           >
             <DropdownItem
               href={buildHref(null)}

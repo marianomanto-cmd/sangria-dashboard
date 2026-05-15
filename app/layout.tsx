@@ -18,6 +18,13 @@ export const metadata: Metadata = {
     "Herramienta interna de gestión de planes de medios, gastos reales y billing.",
 };
 
+// Script inline anti-FOUC: aplica la clase `dark` ANTES de que React
+// hidrate, leyendo localStorage (preferencia explícita) o `prefers-color-
+// scheme` del SO. No usamos libs externas (next-themes) para mantener el
+// bundle chico y la lógica auditable. La var global `__setTheme` se
+// reutiliza desde el ThemeToggle.
+const themeInitScript = `(function(){try{var t=localStorage.getItem('sangria-theme');var d=t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d){document.documentElement.classList.add('dark');}window.__setTheme=function(v){var root=document.documentElement;if(v==='dark'){root.classList.add('dark');}else{root.classList.remove('dark');}try{localStorage.setItem('sangria-theme',v);}catch(e){}};}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -27,7 +34,11 @@ export default function RootLayout({
     <html
       lang="es"
       className={`${geist.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

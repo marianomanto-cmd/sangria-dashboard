@@ -50,7 +50,7 @@ export default function ReportesPage() {
     >
       <Link
         href="/reportes/calendario"
-        className="block rounded-lg border border-line bg-white p-5 mb-6 hover:border-accent transition-colors group"
+        className="block rounded-lg border border-line bg-white dark:bg-paper-2 p-5 mb-6 hover:border-accent transition-colors group"
       >
         <div className="flex items-start gap-3">
           <div className="w-9 h-9 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
@@ -79,7 +79,7 @@ export default function ReportesPage() {
               className="rounded-lg border border-line border-dashed bg-paper-2 p-5"
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="w-8 h-8 rounded-md bg-white border border-line flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-md bg-white dark:bg-paper-2 border border-line flex items-center justify-center shrink-0">
                   <Icon size={14} strokeWidth={2} className="text-ink-2" />
                 </div>
                 <span className="text-[10px] uppercase tracking-[0.08em] text-muted font-medium">

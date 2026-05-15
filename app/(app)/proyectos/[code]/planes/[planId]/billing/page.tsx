@@ -242,22 +242,22 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
         <Link href="/proyectos" className="hover:text-ink">Proyectos</Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <Link href={`/clientes/${planRow.client.slug}`} className="hover:text-ink">
           {planRow.client.name}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <Link href={`/proyectos/${planRow.project.code}`} className="hover:text-ink">
           {planRow.project.name}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <Link
           href={`/proyectos/${planRow.project.code}/planes/${planId}`}
           className="hover:text-ink"
         >
           {plan.name}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <span className="text-ink font-medium">Billing</span>
       </nav>
 
@@ -288,7 +288,7 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-5">
           {/* Sidebar de meses */}
-          <aside className="rounded-lg border border-line bg-white overflow-hidden h-fit">
+          <aside className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden h-fit">
             <div className="px-4 py-2.5 border-b border-line text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               Meses del plan
             </div>
@@ -307,7 +307,7 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
                       {billing ? (
                         <BillingStatusPill status={billing.status} compact />
                       ) : (
-                        <span className="text-[10px] text-stone-300">sin cargar</span>
+                        <span className="text-[10px] text-line">sin cargar</span>
                       )}
                     </Link>
                   </li>

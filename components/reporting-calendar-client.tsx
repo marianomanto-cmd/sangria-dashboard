@@ -96,7 +96,7 @@ export function ReportingCalendarClient({
               : "No closed projects pending. New closes will appear here."}
           </div>
         ) : (
-          <div className="rounded-lg border border-line bg-white overflow-hidden">
+          <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-paper-2 border-b border-line">
                 <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
@@ -164,7 +164,7 @@ export function ReportingCalendarClient({
             {lang === "es"
               ? ` reporte${inProgress.length === 1 ? "" : "s"} en curso`
               : ` report${inProgress.length === 1 ? "" : "s"} in progress`}
-            <span className="text-stone-300"> · </span>
+            <span className="text-line"> · </span>
             {lang === "es" ? "ventana -30 / +30 días" : "window -30 / +30 days"}
           </span>
         </header>
@@ -227,7 +227,7 @@ export function ReportingCalendarClient({
                 type="button"
                 onClick={close}
                 disabled={pendingAction}
-                className="rounded-md border border-line bg-white px-3 py-1.5 text-sm hover:bg-paper-2 disabled:opacity-50"
+                className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm hover:bg-paper-2 disabled:opacity-50"
               >
                 {lang === "es" ? "Cancelar" : "Cancel"}
               </button>
@@ -301,7 +301,7 @@ function AssignDateForm({
           type="date"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          className="mt-1 block w-full rounded-md border border-line bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+          className="mt-1 block w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
           required
         />
       </label>
@@ -316,7 +316,7 @@ function AssignDateForm({
           type="button"
           onClick={onCancel}
           disabled={pending}
-          className="rounded-md border border-line bg-white px-3 py-1.5 text-sm hover:bg-paper-2 disabled:opacity-50"
+          className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm hover:bg-paper-2 disabled:opacity-50"
         >
           {lang === "es" ? "Cancelar" : "Cancel"}
         </button>
@@ -354,7 +354,7 @@ function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-lg border border-line bg-white shadow-xl p-5">
+      <div className="w-full max-w-md rounded-lg border border-line bg-white dark:bg-paper-2 shadow-xl p-5">
         {children}
       </div>
     </div>

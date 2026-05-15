@@ -62,14 +62,14 @@ export function NewProjectForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-lg border border-line bg-white p-6 max-w-3xl space-y-5"
+      className="rounded-lg border border-line bg-white dark:bg-paper-2 p-6 max-w-3xl space-y-5"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <Field label="Cliente">
           <select
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+            className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
             required
           >
             {clients.map((c) => (
@@ -83,7 +83,7 @@ export function NewProjectForm({
           <select
             value={budgetOriginId}
             onChange={(e) => setBudgetOriginId(e.target.value)}
-            className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+            className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
             required
             disabled={filteredOrigins.length === 0}
           >
@@ -104,7 +104,7 @@ export function NewProjectForm({
           onChange={(e) => setName(e.target.value)}
           placeholder="Costa Rica 2026"
           required
-          className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
         />
       </Field>
 
@@ -115,7 +115,7 @@ export function NewProjectForm({
           value={totalGrossBudget}
           onChange={(e) => setTotalGrossBudget(e.target.value.replace(/[^0-9.]/g, ""))}
           placeholder="300000"
-          className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm font-mono focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm font-mono focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
         />
       </Field>
 
@@ -124,7 +124,7 @@ export function NewProjectForm({
           type="date"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
-          className="w-full sm:w-1/2 rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+          className="w-full sm:w-1/2 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
         />
         <p className="mt-1 text-[11px] text-muted">
           La fecha de finalización del proyecto se calcula automáticamente
@@ -137,7 +137,7 @@ export function NewProjectForm({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
-          className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
         />
       </Field>
 

@@ -61,7 +61,7 @@ export function PublishersAdmin({ initialRows }: { initialRows: Pub[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-line bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -116,7 +116,7 @@ export function PublishersAdmin({ initialRows }: { initialRows: Pub[] }) {
                     className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${
                       p.enabled
                         ? "bg-success-soft text-success border-success-soft"
-                        : "bg-paper-2 text-stone-400 border-line"
+                        : "bg-paper-2 text-muted border-line"
                     }`}
                   >
                     {p.enabled ? "habilitado" : "deshabilitado"}
@@ -158,7 +158,7 @@ export function PublishersAdmin({ initialRows }: { initialRows: Pub[] }) {
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="Nombre del publisher"
                 autoFocus
-                className="rounded-md border border-line bg-white px-2 py-1 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
               />
               <label className="flex items-center gap-1.5 text-xs text-muted">
                 <input

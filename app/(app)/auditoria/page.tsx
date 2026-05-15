@@ -92,7 +92,7 @@ export default async function AuditoriaPage({ searchParams }: Props) {
           </p>
         </div>
       ) : (
-        <section className="rounded-lg border border-line bg-white overflow-hidden">
+        <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
           <ul className="divide-y divide-line-soft">
             {rows.map((row) => (
               <li key={row.id} className="px-5 py-3 hover:bg-paper-2 transition-colors">
@@ -136,7 +136,7 @@ function AuditEntry({ row }: { row: AuditLogRow }) {
                 </span>
               )}
               {d.before !== undefined && d.after !== undefined && (
-                <span className="text-stone-300 mx-1">→</span>
+                <span className="text-line mx-1">→</span>
               )}
               {d.after !== undefined && (
                 <span className="text-success">{formatValue(d.after)}</span>
@@ -249,7 +249,7 @@ function FilterChoice({
     <Link
       href={buildHref(value)}
       data-active={isActive}
-      className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+      className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
     >
       {label}
     </Link>

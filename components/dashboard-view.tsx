@@ -61,15 +61,15 @@ export function DashboardView({
 
   return (
     <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
-      <header className="mb-8 flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.16em] uppercase text-accent">
+      <header className="mb-10 flex items-end justify-between gap-4 flex-wrap">
+        <div className="flex flex-col gap-2.5">
+          <p className="text-[11px] font-semibold tracking-[0.18em] uppercase text-accent">
             {labels.eyebrow}
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight mt-2">
+          <h1 className="text-[32px] leading-[1.1] font-semibold tracking-tight text-ink">
             {labels.title}
           </h1>
-          <p className="text-sm text-muted mt-1">
+          <p className="text-sm text-muted leading-relaxed">
             {clientName
               ? labels.filteredBy(clientName)
               : labels.executiveSummary}
@@ -112,7 +112,7 @@ function LayoutToggle({
         type="button"
         onClick={() => onChange("A")}
         data-active={value === "A"}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted data-[active=true]:bg-white data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors duration-150"
       >
         <LayoutGrid size={13} strokeWidth={2} />
         {labels.layoutA}
@@ -121,7 +121,7 @@ function LayoutToggle({
         type="button"
         onClick={() => onChange("C")}
         data-active={value === "C"}
-        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted data-[active=true]:bg-white data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors duration-150"
       >
         <Table2 size={13} strokeWidth={2} />
         {labels.layoutC}
@@ -201,7 +201,7 @@ function LayoutC({
   const labels = LABELS[lang];
   return (
     <>
-      <section className="rounded-lg border border-line bg-white px-5 py-3 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
+      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-3 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
         <CompactKpi
           label={labels.pipelineActive}
           value={formatUsdCompact(kpis.pipelineActiveUsd)}
@@ -246,7 +246,7 @@ function CompactKpi({
       </span>
       <span
         className={`font-mono text-lg font-semibold tabular-nums ${
-          dim ? "text-stone-300" : "text-ink"
+          dim ? "text-line" : "text-ink"
         }`}
       >
         {value}
@@ -270,7 +270,7 @@ function ProjectsSection({
 }) {
   const headerPad = dense ? "px-5 py-2" : "px-5 py-2.5";
   return (
-    <section className="mt-6 rounded-lg border border-line bg-white overflow-hidden">
+    <section className="mt-6 rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
       <div
         className={`${headerPad} border-b border-line flex items-baseline justify-between`}
       >

@@ -86,7 +86,7 @@ export default async function ConfiguracionPage({ searchParams }: Props) {
             <Link
               key={s.href}
               href={client ? `${s.href}?client=${client.slug}` : s.href}
-              className="group rounded-lg border border-line bg-white p-5 hover:border-ink-2 transition-colors"
+              className="group rounded-lg border border-line bg-white dark:bg-paper-2 p-5 hover:border-ink-2 transition-colors"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="w-8 h-8 rounded-md bg-paper-2 border border-line flex items-center justify-center shrink-0">
@@ -106,8 +106,8 @@ export default async function ConfiguracionPage({ searchParams }: Props) {
               className="rounded-lg border border-line border-dashed bg-paper-2 p-5"
             >
               <div className="flex items-start justify-between gap-2">
-                <div className="w-8 h-8 rounded-md bg-white border border-line flex items-center justify-center shrink-0 opacity-50">
-                  <Tag size={14} strokeWidth={2} className="text-stone-400" />
+                <div className="w-8 h-8 rounded-md bg-white dark:bg-paper-2 border border-line flex items-center justify-center shrink-0 opacity-50">
+                  <Tag size={14} strokeWidth={2} className="text-muted" />
                 </div>
                 <span className="text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
                   próximamente

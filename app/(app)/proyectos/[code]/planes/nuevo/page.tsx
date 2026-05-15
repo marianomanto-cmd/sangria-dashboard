@@ -28,11 +28,11 @@ export default async function NuevoPlanPage({ params }: Props) {
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
         <Link href="/proyectos" className="hover:text-ink">Proyectos</Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <Link href={`/proyectos/${project.code}`} className="hover:text-ink">
           {project.name}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <span className="text-ink font-medium">Nuevo plan</span>
       </nav>
 

@@ -25,7 +25,7 @@ export default async function MetricsRedirectPage() {
           <Link
             key={c.slug}
             href={`/configuracion/clientes/${c.slug}#metricas`}
-            className="rounded-lg border border-line bg-white px-5 py-4 flex items-center justify-between hover:border-accent transition-colors group"
+            className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 flex items-center justify-between hover:border-accent transition-colors group"
           >
             <span className="font-medium text-ink group-hover:text-accent">
               {c.name}

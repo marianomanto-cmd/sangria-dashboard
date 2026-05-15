@@ -117,10 +117,10 @@ function ProjectCard({
   lang: "en" | "es";
 }) {
   return (
-    <section className="rounded-lg border border-line bg-white overflow-hidden">
+    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
       <header className="flex items-start justify-between gap-4 px-5 py-4 border-b border-line bg-paper">
         <div className="min-w-0 flex items-start gap-3">
-          <div className="w-9 h-9 rounded-md bg-white border border-line flex items-center justify-center shrink-0">
+          <div className="w-9 h-9 rounded-md bg-white dark:bg-paper-2 border border-line flex items-center justify-center shrink-0">
             <Building2 size={15} strokeWidth={2} className="text-ink-2" />
           </div>
           <div className="min-w-0">
@@ -199,7 +199,7 @@ function PlanBlock({
 
       <table className="w-full text-sm">
         <thead>
-          <tr className="text-[11px] uppercase tracking-[0.06em] text-muted bg-white">
+          <tr className="text-[11px] uppercase tracking-[0.06em] text-muted bg-white dark:bg-paper-2">
             <th className="text-left font-medium px-5 py-2">
               {lang === "es" ? "N° factura" : "Invoice #"}
             </th>

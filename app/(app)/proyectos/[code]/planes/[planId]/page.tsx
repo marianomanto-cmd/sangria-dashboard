@@ -35,15 +35,15 @@ export default async function PlanDetailPage({ params }: Props) {
         <Link href="/proyectos" className="hover:text-ink">
           {lang === "es" ? "Proyectos" : "Projects"}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <Link href={`/clientes/${detail.client.slug}`} className="hover:text-ink">
           {detail.client.name}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <Link href={`/proyectos/${detail.project.code}`} className="hover:text-ink">
           {detail.project.name}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <span className="text-ink font-medium">{detail.plan.name}</span>
       </nav>
 

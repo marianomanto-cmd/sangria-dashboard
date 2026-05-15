@@ -84,7 +84,7 @@ function PreviousMonthCard({
   const estFees = estimate.grossFeesUsd;
   const est = estimate.grossUsd;
   return (
-    <div className="rounded-lg border border-line bg-white overflow-hidden">
+    <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
       <div className="px-5 py-3 border-b border-line-soft bg-paper-2/40 flex items-baseline justify-between">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
@@ -169,7 +169,7 @@ function PreviousMonthCard({
 // si entre 5% y 15%, danger si supera 15%. La dirección (over/under) no
 // cambia el color — sólo la magnitud, porque ambas son señales a revisar.
 function varianceColor(v: number | null): string {
-  if (v == null) return "text-stone-300";
+  if (v == null) return "text-line";
   const abs = Math.abs(v);
   if (abs < 5) return "text-success";
   if (abs < 15) return "text-warn";
@@ -187,7 +187,7 @@ function EstimateMonthCard({
 }) {
   const hasData = estimate.byProject.length > 0;
   return (
-    <div className="rounded-lg border border-line bg-white overflow-hidden">
+    <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
       <div className="px-5 py-3 border-b border-line-soft bg-paper-2/40">
         <div className="flex items-baseline justify-between">
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">

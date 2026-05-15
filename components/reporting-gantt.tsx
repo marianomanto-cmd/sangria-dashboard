@@ -166,7 +166,7 @@ export function ReportingGantt({
   const todayPct = (WINDOW_BEFORE_DAYS / TOTAL_DAYS) * 100;
 
   return (
-    <section className="rounded-lg border border-line bg-white p-5">
+    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 p-5">
       {/* Header eje — meses */}
       <div
         className="grid gap-3 mb-1"
@@ -382,7 +382,7 @@ function GanttRow({
         </div>
         <p className="text-[11px] text-muted truncate">
           {report.clientName}
-          <span className="text-stone-300"> · </span>
+          <span className="text-line"> · </span>
           <span className="font-mono">{report.projectCode}</span>
         </p>
         <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[10px] text-muted">
@@ -402,7 +402,7 @@ function GanttRow({
           >
             {lang === "es" ? "Editar fecha" : "Edit date"}
           </button>
-          <span className="text-stone-300">·</span>
+          <span className="text-line">·</span>
           <button
             type="button"
             onClick={onMarkDelivered}

@@ -71,7 +71,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-line bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -126,7 +126,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                     onChange={(e) =>
                       onUpdate(c.id, { language: e.target.value as Language })
                     }
-                    className="rounded-md border border-line bg-white px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                    className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
                   >
                     {LANGUAGE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -142,7 +142,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                     onChange={(e) =>
                       onUpdate(c.id, { status: e.target.value as ClientStatus })
                     }
-                    className="rounded-md border border-line bg-white px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                    className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
                   >
                     {STATUS_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -191,7 +191,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                 onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 placeholder="Nombre del cliente"
                 autoFocus
-                className="rounded-md border border-line bg-white px-2 py-1 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
               />
               <input
                 type="text"
@@ -200,14 +200,14 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   setDraft({ ...draft, prefix: e.target.value.toUpperCase() })
                 }
                 placeholder="Prefijo (opcional)"
-                className="rounded-md border border-line bg-white px-2 py-1 text-sm font-mono w-32 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-sm font-mono w-32 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
               />
               <select
                 value={draft.language}
                 onChange={(e) =>
                   setDraft({ ...draft, language: e.target.value as Language })
                 }
-                className="rounded-md border border-line bg-white px-2 py-1 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
               >
                 {LANGUAGE_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>

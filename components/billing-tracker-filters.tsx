@@ -67,13 +67,13 @@ export function BillingTrackerFilters({
   const isFiltered = !!currentProject || !!currentFrom || !!currentTo;
 
   return (
-    <section className="rounded-lg border border-line bg-white px-5 py-4 mb-5">
+    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 mb-5">
       <div className="flex items-end gap-4 flex-wrap">
         <Field label={lang === "es" ? "Proyecto" : "Project"}>
           <select
             value={currentProject}
             onChange={(e) => updateParams({ project: e.target.value })}
-            className="rounded-md border border-line bg-white px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[260px] max-w-[360px]"
+            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[260px] max-w-[360px]"
           >
             <option value="">{lang === "es" ? "Todos" : "All"}</option>
             {projects.map((p) => (
@@ -118,7 +118,7 @@ export function BillingTrackerFilters({
           <button
             type="button"
             onClick={reset}
-            className="inline-flex items-center gap-1 rounded-md border border-line bg-white px-2.5 py-1.5 text-xs text-muted hover:text-ink hover:bg-paper-2 transition-colors"
+            className="inline-flex items-center gap-1 rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-xs text-muted hover:text-ink hover:bg-paper-2 transition-colors"
           >
             <X size={12} />
             {lang === "es" ? "Limpiar filtros" : "Clear filters"}

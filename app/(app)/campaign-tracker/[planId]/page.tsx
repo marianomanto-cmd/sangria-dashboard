@@ -58,21 +58,21 @@ export default async function CampaignTrackerPlanPage({
         <Link href={hubHref} className="hover:text-ink">
           Campaign Tracker
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <span className="hover:text-ink">{data.client.name}</span>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <Link
           href={`/proyectos/${data.project.code}`}
           className="hover:text-ink"
         >
           {data.project.name}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <span className="text-ink font-medium">{data.plan.name}</span>
       </nav>
 
       {/* Header del plan */}
-      <header className="rounded-lg border border-line bg-white px-6 py-5 mb-5">
+      <header className="rounded-lg border border-line bg-white dark:bg-paper-2 px-6 py-5 mb-5">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-3 flex-wrap">

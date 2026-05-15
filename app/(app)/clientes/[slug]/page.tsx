@@ -35,7 +35,7 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
         <Link href="/clientes" className="hover:text-ink">
           {lang === "es" ? "Clientes" : "Clients"}
         </Link>
-        <span className="text-stone-300">/</span>
+        <span className="text-line">/</span>
         <span className="text-ink font-medium">{detail.client.name}</span>
       </nav>
 
@@ -116,7 +116,7 @@ function ResumenTab({
   return (
     <>
       {/* KPIs banda */}
-      <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 mb-6">
+      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3 mb-6">
         <Kpi
           label={lang === "es" ? "Proyectos" : "Projects"}
           value={String(kpis.totalProjects)}
@@ -136,7 +136,7 @@ function ResumenTab({
       </section>
 
       {/* Projects table */}
-      <section className="rounded-lg border border-line bg-white overflow-hidden">
+      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">
             {lang === "es" ? "Proyectos" : "Projects"}
@@ -316,7 +316,7 @@ function TimelineTab({
   const totalMonths = months.length;
 
   return (
-    <section className="rounded-lg border border-line bg-white p-5">
+    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 p-5">
       <div className="flex items-baseline justify-between mb-4">
         <h2 className="text-sm font-semibold">
           {lang === "es" ? "Línea de tiempo" : "Timeline"}
@@ -343,7 +343,7 @@ function TimelineTab({
                 Number.parseInt(m.slice(5, 7), 10) - 1,
                 lang,
               )}{" "}
-              <span className="text-stone-400">{m.slice(2, 4)}</span>
+              <span className="text-muted">{m.slice(2, 4)}</span>
             </span>
           ))}
         </div>
@@ -449,7 +449,7 @@ function OriginTab({
     <Link
       href={buildHref(slug, originId, tab)}
       data-active={isActive}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted hover:text-ink data-[active=true]:bg-white data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
     >
       {label}
     </Link>

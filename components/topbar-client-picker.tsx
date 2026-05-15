@@ -70,7 +70,7 @@ export function TopbarClientPicker({ clients }: { clients: ClientOption[] }) {
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-2.5 py-1 text-xs text-ink hover:bg-paper-2 hover:border-ink-2 transition-colors"
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1 text-xs text-ink hover:bg-paper-2 hover:border-ink-2 transition-colors"
       >
         <Building2 size={13} strokeWidth={2} className="text-muted" />
         <span className="truncate max-w-[140px]">
@@ -86,7 +86,7 @@ export function TopbarClientPicker({ clients }: { clients: ClientOption[] }) {
       {open && (
         <div
           role="listbox"
-          className="absolute right-0 top-full mt-1 w-[240px] rounded-md border border-line bg-white shadow-lg z-30 max-h-[400px] overflow-auto py-1"
+          className="absolute right-0 top-full mt-1 w-[240px] rounded-md border border-line bg-white dark:bg-paper-2 shadow-lg z-30 max-h-[400px] overflow-auto py-1"
         >
           <Link
             href={buildHrefFor(null)}

@@ -63,7 +63,7 @@ const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> 
   draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
   ready_to_send: { label: "ready to send", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
   approved: { label: "approved", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  archived: { label: "archived", cls: "bg-paper-2 text-stone-400 border-line", dot: "bg-stone-400" },
+  archived: { label: "archived", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
 };
 
 export function PlanEditor({
@@ -216,7 +216,7 @@ export function PlanEditor({
         <div className="flex items-center gap-2">
           <a
             href={`/api/plans/${detail.plan.id}/export.xlsx`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
             title="Descargar plan en Excel"
           >
             <Download size={14} strokeWidth={2} />
@@ -224,7 +224,7 @@ export function PlanEditor({
           </a>
           <a
             href={`/api/plans/${detail.plan.id}/export.pdf`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
             title="Descargar plan en PDF"
           >
             <FileText size={14} strokeWidth={2} />
@@ -232,7 +232,7 @@ export function PlanEditor({
           </a>
           <Link
             href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/billing`}
-            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
           >
             <Receipt size={14} strokeWidth={2} />
             Billing del plan
@@ -272,7 +272,7 @@ export function PlanEditor({
               type="button"
               onClick={onBackToDraft}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
             >
               Editar (nueva versión)
             </button>
@@ -281,11 +281,11 @@ export function PlanEditor({
       </header>
 
       {/* Plan metadata strip — todas las fechas son derivadas de los placements */}
-      <section className="rounded-lg border border-line bg-white px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
+      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
         <Field label={lang === "es" ? "Período (derivado)" : "Period (derived)"}>
           <span className="font-mono text-sm text-ink-2">
             {formatDate(periodStart, lang)}
-            <span className="text-stone-300"> → </span>
+            <span className="text-line"> → </span>
             {formatDate(periodEnd, lang)}
           </span>
           <p className="text-[10px] text-muted mt-0.5">
@@ -329,7 +329,7 @@ export function PlanEditor({
 
       {/* Notes */}
       {(editable || detail.plan.notesMd) && (
-        <section className="rounded-lg border border-line bg-white px-5 py-4">
+        <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4">
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted mb-2">
             Notas del plan
           </p>
@@ -396,7 +396,7 @@ export function PlanEditor({
           </span>
         </div>
 
-        <div className="rounded-lg border border-line bg-white overflow-hidden">
+        <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
           {detail.fees.length === 0 ? (
             <div className="px-5 py-8 text-center text-xs text-muted">
               Sin fees cargados.
@@ -479,7 +479,7 @@ export function PlanEditor({
       {detail.snapshots.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold mb-2">Snapshots de aprobación</h2>
-          <ul className="rounded-lg border border-line bg-white divide-y divide-line-soft">
+          <ul className="rounded-lg border border-line bg-white dark:bg-paper-2 divide-y divide-line-soft">
             {detail.snapshots.map((s) => (
               <li key={s.id} className="px-5 py-2.5 flex items-center gap-3 text-sm">
                 <span className="font-mono text-ink-2">v{s.versionNumber}</span>
@@ -501,7 +501,7 @@ export function PlanEditor({
                     PDF firmado
                   </a>
                 ) : (
-                  <span className="text-stone-300 text-xs">sin PDF</span>
+                  <span className="text-line text-xs">sin PDF</span>
                 )}
               </li>
             ))}
@@ -563,7 +563,7 @@ function PublisherSection({
   return (
     <details
       open
-      className="group rounded-lg border border-line bg-white overflow-hidden"
+      className="group rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden"
     >
       <summary className="flex items-center gap-3 px-5 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-paper-2/50">
         <ChevronDown size={14} strokeWidth={2} className="text-muted shrink-0 transition-transform -rotate-90 group-open:rotate-0" />
@@ -844,7 +844,7 @@ function PlacementDetails({
               e.target.value !== (placement.audience ?? "") &&
               update({ audience: e.target.value || null })
             }
-            className="w-full text-sm bg-white border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
+            className="w-full text-sm bg-white dark:bg-paper-2 border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
           />
         </Field>
 
@@ -858,7 +858,7 @@ function PlacementDetails({
               e.target.value !== (placement.notesMd ?? "") &&
               update({ notesMd: e.target.value || null })
             }
-            className="w-full text-sm bg-white border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
+            className="w-full text-sm bg-white dark:bg-paper-2 border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
           />
         </Field>
       </div>
@@ -1052,7 +1052,7 @@ function RateInput({
         const v = Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
         if (value == null || Math.abs(v - value) >= 0.000001) onCommit(v);
       }}
-      className="w-full font-mono text-sm tabular-nums bg-white border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
+      className="w-full font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
     />
   );
 }
@@ -1083,7 +1083,7 @@ function DeliveryInput({
           Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
         if (value == null || Math.abs(v - value) >= 1) onCommit(v);
       }}
-      className="w-full font-mono text-sm tabular-nums bg-white border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
+      className="w-full font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
     />
   );
 }
@@ -1298,7 +1298,7 @@ function MetricsEditor({
       <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted mb-2">
         Indicadores estimados
       </p>
-      <div className="rounded-md border border-line bg-white">
+      <div className="rounded-md border border-line bg-white dark:bg-paper-2">
         {draft.length === 0 && calculatedMetrics.length === 0 ? (
           <div className="px-3 py-4 text-center text-xs text-muted">
             Sin indicadores cargados
@@ -1362,7 +1362,7 @@ function MetricsEditor({
                           onCommit={(v) => onChangeRate(idx, v)}
                         />
                       ) : (
-                        <span className="block text-right text-[11px] text-stone-300">—</span>
+                        <span className="block text-right text-[11px] text-line">—</span>
                       )}
                     </td>
                     <td className="px-2 py-1">
@@ -1435,7 +1435,7 @@ function MetricsEditor({
                   <span className="text-muted truncate">{m.slug}</span>
                   <span
                     className={
-                      v == null ? "text-stone-300" : "text-ink-2 tabular-nums"
+                      v == null ? "text-line" : "text-ink-2 tabular-nums"
                     }
                     title={m.formula ?? undefined}
                   >
@@ -1512,7 +1512,7 @@ function FeeRow({
             onCommit={(v) => update({ ratePct: v })}
           />
         ) : (
-          <span className="text-stone-300 text-xs font-mono">—</span>
+          <span className="text-line text-xs font-mono">—</span>
         )}
       </td>
       <td className="px-5 py-1.5 text-right">
@@ -1667,7 +1667,7 @@ function AddPublisherDropdown({
         }
       }}
       disabled={disabled}
-      className="rounded-md border border-line bg-white px-3 py-2 text-sm text-muted hover:border-ink-2 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft cursor-pointer disabled:opacity-50"
+      className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm text-muted hover:border-ink-2 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft cursor-pointer disabled:opacity-50"
     >
       <option value="">+ Agregar publisher…</option>
       {publishers.map((p) => (

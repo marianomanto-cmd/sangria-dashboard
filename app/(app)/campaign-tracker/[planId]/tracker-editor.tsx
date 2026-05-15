@@ -283,7 +283,7 @@ export function CampaignTrackerEditor({
       </div>
 
       {/* Tabla de placements + métricas */}
-      <div className="rounded-lg border border-line bg-white overflow-hidden">
+      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-[13px]">
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -356,7 +356,7 @@ export function CampaignTrackerEditor({
               {editedKeys.size === 1 ? "" : "es"} editado
               {editedKeys.size === 1 ? "" : "s"} en esta sesión
             </span>
-            <span className="text-stone-300">·</span>
+            <span className="text-line">·</span>
             <span className="flex items-center gap-1.5">
               <span
                 className={`inline-block h-1.5 w-1.5 rounded-full ${
@@ -365,7 +365,7 @@ export function CampaignTrackerEditor({
               />
               {saveLabel}
             </span>
-            <span className="text-stone-300">·</span>
+            <span className="text-line">·</span>
             <span>
               Última carga cerrada:{" "}
               <b className="text-ink-2">{lastCloseLabel ?? "nunca"}</b>
@@ -387,7 +387,7 @@ export function CampaignTrackerEditor({
               className={`rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
                 compareMode
                   ? "border-accent bg-accent-soft text-accent"
-                  : "border-line bg-white text-ink hover:bg-paper-2"
+                  : "border-line bg-white dark:bg-paper-2 text-ink hover:bg-paper-2"
               }`}
             >
               {compareMode ? "Ocultar comparación" : "Comparar con última carga"}
@@ -413,7 +413,7 @@ export function CampaignTrackerEditor({
             consumo de inversión por placement · línea accent = pace esperado
           </p>
         </div>
-        <div className="rounded-lg border border-line bg-white p-5">
+        <div className="rounded-lg border border-line bg-white dark:bg-paper-2 p-5">
           <TrackerChart data={chartData} pacePct={pacePct} />
           <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted">
             <span className="flex items-center gap-1.5">
@@ -476,7 +476,7 @@ function PublisherBlock({
             ) : (
               <ChevronDown size={13} className="text-muted" />
             )}
-            <span className="w-5 h-5 rounded bg-white border border-line flex items-center justify-center text-[10px] font-semibold text-muted">
+            <span className="w-5 h-5 rounded bg-white dark:bg-paper-2 border border-line flex items-center justify-center text-[10px] font-semibold text-muted">
               {pub.publisherSlug.slice(0, 2).toUpperCase()}
             </span>
             <span className="font-semibold text-ink">{pub.publisherName}</span>
@@ -694,7 +694,7 @@ function MetricCell({
           unit,
         );
       }}
-      className="w-full text-right font-mono text-[12.5px] rounded border border-[#fde68a] bg-[#fffbea] px-2 py-1 focus:outline-none focus:border-accent focus:bg-white focus:ring-2 focus:ring-accent-soft"
+      className="w-full text-right font-mono text-[12.5px] rounded border border-[#fde68a] bg-[#fffbea] px-2 py-1 focus:outline-none focus:border-accent focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-2 focus:ring-accent-soft"
     />
   );
 }

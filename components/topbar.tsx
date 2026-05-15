@@ -1,13 +1,13 @@
-import { Moon } from "lucide-react";
 import { asc, ne } from "drizzle-orm";
 import { Suspense } from "react";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { TopbarClientPicker } from "@/components/topbar-client-picker";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export async function Topbar() {
   return (
-    <header className="sticky top-0 z-10 border-b border-line bg-white">
+    <header className="sticky top-0 z-10 border-b border-line bg-paper/80 backdrop-blur supports-[backdrop-filter]:bg-paper/70 dark:bg-paper/85">
       <div className="px-6 h-12 flex items-center gap-4">
         <Breadcrumbs trail={["Sangria", "Dashboard"]} />
 
@@ -20,17 +20,11 @@ export async function Topbar() {
             <ClientPickerLoader />
           </Suspense>
 
-          <button
-            type="button"
-            aria-label="Cambiar a modo oscuro"
-            className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted hover:bg-paper-2 hover:text-ink transition-colors"
-          >
-            <Moon size={14} strokeWidth={2} />
-          </button>
+          <ThemeToggle />
 
           <div
             aria-label="Tu cuenta"
-            className="w-7 h-7 rounded-full bg-accent shrink-0"
+            className="w-7 h-7 rounded-full bg-gradient-to-br from-accent-2 to-accent shrink-0 ring-1 ring-accent-strong/20"
           />
         </div>
       </div>
@@ -59,7 +53,7 @@ function Breadcrumbs({ trail }: { trail: readonly string[] }) {
             <span className={last ? "text-ink font-medium" : undefined}>
               {segment}
             </span>
-            {!last && <span className="text-stone-300">/</span>}
+            {!last && <span className="text-line">/</span>}
           </span>
         );
       })}

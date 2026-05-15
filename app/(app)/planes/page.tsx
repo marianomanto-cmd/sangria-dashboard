@@ -49,7 +49,7 @@ const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> 
   draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
   ready_to_send: { label: "ready", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
   approved: { label: "approved", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  archived: { label: "archived", cls: "bg-paper-2 text-stone-400 border-line", dot: "bg-stone-400" },
+  archived: { label: "archived", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
 };
 
 type Props = {
@@ -194,7 +194,7 @@ export default async function PlanesPage({ searchParams }: Props) {
             : "No plans match the filter."}
         </div>
       ) : (
-        <section className="rounded-lg border border-line bg-white overflow-hidden">
+        <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-paper">
               <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -269,7 +269,7 @@ export default async function PlanesPage({ searchParams }: Props) {
                     </td>
                     <td className="px-5 py-2.5 font-mono text-[11px] text-ink-2">
                       {formatDate(p.periodStart, lang)}
-                      <span className="text-stone-300"> → </span>
+                      <span className="text-line"> → </span>
                       {formatDate(p.periodEnd, lang)}
                     </td>
                     <td className="px-5 py-2.5 text-right font-mono text-ink">
@@ -327,7 +327,7 @@ function FilterChoice({
     <Link
       href={href}
       data-active={isActive}
-      className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+      className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
     >
       {label}
     </Link>

@@ -53,18 +53,21 @@ export function Sidebar() {
   return (
     <aside
       data-collapsed={collapsed}
-      className="bg-ink text-white flex flex-col data-[collapsed=true]:w-14 data-[collapsed=false]:w-[220px] transition-[width] duration-150 shrink-0 sticky top-0 h-screen"
+      // Gradiente vertical sutil de rail-2 → rail (más oscuro abajo) para
+      // darle profundidad al sidebar sin separarse del tono del producto.
+      // bg-rail nunca swappea en dark mode (definido fijo en globals.css).
+      className="bg-gradient-to-b from-rail-2 to-rail text-white flex flex-col data-[collapsed=true]:w-14 data-[collapsed=false]:w-[220px] transition-[width] duration-200 ease-out shrink-0 sticky top-0 h-screen border-r border-black/40"
     >
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <SangriaMark size={22} />
         {!collapsed && (
           <span className="text-sm font-semibold tracking-tight">
-            Sangria <span className="text-stone-400 font-normal">/ OS</span>
+            Sangria <span className="text-muted font-normal">/ OS</span>
           </span>
         )}
       </div>
 
-      <nav className="flex-1 px-2 mt-2 flex flex-col gap-0.5">
+      <nav className="flex-1 px-2 mt-2 flex flex-col gap-0.5 overflow-y-auto">
         {PRIMARY.map((entry) => (
           <NavItem
             key={entry.href}
@@ -76,7 +79,10 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-white/10 mx-2 my-2" />
+      <div
+        aria-hidden
+        className="mx-3 my-2 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
+      />
 
       <div className="px-2 flex flex-col gap-0.5">
         {FOOTER.map((entry) => (
@@ -91,12 +97,12 @@ export function Sidebar() {
       </div>
 
       <div className="px-2 pb-3 pt-2 flex items-center gap-2">
-        <div className="w-7 h-7 rounded-full bg-stone-600 shrink-0" />
+        <div className="w-7 h-7 rounded-full bg-gradient-to-br from-stone-500 to-stone-700 ring-1 ring-white/10 shrink-0" />
         {!collapsed && (
           <div className="text-xs leading-tight">
             Mariano Manto
             <br />
-            <span className="text-stone-400">admin</span>
+            <span className="text-muted">admin</span>
           </div>
         )}
       </div>
@@ -105,7 +111,7 @@ export function Sidebar() {
         type="button"
         onClick={() => setCollapsed((c) => !c)}
         aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
-        className="absolute -right-3 top-6 w-6 h-6 rounded-full bg-ink border border-white/15 flex items-center justify-center text-stone-300 hover:text-white hover:border-white/40 transition-colors"
+        className="absolute -right-3 top-6 w-6 h-6 rounded-full bg-rail border border-white/15 flex items-center justify-center text-line hover:text-white hover:border-white/40 hover:scale-110 active:scale-95 transition-all duration-150 shadow-sm"
       >
         {collapsed ? (
           <ChevronsRight size={12} />
@@ -134,14 +140,18 @@ function NavItem({
       href={href}
       data-active={active}
       data-collapsed={collapsed}
-      className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-stone-400 hover:bg-white/5 hover:text-white data-[active=true]:bg-white/[0.08] data-[active=true]:text-white data-[collapsed=true]:justify-center data-[collapsed=true]:px-0 data-[collapsed=true]:w-9 data-[collapsed=true]:h-9 transition-colors"
+      className="group relative flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted hover:bg-white/5 hover:text-white data-[active=true]:bg-white/[0.08] data-[active=true]:text-white data-[collapsed=true]:justify-center data-[collapsed=true]:px-0 data-[collapsed=true]:w-9 data-[collapsed=true]:h-9 transition-colors duration-150"
       title={collapsed ? entry.label : undefined}
     >
       <span
         aria-hidden
-        className="w-[3px] h-4 rounded-sm shrink-0 bg-transparent group-data-[active=true]:bg-accent group-data-[collapsed=true]:hidden"
+        className="w-[3px] h-4 rounded-sm shrink-0 bg-transparent group-data-[active=true]:bg-accent group-data-[collapsed=true]:hidden transition-colors"
       />
-      <Icon size={16} strokeWidth={2} className="shrink-0" />
+      <Icon
+        size={16}
+        strokeWidth={2}
+        className="shrink-0 transition-transform group-hover:scale-105"
+      />
       {!collapsed && <span className="truncate">{entry.label}</span>}
     </Link>
   );

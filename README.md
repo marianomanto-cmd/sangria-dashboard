@@ -63,7 +63,9 @@ producción real conviene migrar a `db:generate` + `db:migrate`.
 
 - **Next.js 16.2.6** (App Router, Turbopack)
 - **React 19.2** + TypeScript 5
-- **Tailwind v4** con `@theme` block (paleta `stone` + accent `#7a1f3d`)
+- **Tailwind v4** con `@theme` block (paleta `stone` + accent `#7a1f3d`).
+  Dark mode class-based (`.dark` en `<html>`): los tokens se redefinen
+  bajo `.dark` en `globals.css` así toda utility swappea sola.
 - **Drizzle ORM 0.45** sobre Postgres (Supabase)
 - **postgres-js** como driver
 - **lucide-react** para íconos
@@ -106,6 +108,8 @@ app/
   globals.css
 
 components/                 # UI compartida
+  theme-toggle.tsx          # toggle claro/oscuro (clase .dark en <html>)
+  skeleton.tsx              # placeholders shimmer para loading states
 db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)

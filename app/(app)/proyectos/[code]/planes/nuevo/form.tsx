@@ -38,7 +38,7 @@ export function NewPlanForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-lg border border-line bg-white p-6 space-y-5"
+      className="rounded-lg border border-line bg-white dark:bg-paper-2 p-6 space-y-5"
     >
       <div>
         <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-muted mb-1.5">
@@ -51,7 +51,7 @@ export function NewPlanForm({
           placeholder="Awareness"
           required
           autoFocus
-          className="w-full rounded-md border border-line bg-white px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
         />
         <div className="mt-2 flex flex-wrap gap-1.5">
           {PRESETS.map((p) => (

@@ -16,7 +16,7 @@ export function Sparkline({
 }: SparklineProps) {
   if (values.length === 0 || values.every((v) => v === 0)) {
     return (
-      <span className="text-stone-300 font-mono text-xs">—</span>
+      <span className="text-line font-mono text-xs">—</span>
     );
   }
 

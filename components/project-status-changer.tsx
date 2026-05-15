@@ -68,7 +68,7 @@ export function ProjectStatusChanger({
               if (!res.ok) setError(res.error);
             });
           }}
-          className="inline-flex items-center gap-1.5 rounded-sm border border-line bg-white px-2 py-1 text-xs hover:bg-paper-2 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-sm border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs hover:bg-paper-2 transition-colors disabled:opacity-50"
         >
           {PROMPTS[s][lang]}
         </button>
