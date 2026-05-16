@@ -58,7 +58,10 @@ export function Sidebar() {
       // Gradiente vertical sutil de rail-2 → rail (más oscuro abajo) para
       // darle profundidad al sidebar sin separarse del tono del producto.
       // bg-rail nunca swappea en dark mode (definido fijo en globals.css).
-      className="bg-gradient-to-b from-rail-2 to-rail text-white flex flex-col data-[collapsed=true]:w-14 data-[collapsed=false]:w-[220px] transition-[width] duration-200 ease-out shrink-0 sticky top-0 h-screen border-r border-black/40"
+      // z-20 para que el botón de colapsar (que sobresale con -right-3)
+      // quede por encima del topbar, que también es sticky y tiene z-10.
+      // Sin esto, el topbar tapa la mitad derecha del botón.
+      className="bg-gradient-to-b from-rail-2 to-rail text-white flex flex-col data-[collapsed=true]:w-14 data-[collapsed=false]:w-[220px] transition-[width] duration-200 ease-out shrink-0 sticky top-0 h-screen z-20 border-r border-black/40"
     >
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <SangriaMark size={22} />
