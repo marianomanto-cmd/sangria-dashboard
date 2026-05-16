@@ -35,10 +35,10 @@ const PRIMARY: NavEntry[] = [
   { href: "/planes", label: "Planes de Medios", icon: FileText },
   { href: "/billing", label: "Billing", icon: FileCheck },
   { href: "/reportes/calendario", label: "Calendario de reportes", icon: CalendarClock },
-  { href: "/reportes/simulador", label: "Simulador", icon: FlaskConical },
   { href: "/reportes", label: "Reportes", icon: BarChart3, exact: true },
   { href: "/billing-tracker", label: "Billing Tracker", icon: Receipt },
   { href: "/campaign-tracker", label: "Campaign Tracker", icon: LineChart },
+  { href: "/reportes/simulador", label: "Simulador", icon: FlaskConical },
 ];
 
 const FOOTER: NavEntry[] = [
