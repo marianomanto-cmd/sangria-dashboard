@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Plus, Save, Trash2, Copy, Wand2 } from "lucide-react";
+import { Plus, Save, Trash2, Copy, Wand2, Rocket } from "lucide-react";
 import {
   createScenario,
   deleteScenario,
@@ -23,6 +23,7 @@ import {
   findBenchmark,
   newRow,
 } from "./builder-helpers";
+import { PromoteDialog } from "./promote-dialog";
 
 type EditingState = {
   scenarioId: string | null;        // null = no guardado
@@ -54,6 +55,7 @@ export function BuilderTab({
   const [editing, setEditing] = useState<EditingState>(BLANK);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [promoteOpen, setPromoteOpen] = useState(false);
 
   const totals = aggregateTotals(editing.rows, benchmarks);
 
@@ -327,6 +329,18 @@ export function BuilderTab({
               Guardar como nuevo
             </button>
           )}
+          {editing.scenarioId && !editing.dirty && (
+            <button
+              type="button"
+              onClick={() => setPromoteOpen(true)}
+              disabled={pending}
+              className="text-xs px-3 py-2 rounded-md border border-accent/40 text-accent hover:bg-accent/10 disabled:opacity-50 flex items-center gap-1.5"
+              title="Crear un media plan real desde este escenario"
+            >
+              <Rocket size={12} />
+              Promover a plan
+            </button>
+          )}
         </div>
         {error && (
           <div className="mb-3 text-xs text-rose-600 dark:text-rose-400 rounded-md border border-rose-300/40 bg-rose-50 dark:bg-rose-950/30 px-3 py-2">
@@ -414,6 +428,14 @@ export function BuilderTab({
           </span>
         </div>
       </div>
+
+      <PromoteDialog
+        open={promoteOpen}
+        onClose={() => setPromoteOpen(false)}
+        clientId={clientId}
+        scenarioId={editing.scenarioId}
+        defaultPlanName={editing.name || "Nuevo plan"}
+      />
     </div>
   );
 }

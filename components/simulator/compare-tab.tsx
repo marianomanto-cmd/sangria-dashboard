@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { fetchScenario } from "@/app/actions/simulator";
+import {
+  fetchCompareablePlans,
+  fetchScenario,
+} from "@/app/actions/simulator";
 import type {
+  CompareablePlanSummary,
   ScenarioSummary,
   SimulatorCatalogs,
 } from "@/db/queries/simulator";
@@ -10,80 +14,155 @@ import { formatUsd } from "@/lib/format";
 import type { BenchmarkRow, ScenarioJson } from "@/lib/simulator-types";
 import { aggregateTotals } from "./builder-helpers";
 
-type Loaded = {
-  id: string;
-  name: string;
-  rowsJson: ScenarioJson;
+// Un slot puede tener un escenario o un plan real. Para uniformar el render,
+// resolvemos cada slot a un `ColumnView` con las mismas métricas.
+type SlotRef =
+  | { kind: "scenario"; id: string }
+  | { kind: "plan"; id: string }
+  | null;
+
+type ColumnView = {
+  label: string;
+  sublabel: string | null;
+  budgetUsd: number;
+  impressions: number;
+  clicks: number;
+  views: number;
+  blendedCpm: number | null;
+  blendedCpc: number | null;
+  blendedCpv: number | null;
+  rowCount: number;
 };
 
 export function CompareTab({
+  clientId,
   scenarios,
   benchmarks,
 }: {
+  clientId: string;
   scenarios: ScenarioSummary[];
   catalogs: SimulatorCatalogs;
   benchmarks: BenchmarkRow[];
 }) {
-  // selectedIds tiene hasta 3 slots; null = vacío. La selección controlada
-  // permite cambiar el escenario de un slot sin perder los otros.
-  const [selectedIds, setSelectedIds] = useState<(string | null)[]>([
-    null,
-    null,
-    null,
-  ]);
-  const [loaded, setLoaded] = useState<Record<string, Loaded>>({});
+  const [slots, setSlots] = useState<SlotRef[]>([null, null, null]);
+  const [scenarioCache, setScenarioCache] = useState<Record<string, ScenarioJson>>({});
+  const [plans, setPlans] = useState<CompareablePlanSummary[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const [pending, startTransition] = useTransition();
+
+  // Carga inicial de planes comparables (planes approved/ready_to_send del
+  // cliente actual). Se cachea al montar el tab.
+  useEffect(() => {
+    let cancelled = false;
+    fetchCompareablePlans(clientId).then((p) => {
+      if (cancelled) return;
+      setPlans(p);
+      setLoadingPlans(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clientId]);
 
   // Cargar escenarios faltantes cuando cambia la selección.
   useEffect(() => {
-    const toFetch = selectedIds.filter(
-      (id): id is string => id != null && !loaded[id],
-    );
+    const toFetch = slots
+      .filter((s): s is { kind: "scenario"; id: string } => s?.kind === "scenario")
+      .map((s) => s.id)
+      .filter((id) => !scenarioCache[id]);
     if (toFetch.length === 0) return;
     startTransition(async () => {
       const results = await Promise.all(toFetch.map((id) => fetchScenario(id)));
-      const next = { ...loaded };
+      const next = { ...scenarioCache };
       for (const sc of results) {
-        if (sc) next[sc.id] = { id: sc.id, name: sc.name, rowsJson: sc.rowsJson };
+        if (sc) next[sc.id] = sc.rowsJson;
       }
-      setLoaded(next);
+      setScenarioCache(next);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds]);
+  }, [slots]);
 
-  const setSlot = (slotIdx: number, id: string | null) => {
-    setSelectedIds((s) => s.map((v, i) => (i === slotIdx ? id : v)));
+  const setSlot = (slotIdx: number, val: SlotRef) => {
+    setSlots((s) => s.map((v, i) => (i === slotIdx ? val : v)));
   };
 
-  // Filtra escenarios disponibles para un slot (excluye los ya elegidos en
-  // otros slots).
+  const parseSelectValue = (raw: string): SlotRef => {
+    if (!raw) return null;
+    const [kind, id] = raw.split(":");
+    if (kind !== "scenario" && kind !== "plan") return null;
+    return { kind, id };
+  };
+
+  // Opciones disponibles para un slot (excluye lo elegido en otros slots).
   const availableFor = (slotIdx: number) => {
-    const otherIds = new Set(
-      selectedIds.filter((id, i) => i !== slotIdx && id != null) as string[],
+    const taken = new Set(
+      slots
+        .filter((s, i) => i !== slotIdx && s != null)
+        .map((s) => `${s!.kind}:${s!.id}`),
     );
-    return scenarios.filter((s) => !otherIds.has(s.id));
+    return {
+      scenarios: scenarios.filter((s) => !taken.has(`scenario:${s.id}`)),
+      plans: plans.filter((p) => !taken.has(`plan:${p.planId}`)),
+    };
   };
 
-  const cols = selectedIds.map((id, i) => {
-    const sc = id ? loaded[id] : null;
+  const resolveSlot = (slot: SlotRef): ColumnView | null => {
+    if (!slot) return null;
+    if (slot.kind === "scenario") {
+      const summary = scenarios.find((s) => s.id === slot.id);
+      const json = scenarioCache[slot.id];
+      if (!summary) return null;
+      if (!json) {
+        return {
+          label: summary.name,
+          sublabel: "cargando…",
+          budgetUsd: 0,
+          impressions: 0,
+          clicks: 0,
+          views: 0,
+          blendedCpm: null,
+          blendedCpc: null,
+          blendedCpv: null,
+          rowCount: summary.rowCount,
+        };
+      }
+      const totals = aggregateTotals(json.rows, benchmarks);
+      return {
+        label: summary.name,
+        sublabel: "Escenario",
+        ...totals,
+        rowCount: json.rows.length,
+      };
+    }
+    // plan real
+    const plan = plans.find((p) => p.planId === slot.id);
+    if (!plan) return null;
     return {
-      slotIdx: i,
-      id,
-      summary: id ? scenarios.find((s) => s.id === id) ?? null : null,
-      data: sc,
-      totals: sc ? aggregateTotals(sc.rowsJson.rows, benchmarks) : null,
+      label: plan.planName,
+      sublabel: `Plan ${plan.status} · ${plan.projectName}`,
+      budgetUsd: plan.budgetUsd,
+      impressions: plan.impressions,
+      clicks: plan.clicks,
+      views: plan.views,
+      blendedCpm: plan.blendedCpm,
+      blendedCpc: plan.blendedCpc,
+      blendedCpv: plan.blendedCpv,
+      rowCount: 0, // no aplica para planes
     };
-  });
+  };
 
-  const hasAnySelected = selectedIds.some((id) => id != null);
+  const cols = slots.map((slot) => resolveSlot(slot));
+  const hasAnySelected = slots.some((s) => s != null);
 
-  if (scenarios.length === 0) {
+  if (scenarios.length === 0 && !loadingPlans && plans.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-line bg-paper-2 p-8 text-center">
-        <p className="text-sm text-muted">No hay escenarios guardados todavía.</p>
+        <p className="text-sm text-muted">
+          No hay escenarios guardados ni planes aprobados para comparar.
+        </p>
         <p className="text-xs text-muted mt-2">
-          Andá al tab <strong>Builder</strong>, armá un escenario y guardalo.
-          Después podés volver acá para compararlo con otros.
+          Andá al tab <strong>Builder</strong> y armá un escenario, o aprobá
+          un plan en algún proyecto del cliente.
         </p>
       </div>
     );
@@ -91,32 +170,49 @@ export function CompareTab({
 
   return (
     <div>
-      {/* Selectores por slot */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-        {[0, 1, 2].map((i) => (
-          <div key={i}>
-            <label className="text-[10px] uppercase tracking-wider text-muted font-medium block mb-1">
-              Slot {i + 1}
-            </label>
-            <select
-              value={selectedIds[i] ?? ""}
-              onChange={(e) => setSlot(i, e.target.value || null)}
-              className="w-full text-xs px-2 py-1.5 rounded-md border border-line bg-white dark:bg-paper-2 text-ink-2"
-            >
-              <option value="">— Vacío —</option>
-              {availableFor(i).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        ))}
+        {[0, 1, 2].map((i) => {
+          const slot = slots[i];
+          const value = slot ? `${slot.kind}:${slot.id}` : "";
+          const avail = availableFor(i);
+          return (
+            <div key={i}>
+              <label className="text-[10px] uppercase tracking-wider text-muted font-medium block mb-1">
+                Slot {i + 1}
+              </label>
+              <select
+                value={value}
+                onChange={(e) => setSlot(i, parseSelectValue(e.target.value))}
+                className="w-full text-xs px-2 py-1.5 rounded-md border border-line bg-white dark:bg-paper-2 text-ink-2"
+              >
+                <option value="">— Vacío —</option>
+                {avail.scenarios.length > 0 && (
+                  <optgroup label="Escenarios">
+                    {avail.scenarios.map((s) => (
+                      <option key={s.id} value={`scenario:${s.id}`}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {avail.plans.length > 0 && (
+                  <optgroup label="Planes reales (goals)">
+                    {avail.plans.map((p) => (
+                      <option key={p.planId} value={`plan:${p.planId}`}>
+                        {p.projectName} · {p.planName}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+          );
+        })}
       </div>
 
       {!hasAnySelected && (
         <div className="rounded-lg border border-dashed border-line bg-paper-2 p-6 text-center text-sm text-muted">
-          Elegí al menos un escenario para empezar a comparar.
+          Elegí al menos un escenario o plan para empezar a comparar.
         </div>
       )}
 
@@ -133,10 +229,17 @@ export function CompareTab({
                     key={idx}
                     className="px-3 py-2 text-right text-[11px] uppercase tracking-wider text-muted font-medium"
                   >
-                    {c.data ? (
-                      c.data.name
-                    ) : c.id ? (
-                      <span className="text-muted/60">cargando…</span>
+                    {c ? (
+                      <>
+                        <div className="text-ink normal-case tracking-normal">
+                          {c.label}
+                        </div>
+                        {c.sublabel && (
+                          <div className="text-[10px] text-muted/70 normal-case tracking-normal font-normal mt-0.5">
+                            {c.sublabel}
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <span className="text-muted/60">—</span>
                     )}
@@ -146,50 +249,45 @@ export function CompareTab({
             </thead>
             <tbody>
               <CompareRow
-                label="Líneas"
-                cols={cols}
-                pick={(t, d) => (d ? d.rowsJson.rows.length.toString() : "—")}
-              />
-              <CompareRow
                 label="Budget total"
                 cols={cols}
-                pick={(t) => (t ? formatUsd(t.budgetUsd) : "—")}
+                pick={(c) => formatUsd(c.budgetUsd)}
                 emphasize
               />
               <CompareRow
-                label="Impresiones est."
+                label="Impresiones"
                 cols={cols}
-                pick={(t) => (t && t.impressions ? formatInt(t.impressions) : "—")}
+                pick={(c) => (c.impressions ? formatInt(c.impressions) : "—")}
               />
               <CompareRow
-                label="Clicks est."
+                label="Clicks"
                 cols={cols}
-                pick={(t) => (t && t.clicks ? formatInt(t.clicks) : "—")}
+                pick={(c) => (c.clicks ? formatInt(c.clicks) : "—")}
               />
               <CompareRow
-                label="Views est."
+                label="Views"
                 cols={cols}
-                pick={(t) => (t && t.views ? formatInt(t.views) : "—")}
+                pick={(c) => (c.views ? formatInt(c.views) : "—")}
               />
               <CompareRow
                 label="Blended CPM"
                 cols={cols}
-                pick={(t) =>
-                  t && t.blendedCpm != null ? `$${t.blendedCpm.toFixed(2)}` : "—"
+                pick={(c) =>
+                  c.blendedCpm != null ? `$${c.blendedCpm.toFixed(2)}` : "—"
                 }
               />
               <CompareRow
                 label="Blended CPC"
                 cols={cols}
-                pick={(t) =>
-                  t && t.blendedCpc != null ? `$${t.blendedCpc.toFixed(2)}` : "—"
+                pick={(c) =>
+                  c.blendedCpc != null ? `$${c.blendedCpc.toFixed(2)}` : "—"
                 }
               />
               <CompareRow
                 label="Blended CPV"
                 cols={cols}
-                pick={(t) =>
-                  t && t.blendedCpv != null ? `$${t.blendedCpv.toFixed(3)}` : "—"
+                pick={(c) =>
+                  c.blendedCpv != null ? `$${c.blendedCpv.toFixed(3)}` : "—"
                 }
               />
             </tbody>
@@ -198,13 +296,15 @@ export function CompareTab({
       )}
 
       {pending && (
-        <p className="mt-3 text-xs text-muted">Cargando escenarios…</p>
+        <p className="mt-3 text-xs text-muted">Cargando…</p>
       )}
 
       <p className="mt-4 text-xs text-muted max-w-2xl">
-        Todas las métricas estimadas usan el cost method y el modo
-        (P25/P50/P75/manual) configurado en cada línea del escenario, con los
-        benchmarks actuales del cliente.
+        Los <strong>escenarios</strong> usan los rates del modo elegido en
+        cada fila (P25/P50/P75/manual) para estimar impresiones/clicks/views.
+        Los <strong>planes reales</strong> agregan los goals tal como están
+        cargados en sus placements — son la fuente de verdad del plan
+        aprobado.
       </p>
     </div>
   );
@@ -217,15 +317,8 @@ function CompareRow({
   emphasize = false,
 }: {
   label: string;
-  cols: Array<{
-    id: string | null;
-    data: Loaded | null;
-    totals: ReturnType<typeof aggregateTotals> | null;
-  }>;
-  pick: (
-    totals: ReturnType<typeof aggregateTotals> | null,
-    data: Loaded | null,
-  ) => string;
+  cols: Array<ColumnView | null>;
+  pick: (c: ColumnView) => string;
   emphasize?: boolean;
 }) {
   return (
@@ -238,7 +331,7 @@ function CompareRow({
             emphasize ? "font-semibold text-ink" : "text-ink-2"
           }`}
         >
-          {c.id ? pick(c.totals, c.data) : "—"}
+          {c ? pick(c) : "—"}
         </td>
       ))}
     </tr>

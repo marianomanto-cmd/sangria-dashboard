@@ -1,10 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { AlertTriangle } from "lucide-react";
 import { fetchBenchmarks } from "@/app/actions/simulator";
 import type { SimulatorCatalogs } from "@/db/queries/simulator";
 import { formatUsd } from "@/lib/format";
-import type { BenchmarkRow } from "@/lib/simulator-types";
+import type { BenchmarkFilters, BenchmarkRow } from "@/lib/simulator-types";
+import { BenchmarkDetailDrawer } from "./benchmark-detail-drawer";
+
+const LOW_SAMPLE_THRESHOLD = 3; // < 3 placements muestra el warning
 
 export function BenchmarksTab({
   clientId,
@@ -22,6 +26,21 @@ export function BenchmarksTab({
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
   const [pending, startTransition] = useTransition();
+  const [drilldown, setDrilldown] = useState<BenchmarkRow | null>(null);
+
+  // Snapshot de los filtros vigentes en el momento de abrir el drawer —
+  // mismo set que se usó para calcular las stats de la fila clickeada.
+  const currentFilters = useMemo<BenchmarkFilters>(
+    () => ({
+      clientId,
+      publisherId: publisherId || null,
+      marketId: marketId || null,
+      costMethod: costMethod || null,
+      dateFrom: dateFrom || null,
+      dateTo: dateTo || null,
+    }),
+    [clientId, publisherId, marketId, costMethod, dateFrom, dateTo],
+  );
 
   const applyFilters = () => {
     startTransition(async () => {
@@ -124,7 +143,9 @@ export function BenchmarksTab({
               {rows.map((r) => (
                 <tr
                   key={`${r.publisherId}|${r.marketId ?? "_"}|${r.costMethod ?? "_"}`}
-                  className="border-b border-line/60 hover:bg-paper-2/40"
+                  className="border-b border-line/60 hover:bg-paper-2/40 cursor-pointer"
+                  onClick={() => setDrilldown(r)}
+                  title="Click para ver placements crudos"
                 >
                   <Td className="text-left font-medium text-ink">
                     {r.publisherName}
@@ -141,7 +162,19 @@ export function BenchmarksTab({
                       <span className="text-muted">—</span>
                     )}
                   </Td>
-                  <Td className="text-ink-2 tabular-nums">{r.placements}</Td>
+                  <Td className="tabular-nums">
+                    {r.placements < LOW_SAMPLE_THRESHOLD ? (
+                      <span
+                        className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"
+                        title="Sample chico — interpretar con cuidado"
+                      >
+                        <AlertTriangle size={11} strokeWidth={2.2} />
+                        {r.placements}
+                      </span>
+                    ) : (
+                      <span className="text-ink-2">{r.placements}</span>
+                    )}
+                  </Td>
                   <Td className="tabular-nums text-ink-2">
                     {formatUsd(r.totalSpendUsd)}
                   </Td>
@@ -176,8 +209,16 @@ export function BenchmarksTab({
         <em>publisher × mercado × cost method</em>. Los percentiles se calculan
         sobre métricas derivadas por placement (CPM = spend / impressions × 1000,
         etc.). La columna <em>Delivery</em> es la mediana de inversión real ÷
-        goal congelado al cierre.
+        goal congelado al cierre. Click en una fila para ver los placements
+        crudos.
       </p>
+
+      <BenchmarkDetailDrawer
+        open={drilldown !== null}
+        onClose={() => setDrilldown(null)}
+        row={drilldown}
+        filters={currentFilters}
+      />
     </div>
   );
 }
