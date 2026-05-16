@@ -1,6 +1,37 @@
-# Handoff — viernes 15/may/2026
+# Handoff — sábado 16/may/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 16/may/2026 — Simulador
+
+- **Nueva sección `/reportes/simulador`** que reemplaza el grid de cards
+  "próximamente" de `/reportes`. La página de Reportes ahora muestra solo
+  dos cards: Calendario y Simulador.
+- **Scope por cliente**: el simulador requiere cliente seleccionado en el
+  topbar. Sin cliente muestra un empty state que invita a elegir uno.
+- **Tab Benchmarks**: agrega CPM/CPC/CPV/CTR por `(publisher × mercado ×
+  cost method)` con p25/p50/p75 + mediana de delivery (real ÷ goal),
+  calculados sobre `campaign_actual_snapshots` joineados con
+  `media_plan_placements` y publishers/markets. Filtros por publisher,
+  mercado, cost method, rango de fechas.
+- **Tab Builder**: tabla editable de filas (publisher, mercado, formato,
+  cost method, budget USD) con modos P25/P50/P75/Manual. El modo
+  P25/P50/P75 autocompleta rates desde el benchmark del mismo segmento;
+  Manual permite overrides directos (se siembran con p50 al cambiar). Los
+  totales abajo agregan budget + impresiones/clicks/views esperados +
+  blended CPM/CPC/CPV. Sidebar con escenarios guardados (cargar /
+  duplicar / borrar).
+- **Tab Comparativa**: hasta 3 escenarios lado a lado con métricas
+  agregadas y blended rates.
+- **Tabla nueva `simulator_scenarios`** (jsonb, scope por cliente) — el
+  `rows_json` guarda el array completo con overrides para iterar sin
+  nuevas migrations.
+- **Sidebar**: nueva entrada "Simulador" entre "Calendario de reportes" y
+  "Reportes".
+
+**Acciones requeridas en prod**: correr el `CREATE TABLE
+simulator_scenarios` + FK + index (o `npm run db:push`) antes de
+mergear, sino `/reportes/simulador` rompe al hacer la primera query.
 
 ### Cambios de la sesión 15/may/2026 — Aesthetic / cosmetic pass
 
@@ -322,6 +353,9 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+599e72a  Simulador: reemplaza el grid 'próximamente' de Reportes (#37)
+2128310  Aesthetic pass: dark mode + microinteractions + token-only colors
+92d21e2  docs: proyectos editar/eliminar + code derivado del nombre (#36)
 3b1a674  Proyectos: editar/eliminar + sacar el identificador del alta y la vista (#35)
 953ac29  Excel del plan: quitar columna Auto de Fees + grand total legible (#33)
 d0ac3bc  Excel del plan: quitar "(agencia paga)" del nombre del publisher (#31)
@@ -863,6 +897,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Estilos del slider dual-range de meses | `app/globals.css` — clase `.month-slider-thumb` (Webkit + Firefox). |
 | Ajustar la ventana del Gantt o los símbolos | `components/reporting-gantt.tsx`. Constants `WINDOW_BEFORE_DAYS`, `WINDOW_AFTER_DAYS`, colores `COLOR_*`. |
 | Cambiar el flow closed → reportado | `app/actions/reports.ts` `markReportDelivered` (delivered_at + project.status='reportado' + audit log). |
+| Tocar el Simulador | `app/(app)/reportes/simulador/page.tsx` (server entry: requiere cliente filtrado), `components/simulator/simulator-client.tsx` (shell de tabs), `components/simulator/{benchmarks,builder,compare}-tab.tsx` (cada tab), `components/simulator/builder-helpers.ts` (matching de benchmark + estimaciones por fila + agregados), `db/queries/simulator.ts` (`getBenchmarks`, `getSimulatorCatalogs`, `listScenarios`, `getScenario`), `app/actions/simulator.ts` (CRUD + read actions), `lib/simulator-types.ts` (tipos de filas / filtros). |
+| Cambiar cómo se calcula un benchmark | `getBenchmarks` en `db/queries/simulator.ts` — agrega snapshots por placement (más reciente por metric_key) y agrupa por `(publisher × market × cost_method)`. Percentiles `percentile()` en el mismo archivo. CPM/CPC/CPV/CTR usan `CALC_METRICS` de `lib/campaign-metrics.ts` (mismas fórmulas que el resto de la app). |
+| Cambiar la lógica de auto-completado del Builder | `findBenchmark` / `effectiveRates` / `estimateDelivery` / `aggregateTotals` en `components/simulator/builder-helpers.ts`. El cost method de la fila decide si se derivan impressions (CPM), clicks (CPC) o views (CPV); CTR se usa para inferir clicks cuando ya hay impressions. |
 | Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |

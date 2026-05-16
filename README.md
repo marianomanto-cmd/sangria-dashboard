@@ -96,15 +96,16 @@ app/
       markets/, metricas/, publishers/   # admin de catálogos
       clientes/               # alta/edición de clientes (nombre, prefijo, idioma, estado)
     reportes/
-      page.tsx              # placeholders de los 6 reports analíticos
+      page.tsx              # landing con cards de Calendario y Simulador
       calendario/           # Reporting Calendar (closed → reportado)
+      simulador/            # Simulador: benchmarks históricos + builder de escenarios + comparativa
   api/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan
       export.pdf/route.ts   # PDF del plan
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
-    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts
+    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts, simulator.ts
   globals.css
 
 components/                 # UI compartida
@@ -118,7 +119,7 @@ db/
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
     clients.ts, billing.ts, billing-tracker.ts, audit-log.ts, budget-origins.ts,
-    reports.ts, campaign-tracker.ts
+    reports.ts, campaign-tracker.ts, simulator.ts
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -129,6 +130,7 @@ lib/
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
   cost-methods.ts           # mapping cost method → métrica principal
   campaign-metrics.ts       # Campaign Tracker: métricas calculadas + pace + buildMetricRows
+  simulator-types.ts        # Simulador: tipos de ScenarioRow/BenchmarkRow/filtros
 ```
 
 ---
@@ -251,6 +253,37 @@ lib/
   `DIRECT_METRIC_RATES`), tanto en la capa viva como en los snapshots. El
   sistema es independiente de Billing / Gastos Reales aunque haya
   solapamiento conceptual con la inversión.
+
+### Simulador (`/reportes/simulador`)
+- Sandbox para que el planner consulte precios reales históricos, arme
+  escenarios hipotéticos y los compare antes de cotizar un plan formal.
+  **No reemplaza a `media_plans`** — vive en paralelo y se alimenta del
+  histórico acumulado.
+- **Scope por cliente**: requiere cliente seleccionado en el topbar. Sin
+  cliente, la página muestra empty state.
+- **Benchmarks**: `getBenchmarks` en `db/queries/simulator.ts` agrega
+  `campaign_actual_snapshots` (último valor por placement+metric_key del
+  rango) joineado con `media_plan_placements` para sacar el `cost_method`.
+  Agrupa por `(publisher × market × cost_method)` y devuelve p25/p50/p75
+  de CPM/CPC/CPV/CTR + mediana de delivery (real ÷ goal congelado al
+  cierre). Las fórmulas vienen de `CALC_METRICS` en
+  `lib/campaign-metrics.ts` — mismas que usa el resto de la app.
+- **Builder**: cada fila tiene un modo `p25 | p50 | p75 | manual`. En
+  P25/P50/P75 los rates se autocompletan desde el benchmark del mismo
+  segmento (matching exacto, fallback al publisher con más sample size).
+  En manual los rates son editables (se siembran con p50 al cambiar).
+  El cost method decide qué se deriva: CPM → impressions, CPC → clicks,
+  CPV → views. CTR infiere clicks cuando ya hay impressions. Flat / Other
+  no derivan delivery.
+- **Persistencia**: `simulator_scenarios (id, client_id, name, rows_json,
+  created_at, updated_at)`. El `rows_json` guarda el array completo de
+  filas con sus overrides — flexible para iterar sin migrations. Sin
+  audit log (es sandbox).
+- **Comparativa**: hasta 3 escenarios lado a lado con métricas agregadas
+  y blended rates (`aggregateTotals` en `components/simulator/builder-helpers.ts`).
+- **No incluye**: promoción de escenario a plan real, charts temporales,
+  drilldown a placements crudos desde Benchmarks. Se suman si los
+  planners los piden.
 
 ### Estimación de facturación
 - `getBillingEstimate` en `db/queries/dashboard.ts` prorratea linealmente
