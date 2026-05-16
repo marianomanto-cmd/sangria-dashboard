@@ -14,6 +14,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import type { ScenarioJson } from "@/lib/simulator-types";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Enums
@@ -645,6 +646,40 @@ export const campaignActualSnapshots = pgTable(
     index("idx_cas_client_date").on(t.clientId, t.snapshotDate),
     index("idx_cas_placement").on(t.placementId),
   ],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Simulator — escenarios "qué pasaría si" que arma un planner antes de
+// cotizar un plan real. No reemplazan a media_plans; viven en paralelo y
+// se alimentan del benchmark histórico (campaign_actual_snapshots) + del
+// catálogo de publishers/markets del cliente. Si un escenario se vuelve un
+// plan, se promociona por código (no hay FK).
+//
+// rowsJson guarda el array de filas del builder con sus overrides y modo
+// (p25/p50/p75/manual). Es flexible a propósito — agregar campos no
+// requiere migration.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const simulatorScenarios = pgTable(
+  "simulator_scenarios",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    rowsJson: jsonb("rows_json")
+      .$type<ScenarioJson>()
+      .notNull()
+      .default(sql`'{"rows":[]}'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_sim_scenarios_client").on(t.clientId, t.updatedAt)],
 );
 
 // ════════════════════════════════════════════════════════════════════════════
