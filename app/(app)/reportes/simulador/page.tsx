@@ -66,8 +66,9 @@ export default async function SimuladorPage({ searchParams }: Props) {
   return (
     <PageShell
       eyebrow="Simulador"
-      title={`Planning sandbox · ${client.name}`}
-      subtitle="Consultá precios reales del histórico, armá escenarios hipotéticos y compará niveles de inversión antes de cotizar un plan."
+      title={client.name}
+      subtitle="Benchmarks históricos · Builder · Comparativa"
+      compact
     >
       <SimulatorClient
         clientId={client.id}

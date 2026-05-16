@@ -2,8 +2,12 @@ import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
   campaignActualSnapshots,
+  clients,
   markets,
   mediaPlanPlacements,
+  mediaPlanPublishers,
+  mediaPlans,
+  projects,
   publishers,
   simulatorScenarios,
 } from "@/db/schema";
@@ -227,6 +231,287 @@ export function percentile(values: number[], p: number): number | null {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// ── Drilldown de un benchmark ───────────────────────────────────────────────
+//
+// Dado un (publisherId × marketId × costMethod) y los mismos filtros usados
+// en getBenchmarks, devuelve los placements crudos que componen la
+// estadística: proyecto, plan, fecha, real, goal, CPM/CPC/CPV/CTR derivados.
+
+export type BenchmarkPlacementDetail = {
+  placementId: string;
+  placementName: string;
+  projectCode: string;
+  projectName: string;
+  planName: string;
+  snapshotDate: string;
+  amountReal: number;
+  amountGoal: number | null;
+  impressions: number | null;
+  clicks: number | null;
+  views: number | null;
+  cpm: number | null;
+  cpc: number | null;
+  cpv: number | null;
+  ctr: number | null;
+};
+
+export async function getBenchmarkDetail(input: {
+  filters: BenchmarkFilters;
+  publisherId: string;
+  marketId: string | null;
+  costMethod: string | null;
+}): Promise<BenchmarkPlacementDetail[]> {
+  const { filters, publisherId, marketId, costMethod } = input;
+
+  const conds = [eq(campaignActualSnapshots.publisherId, publisherId)];
+  if (filters.clientId) {
+    conds.push(eq(campaignActualSnapshots.clientId, filters.clientId));
+  }
+  if (marketId) {
+    conds.push(eq(campaignActualSnapshots.marketId, marketId));
+  }
+  if (filters.dateFrom) {
+    conds.push(gte(campaignActualSnapshots.snapshotDate, filters.dateFrom));
+  }
+  if (filters.dateTo) {
+    conds.push(lte(campaignActualSnapshots.snapshotDate, filters.dateTo));
+  }
+
+  const rows = await db
+    .select({
+      placementId: campaignActualSnapshots.placementId,
+      placementName: mediaPlanPlacements.placementName,
+      placementCostMethod: mediaPlanPlacements.costMethod,
+      projectCode: projects.code,
+      projectName: projects.name,
+      planName: mediaPlans.name,
+      snapshotDate: campaignActualSnapshots.snapshotDate,
+      metricKey: campaignActualSnapshots.metricKey,
+      valueAccumulated: campaignActualSnapshots.valueAccumulated,
+      goalValue: campaignActualSnapshots.goalValue,
+    })
+    .from(campaignActualSnapshots)
+    .innerJoin(
+      mediaPlanPlacements,
+      eq(mediaPlanPlacements.id, campaignActualSnapshots.placementId),
+    )
+    .innerJoin(mediaPlans, eq(mediaPlans.id, campaignActualSnapshots.mediaPlanId))
+    .innerJoin(projects, eq(projects.id, campaignActualSnapshots.projectId))
+    .where(and(...conds))
+    .orderBy(
+      asc(campaignActualSnapshots.placementId),
+      desc(campaignActualSnapshots.snapshotDate),
+    );
+
+  // Agregar por placement (última snapshot de cada metric_key) y filtrar por
+  // cost_method del placement.
+  type Agg = {
+    placementId: string;
+    placementName: string;
+    projectCode: string;
+    projectName: string;
+    planName: string;
+    snapshotDate: string;
+    realByKey: Record<string, number>;
+    goalByKey: Record<string, number>;
+  };
+  const byPlacement = new Map<string, Agg>();
+  for (const r of rows) {
+    if (costMethod && r.placementCostMethod !== costMethod) continue;
+    let agg = byPlacement.get(r.placementId);
+    if (!agg) {
+      agg = {
+        placementId: r.placementId,
+        placementName: r.placementName,
+        projectCode: r.projectCode,
+        projectName: r.projectName,
+        planName: r.planName,
+        snapshotDate: r.snapshotDate,
+        realByKey: {},
+        goalByKey: {},
+      };
+      byPlacement.set(r.placementId, agg);
+    }
+    if (agg.realByKey[r.metricKey] === undefined) {
+      agg.realByKey[r.metricKey] = Number(r.valueAccumulated);
+      if (r.goalValue != null) {
+        agg.goalByKey[r.metricKey] = Number(r.goalValue);
+      }
+    }
+  }
+
+  const out: BenchmarkPlacementDetail[] = [];
+  for (const agg of byPlacement.values()) {
+    const amount = agg.realByKey.amount ?? 0;
+    const imps = agg.realByKey.impressions ?? null;
+    const clicks = agg.realByKey.clicks ?? null;
+    const views = agg.realByKey.views ?? null;
+    out.push({
+      placementId: agg.placementId,
+      placementName: agg.placementName,
+      projectCode: agg.projectCode,
+      projectName: agg.projectName,
+      planName: agg.planName,
+      snapshotDate: agg.snapshotDate,
+      amountReal: round2(amount),
+      amountGoal: agg.goalByKey.amount != null ? round2(agg.goalByKey.amount) : null,
+      impressions: imps,
+      clicks,
+      views,
+      cpm: imps && imps > 0 ? round2((amount / imps) * 1000) : null,
+      cpc: clicks && clicks > 0 ? round2(amount / clicks) : null,
+      cpv: views && views > 0 ? round4(amount / views) : null,
+      ctr: clicks != null && imps && imps > 0 ? round2((clicks / imps) * 100) : null,
+    });
+  }
+
+  // Por fecha desc — los más recientes arriba.
+  out.sort((a, b) => b.snapshotDate.localeCompare(a.snapshotDate));
+  return out;
+}
+
+function round4(n: number): number {
+  return Math.round(n * 10000) / 10000;
+}
+
+// ── Comparativa: planes reales como opción del slot de Compare ──────────────
+//
+// Devuelve los planes que pueden agregarse en el tab Comparativa: planes
+// `approved` o `ready_to_send` del cliente actual. Para cada uno computamos
+// los totales agregados (budget, impressions, clicks, views, blended rates)
+// directo desde los placements + metricsJson (los GOALS del plan).
+
+export type CompareablePlanSummary = {
+  planId: string;
+  planName: string;
+  projectCode: string;
+  projectName: string;
+  status: string;
+  budgetUsd: number;
+  impressions: number;
+  clicks: number;
+  views: number;
+  blendedCpm: number | null;
+  blendedCpc: number | null;
+  blendedCpv: number | null;
+};
+
+export async function listCompareablePlans(
+  clientId: string,
+): Promise<CompareablePlanSummary[]> {
+  const rows = await db
+    .select({
+      planId: mediaPlans.id,
+      planName: mediaPlans.name,
+      planStatus: mediaPlans.status,
+      projectCode: projects.code,
+      projectName: projects.name,
+      amountUsd: mediaPlanPlacements.amountUsd,
+      metricsJson: mediaPlanPlacements.metricsJson,
+    })
+    .from(mediaPlans)
+    .innerJoin(projects, eq(projects.id, mediaPlans.projectId))
+    .innerJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+    )
+    .innerJoin(
+      mediaPlanPlacements,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .where(
+      and(
+        eq(projects.clientId, clientId),
+        // Aceptamos tanto approved como ready_to_send: el ready ya está
+        // congelado por el MM y tiene sentido compararlo.
+        // archivados y drafts no.
+      ),
+    );
+
+  type Agg = {
+    planId: string;
+    planName: string;
+    projectCode: string;
+    projectName: string;
+    status: string;
+    budgetUsd: number;
+    impressions: number;
+    clicks: number;
+    views: number;
+  };
+  const byPlan = new Map<string, Agg>();
+  for (const r of rows) {
+    if (r.planStatus !== "approved" && r.planStatus !== "ready_to_send") continue;
+    let agg = byPlan.get(r.planId);
+    if (!agg) {
+      agg = {
+        planId: r.planId,
+        planName: r.planName,
+        projectCode: r.projectCode,
+        projectName: r.projectName,
+        status: r.planStatus,
+        budgetUsd: 0,
+        impressions: 0,
+        clicks: 0,
+        views: 0,
+      };
+      byPlan.set(r.planId, agg);
+    }
+    agg.budgetUsd += Number(r.amountUsd) || 0;
+    const m = r.metricsJson ?? {};
+    agg.impressions += Number(m.impressions) || 0;
+    agg.clicks += Number(m.clicks) || 0;
+    agg.views += Number(m.views) || 0;
+  }
+
+  return [...byPlan.values()]
+    .map((a) => ({
+      ...a,
+      budgetUsd: round2(a.budgetUsd),
+      blendedCpm: a.impressions > 0 ? round2((a.budgetUsd / a.impressions) * 1000) : null,
+      blendedCpc: a.clicks > 0 ? round2(a.budgetUsd / a.clicks) : null,
+      blendedCpv: a.views > 0 ? round4(a.budgetUsd / a.views) : null,
+    }))
+    .sort((a, b) =>
+      `${a.projectName} ${a.planName}`.localeCompare(`${b.projectName} ${b.planName}`),
+    );
+}
+
+// Lista proyectos del cliente para el dialog de "Promover escenario a plan".
+// Filtramos los archivados y reportados — no tiene sentido crear planes ahí.
+export type PromoteTargetProject = {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+};
+
+export async function listProjectsForPromotion(
+  clientId: string,
+): Promise<PromoteTargetProject[]> {
+  return db
+    .select({
+      id: projects.id,
+      code: projects.code,
+      name: projects.name,
+      status: projects.status,
+    })
+    .from(projects)
+    .innerJoin(clients, eq(clients.id, projects.clientId))
+    .where(
+      and(
+        eq(projects.clientId, clientId),
+        // No filtramos por status acá — lo hacemos en JS para mantener clara
+        // la lista de exclusiones.
+      ),
+    )
+    .then((rows) =>
+      rows
+        .filter((p) => p.status !== "reportado")
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
 }
 
 // ── Catálogos para el Builder ───────────────────────────────────────────────

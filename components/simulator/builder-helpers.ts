@@ -127,6 +127,36 @@ export const MODES: Array<{ value: ScenarioMode; label: string; hint: string }> 
   { value: "manual", label: "Manual", hint: "Overrides manuales (ignora benchmark)" },
 ];
 
+// ── Promoción a plan real ───────────────────────────────────────────────────
+//
+// Cost method de una fila → métrica direct principal que aplica.
+export function primaryMetricKeyFor(costMethod: string | null): string | null {
+  if (!costMethod) return null;
+  const cm = costMethod.replace(/^d/, "");
+  if (cm === "CPM") return "impressions";
+  if (cm === "CPC") return "clicks";
+  if (cm === "CPV") return "views";
+  if (cm === "CPA") return "conversions";
+  return null;
+}
+
+// Dado una fila + el benchmark efectivo para esa fila, devuelve el
+// metrics_json que se persiste en el placement promovido. A diferencia del
+// builder (que solo muestra estimaciones derivadas), acá necesitamos
+// persistir las direct metrics — el plan real las usa como goals.
+export function placementMetricsFromRow(
+  row: ScenarioRow,
+  bench: BenchmarkRow | null,
+): Record<string, number> {
+  const rates = effectiveRates(row, bench);
+  const est = estimateDelivery(row, rates);
+  const result: Record<string, number> = {};
+  if (est.impressions != null) result.impressions = Math.round(est.impressions);
+  if (est.clicks != null) result.clicks = Math.round(est.clicks);
+  if (est.views != null) result.views = Math.round(est.views);
+  return result;
+}
+
 export function newRow(): ScenarioRow {
   return {
     id: crypto.randomUUID(),

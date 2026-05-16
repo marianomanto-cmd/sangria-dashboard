@@ -6,6 +6,11 @@ type PageShellProps = {
   subtitle?: string;
   actions?: React.ReactNode;
   children: React.ReactNode;
+  // compact = header con eyebrow + title inline, subtitle más chico y
+  // márgenes apretados. Pensado para pantallas donde el contenido es muy
+  // alto (ej. el Simulador con escenarios grandes) y necesitamos ganar
+  // espacio vertical para la tabla principal.
+  compact?: boolean;
 };
 
 export function PageShell({
@@ -14,7 +19,33 @@ export function PageShell({
   subtitle,
   actions,
   children,
+  compact = false,
 }: PageShellProps) {
+  if (compact) {
+    return (
+      <main className="px-8 py-5 max-w-[1380px] mx-auto w-full">
+        <header className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            {eyebrow && (
+              <span className="text-[10px] font-semibold tracking-[0.15em] uppercase text-accent">
+                {eyebrow}
+              </span>
+            )}
+            <h1 className="text-lg leading-tight font-semibold tracking-tight text-ink">
+              {title}
+            </h1>
+            {subtitle && (
+              <span className="text-xs text-muted leading-snug">
+                {subtitle}
+              </span>
+            )}
+          </div>
+          {actions && <div className="flex items-center gap-2">{actions}</div>}
+        </header>
+        {children}
+      </main>
+    );
+  }
   return (
     <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
       <header className="mb-10 flex items-end justify-between gap-4 flex-wrap">

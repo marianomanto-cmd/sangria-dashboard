@@ -78,6 +78,7 @@ export function SimulatorClient({
       )}
       {tab === "compare" && (
         <CompareTab
+          clientId={clientId}
           scenarios={scenarios}
           catalogs={catalogs}
           benchmarks={initialBenchmarks}
