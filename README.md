@@ -91,7 +91,7 @@ app/
     billing-tracker/        # /billing-tracker — vista jerárquica proyecto → planes → facturas emitidas con desglose media/fee
     campaign-tracker/       # /campaign-tracker — hub con filtro vigentes/concluidos/todos + vista de carga de consumo real vs goal
       [planId]/             # vista de carga: tabla editable (autosave) + chart de progreso
-    auditoria/              # /auditoria — log con diff
+    auditoria/              # /auditoria — log legible + papelera (/auditoria/papelera)
     configuracion/
       markets/, metricas/, publishers/   # admin de catálogos
       clientes/               # alta/edición de clientes (nombre, prefijo, idioma, estado)
@@ -282,8 +282,18 @@ lib/
 
 ### Audit log
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` + `after_json`.
-- Vista en `/auditoria` con diff campo a campo, filtros por entityType y
-  action.
+- Vista en `/auditoria` renderiza cada evento como oración legible
+  ("Sistema editó el plan 'Awareness' · hoy 14:32"). Sustantivos / verbos
+  / fechas relativas viven en `lib/audit-format.ts` — agregar mapeos
+  cuando aparezcan nuevos `entity_type`. Filtros por tipo y acción.
+- **Papelera** en `/auditoria/papelera`: lista todos los items
+  eliminados (proyectos, planes, publishers, placements, fees,
+  catálogos) con su snapshot del momento. Hoy es solo consulta
+  histórica — no hay restore (los `before_json` del proyecto borrado
+  no traen los planes cascadeados). Acceso desde `/auditoria` con el
+  botón "Papelera (N)".
+- `audit_log.user_id` está en el schema pero hoy siempre es null (sin
+  auth real todavía); el actor se renderiza como "Sistema".
 
 ### Idioma operativo del cliente (i18n)
 - `clients.language` (`'en' | 'es'`, default `'en'`) define el idioma en

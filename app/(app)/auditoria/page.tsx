@@ -1,10 +1,19 @@
 import Link from "next/link";
+import { Trash2 } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
 import {
   getAuditLog,
   getAuditLogStats,
   type AuditLogRow,
 } from "@/db/queries/audit-log";
+import {
+  actionVerb,
+  actorLabel,
+  entityLabel,
+  entityNoun,
+  formatAbsoluteDateTime,
+  formatRelativeDateTime,
+} from "@/lib/audit-format";
 
 type Props = {
   searchParams: Promise<{
@@ -27,12 +36,26 @@ export default async function AuditoriaPage({ searchParams }: Props) {
     getAuditLogStats(),
   ]);
 
+  const trashCount =
+    stats.byAction.find((a) => a.action === "delete")?.count ?? 0;
+
   return (
     <PageShell
       eyebrow="Auditoría"
       title="Log de cambios"
       subtitle={`${stats.total} eventos registrados · mostrando los últimos ${rows.length}`}
     >
+      {/* Acceso a papelera */}
+      <div className="mb-4">
+        <Link
+          href="/auditoria/papelera"
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 transition-colors"
+        >
+          <Trash2 size={13} strokeWidth={2} />
+          Papelera ({trashCount})
+        </Link>
+      </div>
+
       {/* Filtros */}
       <section className="mb-4 flex flex-wrap items-center gap-2 text-xs">
         <FilterPill label="Tipo">
@@ -47,7 +70,7 @@ export default async function AuditoriaPage({ searchParams }: Props) {
               key={e.entityType}
               current={filters.entityType ?? null}
               value={e.entityType}
-              label={`${e.entityType} (${e.count})`}
+              label={`${entityNoun(e.entityType).singular} (${e.count})`}
               buildHref={(v) => buildAuditHref({ ...filters, entityType: v ?? undefined })}
             />
           ))}
@@ -65,7 +88,7 @@ export default async function AuditoriaPage({ searchParams }: Props) {
               key={a.action}
               current={filters.action ?? null}
               value={a.action}
-              label={`${a.action} (${a.count})`}
+              label={`${actionVerb(a.action)} (${a.count})`}
               buildHref={(v) => buildAuditHref({ ...filters, action: v ?? undefined })}
             />
           ))}
@@ -87,7 +110,7 @@ export default async function AuditoriaPage({ searchParams }: Props) {
           <p className="text-sm font-medium text-ink-2">Sin eventos</p>
           <p className="text-xs text-muted mt-1">
             {stats.total === 0
-              ? "El log está vacío. Editá un gasto en /proyectos/[code]?tab=gastos para generar el primer evento."
+              ? "El log está vacío. Cualquier cambio en proyectos, planes o catálogos queda registrado acá."
               : "Ningún evento matchea los filtros seleccionados."}
           </p>
         </div>
@@ -111,22 +134,37 @@ export default async function AuditoriaPage({ searchParams }: Props) {
 // ────────────────────────────────────────────────────────────────────────────
 
 function AuditEntry({ row }: { row: AuditLogRow }) {
+  const noun = entityNoun(row.entityType);
+  const verb = actionVerb(row.action);
+  const actor = actorLabel(row.userId);
+  const label = entityLabel(row.entityType, row.beforeJson, row.afterJson);
+  const relative = formatRelativeDateTime(row.createdAt);
+  const absolute = formatAbsoluteDateTime(row.createdAt);
   const diff = computeDiff(row.beforeJson, row.afterJson);
 
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2 flex-wrap">
-        <ActionBadge action={row.action} />
-        <span className="text-sm font-medium text-ink">{row.entityType}</span>
-        <span className="font-mono text-[11px] text-muted truncate max-w-[260px]">
-          {row.entityId.slice(0, 8)}…
-        </span>
-        <span className="ml-auto font-mono text-[11px] text-muted">
-          {row.createdAt.toISOString().replace("T", " ").slice(0, 19)}
+        <ActionBadge action={row.action} verb={verb} />
+        <p className="text-sm text-ink-2 leading-relaxed">
+          <span className="font-medium text-ink">{actor}</span>{" "}
+          {verb} {noun.article} <span className="text-ink-2">{noun.singular}</span>
+          {label && (
+            <>
+              {" "}
+              <span className="font-medium text-ink">&ldquo;{label}&rdquo;</span>
+            </>
+          )}
+        </p>
+        <span
+          className="ml-auto font-mono text-[11px] text-muted whitespace-nowrap"
+          title={absolute}
+        >
+          {relative}
         </span>
       </div>
       {diff.length > 0 && (
-        <ul className="ml-1 text-xs flex flex-col gap-0.5">
+        <ul className="ml-1 mt-0.5 text-xs flex flex-col gap-0.5">
           {diff.map((d) => (
             <li key={d.field} className="font-mono text-[11.5px]">
               <span className="text-muted">{d.field}:</span>{" "}
@@ -149,7 +187,7 @@ function AuditEntry({ row }: { row: AuditLogRow }) {
   );
 }
 
-function ActionBadge({ action }: { action: string }) {
+function ActionBadge({ action, verb }: { action: string; verb: string }) {
   const styles: Record<string, string> = {
     create: "bg-success-soft text-success border-success-soft",
     update: "bg-info-soft text-info border-info-soft",
@@ -160,14 +198,24 @@ function ActionBadge({ action }: { action: string }) {
     <span
       className={`inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${cls}`}
     >
-      {action}
+      {verb}
     </span>
   );
 }
 
 type FieldDiff = { field: string; before?: unknown; after?: unknown };
 
-const FIELD_BLACKLIST = new Set(["id", "recordedAt", "createdAt", "updatedAt"]);
+const FIELD_BLACKLIST = new Set([
+  "id",
+  "recordedAt",
+  "createdAt",
+  "updatedAt",
+  "duplicatedFromPlanId",
+  "duplicatedFrom",
+  "placementsCopied",
+  "publishersCopied",
+  "feesCopied",
+]);
 
 function computeDiff(
   before: unknown,

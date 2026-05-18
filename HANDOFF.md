@@ -2,6 +2,48 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 18/may/2026 (pm-2) — Duplicar plan + auditoría legible + papelera
+
+- **Duplicar plan al crear**: el form de `+ Nuevo plan`
+  (`/proyectos/[code]/planes/nuevo`) ahora arranca con dos tabs:
+  "Plan vacío" (comportamiento original) y "Duplicar plan existente".
+  El dropdown de duplicar lista TODOS los planes del cliente del
+  proyecto destino — cualquier proyecto, cualquier status — formateado
+  como: `<plan> · <proyecto> (mercados) (publishers) · $total [status]`,
+  para que el planner sepa qué tiene cada plan antes de elegir. Al
+  seleccionar uno se renderiza un resumen abajo con período, total y
+  un botón "usar 'X (copia)'" como sugerencia de nombre. La server
+  action `duplicatePlan({ sourcePlanId, targetProjectId, newName })`
+  clona el plan + publishers + placements + fees en estado `draft` con
+  v0 y sin snapshots. Bloquea cruzar clientes (publishers / markets /
+  metrics son per-cliente). Audit_log queda con
+  `duplicatedFromPlanId` para trazabilidad.
+- **Audit log legible**: cada evento se renderiza ahora como oración
+  ("Sistema editó el plan 'Awareness' · hace 5 minutos") en vez del
+  rectángulo opaco `media_plan · 7a3b1c…`. El verbo y el sustantivo
+  se traducen al español a partir de `entityType + action` (helpers
+  en `lib/audit-format.ts`); el nombre del item se extrae del
+  before/afterJson según el tipo (`placement_name` para placements,
+  `name` para plan/cliente/etc.). El timestamp pasa a relativo
+  ("hoy 14:32" / "ayer 09:15" / "hace 3 minutos" / "12/may 14:32"),
+  con tooltip que muestra absoluto. El actor sigue siendo "Sistema"
+  como placeholder hasta que tengamos auth real (el campo
+  `audit_log.user_id` está pero hoy siempre es null).
+- **Papelera** (`/auditoria/papelera`): nueva vista que lista todos
+  los items eliminados (proyectos, planes, publishers, placements,
+  fees, catálogos) leídos del `audit_log` con `action='delete'`,
+  ordenados desc. Tabla con tipo, nombre (extraído del beforeJson),
+  quién lo borró, cuándo (relativo + tooltip absoluto) y un detalle
+  por tipo (presupuesto del proyecto, monto del placement, etc.).
+  Filtros por tipo de entidad. **No tiene botón de restaurar por
+  ahora** — es consulta histórica. Para restaurar hace falta cambiar
+  los deletes para que guarden snapshots con cascada en el
+  beforeJson (cuando borrás un proyecto se cascadea a planes y los
+  audit_log de los planes no existen). Se llega desde
+  `/auditoria` con el botón "Papelera (N)".
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código.
+
 ### Cambios de la sesión 18/may/2026 (pm) — Campaign Tracker: histórico de planes + fix label pace
 
 - **Planes concluidos accesibles en el hub**: el `/campaign-tracker`
@@ -935,6 +977,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el flow closed → reportado | `app/actions/reports.ts` `markReportDelivered` (delivered_at + project.status='reportado' + audit log). |
 | Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
+| Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
+| Cambiar el render del log de auditoría / papelera | `app/(app)/auditoria/page.tsx` (log), `app/(app)/auditoria/papelera/page.tsx` (papelera). Sustantivos / verbos / labels de timestamp en `lib/audit-format.ts` — agregar nuevos entityType acá. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
 | Configurar conexión DB                 | `db/index.ts`                                             |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |

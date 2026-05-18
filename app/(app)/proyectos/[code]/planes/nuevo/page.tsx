@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { projects } from "@/db/schema";
+import { listSourcePlansForClient } from "@/app/actions/plans";
 import { NewPlanForm } from "./form";
 
 type Props = { params: Promise<{ code: string }> };
@@ -14,12 +15,17 @@ export default async function NuevoPlanPage({ params }: Props) {
       id: projects.id,
       code: projects.code,
       name: projects.name,
+      clientId: projects.clientId,
     })
     .from(projects)
     .where(eq(projects.code, code))
     .limit(1);
 
   if (!project) notFound();
+
+  // Lookup para "duplicar plan": todos los planes del cliente (cualquier
+  // status, cualquier proyecto del cliente) con sus mercados/publishers/total.
+  const sourcePlans = await listSourcePlansForClient(project.clientId);
 
   return (
     <main className="px-8 py-10 max-w-[800px] mx-auto w-full">
@@ -46,7 +52,11 @@ export default async function NuevoPlanPage({ params }: Props) {
         <p className="text-sm text-muted mt-1 font-mono">{project.code}</p>
       </header>
 
-      <NewPlanForm projectId={project.id} projectCode={project.code} />
+      <NewPlanForm
+        projectId={project.id}
+        projectCode={project.code}
+        sourcePlans={sourcePlans}
+      />
     </main>
   );
 }
