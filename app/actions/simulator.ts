@@ -3,8 +3,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { recordAudit } from "@/lib/audit";
 import {
-  auditLog,
   mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
@@ -278,7 +278,7 @@ export async function promoteScenarioToPlan(input: {
     .values({ projectId: input.projectId, name, status: "draft" })
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan",
     entityId: plan.id,
     action: "create",
@@ -299,7 +299,7 @@ export async function promoteScenarioToPlan(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "media_plan_publisher",
       entityId: mpp.id,
       action: "create",

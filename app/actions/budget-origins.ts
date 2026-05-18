@@ -3,7 +3,8 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { auditLog, budgetOrigins, projects } from "@/db/schema";
+import { budgetOrigins, projects } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -34,7 +35,7 @@ export async function createBudgetOrigin(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "budget_origin",
       entityId: bo.id,
       action: "create",
@@ -74,7 +75,7 @@ export async function updateBudgetOrigin(input: {
     .where(eq(budgetOrigins.id, input.id))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "budget_origin",
     entityId: input.id,
     action: "update",
@@ -114,7 +115,7 @@ export async function deleteBudgetOrigin(input: {
 
   await db.delete(budgetOrigins).where(eq(budgetOrigins.id, input.id));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "budget_origin",
     entityId: input.id,
     action: "delete",

@@ -3,8 +3,8 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { recordAudit } from "@/lib/audit";
 import {
-  auditLog,
   clientPublishers,
   markets,
   mediaPlanFees,
@@ -60,7 +60,7 @@ export async function createPlan(input: {
     })
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan",
     entityId: plan.id,
     action: "create",
@@ -218,7 +218,7 @@ export async function duplicatePlan(input: {
     );
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan",
     entityId: newPlan.id,
     action: "create",
@@ -264,7 +264,7 @@ export async function updatePlanMetadata(input: {
     .where(eq(mediaPlans.id, input.planId))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan",
     entityId: input.planId,
     action: "update",
@@ -327,7 +327,7 @@ export async function transitionPlanStatus(input: {
       .where(eq(mediaPlans.id, input.planId));
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan",
     entityId: input.planId,
     action: "update",
@@ -415,7 +415,7 @@ export async function addPublisherToPlan(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "media_plan_publisher",
       entityId: mpp.id,
       action: "create",
@@ -457,7 +457,7 @@ export async function updatePlanPublisher(input: {
     .where(eq(mediaPlanPublishers.id, input.mppId))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_publisher",
     entityId: input.mppId,
     action: "update",
@@ -538,7 +538,7 @@ export async function duplicatePlanPublisher(
     );
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_publisher",
     entityId: dup.id,
     action: "create",
@@ -560,7 +560,7 @@ export async function removePublisherFromPlan(
 
   await db.delete(mediaPlanPublishers).where(eq(mediaPlanPublishers.id, mppId));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_publisher",
     entityId: mppId,
     action: "delete",
@@ -603,7 +603,7 @@ export async function addPlacement(input: {
     })
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_placement",
     entityId: pl.id,
     action: "create",
@@ -666,7 +666,7 @@ export async function updatePlacement(input: {
     .where(eq(mediaPlanPlacements.id, input.placementId))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_placement",
     entityId: input.placementId,
     action: "update",
@@ -716,7 +716,7 @@ export async function duplicatePlacement(
     })
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_placement",
     entityId: dup.id,
     action: "create",
@@ -736,7 +736,7 @@ export async function removePlacement(placementId: string): Promise<Result> {
 
   await db.delete(mediaPlanPlacements).where(eq(mediaPlanPlacements.id, placementId));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_placement",
     entityId: placementId,
     action: "delete",
@@ -794,7 +794,7 @@ export async function addFee(input: {
     })
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_fee",
     entityId: f.id,
     action: "create",
@@ -845,7 +845,7 @@ export async function updateFee(input: {
     .where(eq(mediaPlanFees.id, input.feeId))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_fee",
     entityId: input.feeId,
     action: "update",
@@ -866,7 +866,7 @@ export async function removeFee(feeId: string): Promise<Result> {
 
   await db.delete(mediaPlanFees).where(eq(mediaPlanFees.id, feeId));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "media_plan_fee",
     entityId: feeId,
     action: "delete",

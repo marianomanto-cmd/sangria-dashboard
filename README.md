@@ -78,7 +78,11 @@ producción real conviene migrar a `db:generate` + `db:migrate`.
 
 ```
 app/
-  (app)/                    # layout principal (Sidebar + Topbar)
+  login/                    # /login — botón "Continuar con Google" (público)
+  auth/
+    callback/route.ts       # OAuth callback: exchange + valida @sangria.agency
+    signout/route.ts        # POST → cierra sesión
+  (app)/                    # layout principal (Sidebar + Topbar) — todo requiere login
     layout.tsx              # force-dynamic → ninguna page se prerenderea
     page.tsx                # Dashboard
     clientes/               # /clientes y /clientes/[slug]
@@ -129,6 +133,14 @@ lib/
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
   cost-methods.ts           # mapping cost method → métrica principal
   campaign-metrics.ts       # Campaign Tracker: métricas calculadas + pace + buildMetricRows
+  audit.ts                  # recordAudit() — wrapper para insertar en audit_log con autor
+  audit-format.ts           # entityNoun / actionVerb / entityLabel / actorLabel / formatRelativeDateTime
+  auth.ts                   # getCurrentUser() (server-side)
+  supabase/
+    server.ts               # cliente Supabase para Server Components / route handlers
+    client.ts               # cliente Supabase para Client Components
+    middleware.ts           # updateSession() — usado por proxy.ts (route protection)
+proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
 ```
 
 ---
@@ -281,19 +293,45 @@ lib/
   para detectar planes modificados después de facturar.
 
 ### Audit log
-- `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` + `after_json`.
+- `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` +
+  `after_json` + `user_id` + `user_email` (denormalizado para no
+  joinear `auth.users` en cada render).
+- Las server actions usan `await recordAudit({...})` de `lib/audit.ts`
+  — el wrapper hace `getCurrentUser()` y enriquece la row con el
+  autor. NO insertar directo con `db.insert(auditLog)` desde server
+  actions: queda como "Sistema".
 - Vista en `/auditoria` renderiza cada evento como oración legible
-  ("Sistema editó el plan 'Awareness' · hoy 14:32"). Sustantivos / verbos
-  / fechas relativas viven en `lib/audit-format.ts` — agregar mapeos
-  cuando aparezcan nuevos `entity_type`. Filtros por tipo y acción.
+  ("Mariano Manto editó el plan 'Awareness' · hoy 14:32"). Sustantivos
+  / verbos / fechas relativas viven en `lib/audit-format.ts` — agregar
+  mapeos cuando aparezcan nuevos `entity_type`. Filtros por tipo y
+  acción.
 - **Papelera** en `/auditoria/papelera`: lista todos los items
   eliminados (proyectos, planes, publishers, placements, fees,
   catálogos) con su snapshot del momento. Hoy es solo consulta
   histórica — no hay restore (los `before_json` del proyecto borrado
   no traen los planes cascadeados). Acceso desde `/auditoria` con el
   botón "Papelera (N)".
-- `audit_log.user_id` está en el schema pero hoy siempre es null (sin
-  auth real todavía); el actor se renderiza como "Sistema".
+
+### Auth (Google OAuth, sangria.agency-only)
+- Toda la app está detrás de un `proxy.ts` (Next.js 16 reemplaza
+  `middleware.ts`) que valida la sesión via Supabase Auth en cada
+  request. Sin sesión → redirect a `/login` con `?next=` preservado.
+  Rutas públicas: `/login`, `/auth/callback`, `/auth/signout`.
+- **Provider**: Google. El botón en `/login` invoca
+  `supabase.auth.signInWithOAuth({ provider: "google", options: {
+  queryParams: { hd: "sangria.agency", prompt: "select_account" } } })`
+  para que Google preseleccione la cuenta de agencia.
+- **Bloqueo por dominio** en dos lugares (defensa en profundidad):
+  - `app/auth/callback/route.ts` valida `user.email.endsWith
+    ("@sangria.agency")` después del exchange; si no, `signOut()` y
+    redirige a `/login?error=domain`.
+  - `lib/supabase/middleware.ts` también lo revalida en cada request
+    por si la sesión vino con otra cuenta.
+- **Topbar**: muestra avatar de Google (`user_metadata.avatar_url` /
+  `picture`) o iniciales, con menú "Cerrar sesión" que hace POST a
+  `/auth/signout`.
+- **Setup de prod** (no automático): ver `.env.example` para los
+  pasos en Supabase dashboard y Google Cloud Console.
 
 ### Idioma operativo del cliente (i18n)
 - `clients.language` (`'en' | 'es'`, default `'en'`) define el idioma en

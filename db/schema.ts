@@ -700,7 +700,12 @@ export const auditLog = pgTable(
     action: text("action").notNull(),
     beforeJson: jsonb("before_json"),
     afterJson: jsonb("after_json"),
+    // Supabase auth user id (auth.users.id). Nullable: rows previas al
+    // wire-up de auth quedan en null y se renderizan como "Sistema".
     userId: uuid("user_id"),
+    // Denormalizado para no joinear a auth.users en cada render. Se setea
+    // al insertar desde `recordAudit()` en `lib/audit.ts`.
+    userEmail: text("user_email"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

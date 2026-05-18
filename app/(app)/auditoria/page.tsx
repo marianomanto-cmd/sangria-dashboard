@@ -136,7 +136,7 @@ export default async function AuditoriaPage({ searchParams }: Props) {
 function AuditEntry({ row }: { row: AuditLogRow }) {
   const noun = entityNoun(row.entityType);
   const verb = actionVerb(row.action);
-  const actor = actorLabel(row.userId);
+  const actor = actorLabel(row.userEmail, row.userId);
   const label = entityLabel(row.entityType, row.beforeJson, row.afterJson);
   const relative = formatRelativeDateTime(row.createdAt);
   const absolute = formatAbsoluteDateTime(row.createdAt);

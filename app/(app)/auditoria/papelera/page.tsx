@@ -138,7 +138,7 @@ export default async function PapeleraPage({ searchParams }: Props) {
                   row.beforeJson,
                   row.afterJson,
                 );
-                const actor = actorLabel(row.userId);
+                const actor = actorLabel(row.userEmail, row.userId);
                 const relative = formatRelativeDateTime(row.createdAt);
                 const absolute = formatAbsoluteDateTime(row.createdAt);
                 const detail = extractDetail(row.entityType, row.beforeJson);

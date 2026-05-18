@@ -3,7 +3,8 @@
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { auditLog, markets } from "@/db/schema";
+import { markets } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -53,7 +54,7 @@ export async function createMarket(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "market",
       entityId: m.id,
       action: "create",
@@ -98,7 +99,7 @@ export async function updateMarket(input: {
     .where(eq(markets.id, input.id))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "market",
     entityId: input.id,
     action: "update",
@@ -124,7 +125,7 @@ export async function deleteMarket(input: {
   // El FK en placements tiene onDelete: "set null", así que se permite.
   await db.delete(markets).where(eq(markets.id, input.id));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "market",
     entityId: input.id,
     action: "delete",
