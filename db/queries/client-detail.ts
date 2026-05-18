@@ -30,7 +30,6 @@ export type ClientDetailProject = {
   spentUsd: number;
   consumptionPct: number;
   planCount: number;
-  monthlySpend: number[];
 };
 
 export type ClientDetail = {
@@ -38,7 +37,6 @@ export type ClientDetail = {
   origins: (typeof budgetOrigins.$inferSelect)[];
   selectedOriginId: string | null;
   projects: ClientDetailProject[];
-  monthLabels: string[];
   kpis: ClientDetailKpis;
 };
 
@@ -117,39 +115,9 @@ export async function getClientDetail(
     projectEndDates.map((r) => [r.projectId, r.endDate]),
   );
 
-  const monthly = await db
-    .select({
-      projectId: projects.id,
-      month: planBillings.month,
-      total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
-    })
-    .from(projects)
-    .innerJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
-    .innerJoin(planBillings, eq(planBillings.mediaPlanId, mediaPlans.id))
-    .innerJoin(
-      planBillingPublishers,
-      eq(planBillingPublishers.planBillingId, planBillings.id),
-    )
-    .where(filterClause)
-    .groupBy(projects.id, planBillings.month);
-
-  const monthLabels = Array.from(new Set(monthly.map((r) => r.month))).sort();
-
-  const byProject = new Map<string, Map<string, number>>();
-  for (const r of monthly) {
-    let m = byProject.get(r.projectId);
-    if (!m) {
-      m = new Map();
-      byProject.set(r.projectId, m);
-    }
-    m.set(r.month, Number.parseFloat(r.total));
-  }
-
   const projectsRows: ClientDetailProject[] = totals.map((t) => {
     const total = Number.parseFloat(t.totalBudgetUsd ?? "0");
     const spent = Number.parseFloat(t.spentUsd);
-    const monthMap = byProject.get(t.id);
-    const monthlySpend = monthLabels.map((m) => monthMap?.get(m) ?? 0);
     return {
       id: t.id,
       code: t.code,
@@ -161,7 +129,6 @@ export async function getClientDetail(
       spentUsd: spent,
       consumptionPct: total > 0 ? (spent / total) * 100 : 0,
       planCount: t.planCount,
-      monthlySpend,
     };
   });
 
@@ -180,7 +147,6 @@ export async function getClientDetail(
     origins,
     selectedOriginId,
     projects: projectsRows,
-    monthLabels,
     kpis: {
       totalProjects,
       activeProjects,

@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Sparkline } from "@/components/sparkline";
 import { StatusBadge } from "@/components/status-badge";
 import { getClientDetail } from "@/db/queries/client-detail";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
@@ -175,9 +174,6 @@ function ResumenTab({
                 <th className="text-right font-medium px-5 py-2.5">
                   {lang === "es" ? "Gastado" : "Spent"}
                 </th>
-                <th className="text-left font-medium px-5 py-2.5 w-[140px]">
-                  Spark
-                </th>
                 <th className="text-left font-medium px-5 py-2.5 w-[180px]">
                   {lang === "es" ? "Avance" : "Progress"}
                 </th>
@@ -215,9 +211,6 @@ function ResumenTab({
                     </td>
                     <td className="px-5 py-3 text-right font-mono text-ink-2">
                       {p.spentUsd > 0 ? formatUsd(p.spentUsd) : "—"}
-                    </td>
-                    <td className="px-5 py-3">
-                      <Sparkline values={p.monthlySpend} />
                     </td>
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
