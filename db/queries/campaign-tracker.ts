@@ -27,13 +27,22 @@ import {
 // ════════════════════════════════════════════════════════════════════════════
 // Campaign Tracker — queries.
 //
-// "Plan vigente" = status 'approved' Y la fecha de hoy cae dentro del período
-// derivado del plan (min/max de fechas de placements). Los clientes
-// archivados se excluyen siempre. El scope respeta el filtro global ?client=.
+// Cada plan approved con período definido tiene un estado de tracking:
+//   - 'vigente':   start <= hoy <= end         (necesita carga diaria)
+//   - 'concluido': hoy > end                   (plan cerrado, queda histórico)
+//   - 'futuro':    hoy < start                 (todavía no arrancó; excluido)
+//
+// El hub muestra por default sólo los vigentes, pero el filtro permite ver
+// concluidos también — la data del editor (placements + actuals + snapshots)
+// queda disponible para consulta histórica. Los clientes archivados se
+// excluyen siempre y el scope respeta el filtro global ?client=.
 //
 // Los goals salen del plan (amount_usd + metrics_json de cada placement); los
 // valores reales salen de campaign_placement_actuals.
 // ════════════════════════════════════════════════════════════════════════════
+
+export type CampaignHubFilter = "vigente" | "concluido" | "todos";
+export type CampaignHubPlanStatus = "vigente" | "concluido";
 
 const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 
@@ -60,6 +69,7 @@ export type CampaignHubPlan = {
   paceStatus: PaceStatus;
   lastUpdateAt: Date | null;
   isStale: boolean;
+  status: CampaignHubPlanStatus;
   lag: number; // pacePct - progressPct (rezago); usado para ordenar
 };
 
@@ -73,6 +83,7 @@ export type CampaignHubClient = {
 
 export type CampaignHubResult = {
   clients: CampaignHubClient[];
+  filter: CampaignHubFilter;
   totals: {
     plansCount: number;
     clientsCount: number;
@@ -81,10 +92,17 @@ export type CampaignHubResult = {
     staleCount: number;
     offPaceCount: number;
   };
+  // Conteo total por estado (sin importar el filtro aplicado), para los
+  // chips de filtro del hub.
+  statusCounts: {
+    vigente: number;
+    concluido: number;
+  };
 };
 
 export async function getCampaignTrackerHub(
   clientId?: string | null,
+  filter: CampaignHubFilter = "vigente",
 ): Promise<CampaignHubResult> {
   const today = new Date();
 
@@ -127,21 +145,34 @@ export async function getCampaignTrackerHub(
     .where(and(...conds))
     .groupBy(mediaPlans.id, projects.id, clients.id, budgetOrigins.id);
 
-  // Solo planes con período definido que incluye hoy.
+  // Clasificamos cada plan en vigente / concluido / futuro. Excluimos los
+  // futuros y los que no tienen período definido (placements sin fechas).
   const todayMs = today.getTime();
-  const vigentes = planRows.filter((r) => {
-    if (!r.periodStart || !r.periodEnd) return false;
+  const classified = planRows.flatMap((r) => {
+    if (!r.periodStart || !r.periodEnd) return [];
     const start = parseLocalDate(r.periodStart);
     const end = parseLocalDate(r.periodEnd);
-    if (!start || !end) return false;
-    // El fin del período cuenta el día completo.
+    if (!start || !end) return [];
     const endOfDay = end.getTime() + 24 * 60 * 60 * 1000 - 1;
-    return todayMs >= start.getTime() && todayMs <= endOfDay;
+    if (todayMs < start.getTime()) return []; // futuro: fuera del hub
+    const status: CampaignHubPlanStatus = todayMs > endOfDay ? "concluido" : "vigente";
+    return [{ row: r, status }];
   });
 
-  if (vigentes.length === 0) {
+  const statusCounts = {
+    vigente: classified.filter((c) => c.status === "vigente").length,
+    concluido: classified.filter((c) => c.status === "concluido").length,
+  };
+
+  const filtered =
+    filter === "todos"
+      ? classified
+      : classified.filter((c) => c.status === filter);
+
+  if (filtered.length === 0) {
     return {
       clients: [],
+      filter,
       totals: {
         plansCount: 0,
         clientsCount: 0,
@@ -150,10 +181,11 @@ export async function getCampaignTrackerHub(
         staleCount: 0,
         offPaceCount: 0,
       },
+      statusCounts,
     };
   }
 
-  const planIds = vigentes.map((r) => r.planId);
+  const planIds = filtered.map((c) => c.row.planId);
 
   // Inversión real acumulada (metric_key='amount') + última edición de
   // cualquier métrica, por plan.
@@ -191,7 +223,7 @@ export async function getCampaignTrackerHub(
   let staleCount = 0;
   let offPaceCount = 0;
 
-  for (const r of vigentes) {
+  for (const { row: r, status } of filtered) {
     const goalInvestmentUsd = Number.parseFloat(r.goalInvestmentUsd);
     const actuals = actualByPlan.get(r.planId);
     const actualInvestmentUsd = actuals?.actualInvestment ?? 0;
@@ -202,9 +234,11 @@ export async function getCampaignTrackerHub(
         : 0;
     const pacePct = computePacePct(r.periodStart, r.periodEnd, today);
     const paceStatus = computePaceStatus(progressPct, pacePct);
+    // Para concluidos no aplica el aviso de "sin update": el plan ya terminó.
     const isStale =
-      lastUpdateAt == null ||
-      todayMs - lastUpdateAt.getTime() >= STALE_THRESHOLD_MS;
+      status === "vigente" &&
+      (lastUpdateAt == null ||
+        todayMs - lastUpdateAt.getTime() >= STALE_THRESHOLD_MS);
 
     goalSum += goalInvestmentUsd;
     actualSum += actualInvestmentUsd;
@@ -230,6 +264,7 @@ export async function getCampaignTrackerHub(
       paceStatus,
       lastUpdateAt,
       isStale,
+      status,
       lag: pacePct - progressPct,
     };
 
@@ -248,7 +283,9 @@ export async function getCampaignTrackerHub(
     group.worstLag = Math.max(group.worstLag, plan.lag);
   }
 
-  // Más rezagado primero: dentro de cada cliente y entre clientes.
+  // Más rezagado primero: dentro de cada cliente y entre clientes. Para
+  // concluidos, "lag" deja de ser accionable pero igual da un orden
+  // determinístico (los más cortos vs goal primero).
   const clientGroups = Array.from(byClient.values());
   for (const g of clientGroups) {
     g.plans.sort((a, b) => b.lag - a.lag);
@@ -257,14 +294,16 @@ export async function getCampaignTrackerHub(
 
   return {
     clients: clientGroups,
+    filter,
     totals: {
-      plansCount: vigentes.length,
+      plansCount: filtered.length,
       clientsCount: clientGroups.length,
       goalInvestmentUsd: goalSum,
       actualInvestmentUsd: actualSum,
       staleCount,
       offPaceCount,
     },
+    statusCounts,
   };
 }
 

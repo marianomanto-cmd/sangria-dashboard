@@ -2,6 +2,34 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 18/may/2026 (pm) — Campaign Tracker: histórico de planes + fix label pace
+
+- **Planes concluidos accesibles en el hub**: el `/campaign-tracker`
+  agregó un filtro de estado (Vigentes / Concluidos / Todos). Antes
+  desaparecían en cuanto el período del plan terminaba; ahora quedan
+  en "Concluidos" con toda su data (placements, actuals, snapshots)
+  para consulta histórica de "real vs planeado". Default sigue siendo
+  Vigentes (el caso accionable). Para concluidos: badge "concluido"
+  al lado del nombre, sin warning de stale (la carga ya no aplica),
+  y los KPIs se rellabelean ("Cumplimiento promedio", "Cerraron
+  off-pace", etc.). El detalle del plan (`/campaign-tracker/[planId]`)
+  detecta también si el período terminó y muestra "concluido" en
+  vez de "vigente" en el badge del header — el editor sigue
+  funcionando porque sirve también para cargar datos atrasados.
+- **Query change**: `getCampaignTrackerHub(clientId, filter)` ahora
+  recibe el filtro y devuelve además `statusCounts` para los chips
+  + `status` por plan ('vigente' | 'concluido'). Los "futuros"
+  (start > hoy) siguen excluidos.
+- **Fix UI**: el label "pace XX%" del gráfico de progreso del
+  detalle se cortaba al medio cuando el pace caía cerca de los
+  bordes (e.g., 95% rebasaba el chart por la derecha). Ahora la
+  posición se elige según el valor (`insideTopRight` cuando >85,
+  `insideTopLeft` cuando <15, `top` en el medio) y subimos el
+  `margin.top` del chart a 28 para dar aire vertical. Ver
+  `app/(app)/campaign-tracker/[planId]/tracker-chart.tsx`.
+
+**Acciones requeridas en prod**: ninguna. Solo cambios de código.
+
 ### Cambios de la sesión 18/may/2026 — Duplicar publishers y placements
 
 - **Duplicar placement** en el editor del plan: nuevo botón ⧉ (Copy) al lado

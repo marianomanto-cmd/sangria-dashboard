@@ -45,12 +45,19 @@ export function TrackerChart({
     );
   }
 
+  // El label "pace XX%" se centra horizontalmente sobre la línea vertical;
+  // cerca de los bordes (0% o 110%) se cortaba al medio. Para evitarlo,
+  // anclamos a la izquierda cuando la línea está sobre la derecha del
+  // chart y viceversa. En el medio mantenemos el centrado de siempre.
+  const labelPosition: "top" | "insideTopRight" | "insideTopLeft" =
+    pacePct > 85 ? "insideTopRight" : pacePct < 15 ? "insideTopLeft" : "top";
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart
         data={rows}
         layout="vertical"
-        margin={{ top: 8, right: 16, left: 8, bottom: 8 }}
+        margin={{ top: 28, right: 24, left: 8, bottom: 8 }}
         barCategoryGap="28%"
       >
         <CartesianGrid stroke="#e7e5e4" strokeDasharray="3 3" horizontal={false} />
@@ -99,9 +106,10 @@ export function TrackerChart({
           strokeWidth={1.5}
           label={{
             value: `pace ${pacePct.toFixed(0)}%`,
-            position: "top",
+            position: labelPosition,
             fill: "#7a1f3d",
             fontSize: 10,
+            offset: 6,
           }}
         />
         <ReferenceLine x={100} stroke="#78716c" strokeDasharray="4 3" />

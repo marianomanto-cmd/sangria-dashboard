@@ -48,6 +48,11 @@ export default async function CampaignTrackerPlanPage({
       ? (data.actualInvestmentUsd / data.goalInvestmentUsd) * 100
       : 0;
   const deltaVsPace = progressPct - data.pacePct;
+  // Si el período del plan ya terminó, mostramos "concluido" en vez de
+  // "vigente". El editor sigue funcionando — la trafficker puede cargar
+  // datos atrasados o consultar el histórico.
+  const isConcluido =
+    !!end && nowMs > end.getTime() + 24 * 60 * 60 * 1000 - 1;
 
   return (
     <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
@@ -79,11 +84,17 @@ export default async function CampaignTrackerPlanPage({
               <h1 className="text-2xl font-semibold tracking-tight">
                 {data.plan.name}
               </h1>
-              <span className="inline-flex items-center rounded-sm border border-accent-soft bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
+              <span
+                className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-medium ${
+                  isConcluido
+                    ? "border-line bg-paper-2 text-muted"
+                    : "border-accent-soft bg-accent-soft text-accent"
+                }`}
+              >
                 {data.plan.currentVersion > 0
                   ? `Plan v${data.plan.currentVersion}`
                   : "Plan"}{" "}
-                · vigente
+                · {isConcluido ? "concluido" : "vigente"}
               </span>
               <span className="inline-flex items-center rounded-sm border border-line bg-paper-2 px-2 py-0.5 text-[11px] font-medium text-muted">
                 {data.budgetOriginName} · {data.client.name}
