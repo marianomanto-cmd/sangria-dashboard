@@ -3,8 +3,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { recordAudit } from "@/lib/audit";
 import {
-  auditLog,
   campaignActualSnapshots,
   campaignPlacementActuals,
   clients,
@@ -80,7 +80,7 @@ export async function setPlacementActual(input: {
       .set({ valueActual: valueStr, updatedAt: new Date() })
       .where(eq(campaignPlacementActuals.id, existing.id))
       .returning();
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "campaign_placement_actual",
       entityId: existing.id,
       action: "update",
@@ -96,7 +96,7 @@ export async function setPlacementActual(input: {
         valueActual: valueStr,
       })
       .returning();
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "campaign_placement_actual",
       entityId: created.id,
       action: "create",
@@ -214,7 +214,7 @@ export async function closeDailyLoad(input: {
       },
     });
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "campaign_daily_close",
     entityId: input.planId,
     action: "create",

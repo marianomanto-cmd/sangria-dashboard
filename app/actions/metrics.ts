@@ -1,9 +1,10 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { auditLog, metricsCatalog } from "@/db/schema";
+import { metricsCatalog } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -62,7 +63,7 @@ export async function createMetric(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "metric",
       entityId: m.id,
       action: "create",
@@ -111,7 +112,7 @@ export async function updateMetric(input: {
     .where(eq(metricsCatalog.id, input.id))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "metric",
     entityId: input.id,
     action: "update",
@@ -136,7 +137,7 @@ export async function deleteMetric(input: {
 
   await db.delete(metricsCatalog).where(eq(metricsCatalog.id, input.id));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "metric",
     entityId: input.id,
     action: "delete",

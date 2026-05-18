@@ -3,7 +3,8 @@
 import { and, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { auditLog, clientPublishers, publishers } from "@/db/schema";
+import { clientPublishers, publishers } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -45,7 +46,7 @@ export async function createPublisher(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "publisher",
       entityId: pub.id,
       action: "create",
@@ -89,7 +90,7 @@ export async function updatePublisher(input: {
     .where(eq(publishers.id, input.id))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "publisher",
     entityId: input.id,
     action: "update",
@@ -112,7 +113,7 @@ export async function deletePublisher(id: string): Promise<Result> {
   // No borramos publishers usados en planes; los disable.
   try {
     await db.delete(publishers).where(eq(publishers.id, id));
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "publisher",
       entityId: id,
       action: "delete",
@@ -202,7 +203,7 @@ export async function upsertClientPublisher(input: {
       });
     }
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "client_publisher",
       entityId: input.publisherId,
       action: existing ? "update" : "create",

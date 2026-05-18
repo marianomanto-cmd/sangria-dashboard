@@ -155,10 +155,24 @@ export function formatAbsoluteDateTime(date: Date): string {
   return `${day}/${mon}/${year} ${hh}:${mm}:${ss}`;
 }
 
-// Quién hizo la acción. Mientras no haya auth real, todo lo registra el
-// "Sistema" (los inserts del backend). Cuando agreguemos login este helper
-// va a recibir el rowi.userId y devolverá el nombre del usuario.
-export function actorLabel(userId: string | null): string {
-  if (userId) return userId.slice(0, 8) + "…";
+// Quién hizo la acción. Si tenemos el email (denormalizado en audit_log.
+// userEmail desde el wire-up de auth), lo formateamos como "Nombre Apellido"
+// derivado del local-part. Si no hay email pero hay userId quiere decir que
+// la auth funcionó pero el email no se grabó (raro) — mostramos "usuario
+// abc12345". Si no hay nada quiere decir que la row es vieja o vino de un
+// script — "Sistema".
+export function actorLabel(
+  userEmail: string | null,
+  userId: string | null = null,
+): string {
+  if (userEmail) {
+    const local = userEmail.split("@")[0] ?? userEmail;
+    return local
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((s) => s[0].toUpperCase() + s.slice(1))
+      .join(" ") || userEmail;
+  }
+  if (userId) return `usuario ${userId.slice(0, 8)}`;
   return "Sistema";
 }

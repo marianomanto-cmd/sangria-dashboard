@@ -3,8 +3,8 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { recordAudit } from "@/lib/audit";
 import {
-  auditLog,
   budgetOrigins,
   clients,
   projects,
@@ -86,7 +86,7 @@ export async function createProject(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "project",
       entityId: proj.id,
       action: "create",
@@ -162,7 +162,7 @@ export async function updateProject(input: {
     .where(eq(projects.id, input.projectId))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "project",
     entityId: input.projectId,
     action: "update",
@@ -189,7 +189,7 @@ export async function deleteProject(input: {
 
   await db.delete(projects).where(eq(projects.id, input.projectId));
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "project",
     entityId: input.projectId,
     action: "delete",

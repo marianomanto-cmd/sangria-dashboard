@@ -3,7 +3,8 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { auditLog, clients } from "@/db/schema";
+import { clients } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
 import type { Language } from "@/lib/i18n";
 
 type Result<T = void> =
@@ -49,7 +50,7 @@ export async function createClient(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "client",
       entityId: row.id,
       action: "create",
@@ -101,7 +102,7 @@ export async function updateClient(input: {
     .where(eq(clients.id, input.id))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "client",
     entityId: input.id,
     action: "update",

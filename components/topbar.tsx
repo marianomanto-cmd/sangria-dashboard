@@ -2,10 +2,14 @@ import { asc, ne } from "drizzle-orm";
 import { Suspense } from "react";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
+import { getCurrentUser } from "@/lib/auth";
 import { TopbarClientPicker } from "@/components/topbar-client-picker";
+import { TopbarUser } from "@/components/topbar-user";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export async function Topbar() {
+  const user = await getCurrentUser();
+
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-paper/80 backdrop-blur supports-[backdrop-filter]:bg-paper/70 dark:bg-paper/85">
       <div className="px-6 h-12 flex items-center gap-4">
@@ -22,10 +26,18 @@ export async function Topbar() {
 
           <ThemeToggle />
 
-          <div
-            aria-label="Tu cuenta"
-            className="w-7 h-7 rounded-full bg-gradient-to-br from-accent-2 to-accent shrink-0 ring-1 ring-accent-strong/20"
-          />
+          {user ? (
+            <TopbarUser
+              email={user.email}
+              name={user.name}
+              avatarUrl={user.avatarUrl}
+            />
+          ) : (
+            <div
+              aria-label="Sin sesión"
+              className="w-7 h-7 rounded-full bg-paper-2 border border-line shrink-0"
+            />
+          )}
         </div>
       </div>
     </header>

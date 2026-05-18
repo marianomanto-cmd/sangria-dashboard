@@ -3,7 +3,8 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { auditLog, projects, projectReports } from "@/db/schema";
+import { projects, projectReports } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -57,7 +58,7 @@ export async function setProjectStatus(input: {
     .where(eq(projects.id, input.projectId))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "project",
     entityId: input.projectId,
     action: "status_change",
@@ -120,7 +121,7 @@ export async function setReportDeliveryDate(input: {
     .where(eq(projectReports.id, input.reportId))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "project_report",
     entityId: input.reportId,
     action: before.deliveryDate ? "delivery_date_update" : "delivery_date_set",
@@ -177,7 +178,7 @@ export async function markReportDelivered(input: {
       .set({ status: "reportado" })
       .where(eq(projects.id, before.projectId));
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "project",
       entityId: before.projectId,
       action: "status_change",
@@ -186,7 +187,7 @@ export async function markReportDelivered(input: {
     });
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "project_report",
     entityId: input.reportId,
     action: "delivered",

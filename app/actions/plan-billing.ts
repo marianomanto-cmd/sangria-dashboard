@@ -3,8 +3,8 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
+import { recordAudit } from "@/lib/audit";
 import {
-  auditLog,
   mediaPlanFees,
   mediaPlanPublishers,
   mediaPlans,
@@ -120,7 +120,7 @@ export async function ensureBillingForMonth(input: {
     );
   }
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "plan_billing",
     entityId: billing.id,
     action: "create",
@@ -264,7 +264,7 @@ export async function setPublisherConsumption(input: {
       .where(eq(planBillingPublishers.id, existing.id))
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "plan_billing_publisher",
       entityId: existing.id,
       action: "update",
@@ -283,7 +283,7 @@ export async function setPublisherConsumption(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "plan_billing_publisher",
       entityId: created.id,
       action: "create",
@@ -384,7 +384,7 @@ export async function setFeeImputation(input: {
       .where(eq(planBillingFees.id, existing.id))
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "plan_billing_fee",
       entityId: existing.id,
       action: "update",
@@ -402,7 +402,7 @@ export async function setFeeImputation(input: {
       })
       .returning();
 
-    await db.insert(auditLog).values({
+    await recordAudit({
       entityType: "plan_billing_fee",
       entityId: created.id,
       action: "create",
@@ -526,7 +526,7 @@ async function persistTransition(
     .where(eq(planBillings.id, billingId))
     .returning();
 
-  await db.insert(auditLog).values({
+  await recordAudit({
     entityType: "plan_billing",
     entityId: billingId,
     action: "update",

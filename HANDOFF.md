@@ -2,6 +2,57 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 18/may/2026 (pm-3) — OAuth Google + Sangria.agency-only + audit author
+
+- **OAuth con Google Workspace** vía Supabase Auth. Toda la app está
+  ahora detrás de un proxy (`proxy.ts` — Next.js 16 renombró
+  `middleware.ts → proxy.ts`) que valida sesión en cada request. Sin
+  sesión → redirect a `/login` con `?next=` preservado para volver
+  después del login. `/login`, `/auth/callback`, `/auth/signout` son
+  públicas; el resto requiere login.
+- **Bloqueo por dominio `@sangria.agency`** en dos lugares:
+  - El botón de Google pasa `hd=sangria.agency` + `prompt=select_account`
+    para que Google preseleccione la cuenta de agencia (no es bloqueo
+    duro — es UX).
+  - El callback (`app/auth/callback/route.ts`) verifica `user.email`
+    después del exchange; si no termina en `@sangria.agency` hace
+    `signOut()` y redirige a `/login?error=domain`.
+  - El proxy también revalida en cada request (defensa en profundidad
+    por si la sesión vino de otra cuenta).
+- **Topbar con user pill**: avatar de Google (o iniciales si no hay
+  picture) + menú con el email y "Cerrar sesión" (POST a
+  `/auth/signout`). Reemplaza el círculo decorativo de antes.
+- **Audit log con autor**: nueva columna `audit_log.user_email`
+  denormalizada (también `user_id` que ya estaba). Todas las 48
+  inserts de `db.insert(auditLog).values({...})` distribuidas por las
+  11 server actions se migraron a `await recordAudit({...})`
+  (`lib/audit.ts`). El helper hace `getCurrentUser()` y enriquece la
+  row con id + email del usuario logueado; si no hay sesión (script
+  de seed, llamada interna) queda en null → se renderiza "Sistema".
+  `actorLabel(userEmail, userId)` en `lib/audit-format.ts` formatea
+  el email como nombre ("mariano.manto@…" → "Mariano Manto"). Las
+  rows previas al wire-up siguen mostrándose como "Sistema".
+
+**Acciones requeridas en prod**:
+1. `npm run db:push` — agrega la columna `audit_log.user_email`.
+2. Setup en Supabase dashboard:
+   - **Auth → Providers → Google**: enabled, con Client ID + Secret
+     del OAuth 2.0 Client de Google Cloud Console.
+   - **Auth → URL Configuration**:
+     - Site URL = `https://<dominio-prod>` (o `http://localhost:3000` en dev).
+     - Redirect URLs: agregar
+       `https://<dominio-prod>/auth/callback` y
+       `http://localhost:3000/auth/callback`.
+3. Setup en Google Cloud Console:
+   - En el OAuth Client, agregar como Authorized redirect URI:
+     `https://<PROJECT-REF>.supabase.co/auth/v1/callback`.
+   - (Recomendado) restringir el OAuth consent screen a usuarios
+     internos del Workspace de sangria.agency.
+
+Sin migración de datos: las rows viejas del audit_log quedan con
+`user_email = null` y se renderizan como "Sistema". Las nuevas
+quedan con el email del autor.
+
 ### Cambios de la sesión 18/may/2026 (pm-2) — Duplicar plan + auditoría legible + papelera
 
 - **Duplicar plan al crear**: el form de `+ Nuevo plan`
@@ -979,6 +1030,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
 | Cambiar el render del log de auditoría / papelera | `app/(app)/auditoria/page.tsx` (log), `app/(app)/auditoria/papelera/page.tsx` (papelera). Sustantivos / verbos / labels de timestamp en `lib/audit-format.ts` — agregar nuevos entityType acá. |
+| Tocar la auth (login con Google, dominio permitido, sign-out) | `lib/supabase/{server,client,middleware}.ts` (cliente Supabase), `lib/auth.ts` (`getCurrentUser`), `proxy.ts` (route protection — Next.js 16 reemplaza middleware.ts), `app/login/`, `app/auth/{callback,signout}/`. El dominio `@sangria.agency` está hardcodeado en `proxy.ts` y `callback/route.ts` — cambiarlo en ambos. |
+| Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
 | Configurar conexión DB                 | `db/index.ts`                                             |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |
