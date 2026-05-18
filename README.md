@@ -89,7 +89,7 @@ app/
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
     billing-tracker/        # /billing-tracker — vista jerárquica proyecto → planes → facturas emitidas con desglose media/fee
-    campaign-tracker/       # /campaign-tracker — hub de planes vigentes + vista de carga de consumo real vs goal
+    campaign-tracker/       # /campaign-tracker — hub con filtro vigentes/concluidos/todos + vista de carga de consumo real vs goal
       [planId]/             # vista de carga: tabla editable (autosave) + chart de progreso
     auditoria/              # /auditoria — log con diff
     configuracion/
@@ -472,13 +472,16 @@ Idempotente: limpia las tablas antes de insertar.
   del plan en lo más profundo, `/auditoria`, billing editor del plan).
   Plan: ir traduciendo a medida que se toque cada archivo.
 - **Drive integration**: en discusión, fuera del scope MVP.
-- **Campaign Tracker** (`/campaign-tracker`): hub de planes vigentes + vista
-  de carga de consumo real vs goal con autosave, chart de progreso, cierre
-  de día (snapshot al histórico) y comparación contra la última carga.
-  **Requiere `npm run db:push`** en prod para crear las tablas
-  `campaign_placement_actuals` (capa viva) y `campaign_actual_snapshots`
-  (histórico) — ambas aditivas, sin backfill. Pendiente: la sección de
-  Reportes que consume `campaign_actual_snapshots` todavía no existe.
-  Elementos del mockup que siguen "próximamente": stepper de fecha y tabs
-  Histórico / Resumen acumulado (dependen de una vista de histórico
-  diario, fuera de alcance de esta entrega).
+- **Campaign Tracker** (`/campaign-tracker`): hub de planes con filtro de
+  estado (Vigentes / Concluidos / Todos) + vista de carga de consumo real
+  vs goal con autosave, chart de progreso, cierre de día (snapshot al
+  histórico) y comparación contra la última carga. Los planes
+  concluidos (hoy > `endDate`) quedan accesibles en el hub para consulta
+  histórica — el detalle del plan funciona igual y el badge del header
+  pasa de "vigente" a "concluido". **Requiere `npm run db:push`** en prod
+  para crear las tablas `campaign_placement_actuals` (capa viva) y
+  `campaign_actual_snapshots` (histórico) — ambas aditivas, sin backfill.
+  Pendiente: la sección de Reportes que consume `campaign_actual_snapshots`
+  todavía no existe. Elementos del mockup que siguen "próximamente":
+  stepper de fecha y tabs Histórico / Resumen acumulado (dependen de una
+  vista de histórico diario, fuera de alcance de esta entrega).

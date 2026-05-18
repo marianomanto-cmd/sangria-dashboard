@@ -10,6 +10,7 @@ import {
 import {
   getCampaignTrackerHub,
   type CampaignHubClient,
+  type CampaignHubFilter,
 } from "@/db/queries/campaign-tracker";
 import { buildHrefWithClient } from "@/lib/client-filter";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
@@ -17,31 +18,77 @@ import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { DEFAULT_LANGUAGE, formatDate } from "@/lib/i18n";
 
 type Props = {
-  searchParams: Promise<{ client?: string }>;
+  searchParams: Promise<{ client?: string; filter?: string }>;
 };
+
+function parseFilter(raw: string | undefined): CampaignHubFilter {
+  return raw === "concluido" || raw === "todos" ? raw : "vigente";
+}
 
 export default async function CampaignTrackerPage({ searchParams }: Props) {
   const sp = await searchParams;
   const client = await resolveClientFromSearchParams(sp);
   const lang = client?.language ?? DEFAULT_LANGUAGE;
+  const filter = parseFilter(sp.filter);
 
-  const { clients, totals } = await getCampaignTrackerHub(client?.id ?? null);
+  const { clients, totals, statusCounts } = await getCampaignTrackerHub(
+    client?.id ?? null,
+    filter,
+  );
+
+  const filterLabels: Record<CampaignHubFilter, { word: string; words: string }> = {
+    vigente: { word: "vigente", words: "vigentes" },
+    concluido: { word: "concluido", words: "concluidos" },
+    todos: { word: "", words: "" },
+  };
+  const fl = filterLabels[filter];
 
   const title = client
     ? `Campaign Tracker · ${client.name}`
     : "Campaign Tracker";
-  const subtitle = `${totals.plansCount} plan${
-    totals.plansCount === 1 ? "" : "es"
-  } vigente${totals.plansCount === 1 ? "" : "s"} en ${totals.clientsCount} cliente${
-    totals.clientsCount === 1 ? "" : "s"
-  }. Cargá el consumo real y mirá qué campañas están on-pace, atrasadas o excediendo el goal.`;
+  const subtitle =
+    filter === "concluido"
+      ? `${totals.plansCount} plan${totals.plansCount === 1 ? "" : "es"} concluido${totals.plansCount === 1 ? "" : "s"} en ${totals.clientsCount} cliente${totals.clientsCount === 1 ? "" : "s"}. Histórico de campañas finalizadas — datos reales vs lo planeado.`
+      : filter === "todos"
+        ? `${totals.plansCount} plan${totals.plansCount === 1 ? "" : "es"} (vigentes + concluidos) en ${totals.clientsCount} cliente${totals.clientsCount === 1 ? "" : "s"}.`
+        : `${totals.plansCount} plan${totals.plansCount === 1 ? "" : "es"} ${fl.words} en ${totals.clientsCount} cliente${totals.clientsCount === 1 ? "" : "s"}. Cargá el consumo real y mirá qué campañas están on-pace, atrasadas o excediendo el goal.`;
 
   return (
     <PageShell eyebrow="Campaign Tracker" title={title} subtitle={subtitle}>
+      {/* Filtro de estado */}
+      <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
+        <FilterPill label="Estado">
+          <FilterChoice
+            current={filter}
+            value="vigente"
+            label={`Vigentes (${statusCounts.vigente})`}
+            clientSlug={client?.slug ?? null}
+          />
+          <FilterChoice
+            current={filter}
+            value="concluido"
+            label={`Concluidos (${statusCounts.concluido})`}
+            clientSlug={client?.slug ?? null}
+          />
+          <FilterChoice
+            current={filter}
+            value="todos"
+            label={`Todos (${statusCounts.vigente + statusCounts.concluido})`}
+            clientSlug={client?.slug ?? null}
+          />
+        </FilterPill>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
         <KpiCard
-          label="Planes vigentes"
+          label={
+            filter === "concluido"
+              ? "Planes concluidos"
+              : filter === "todos"
+                ? "Planes (todos)"
+                : "Planes vigentes"
+          }
           value={String(totals.plansCount)}
           hint={`${totals.clientsCount} cliente${totals.clientsCount === 1 ? "" : "s"}`}
         />
@@ -50,21 +97,39 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
           value={formatUsdCompact(totals.actualInvestmentUsd)}
           hint={`sobre ${formatUsdCompact(totals.goalInvestmentUsd)} planeados`}
         />
+        {filter === "concluido" ? (
+          <KpiCard
+            label="Cumplimiento promedio"
+            value={
+              totals.goalInvestmentUsd > 0
+                ? `${((totals.actualInvestmentUsd / totals.goalInvestmentUsd) * 100).toFixed(0)}%`
+                : "—"
+            }
+            hint="real / planeado"
+          />
+        ) : (
+          <KpiCard
+            label="Sin update ≥48h"
+            value={String(totals.staleCount)}
+            hint={totals.staleCount === 0 ? "todo al día" : "requieren carga"}
+            tone={totals.staleCount > 0 ? "warn" : undefined}
+          />
+        )}
         <KpiCard
-          label="Sin update ≥48h"
-          value={String(totals.staleCount)}
-          hint={totals.staleCount === 0 ? "todo al día" : "requieren carga"}
-          tone={totals.staleCount > 0 ? "warn" : undefined}
-        />
-        <KpiCard
-          label="Planes off-pace"
+          label={filter === "concluido" ? "Cerraron off-pace" : "Planes off-pace"}
           value={
-            totals.offPaceCount === 0 ? "Todo on pace" : String(totals.offPaceCount)
+            totals.offPaceCount === 0
+              ? filter === "concluido"
+                ? "Todo en goal"
+                : "Todo on pace"
+              : String(totals.offPaceCount)
           }
           hint={
             totals.offPaceCount === 0
               ? "✓"
-              : "atrasados o excediendo el goal"
+              : filter === "concluido"
+                ? "no llegaron al goal o lo excedieron"
+                : "atrasados o excediendo el goal"
           }
           ink
         />
@@ -72,8 +137,20 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
 
       {clients.length === 0 ? (
         <EmptyState
-          title="Sin planes vigentes para cargar"
-          hint="Aparecen acá los planes aprobados cuyo período incluye la fecha de hoy."
+          title={
+            filter === "concluido"
+              ? "Sin planes concluidos para mostrar"
+              : filter === "todos"
+                ? "Sin planes con período definido"
+                : "Sin planes vigentes para cargar"
+          }
+          hint={
+            filter === "concluido"
+              ? "Acá quedan los planes aprobados cuyo período ya terminó. Aparecen una vez que pasa la fecha de fin del último placement."
+              : filter === "todos"
+                ? "Aparecen los planes aprobados con período definido (vigentes y concluidos)."
+                : "Aparecen acá los planes aprobados cuyo período incluye la fecha de hoy."
+          }
         />
       ) : (
         <>
@@ -105,6 +182,7 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
                     group={group}
                     clientSlug={client?.slug ?? null}
                     lang={lang}
+                    filter={filter}
                   />
                 ))}
               </tbody>
@@ -112,14 +190,24 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
           </section>
 
           <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-muted">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full bg-warn" />
-              fondo amarillo = sin update ≥48h
-            </span>
+            {filter !== "concluido" && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-warn" />
+                fondo amarillo = sin update ≥48h
+              </span>
+            )}
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-3 w-[1.5px] bg-accent" />
               marca vertical en la barra = pace esperado por fecha del plan
             </span>
+            {filter !== "vigente" && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-flex items-center rounded-sm border border-line bg-paper-2 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                  concluido
+                </span>
+                = el período del plan ya terminó (queda como histórico)
+              </span>
+            )}
           </div>
         </>
       )}
@@ -127,15 +215,67 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
   );
 }
 
+function FilterPill({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-paper-2 border border-line">
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted mr-1">
+        {label}
+      </span>
+      <div className="flex items-center gap-0.5">{children}</div>
+    </div>
+  );
+}
+
+function FilterChoice({
+  current,
+  value,
+  label,
+  clientSlug,
+}: {
+  current: CampaignHubFilter;
+  value: CampaignHubFilter;
+  label: string;
+  clientSlug: string | null;
+}) {
+  const isActive = current === value;
+  const params = new URLSearchParams();
+  // 'vigente' es default — no lo escribimos en la URL.
+  if (value !== "vigente") params.set("filter", value);
+  if (clientSlug) params.set("client", clientSlug);
+  const qs = params.toString();
+  const href = qs ? `/campaign-tracker?${qs}` : "/campaign-tracker";
+  return (
+    <Link
+      href={href}
+      data-active={isActive}
+      className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+    >
+      {label}
+    </Link>
+  );
+}
+
 function ClientGroup({
   group,
   clientSlug,
   lang,
+  filter,
 }: {
   group: CampaignHubClient;
   clientSlug: string | null;
   lang: "en" | "es";
+  filter: CampaignHubFilter;
 }) {
+  // Label del header del cliente: para 'vigente' mantenemos "activos"
+  // (refuerza que son los que necesitan carga hoy); para concluidos /
+  // todos cambiamos a "concluidos" / "en total".
+  const headerNote =
+    filter === "concluido"
+      ? `${group.plans.length} plan${group.plans.length === 1 ? "" : "es"} concluido${group.plans.length === 1 ? "" : "s"}`
+      : filter === "todos"
+        ? `${group.plans.length} plan${group.plans.length === 1 ? "" : "es"} en total`
+        : `${group.plans.length} plan${group.plans.length === 1 ? "" : "es"} activo${group.plans.length === 1 ? "" : "s"}`;
+
   return (
     <>
       <tr className="bg-paper-2">
@@ -145,11 +285,7 @@ function ClientGroup({
               <Building2 size={12} strokeWidth={2} className="text-ink-2" />
             </div>
             <span className="font-semibold text-ink">{group.clientName}</span>
-            <span className="text-xs text-muted">
-              · {group.plans.length} plan
-              {group.plans.length === 1 ? "" : "es"} activo
-              {group.plans.length === 1 ? "" : "s"}
-            </span>
+            <span className="text-xs text-muted">· {headerNote}</span>
           </div>
         </td>
       </tr>
@@ -158,6 +294,8 @@ function ClientGroup({
           `/campaign-tracker/${plan.planId}`,
           clientSlug,
         );
+        const showConcluidoBadge =
+          plan.status === "concluido" && filter !== "concluido";
         return (
           <tr
             key={plan.planId}
@@ -172,6 +310,11 @@ function ClientGroup({
                 {plan.currentVersion > 0 && (
                   <span className="ml-2 font-mono text-[10px] text-muted">
                     v{plan.currentVersion}
+                  </span>
+                )}
+                {showConcluidoBadge && (
+                  <span className="ml-2 inline-flex items-center rounded-sm border border-line bg-paper-2 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                    concluido
                   </span>
                 )}
                 <div className="text-xs text-muted mt-0.5">
