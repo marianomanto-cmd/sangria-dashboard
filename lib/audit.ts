@@ -8,8 +8,11 @@ import { getCurrentUser } from "@/lib/auth";
 // user_email queden grabados sin tener que repetir el lookup en cada
 // action.
 //
-// Si no hay user logueado (ej: script de seed, llamada interna sin
-// sesión), inserta con null y se renderiza como "Sistema" en /auditoria.
+// IMPORTANTE: nunca tira. Si el insert falla (ej: schema desync porque
+// alguien se olvidó del `db:push`, DB caída, columna nueva sin migrar)
+// logueamos el error pero no rompemos la acción del usuario — la
+// auditoría es importante pero no crítica para el flow; perder un
+// registro es menos malo que romper un guardado que ya se cometió.
 export async function recordAudit(entry: {
   entityType: string;
   entityId: string;
@@ -30,13 +33,25 @@ export async function recordAudit(entry: {
     // request (ej: script de seed). En ese caso queda como "Sistema".
   }
 
-  await db.insert(auditLog).values({
-    entityType: entry.entityType,
-    entityId: entry.entityId,
-    action: entry.action,
-    beforeJson: (entry.beforeJson ?? null) as never,
-    afterJson: (entry.afterJson ?? null) as never,
-    userId,
-    userEmail,
-  });
+  try {
+    await db.insert(auditLog).values({
+      entityType: entry.entityType,
+      entityId: entry.entityId,
+      action: entry.action,
+      beforeJson: (entry.beforeJson ?? null) as never,
+      afterJson: (entry.afterJson ?? null) as never,
+      userId,
+      userEmail,
+    });
+  } catch (err) {
+    // Loggeamos para que aparezca en los runtime logs del host (Vercel).
+    console.error("[audit] insert failed — el cambio se aplicó igual:", {
+      entityType: entry.entityType,
+      entityId: entry.entityId,
+      action: entry.action,
+      userEmail,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
+
