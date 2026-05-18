@@ -253,24 +253,54 @@ export async function getBillingDetail(id: string): Promise<BillingDetail | null
   const accumMap = new Map(accumByPub.map((r) => [r.publisherId, Number.parseFloat(r.total)]));
   const thisMonthMap = new Map(thisMonthByPub.map((r) => [r.publisherId, r]));
 
-  const publisherLines: BillingPublisherLine[] = planPubs
+  // Un publisher puede aparecer en N bloques (mediaPlanPublishers) dentro de
+  // un mismo plan. Para el billing, todo se rolla a UNA línea por publisher:
+  // totalPlannedUsd = suma de los bloques, agencyPays = OR de los overrides
+  // (si CUALQUIER bloque va por agencia, la línea es facturable). El billing
+  // real (planBillingPublishers) ya está keyed por (billing, publisher), así
+  // que el consumo del mes es un único valor sin importar los bloques.
+  const aggByPub = new Map<
+    string,
+    {
+      pub: (typeof planPubs)[number]["pub"];
+      totalPlanned: number;
+      anyAgencyPays: boolean;
+    }
+  >();
+  for (const r of planPubs) {
+    const acc = aggByPub.get(r.pub.id);
+    const agencyPays = r.mpp.agencyPaysOverride ?? r.pub.agencyPaysDefault;
+    const planned = Number.parseFloat(r.mpp.totalPlannedUsd);
+    if (acc) {
+      acc.totalPlanned += planned;
+      acc.anyAgencyPays = acc.anyAgencyPays || agencyPays;
+    } else {
+      aggByPub.set(r.pub.id, {
+        pub: r.pub,
+        totalPlanned: planned,
+        anyAgencyPays: agencyPays,
+      });
+    }
+  }
+
+  const publisherLines: BillingPublisherLine[] = Array.from(aggByPub.values())
     .sort((a, b) => a.pub.sortOrder - b.pub.sortOrder)
-    .map((r) => {
-      const thisMonth = thisMonthMap.get(r.pub.id);
-      const accumTotal = accumMap.get(r.pub.id) ?? 0;
+    .map((agg) => {
+      const thisMonth = thisMonthMap.get(agg.pub.id);
+      const accumTotal = accumMap.get(agg.pub.id) ?? 0;
       const thisMonthAmount = thisMonth ? Number.parseFloat(thisMonth.amountRealUsd) : 0;
       // Para mostrar "consumido antes de este mes": accum total - this month.
       const consumedBefore = accumTotal - thisMonthAmount;
       return {
-        publisherId: r.pub.id,
-        publisherName: r.pub.name,
-        publisherSlug: r.pub.slug,
-        publisherSortOrder: r.pub.sortOrder,
-        agencyPays: r.mpp.agencyPaysOverride ?? r.pub.agencyPaysDefault,
-        totalPlannedUsd: Number.parseFloat(r.mpp.totalPlannedUsd),
+        publisherId: agg.pub.id,
+        publisherName: agg.pub.name,
+        publisherSlug: agg.pub.slug,
+        publisherSortOrder: agg.pub.sortOrder,
+        agencyPays: agg.anyAgencyPays,
+        totalPlannedUsd: agg.totalPlanned,
         consumedAccumulatedUsd: consumedBefore,
         amountThisMonthUsd: thisMonthAmount,
-        isBillable: thisMonth?.isBillable ?? (r.mpp.agencyPaysOverride ?? r.pub.agencyPaysDefault),
+        isBillable: thisMonth?.isBillable ?? agg.anyAgencyPays,
         notes: thisMonth?.notes ?? null,
       };
     });

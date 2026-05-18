@@ -435,19 +435,31 @@ async function getPlansSummaryForProjects(
         : 0;
     const totalFees = fixedFees + mgmtFee;
 
-    // Publishers breakdown
+    // Publishers breakdown. Un publisher puede tener N bloques en el plan;
+    // agregamos por publisherId sumando totalPlannedUsd (el billed ya es
+    // único por publisher).
     const pubs = publishersByPlan.get(p.id) ?? [];
-    const publisherBreakdown: PublisherBreakdownRow[] = pubs.map((pp) => {
+    const breakdownByPub = new Map<string, PublisherBreakdownRow>();
+    for (const pp of pubs) {
       const planned = Number.parseFloat(pp.plannedUsd);
-      const billed = billedByPubKey.get(`${p.id}::${pp.publisherId}`) ?? 0;
-      return {
-        publisherId: pp.publisherId,
-        publisherName: pp.publisherName,
-        plannedUsd: planned,
-        billedUsd: billed,
-        pendingUsd: Math.max(0, planned - billed),
-      };
-    });
+      const existing = breakdownByPub.get(pp.publisherId);
+      if (existing) {
+        existing.plannedUsd += planned;
+        existing.pendingUsd = Math.max(0, existing.plannedUsd - existing.billedUsd);
+      } else {
+        const billed = billedByPubKey.get(`${p.id}::${pp.publisherId}`) ?? 0;
+        breakdownByPub.set(pp.publisherId, {
+          publisherId: pp.publisherId,
+          publisherName: pp.publisherName,
+          plannedUsd: planned,
+          billedUsd: billed,
+          pendingUsd: Math.max(0, planned - billed),
+        });
+      }
+    }
+    const publisherBreakdown: PublisherBreakdownRow[] = Array.from(
+      breakdownByPub.values(),
+    );
 
     // Fees breakdown
     const feeRowList = feesByPlanRows.get(p.id) ?? [];

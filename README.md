@@ -217,6 +217,17 @@ lib/
   de "agencia paga" / "cliente paga".
 - En el editor del plan se listan solo los publishers habilitados para el
   cliente del proyecto.
+- Un mismo publisher puede aparecer **N veces** en un plan (cada bloque es
+  un row independiente de `media_plan_publishers` con sus propios
+  `totalPlannedUsd`, `agencyPaysOverride` y placements). Se usa para casos
+  como "Meta Brand" + "Meta Performance" en el mismo plan. En el editor
+  hay un botón "duplicar" (⧉) que clona el bloque entero con todos sus
+  placements; el dropdown de "+ Agregar publisher…" no filtra los ya
+  usados. **Importante**: `plan_billing_publishers` sigue keyed por
+  `(billing, publisher)`, así que la vista de billing rolla los N bloques
+  a una sola línea (suma de planeados, OR de `agency_pays`). Ver
+  `db/queries/billing.ts:getBillingDetail` y
+  `db/queries/dashboard.ts:listPlansForDashboard` para el patrón.
 - Cascada para `agency_pays`: override del plan → default del cliente →
   default global del catálogo.
 

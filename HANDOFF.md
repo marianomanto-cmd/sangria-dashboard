@@ -2,6 +2,48 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 18/may/2026 — Duplicar publishers y placements
+
+- **Duplicar placement** en el editor del plan: nuevo botón ⧉ (Copy) al lado
+  del trash en cada fila. Clona todos los campos (nombre, mercado, monto,
+  cost method, fechas, audiencia, notas, `metrics_json`) y queda
+  inmediatamente debajo del original con `sortOrder = src + 1` (los demás
+  se corren). Server action: `duplicatePlacement(placementId)` en
+  `app/actions/plans.ts`.
+- **Duplicar publisher**: mismo botón en el header del bloque. Clona el
+  row de `mediaPlanPublishers` (mismo `publisherId`, `totalPlannedUsd`,
+  `agencyPaysOverride`) **y todos sus placements**. El bloque queda
+  apenas debajo del original. Server action: `duplicatePlanPublisher(mppId)`.
+- **Schema**: se sacó el `unique("uq_mpp_plan_publisher")` de
+  `media_plan_publishers` para permitir que un mismo publisher tenga N
+  bloques en un plan (ej: "Meta Brand" + "Meta Performance"). El comentario
+  en `db/schema.ts` documenta la nueva semántica.
+- **Billing aggregation**: el `plan_billing_publishers` sigue siendo único
+  por `(billing, publisher)`, así que la vista de billing y los caps de
+  cap-de-gasto agregan los N bloques por publisher antes de armar las
+  líneas. Fixes en:
+  - `db/queries/billing.ts:getBillingDetail` — agrega `planPubs` por
+    `publisherId` (suma `totalPlannedUsd`, OR de `agencyPays`).
+  - `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx` — mismo
+    rollup para la vista de carga mensual.
+  - `app/actions/plan-billing.ts:createBilling` — dedup de `planPubs`
+    por `publisherId` para no violar `uq_pbp_billing_publisher` al
+    pre-cargar rows en cero.
+  - `app/actions/plan-billing.ts:setPublisherConsumption` — el cap usa
+    `sum(totalPlannedUsd)` agregando todos los bloques.
+  - `db/queries/dashboard.ts:listPlansForDashboard` — el publisher
+    breakdown agrega bloques antes de comparar con el `billed` (que ya es
+    único por publisher).
+- **Editor / Excel / PDF**: cada bloque sigue siendo un row visible en
+  el editor del plan, en el Excel y en el PDF — la rollup solo se aplica
+  en la vista de billing y rollups de dashboard. El dropdown de "+ Agregar
+  publisher…" ahora muestra siempre el catálogo completo (ya no filtra
+  por "ya agregados", consistente con permitir bloques duplicados).
+
+**Acciones requeridas en prod**: correr `npm run db:push` para borrar el
+unique `uq_mpp_plan_publisher`. Sin migración de datos: planes existentes
+quedan iguales (cada uno con 1 bloque por publisher).
+
 ### Cambios de la sesión 15/may/2026 — Aesthetic / cosmetic pass
 
 - **Dark mode real**. El toggle del topbar (antes decorativo) ahora

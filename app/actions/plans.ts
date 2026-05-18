@@ -310,6 +310,86 @@ export async function updatePlanPublisher(input: {
   return { ok: true };
 }
 
+// Duplica un publisher del plan: clona el row + todos sus placements.
+// El bloque resultante apunta al mismo publisher (puede haber N bloques del
+// mismo publisher en un plan) y queda inmediatamente después del original.
+export async function duplicatePlanPublisher(
+  mppId: string,
+): Promise<Result<{ mppId: string }>> {
+  const [src] = await db
+    .select()
+    .from(mediaPlanPublishers)
+    .where(eq(mediaPlanPublishers.id, mppId))
+    .limit(1);
+  if (!src) return { ok: false, error: "Publisher row no encontrado" };
+
+  const [plan] = await db
+    .select()
+    .from(mediaPlans)
+    .where(eq(mediaPlans.id, src.mediaPlanId))
+    .limit(1);
+  if (!plan) return { ok: false, error: "Plan no encontrado" };
+  if (plan.status === "archived") {
+    return { ok: false, error: "Plan archivado" };
+  }
+
+  const srcPlacements = await db
+    .select()
+    .from(mediaPlanPlacements)
+    .where(eq(mediaPlanPlacements.mediaPlanPublisherId, mppId))
+    .orderBy(asc(mediaPlanPlacements.sortOrder));
+
+  // Insertar nuevo bloque justo después del original: corrimiento de
+  // sort_order para todos los bloques posteriores en el mismo plan.
+  await db
+    .update(mediaPlanPublishers)
+    .set({ sortOrder: sql`${mediaPlanPublishers.sortOrder} + 1` })
+    .where(
+      and(
+        eq(mediaPlanPublishers.mediaPlanId, src.mediaPlanId),
+        sql`${mediaPlanPublishers.sortOrder} > ${src.sortOrder}`,
+      ),
+    );
+
+  const [dup] = await db
+    .insert(mediaPlanPublishers)
+    .values({
+      mediaPlanId: src.mediaPlanId,
+      publisherId: src.publisherId,
+      totalPlannedUsd: src.totalPlannedUsd,
+      agencyPaysOverride: src.agencyPaysOverride,
+      sortOrder: src.sortOrder + 1,
+    })
+    .returning();
+
+  if (srcPlacements.length > 0) {
+    await db.insert(mediaPlanPlacements).values(
+      srcPlacements.map((p) => ({
+        mediaPlanPublisherId: dup.id,
+        placementName: p.placementName,
+        marketId: p.marketId,
+        audience: p.audience,
+        amountUsd: p.amountUsd,
+        costMethod: p.costMethod,
+        startDate: p.startDate,
+        endDate: p.endDate,
+        metricsJson: p.metricsJson ?? {},
+        notesMd: p.notesMd,
+        sortOrder: p.sortOrder,
+      })),
+    );
+  }
+
+  await db.insert(auditLog).values({
+    entityType: "media_plan_publisher",
+    entityId: dup.id,
+    action: "create",
+    afterJson: { ...dup, duplicatedFrom: mppId, placementsCopied: srcPlacements.length },
+  });
+
+  return { ok: true, mppId: dup.id };
+}
+
 export async function removePublisherFromPlan(
   mppId: string,
 ): Promise<Result> {
@@ -437,6 +517,55 @@ export async function updatePlacement(input: {
   });
 
   return { ok: true };
+}
+
+// Duplica un placement dentro del mismo bloque de publisher. El nuevo
+// placement queda inmediatamente después del original.
+export async function duplicatePlacement(
+  placementId: string,
+): Promise<Result<{ placementId: string }>> {
+  const [src] = await db
+    .select()
+    .from(mediaPlanPlacements)
+    .where(eq(mediaPlanPlacements.id, placementId))
+    .limit(1);
+  if (!src) return { ok: false, error: "Placement no encontrado" };
+
+  await db
+    .update(mediaPlanPlacements)
+    .set({ sortOrder: sql`${mediaPlanPlacements.sortOrder} + 1` })
+    .where(
+      and(
+        eq(mediaPlanPlacements.mediaPlanPublisherId, src.mediaPlanPublisherId),
+        sql`${mediaPlanPlacements.sortOrder} > ${src.sortOrder}`,
+      ),
+    );
+
+  const [dup] = await db
+    .insert(mediaPlanPlacements)
+    .values({
+      mediaPlanPublisherId: src.mediaPlanPublisherId,
+      placementName: src.placementName,
+      marketId: src.marketId,
+      audience: src.audience,
+      amountUsd: src.amountUsd,
+      costMethod: src.costMethod,
+      startDate: src.startDate,
+      endDate: src.endDate,
+      metricsJson: src.metricsJson ?? {},
+      notesMd: src.notesMd,
+      sortOrder: src.sortOrder + 1,
+    })
+    .returning();
+
+  await db.insert(auditLog).values({
+    entityType: "media_plan_placement",
+    entityId: dup.id,
+    action: "create",
+    afterJson: { ...dup, duplicatedFrom: placementId },
+  });
+
+  return { ok: true, placementId: dup.id };
 }
 
 export async function removePlacement(placementId: string): Promise<Result> {
