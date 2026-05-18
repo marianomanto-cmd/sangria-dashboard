@@ -306,6 +306,12 @@ export const mediaPlans = pgTable(
 // ════════════════════════════════════════════════════════════════════════════
 // Publisher dentro de un plan. Tiene un total planeado que debe coincidir
 // con la suma de sus placements.
+//
+// Un mismo publisher puede aparecer N veces en un plan (ej: "Meta Brand" +
+// "Meta Performance"): cada bloque tiene su totalPlannedUsd y sus placements.
+// El billing igual rolla a un solo número por publisher x mes — al
+// agregar/sumar lo planeado por publisher hay que sumar todos los bloques
+// (ver db/queries/billing.ts).
 // ════════════════════════════════════════════════════════════════════════════
 
 export const mediaPlanPublishers = pgTable(
@@ -331,7 +337,6 @@ export const mediaPlanPublishers = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [unique("uq_mpp_plan_publisher").on(t.mediaPlanId, t.publisherId)],
 );
 
 // ════════════════════════════════════════════════════════════════════════════

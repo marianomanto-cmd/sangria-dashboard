@@ -6,6 +6,7 @@ import { useState, useTransition } from "react";
 import {
   ChevronDown,
   ChevronRight,
+  Copy,
   Download,
   FileText,
   GripVertical,
@@ -18,6 +19,8 @@ import {
   addFee,
   addPlacement,
   addPublisherToPlan,
+  duplicatePlacement,
+  duplicatePlanPublisher,
   removeFee,
   removePlacement,
   removePublisherFromPlan,
@@ -85,8 +88,9 @@ export function PlanEditor({
 
   const refresh = () => router.refresh();
 
-  const usedPublisherIds = new Set(detail.publishers.map((p) => p.publisherId));
-  const availablePublishers = allPublishers.filter((p) => !usedPublisherIds.has(p.id));
+  // Un publisher puede agregarse N veces (cada bloque es independiente).
+  // El dropdown muestra siempre el catálogo completo del cliente.
+  const availablePublishers = allPublishers;
 
   const projectBudget = Number.parseFloat(detail.project.totalGrossBudgetUsd ?? "0");
   const planTotal = detail.totals.grand;
@@ -560,6 +564,14 @@ function PublisherSection({
     });
   };
 
+  const onDuplicatePub = () => {
+    startTransition(async () => {
+      const r = await duplicatePlanPublisher(pub.id);
+      if (!r.ok) alert(r.error);
+      onChange();
+    });
+  };
+
   return (
     <details
       open
@@ -585,17 +597,30 @@ function PublisherSection({
           className="w-32 text-right font-mono font-semibold"
         />
         {editable && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              onRemovePub();
-            }}
-            className="text-muted hover:text-danger p-1 -mr-2"
-            title="Eliminar publisher"
-          >
-            <Trash2 size={14} />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onDuplicatePub();
+              }}
+              className="text-muted hover:text-ink p-1"
+              title="Duplicar publisher (con todos sus placements)"
+            >
+              <Copy size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onRemovePub();
+              }}
+              className="text-muted hover:text-danger p-1 -mr-2"
+              title="Eliminar publisher"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
         )}
       </summary>
 
@@ -621,7 +646,7 @@ function PublisherSection({
                 <th className="text-left font-medium px-3 py-2">Mercado</th>
                 <th className="text-left font-medium px-3 py-2">Cost method</th>
                 <th className="text-right font-medium px-3 py-2">Monto</th>
-                {editable && <th className="w-10"></th>}
+                {editable && <th className="w-16"></th>}
               </tr>
             </thead>
             <tbody>
@@ -694,6 +719,14 @@ function PlacementRow({
     });
   };
 
+  const onDuplicate = () => {
+    startTransition(async () => {
+      const r = await duplicatePlacement(placement.id);
+      if (!r.ok) alert(r.error);
+      onChange();
+    });
+  };
+
   return (
     <>
       <tr className="border-t border-line-soft hover:bg-paper-2/40">
@@ -755,7 +788,15 @@ function PlacementRow({
           />
         </td>
         {editable && (
-          <td className="px-2 py-1.5 text-center">
+          <td className="px-1 py-1.5 text-center whitespace-nowrap">
+            <button
+              type="button"
+              onClick={onDuplicate}
+              className="text-muted hover:text-ink p-1"
+              title="Duplicar placement"
+            >
+              <Copy size={12} />
+            </button>
             <button
               type="button"
               onClick={onRemove}

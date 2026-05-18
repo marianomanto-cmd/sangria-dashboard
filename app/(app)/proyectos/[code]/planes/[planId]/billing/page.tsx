@@ -94,10 +94,11 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
   const billingByMonth = new Map(existingBillings.map((b) => [b.month, b]));
   const selectedMonth = sp.month && months.includes(sp.month) ? sp.month : null;
 
-  // Plan publishers (catálogo del plan)
-  const planPubs = await db
+  // Plan publishers (catálogo del plan). Un mismo publisher puede tener N
+  // bloques: para la vista de billing los agregamos a UNA línea por
+  // publisher con totalPlannedUsd = suma y agencyPays = OR de los overrides.
+  const planPubRows = await db
     .select({
-      id: mediaPlanPublishers.id,
       publisherId: mediaPlanPublishers.publisherId,
       publisherName: publishers.name,
       publisherSlug: publishers.slug,
@@ -110,6 +111,45 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
     .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
     .where(eq(mediaPlanPublishers.mediaPlanId, planId))
     .orderBy(asc(mediaPlanPublishers.sortOrder));
+
+  const planPubs = Array.from(
+    planPubRows
+      .reduce(
+        (
+          acc,
+          r,
+        ) => {
+          const agencyPays = r.agencyPaysOverride ?? r.agencyPaysDefault;
+          const existing = acc.get(r.publisherId);
+          if (existing) {
+            existing.totalPlanned += Number.parseFloat(r.totalPlannedUsd);
+            existing.anyAgencyPays = existing.anyAgencyPays || agencyPays;
+          } else {
+            acc.set(r.publisherId, {
+              publisherId: r.publisherId,
+              publisherName: r.publisherName,
+              publisherSlug: r.publisherSlug,
+              sortOrder: r.sortOrder,
+              totalPlanned: Number.parseFloat(r.totalPlannedUsd),
+              anyAgencyPays: agencyPays,
+            });
+          }
+          return acc;
+        },
+        new Map<
+          string,
+          {
+            publisherId: string;
+            publisherName: string;
+            publisherSlug: string;
+            sortOrder: number;
+            totalPlanned: number;
+            anyAgencyPays: boolean;
+          }
+        >(),
+      )
+      .values(),
+  ).sort((a, b) => a.sortOrder - b.sortOrder);
 
   // Plan fees (catálogo del plan)
   const planFees = await db
@@ -173,11 +213,11 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
         publisherId: p.publisherId,
         publisherName: p.publisherName,
         publisherSlug: p.publisherSlug,
-        agencyPays: p.agencyPaysOverride ?? p.agencyPaysDefault,
-        totalPlannedUsd: Number.parseFloat(p.totalPlannedUsd),
+        agencyPays: p.anyAgencyPays,
+        totalPlannedUsd: p.totalPlanned,
         consumedBeforeUsd: consumedBefore,
         amountThisMonthUsd: thisMonth,
-        isBillable: r?.isBillable ?? (p.agencyPaysOverride ?? p.agencyPaysDefault),
+        isBillable: r?.isBillable ?? p.anyAgencyPays,
         notes: r?.notes ?? null,
       };
     });
@@ -204,10 +244,7 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
 
     // Total media del plan: base para derivar management fees por %.
     // amount = TM × ratePct / (100 - ratePct) (ver db/schema.ts:357-359)
-    const totalMedia = planPubs.reduce(
-      (s, p) => s + Number.parseFloat(p.totalPlannedUsd),
-      0,
-    );
+    const totalMedia = planPubs.reduce((s, p) => s + p.totalPlanned, 0);
 
     feeLines = planFees.map((f) => {
       const r = feeRowsMap.get(f.id);

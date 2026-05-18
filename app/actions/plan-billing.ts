@@ -62,8 +62,12 @@ export async function ensureBillingForMonth(input: {
     })
     .returning();
 
-  // Pre-cargar rows en cero para todos los publishers del plan.
-  const planPubs = await db
+  // Pre-cargar rows en cero para todos los publishers del plan. Un publisher
+  // puede tener N bloques (mediaPlanPublishers) en el plan; planBillingPublishers
+  // tiene una unique por (billing, publisher), así que deduplicamos por
+  // publisherId. Si cualquier bloque overridea agencyPays, el row del mes
+  // hereda ese override (basta que UNO marque "agencia paga").
+  const planPubRows = await db
     .select({
       publisherId: mediaPlanPublishers.publisherId,
       mppOverride: mediaPlanPublishers.agencyPaysOverride,
@@ -71,20 +75,31 @@ export async function ensureBillingForMonth(input: {
     .from(mediaPlanPublishers)
     .where(eq(mediaPlanPublishers.mediaPlanId, input.planId));
 
-  if (planPubs.length > 0) {
+  const overrideByPub = new Map<string, boolean | null>();
+  for (const r of planPubRows) {
+    const prev = overrideByPub.get(r.publisherId);
+    // Cualquier override true gana; si solo hay false → false; si todos null → null.
+    if (r.mppOverride === true) overrideByPub.set(r.publisherId, true);
+    else if (prev === undefined) overrideByPub.set(r.publisherId, r.mppOverride);
+    else if (prev === null && r.mppOverride === false) overrideByPub.set(r.publisherId, false);
+  }
+  const uniquePubIds = Array.from(overrideByPub.keys());
+
+  if (uniquePubIds.length > 0) {
     // Need agency_pays defaults from publishers
     const pubDefaults = await db
       .select({ id: publishers.id, agencyPaysDefault: publishers.agencyPaysDefault })
       .from(publishers)
-      .where(inArray(publishers.id, planPubs.map((p) => p.publisherId)));
+      .where(inArray(publishers.id, uniquePubIds));
     const defaultsMap = new Map(pubDefaults.map((p) => [p.id, p.agencyPaysDefault]));
 
     await db.insert(planBillingPublishers).values(
-      planPubs.map((p) => ({
+      uniquePubIds.map((publisherId) => ({
         planBillingId: billing.id,
-        publisherId: p.publisherId,
+        publisherId,
         amountRealUsd: "0.00",
-        isBillable: p.mppOverride ?? defaultsMap.get(p.publisherId) ?? true,
+        isBillable:
+          overrideByPub.get(publisherId) ?? defaultsMap.get(publisherId) ?? true,
       })),
     );
   }
@@ -182,18 +197,22 @@ export async function setPublisherConsumption(input: {
     .limit(1);
   if (!billing) return { ok: false, error: "Billing no encontrado" };
 
+  // Suma de TODOS los bloques del publisher en el plan (un publisher puede
+  // tener N bloques con sus propios totales).
   const [planPub] = await db
-    .select({ totalPlannedUsd: mediaPlanPublishers.totalPlannedUsd })
+    .select({
+      totalPlannedUsd: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+      blocks: sql<number>`count(*)::int`,
+    })
     .from(mediaPlanPublishers)
     .where(
       and(
         eq(mediaPlanPublishers.mediaPlanId, billing.mediaPlanId),
         eq(mediaPlanPublishers.publisherId, input.publisherId),
       ),
-    )
-    .limit(1);
+    );
 
-  if (planPub) {
+  if (planPub && planPub.blocks > 0) {
     const [accumOthersRow] = await db
       .select({
         total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
