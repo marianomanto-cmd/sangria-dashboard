@@ -78,6 +78,164 @@ export async function createPlan(input: {
   return { ok: true, planId: plan.id };
 }
 
+// Duplica un plan existente dentro de un proyecto (puede ser el mismo del
+// plan fuente o uno distinto del mismo cliente). Clona el plan + todos sus
+// publishers + placements + fees. El plan nuevo arranca en estado 'draft',
+// con currentVersion=0 y SIN snapshots (los aprobados se quedan en el
+// original). Si el targetProject es del mismo cliente que el fuente,
+// dejamos pasar; si es de otro cliente, fallamos (los publishers /
+// markets / metrics son per-cliente y no se pueden mezclar).
+export async function duplicatePlan(input: {
+  sourcePlanId: string;
+  targetProjectId: string;
+  newName: string;
+}): Promise<Result<{ planId: string }>> {
+  if (!input.newName.trim())
+    return { ok: false, error: "El plan necesita un nombre" };
+
+  const [src] = await db
+    .select({
+      plan: mediaPlans,
+      sourceClientId: projects.clientId,
+    })
+    .from(mediaPlans)
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .where(eq(mediaPlans.id, input.sourcePlanId))
+    .limit(1);
+  if (!src) return { ok: false, error: "Plan fuente no encontrado" };
+
+  const [target] = await db
+    .select({ id: projects.id, clientId: projects.clientId, code: projects.code })
+    .from(projects)
+    .where(eq(projects.id, input.targetProjectId))
+    .limit(1);
+  if (!target) return { ok: false, error: "Proyecto destino no encontrado" };
+
+  if (target.clientId !== src.sourceClientId) {
+    return {
+      ok: false,
+      error:
+        "El proyecto destino es de otro cliente — los publishers, markets y métricas no se comparten entre clientes.",
+    };
+  }
+
+  const [collision] = await db
+    .select({ id: mediaPlans.id })
+    .from(mediaPlans)
+    .where(
+      and(
+        eq(mediaPlans.projectId, input.targetProjectId),
+        eq(mediaPlans.name, input.newName.trim()),
+      ),
+    )
+    .limit(1);
+  if (collision) {
+    return {
+      ok: false,
+      error: `Ya existe un plan llamado "${input.newName}" en el proyecto destino`,
+    };
+  }
+
+  // Snapshot completo del plan fuente.
+  const srcPubs = await db
+    .select()
+    .from(mediaPlanPublishers)
+    .where(eq(mediaPlanPublishers.mediaPlanId, input.sourcePlanId))
+    .orderBy(asc(mediaPlanPublishers.sortOrder));
+
+  const srcPubIds = srcPubs.map((p) => p.id);
+  const srcPlacements =
+    srcPubIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(mediaPlanPlacements)
+          .where(inArray(mediaPlanPlacements.mediaPlanPublisherId, srcPubIds))
+          .orderBy(asc(mediaPlanPlacements.sortOrder));
+
+  const srcFees = await db
+    .select()
+    .from(mediaPlanFees)
+    .where(eq(mediaPlanFees.mediaPlanId, input.sourcePlanId))
+    .orderBy(asc(mediaPlanFees.sortOrder));
+
+  // Insertar plan nuevo en draft.
+  const [newPlan] = await db
+    .insert(mediaPlans)
+    .values({
+      projectId: input.targetProjectId,
+      name: input.newName.trim(),
+      status: "draft",
+      notesMd: src.plan.notesMd,
+    })
+    .returning();
+
+  // Insertar publishers (mapeando oldMppId → newMppId para los placements).
+  const idMap = new Map<string, string>();
+  for (const pub of srcPubs) {
+    const [newPub] = await db
+      .insert(mediaPlanPublishers)
+      .values({
+        mediaPlanId: newPlan.id,
+        publisherId: pub.publisherId,
+        totalPlannedUsd: pub.totalPlannedUsd,
+        agencyPaysOverride: pub.agencyPaysOverride,
+        sortOrder: pub.sortOrder,
+      })
+      .returning();
+    idMap.set(pub.id, newPub.id);
+  }
+
+  if (srcPlacements.length > 0) {
+    await db.insert(mediaPlanPlacements).values(
+      srcPlacements.map((p) => ({
+        mediaPlanPublisherId: idMap.get(p.mediaPlanPublisherId)!,
+        placementName: p.placementName,
+        marketId: p.marketId,
+        audience: p.audience,
+        amountUsd: p.amountUsd,
+        costMethod: p.costMethod,
+        startDate: p.startDate,
+        endDate: p.endDate,
+        metricsJson: p.metricsJson ?? {},
+        notesMd: p.notesMd,
+        sortOrder: p.sortOrder,
+      })),
+    );
+  }
+
+  if (srcFees.length > 0) {
+    await db.insert(mediaPlanFees).values(
+      srcFees.map((f) => ({
+        mediaPlanId: newPlan.id,
+        feeType: f.feeType,
+        name: f.name,
+        ratePct: f.ratePct,
+        amountUsd: f.amountUsd,
+        notes: f.notes,
+        sortOrder: f.sortOrder,
+      })),
+    );
+  }
+
+  await db.insert(auditLog).values({
+    entityType: "media_plan",
+    entityId: newPlan.id,
+    action: "create",
+    afterJson: {
+      ...newPlan,
+      duplicatedFromPlanId: input.sourcePlanId,
+      publishersCopied: srcPubs.length,
+      placementsCopied: srcPlacements.length,
+      feesCopied: srcFees.length,
+    },
+  });
+
+  revalidatePath(`/proyectos/${target.code}`);
+
+  return { ok: true, planId: newPlan.id };
+}
+
 export async function updatePlanMetadata(input: {
   planId: string;
   name?: string;
@@ -804,4 +962,103 @@ export async function listAllMetricsForClient(clientId: string) {
     .from(metricsCatalog)
     .where(eq(metricsCatalog.clientId, clientId))
     .orderBy(asc(metricsCatalog.sortOrder), asc(metricsCatalog.name));
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Lookup para "duplicar plan" en el form de "+ Nuevo plan": lista todos los
+// planes del cliente del proyecto destino (cualquier status, cualquier
+// proyecto) con los markets y publishers presentes adentro + total media.
+// Muestra al planner qué tiene cada plan antes de elegir cuál duplicar.
+// ════════════════════════════════════════════════════════════════════════════
+
+export type SourcePlanOption = {
+  planId: string;
+  planName: string;
+  projectCode: string;
+  projectName: string;
+  status: string;
+  totalMediaUsd: number;
+  markets: string[];
+  publishers: string[];
+  periodStart: string | null;
+  periodEnd: string | null;
+};
+
+export async function listSourcePlansForClient(
+  clientId: string,
+): Promise<SourcePlanOption[]> {
+  // Una sola query con array_agg para markets / publishers + sum del total.
+  // Filtramos null markets (placements sin mercado) para no contar "—" en
+  // el listado. Los publishers vienen de los bloques (un mismo publisher
+  // sale una sola vez por distinct).
+  const rows = await db
+    .select({
+      planId: mediaPlans.id,
+      planName: mediaPlans.name,
+      status: mediaPlans.status,
+      projectCode: projects.code,
+      projectName: projects.name,
+      totalMediaUsd: sql<string>`coalesce(sum(distinct ${mediaPlanPublishers.totalPlannedUsd}::numeric * 0 + ${mediaPlanPublishers.totalPlannedUsd}::numeric), 0)`,
+      // Markets distintos a través de los placements del plan.
+      markets: sql<string[]>`coalesce(array_agg(distinct ${markets.name}) filter (where ${markets.name} is not null), '{}'::text[])`,
+      // Publishers distintos a través de los bloques.
+      publishers: sql<string[]>`coalesce(array_agg(distinct ${publishers.name}) filter (where ${publishers.name} is not null), '{}'::text[])`,
+      periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
+      periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
+    })
+    .from(mediaPlans)
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .leftJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+    )
+    .leftJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
+    .leftJoin(
+      mediaPlanPlacements,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .leftJoin(markets, eq(mediaPlanPlacements.marketId, markets.id))
+    .where(eq(projects.clientId, clientId))
+    .groupBy(mediaPlans.id, projects.id);
+
+  // El "sum distinct" arriba es un workaround porque drizzle no nos deja
+  // hacer sum sobre el group de publishers (los joins generan filas
+  // duplicadas). Si un mismo bloque aparece N veces por los joins de
+  // placements/markets, el sum lo sobrecuenta. Como cada mediaPlanPublishers
+  // tiene id único y totalPlannedUsd es escalar, hacemos el sum en JS para
+  // evitar errores: re-fetch los totals con una query mínima por plan.
+  const planIds = rows.map((r) => r.planId);
+  const totalsByPlan = new Map<string, number>();
+  if (planIds.length > 0) {
+    const totals = await db
+      .select({
+        planId: mediaPlanPublishers.mediaPlanId,
+        total: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+      })
+      .from(mediaPlanPublishers)
+      .where(inArray(mediaPlanPublishers.mediaPlanId, planIds))
+      .groupBy(mediaPlanPublishers.mediaPlanId);
+    for (const t of totals) totalsByPlan.set(t.planId, Number.parseFloat(t.total));
+  }
+
+  return rows
+    .map((r) => ({
+      planId: r.planId,
+      planName: r.planName,
+      projectCode: r.projectCode,
+      projectName: r.projectName,
+      status: r.status,
+      totalMediaUsd: totalsByPlan.get(r.planId) ?? 0,
+      markets: [...r.markets].sort((a, b) => a.localeCompare(b)),
+      publishers: [...r.publishers].sort((a, b) => a.localeCompare(b)),
+      periodStart: r.periodStart,
+      periodEnd: r.periodEnd,
+    }))
+    .sort((a, b) => {
+      // Recientes primero (por periodStart desc, los sin fecha al final).
+      if (a.periodStart && b.periodStart) return b.periodStart.localeCompare(a.periodStart);
+      if (a.periodStart) return -1;
+      if (b.periodStart) return 1;
+      return a.planName.localeCompare(b.planName);
+    });
 }
