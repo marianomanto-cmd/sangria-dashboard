@@ -102,7 +102,7 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
       publisherId: mediaPlanPublishers.publisherId,
       publisherName: publishers.name,
       publisherSlug: publishers.slug,
-      agencyPaysDefault: publishers.agencyPaysDefault,
+      agencyPaysDefault: publishers.agencyPays,
       agencyPaysOverride: mediaPlanPublishers.agencyPaysOverride,
       totalPlannedUsd: mediaPlanPublishers.totalPlannedUsd,
       sortOrder: publishers.sortOrder,

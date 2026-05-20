@@ -31,7 +31,6 @@ alter table public.markets                     enable row level security;
 alter table public.metrics_catalog             enable row level security;
 alter table public.publishers                  enable row level security;
 alter table public.clients                     enable row level security;
-alter table public.client_publishers           enable row level security;
 alter table public.budget_origins              enable row level security;
 alter table public.projects                    enable row level security;
 alter table public.media_plans                 enable row level security;

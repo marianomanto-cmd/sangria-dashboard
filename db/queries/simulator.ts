@@ -23,8 +23,8 @@ import type {
 //   1) getBenchmarks(): agrega históricos de campaign_actual_snapshots por
 //      (publisher × market × costMethod), calculando CPM/CPC/CPV/CTR por
 //      placement y devolviendo p25/p50/p75 + % delivery mediano.
-//   2) getSimulatorCatalogs(): publishers globales + markets del cliente +
-//      cost methods. Lo consume el Builder para los selects.
+//   2) getSimulatorCatalogs(): publishers + markets del cliente + cost methods.
+//      Lo consume el Builder para los selects.
 //   3) listScenarios() / getScenario(): CRUD read sobre simulator_scenarios.
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -528,11 +528,15 @@ export async function getSimulatorCatalogs(
   clientId: string | null,
 ): Promise<SimulatorCatalogs> {
   const [pubRows, marketRows] = await Promise.all([
-    db
-      .select({ id: publishers.id, name: publishers.name })
-      .from(publishers)
-      .where(eq(publishers.enabled, true))
-      .orderBy(asc(publishers.sortOrder), asc(publishers.name)),
+    clientId
+      ? db
+          .select({ id: publishers.id, name: publishers.name })
+          .from(publishers)
+          .where(
+            and(eq(publishers.clientId, clientId), eq(publishers.enabled, true)),
+          )
+          .orderBy(asc(publishers.sortOrder), asc(publishers.name))
+      : Promise.resolve([] as { id: string; name: string }[]),
     clientId
       ? db
           .select({ id: markets.id, name: markets.name })

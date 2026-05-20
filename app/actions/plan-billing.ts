@@ -88,10 +88,10 @@ export async function ensureBillingForMonth(input: {
   if (uniquePubIds.length > 0) {
     // Need agency_pays defaults from publishers
     const pubDefaults = await db
-      .select({ id: publishers.id, agencyPaysDefault: publishers.agencyPaysDefault })
+      .select({ id: publishers.id, agencyPays: publishers.agencyPays })
       .from(publishers)
       .where(inArray(publishers.id, uniquePubIds));
-    const defaultsMap = new Map(pubDefaults.map((p) => [p.id, p.agencyPaysDefault]));
+    const defaultsMap = new Map(pubDefaults.map((p) => [p.id, p.agencyPays]));
 
     await db.insert(planBillingPublishers).values(
       uniquePubIds.map((publisherId) => ({

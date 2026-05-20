@@ -3,7 +3,8 @@
 // Cubre:
 //   · 4 clientes en distintos estados (active / paused), cada uno con su
 //     propio subset de publishers y su propia regla de "agencia/cliente paga"
-//   · Catálogos: 11 publishers + 14 markets + 17 metrics
+//   · Catálogos per-cliente: publishers + markets + metrics (cada cliente
+//     tiene su propia lista; no hay catálogo global)
 //   · 9 proyectos cubriendo TODOS los estados: planning / active / paused / closed
 //   · ~14 planes peer cubriendo TODOS los estados: draft / ready_to_send /
 //     approved / archived
@@ -32,42 +33,31 @@ async function main() {
   await db.delete(s.projectReports);
   await db.delete(s.projects);
   await db.delete(s.budgetOrigins);
-  await db.delete(s.clientPublishers);
-  await db.delete(s.clients);
   await db.delete(s.publishers);
   await db.delete(s.markets);
   await db.delete(s.metricsCatalog);
+  await db.delete(s.clients);
 
   // ════════════════════════════════════════════════════════════════════════
-  // Catálogos globales
+  // Catálogos per-cliente
   // ════════════════════════════════════════════════════════════════════════
 
-  console.log("⏳ Catálogo de publishers...");
-  const pubs = await db
-    .insert(s.publishers)
-    .values([
-      { slug: "youtube", name: "YouTube", agencyPaysDefault: true, sortOrder: 0 },
-      { slug: "meta", name: "Meta", agencyPaysDefault: true, sortOrder: 1 },
-      { slug: "tiktok", name: "TikTok", agencyPaysDefault: true, sortOrder: 2 },
-      { slug: "dv360", name: "DV360", agencyPaysDefault: true, sortOrder: 3 },
-      { slug: "display", name: "Display", agencyPaysDefault: true, sortOrder: 4 },
-      { slug: "search", name: "Google Search", agencyPaysDefault: true, sortOrder: 5 },
-      { slug: "spotify", name: "Spotify", agencyPaysDefault: true, sortOrder: 6 },
-      { slug: "ooh", name: "OOH (Out of Home)", agencyPaysDefault: false, sortOrder: 7 },
-      { slug: "programmatic", name: "Programmatic", agencyPaysDefault: true, sortOrder: 8 },
-      { slug: "linkedin", name: "LinkedIn", agencyPaysDefault: true, sortOrder: 9 },
-      { slug: "x", name: "X (Twitter)", agencyPaysDefault: true, sortOrder: 10 },
-    ])
-    .returning();
-
-  const pubBySlug = new Map(pubs.map((p) => [p.slug, p]));
-  const pub = (slug: string) => {
-    const p = pubBySlug.get(slug);
-    if (!p) throw new Error(`Publisher slug ${slug} no existe`);
-    return p;
+  // Nombres "lindos" por slug — para sembrar los publishers per-cliente abajo.
+  const PUBLISHER_NAMES: Record<string, string> = {
+    youtube: "YouTube",
+    meta: "Meta",
+    tiktok: "TikTok",
+    dv360: "DV360",
+    display: "Display",
+    search: "Google Search",
+    spotify: "Spotify",
+    ooh: "OOH (Out of Home)",
+    programmatic: "Programmatic",
+    linkedin: "LinkedIn",
+    x: "X (Twitter)",
   };
 
-  // El catálogo de markets y metricas ahora es per-cliente. Lo armamos
+  // El catálogo de publishers, markets y metricas ahora es per-cliente. Lo armamos
   // después de insertar los clientes — ver más abajo.
   console.log("⏳ Catálogo de mercados y métricas: skipped (per cliente, después)");
 
@@ -173,51 +163,91 @@ async function main() {
   });
 
   // ════════════════════════════════════════════════════════════════════════
-  // Mapping per-cliente del catálogo de publishers.
-  // Cada cliente tiene su propia lista habilitada y reglas de pago.
+  // Publishers per-cliente. Cada cliente tiene su propia lista, con su slug,
+  // nombre, regla de pago (agencia / cliente) y orden.
   // ════════════════════════════════════════════════════════════════════════
 
-  console.log("⏳ Publishers por cliente...");
+  console.log("⏳ Publishers per cliente...");
 
-  // Copa: catálogo amplio, agencia paga casi todo (excepto OOH)
-  await db.insert(s.clientPublishers).values([
-    { clientId: copa.id, publisherId: pub("youtube").id,      agencyPays: true,  sortOrder: 0 },
-    { clientId: copa.id, publisherId: pub("meta").id,          agencyPays: true,  sortOrder: 1 },
-    { clientId: copa.id, publisherId: pub("tiktok").id,        agencyPays: true,  sortOrder: 2 },
-    { clientId: copa.id, publisherId: pub("dv360").id,         agencyPays: true,  sortOrder: 3 },
-    { clientId: copa.id, publisherId: pub("display").id,       agencyPays: true,  sortOrder: 4 },
-    { clientId: copa.id, publisherId: pub("search").id,        agencyPays: true,  sortOrder: 5 },
-    { clientId: copa.id, publisherId: pub("spotify").id,       agencyPays: true,  sortOrder: 6 },
-    { clientId: copa.id, publisherId: pub("ooh").id,           agencyPays: false, sortOrder: 7 },
-    { clientId: copa.id, publisherId: pub("programmatic").id,  agencyPays: true,  sortOrder: 8 },
-  ]);
+  const CLIENT_PUBLISHERS: {
+    clientId: string;
+    list: { slug: string; agencyPays: boolean }[];
+  }[] = [
+    // Copa: catálogo amplio, agencia paga casi todo (excepto OOH).
+    {
+      clientId: copa.id,
+      list: [
+        { slug: "youtube", agencyPays: true },
+        { slug: "meta", agencyPays: true },
+        { slug: "tiktok", agencyPays: true },
+        { slug: "dv360", agencyPays: true },
+        { slug: "display", agencyPays: true },
+        { slug: "search", agencyPays: true },
+        { slug: "spotify", agencyPays: true },
+        { slug: "ooh", agencyPays: false },
+        { slug: "programmatic", agencyPays: true },
+      ],
+    },
+    // Cervecería Andina: foco social. Spotify = cliente paga directo.
+    {
+      clientId: cra.id,
+      list: [
+        { slug: "youtube", agencyPays: true },
+        { slug: "meta", agencyPays: true },
+        { slug: "tiktok", agencyPays: true },
+        { slug: "spotify", agencyPays: false },
+        { slug: "programmatic", agencyPays: true },
+        { slug: "x", agencyPays: true },
+      ],
+    },
+    // Banco Pacífico: B2B / display-heavy + LinkedIn. OOH = agencia paga.
+    {
+      clientId: bpac.id,
+      list: [
+        { slug: "search", agencyPays: true },
+        { slug: "display", agencyPays: true },
+        { slug: "meta", agencyPays: true },
+        { slug: "linkedin", agencyPays: true },
+        { slug: "programmatic", agencyPays: true },
+        { slug: "ooh", agencyPays: true },
+      ],
+    },
+    // Tienda Roma: catálogo mínimo.
+    {
+      clientId: tr.id,
+      list: [
+        { slug: "meta", agencyPays: true },
+        { slug: "tiktok", agencyPays: true },
+        { slug: "search", agencyPays: true },
+      ],
+    },
+  ];
 
-  // Cervecería Andina: foco social. Spotify = cliente paga directo.
-  await db.insert(s.clientPublishers).values([
-    { clientId: cra.id, publisherId: pub("youtube").id,     agencyPays: true,  sortOrder: 0 },
-    { clientId: cra.id, publisherId: pub("meta").id,         agencyPays: true,  sortOrder: 1 },
-    { clientId: cra.id, publisherId: pub("tiktok").id,       agencyPays: true,  sortOrder: 2 },
-    { clientId: cra.id, publisherId: pub("spotify").id,      agencyPays: false, sortOrder: 3 },
-    { clientId: cra.id, publisherId: pub("programmatic").id, agencyPays: true,  sortOrder: 4 },
-    { clientId: cra.id, publisherId: pub("x").id,            agencyPays: true,  sortOrder: 5 },
-  ]);
+  const pubRowsSeed = await db
+    .insert(s.publishers)
+    .values(
+      CLIENT_PUBLISHERS.flatMap((c) =>
+        c.list.map((p, i) => ({
+          clientId: c.clientId,
+          slug: p.slug,
+          name: PUBLISHER_NAMES[p.slug] ?? p.slug,
+          agencyPays: p.agencyPays,
+          enabled: true,
+          sortOrder: i,
+        })),
+      ),
+    )
+    .returning();
 
-  // Banco Pacífico: B2B / display-heavy + LinkedIn. OOH = agencia paga (override).
-  await db.insert(s.clientPublishers).values([
-    { clientId: bpac.id, publisherId: pub("search").id,       agencyPays: true, sortOrder: 0 },
-    { clientId: bpac.id, publisherId: pub("display").id,      agencyPays: true, sortOrder: 1 },
-    { clientId: bpac.id, publisherId: pub("meta").id,         agencyPays: true, sortOrder: 2 },
-    { clientId: bpac.id, publisherId: pub("linkedin").id,     agencyPays: true, sortOrder: 3 },
-    { clientId: bpac.id, publisherId: pub("programmatic").id, agencyPays: true, sortOrder: 4 },
-    { clientId: bpac.id, publisherId: pub("ooh").id,          agencyPays: true, sortOrder: 5 },
-  ]);
-
-  // Tienda Roma: catálogo mínimo
-  await db.insert(s.clientPublishers).values([
-    { clientId: tr.id, publisherId: pub("meta").id,    agencyPays: true, sortOrder: 0 },
-    { clientId: tr.id, publisherId: pub("tiktok").id,  agencyPays: true, sortOrder: 1 },
-    { clientId: tr.id, publisherId: pub("search").id,  agencyPays: true, sortOrder: 2 },
-  ]);
+  const pubByClientAndSlug = new Map(
+    pubRowsSeed.map((p) => [`${p.clientId}|${p.slug}`, p]),
+  );
+  const pubFor = (clientId: string, slug: string) => {
+    const p = pubByClientAndSlug.get(`${clientId}|${slug}`);
+    if (!p)
+      throw new Error(`Publisher ${slug} no existe para cliente ${clientId}`);
+    return p;
+  };
 
   // ════════════════════════════════════════════════════════════════════════
   // Budget Origins por cliente
@@ -456,7 +486,7 @@ async function main() {
         .insert(s.mediaPlanPublishers)
         .values({
           mediaPlanId: plan.id,
-          publisherId: pub(psp.slug).id,
+          publisherId: pubFor(planClientId, psp.slug).id,
           totalPlannedUsd: psp.totalPlanned.toFixed(2),
           sortOrder: i,
         })
@@ -1321,9 +1351,9 @@ async function main() {
     .returning();
 
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billAwFeb.id, publisherId: pub("youtube").id, amountRealUsd: "22000.00", isBillable: true, notes: "50% Bumper + parcial In-Stream" },
-    { planBillingId: billAwFeb.id, publisherId: pub("meta").id,    amountRealUsd: "16000.00", isBillable: true, notes: "50% Feed + 30% Reels" },
-    { planBillingId: billAwFeb.id, publisherId: pub("tiktok").id,  amountRealUsd: "10000.00", isBillable: true, notes: "50% TikTok In-Feed" },
+    { planBillingId: billAwFeb.id, publisherId: pubFor(copa.id, "youtube").id, amountRealUsd: "22000.00", isBillable: true, notes: "50% Bumper + parcial In-Stream" },
+    { planBillingId: billAwFeb.id, publisherId: pubFor(copa.id, "meta").id,    amountRealUsd: "16000.00", isBillable: true, notes: "50% Feed + 30% Reels" },
+    { planBillingId: billAwFeb.id, publisherId: pubFor(copa.id, "tiktok").id,  amountRealUsd: "10000.00", isBillable: true, notes: "50% TikTok In-Feed" },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billAwFeb.id, mediaPlanFeeId: awareness.fees[0].id, amountImputedUsd: "7500.00", notes: "50% Mgmt Fee" },
@@ -1346,9 +1376,9 @@ async function main() {
     .returning();
 
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billAwMar.id, publisherId: pub("youtube").id, amountRealUsd: "23000.00", isBillable: true },
-    { planBillingId: billAwMar.id, publisherId: pub("meta").id,    amountRealUsd: "19000.00", isBillable: true },
-    { planBillingId: billAwMar.id, publisherId: pub("tiktok").id,  amountRealUsd: "10000.00", isBillable: true },
+    { planBillingId: billAwMar.id, publisherId: pubFor(copa.id, "youtube").id, amountRealUsd: "23000.00", isBillable: true },
+    { planBillingId: billAwMar.id, publisherId: pubFor(copa.id, "meta").id,    amountRealUsd: "19000.00", isBillable: true },
+    { planBillingId: billAwMar.id, publisherId: pubFor(copa.id, "tiktok").id,  amountRealUsd: "10000.00", isBillable: true },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billAwMar.id, mediaPlanFeeId: awareness.fees[0].id, amountImputedUsd: "7500.00", notes: "50% Mgmt Fee" },
@@ -1371,8 +1401,8 @@ async function main() {
     .returning();
 
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billBrandMar.id, publisherId: pub("youtube").id, amountRealUsd: "20000.00", isBillable: true },
-    { planBillingId: billBrandMar.id, publisherId: pub("meta").id,    amountRealUsd: "10000.00", isBillable: true },
+    { planBillingId: billBrandMar.id, publisherId: pubFor(copa.id, "youtube").id, amountRealUsd: "20000.00", isBillable: true },
+    { planBillingId: billBrandMar.id, publisherId: pubFor(copa.id, "meta").id,    amountRealUsd: "10000.00", isBillable: true },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billBrandMar.id, mediaPlanFeeId: brandCont.fees[0].id, amountImputedUsd: "5000.00" },
@@ -1393,8 +1423,8 @@ async function main() {
     ])
     .returning();
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billBrandApr.id, publisherId: pub("youtube").id, amountRealUsd: "20000.00", isBillable: true },
-    { planBillingId: billBrandApr.id, publisherId: pub("meta").id,    amountRealUsd: "10000.00", isBillable: true },
+    { planBillingId: billBrandApr.id, publisherId: pubFor(copa.id, "youtube").id, amountRealUsd: "20000.00", isBillable: true },
+    { planBillingId: billBrandApr.id, publisherId: pubFor(copa.id, "meta").id,    amountRealUsd: "10000.00", isBillable: true },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billBrandApr.id, mediaPlanFeeId: brandCont.fees[0].id, amountImputedUsd: "5000.00" },
@@ -1415,9 +1445,9 @@ async function main() {
     ])
     .returning();
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billCuentasMar.id, publisherId: pub("search").id, amountRealUsd: "10000.00", isBillable: true },
-    { planBillingId: billCuentasMar.id, publisherId: pub("meta").id,   amountRealUsd: "7000.00",  isBillable: true },
-    { planBillingId: billCuentasMar.id, publisherId: pub("display").id,amountRealUsd: "3000.00",  isBillable: true },
+    { planBillingId: billCuentasMar.id, publisherId: pubFor(bpac.id, "search").id, amountRealUsd: "10000.00", isBillable: true },
+    { planBillingId: billCuentasMar.id, publisherId: pubFor(bpac.id, "meta").id,   amountRealUsd: "7000.00",  isBillable: true },
+    { planBillingId: billCuentasMar.id, publisherId: pubFor(bpac.id, "display").id,amountRealUsd: "3000.00",  isBillable: true },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billCuentasMar.id, mediaPlanFeeId: cuentas.fees[0].id, amountImputedUsd: "2400.00" },
@@ -1440,8 +1470,8 @@ async function main() {
     ])
     .returning();
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billPrestApr.id, publisherId: pub("search").id,   amountRealUsd: "11000.00", isBillable: true },
-    { planBillingId: billPrestApr.id, publisherId: pub("linkedin").id, amountRealUsd: "5000.00",  isBillable: true },
+    { planBillingId: billPrestApr.id, publisherId: pubFor(bpac.id, "search").id,   amountRealUsd: "11000.00", isBillable: true },
+    { planBillingId: billPrestApr.id, publisherId: pubFor(bpac.id, "linkedin").id, amountRealUsd: "5000.00",  isBillable: true },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billPrestApr.id, mediaPlanFeeId: prest.fees[0].id, amountImputedUsd: "1900.00" },
@@ -1461,11 +1491,11 @@ async function main() {
     ])
     .returning();
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billIpaApr.id, publisherId: pub("youtube").id, amountRealUsd: "5000.00", isBillable: true },
-    { planBillingId: billIpaApr.id, publisherId: pub("meta").id,    amountRealUsd: "4500.00", isBillable: true },
-    { planBillingId: billIpaApr.id, publisherId: pub("tiktok").id,  amountRealUsd: "2500.00", isBillable: true },
+    { planBillingId: billIpaApr.id, publisherId: pubFor(cra.id, "youtube").id, amountRealUsd: "5000.00", isBillable: true },
+    { planBillingId: billIpaApr.id, publisherId: pubFor(cra.id, "meta").id,    amountRealUsd: "4500.00", isBillable: true },
+    { planBillingId: billIpaApr.id, publisherId: pubFor(cra.id, "tiktok").id,  amountRealUsd: "2500.00", isBillable: true },
     // Spotify es no-billable porque cliente paga directo
-    { planBillingId: billIpaApr.id, publisherId: pub("spotify").id, amountRealUsd: "1500.00", isBillable: false, notes: "Cliente paga directo" },
+    { planBillingId: billIpaApr.id, publisherId: pubFor(cra.id, "spotify").id, amountRealUsd: "1500.00", isBillable: false, notes: "Cliente paga directo" },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billIpaApr.id, mediaPlanFeeId: ipa.fees[0].id, amountImputedUsd: "1700.00" },
@@ -1487,8 +1517,8 @@ async function main() {
     ])
     .returning();
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billEoyNov.id, publisherId: pub("youtube").id, amountRealUsd: "30000.00", isBillable: true },
-    { planBillingId: billEoyNov.id, publisherId: pub("meta").id,    amountRealUsd: "25000.00", isBillable: true },
+    { planBillingId: billEoyNov.id, publisherId: pubFor(copa.id, "youtube").id, amountRealUsd: "30000.00", isBillable: true },
+    { planBillingId: billEoyNov.id, publisherId: pubFor(copa.id, "meta").id,    amountRealUsd: "25000.00", isBillable: true },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billEoyNov.id, mediaPlanFeeId: eoy.fees[0].id, amountImputedUsd: "9500.00" },
@@ -1508,8 +1538,8 @@ async function main() {
     ])
     .returning();
   await db.insert(s.planBillingPublishers).values([
-    { planBillingId: billEoyDec.id, publisherId: pub("youtube").id, amountRealUsd: "50000.00", isBillable: true },
-    { planBillingId: billEoyDec.id, publisherId: pub("meta").id,    amountRealUsd: "25000.00", isBillable: true },
+    { planBillingId: billEoyDec.id, publisherId: pubFor(copa.id, "youtube").id, amountRealUsd: "50000.00", isBillable: true },
+    { planBillingId: billEoyDec.id, publisherId: pubFor(copa.id, "meta").id,    amountRealUsd: "25000.00", isBillable: true },
   ]);
   await db.insert(s.planBillingFees).values([
     { planBillingId: billEoyDec.id, mediaPlanFeeId: eoy.fees[0].id, amountImputedUsd: "13000.00" },

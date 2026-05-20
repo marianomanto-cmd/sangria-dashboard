@@ -97,8 +97,8 @@ app/
       [planId]/             # vista de carga: tabla editable (autosave) + chart de progreso
     auditoria/              # /auditoria — log legible + papelera (/auditoria/papelera)
     configuracion/
-      markets/, metricas/, publishers/   # admin de catálogos
-      clientes/               # alta/edición de clientes (nombre, prefijo, idioma, estado)
+      markets/, metricas/     # accesos a catálogos per-cliente
+      clientes/               # alta/edición de clientes + config per-cliente (publishers, métricas, mercados, budget origins)
     reportes/
       page.tsx              # placeholders de los 6 reports analíticos
       calendario/           # Reporting Calendar (closed → reportado)
@@ -223,13 +223,17 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
 - `media_plan_placements.market_id` es FK con `ON DELETE SET NULL`.
 
 ### Publishers per cliente
-- Catálogo global `publishers` (lista maestra, editable en
-  `/configuracion/publishers`).
-- Tabla join `client_publishers (client_id, publisher_id, agency_pays,
-  enabled, sort_order)`: define el subset que cada cliente usa y su default
-  de "agencia paga" / "cliente paga".
-- En el editor del plan se listan solo los publishers habilitados para el
-  cliente del proyecto.
+- `publishers` es **per-cliente** (igual que `markets` y `metrics_catalog`):
+  cada cliente tiene su propia lista — `slug`, `name`, `agency_pays` (regla
+  "agencia paga" / "cliente paga directo"), `enabled`, `sort_order`. Unique en
+  `(client_id, slug)`. **No hay catálogo global ni tabla puente**: la tabla
+  `client_publishers` se eliminó.
+- Se administran desde `/configuracion/clientes/[slug]` (sección Publishers):
+  crear, renombrar, habilitar/deshabilitar, definir agency_pays y borrar (los
+  que estén en uso en planes no se pueden borrar — se deshabilitan). Mismo
+  patrón que Mercados y Métricas.
+- En el editor del plan se listan sólo los publishers habilitados del cliente
+  del proyecto (`listPublishersForClient` en `app/actions/plans.ts`).
 - Un mismo publisher puede aparecer **N veces** en un plan (cada bloque es
   un row independiente de `media_plan_publishers` con sus propios
   `totalPlannedUsd`, `agencyPaysOverride` y placements). Se usa para casos
@@ -241,8 +245,9 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
   a una sola línea (suma de planeados, OR de `agency_pays`). Ver
   `db/queries/billing.ts:getBillingDetail` y
   `db/queries/dashboard.ts:listPlansForDashboard` para el patrón.
-- Cascada para `agency_pays`: override del plan → default del cliente →
-  default global del catálogo.
+- Cascada para `agency_pays`: override del bloque del plan
+  (`media_plan_publishers.agency_pays_override`) → `agency_pays` del publisher
+  per-cliente.
 
 ### Billing per plan, per mes
 - `plan_billings` es la factura del plan en un mes específico.
@@ -514,12 +519,10 @@ Idempotente: limpia las tablas antes de insertar.
 - **Admin de clientes**: `/configuracion/clientes` ya existe (CRUD básico
   con idioma operativo). `/configuracion/usuarios` sigue siendo placeholder
   ("próximamente").
-- **Publishers per-cliente UI**: la edición del mapping `client_publishers`
-  hoy es vía seed; no hay UI para que el AM lo administre.
-- **Markets/metrics per-cliente (Parte B)**: hoy son catálogos globales. Se
-  pidió poder editarlos per-cliente. Requiere migración de schema (nuevas
-  tablas `client_markets` / `client_metrics` o agregar `client_id`) +
-  decisión de qué hacer con la data existente. Ver detalle en HANDOFF.md.
+- **Publishers / markets / metrics per-cliente**: resuelto. Los tres son
+  catálogos per-cliente (tabla con `client_id`, unique `(client_id, slug)`) y
+  se administran desde `/configuracion/clientes/[slug]`. Ya no hay catálogo
+  global de publishers ni tabla puente `client_publishers`.
 - **Excel**: tab 1 (Media plan) muestra placements + subtotal por publisher
   + TOTAL MEDIA, todos con sus métricas (direct = suma, calculated = recomputado
   con la fórmula del catálogo sobre el subtotal/total correspondiente). Tab 2

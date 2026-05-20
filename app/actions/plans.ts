@@ -5,7 +5,6 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import {
-  clientPublishers,
   markets,
   mediaPlanFees,
   mediaPlanPlacements,
@@ -880,46 +879,24 @@ export async function removeFee(feeId: string): Promise<Result> {
 // Lookups del catálogo (para los dropdowns del editor)
 // ════════════════════════════════════════════════════════════════════════════
 
-export async function listPublishers() {
-  return db
-    .select()
-    .from(publishers)
-    .where(eq(publishers.enabled, true))
-    .orderBy(asc(publishers.sortOrder), asc(publishers.name));
-}
-
-// Publishers habilitados para UN cliente, con su `agencyPays` propio.
-// Si el cliente todavía no tiene mapping para algún publisher del catálogo,
-// ese publisher no aparece (la mappings es la fuente de verdad por cliente).
+// Publishers habilitados para UN cliente. Cada cliente tiene su propia lista
+// (tabla `publishers` con client_id). El campo `agencyPaysDefault` que devuelve
+// es el `agency_pays` per-cliente del publisher (se mantiene el nombre por
+// compatibilidad con el editor del plan, donde es el default antes del override
+// por bloque).
 export async function listPublishersForClient(clientId: string) {
-  const rows = await db
+  return db
     .select({
       id: publishers.id,
       slug: publishers.slug,
       name: publishers.name,
       enabled: publishers.enabled,
-      agencyPays: clientPublishers.agencyPays,
-      sortOrder: clientPublishers.sortOrder,
-      cpEnabled: clientPublishers.enabled,
+      agencyPaysDefault: publishers.agencyPays,
+      sortOrder: publishers.sortOrder,
     })
-    .from(clientPublishers)
-    .innerJoin(publishers, eq(clientPublishers.publisherId, publishers.id))
-    .where(
-      and(
-        eq(clientPublishers.clientId, clientId),
-        eq(clientPublishers.enabled, true),
-        eq(publishers.enabled, true),
-      ),
-    )
-    .orderBy(asc(clientPublishers.sortOrder), asc(publishers.name));
-  return rows.map((r) => ({
-    id: r.id,
-    slug: r.slug,
-    name: r.name,
-    enabled: r.enabled,
-    agencyPaysDefault: r.agencyPays,
-    sortOrder: r.sortOrder,
-  }));
+    .from(publishers)
+    .where(and(eq(publishers.clientId, clientId), eq(publishers.enabled, true)))
+    .orderBy(asc(publishers.sortOrder), asc(publishers.name));
 }
 
 // Markets per-cliente. clientId requerido — el listado es del subset del

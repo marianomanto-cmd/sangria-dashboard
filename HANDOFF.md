@@ -2,6 +2,41 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 20/may/2026 — Publishers per-cliente (eliminar catálogo global)
+
+- **`publishers` pasa a ser per-cliente**, igual que `markets` y
+  `metrics_catalog`. Antes era un catálogo global + tabla puente
+  `client_publishers`; eso causaba que un publisher recién creado "existiera"
+  pero no apareciera para el cliente al armar un plan (había que habilitarlo
+  en el puente). Ahora cada cliente tiene su propia lista (tabla `publishers`
+  con `client_id`, `agency_pays`, `enabled`, `sort_order`, unique
+  `(client_id, slug)`).
+- **`client_publishers` se eliminó.** El `agency_pays` vive ahora directo en
+  `publishers` (per-cliente); el override por bloque del plan sigue en
+  `media_plan_publishers.agency_pays_override`.
+- **CRUD per-cliente** en `/configuracion/clientes/[slug]` (sección Publishers):
+  crear / renombrar / habilitar / definir agency_pays / borrar — mismo patrón
+  que Mercados y Métricas. Se **eliminó** la página global
+  `/configuracion/publishers`.
+- Código tocado: `db/schema.ts`, `app/actions/publishers.ts` (CRUD per-cliente),
+  `app/actions/plans.ts` (`listPublishersForClient`), queries
+  (`project-detail.ts`, `billing.ts`, `simulator.ts`),
+  `app/actions/plan-billing.ts`, la página de billing del plan, `db/rls.sql`,
+  `scripts/seed.ts`, `lib/client-filter.ts`. El editor del plan **no** cambió:
+  se mantuvo el shape de retorno de `listPublishersForClient`.
+
+**Acciones requeridas en prod** (correr ANTES o junto con el deploy del código —
+el código nuevo espera el schema per-cliente):
+1. Correr `db/publishers-per-client.sql` en el SQL Editor de Supabase. Es
+   **transaccional** (todo o nada) y migra los datos: crea las copias
+   per-cliente, re-apunta `media_plan_publishers` / `plan_billing_publishers` /
+   `campaign_actual_snapshots`, y borra `client_publishers` + los publishers
+   globales viejos. **No** usar `npm run db:push` para esto (no haría el
+   backfill de datos). Verificar con el bloque del final del archivo: conteos
+   deben quedar 8 / 2 / 50 y `publishers_huerfanos = 0`.
+2. Diagnóstico previo (20/may): toda la data de publishers era de Copa (9
+   mapeados, 0 huérfanos), conteos 8 / 2 / 50 — la migración no pierde nada.
+
 ### Cambios de la sesión 20/may/2026 — RLS en Supabase (cerrar la REST API pública)
 
 - **Row-Level Security activado en todas las tablas del schema `public`.**
@@ -510,6 +545,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+(branch claude/fix-publisher-visibility-RXmV3)  Publishers per-cliente: elimina catálogo global + client_publishers; CRUD en config del cliente + migración db/publishers-per-client.sql
 d9adeea  Enable RLS en todas las tablas de public — cierra la REST API pública de Supabase
 3b1a674  Proyectos: editar/eliminar + sacar el identificador del alta y la vista (#35)
 953ac29  Excel del plan: quitar columna Auto de Fees + grand total legible (#33)
@@ -885,19 +921,12 @@ próximo paso es agregar autenticación con roles.
 - ¿Roles per-cliente o globales? (ej. ¿un AM puede ser AM solo de Copa?)
 - ¿Cómo manejamos el flujo de aprobación de un plan — quién firma?
 
-### 3. Admin UI para per-client publishers
+### 3. Admin UI para per-client publishers — HECHO (sesión 20/may/2026)
 
-Hoy `client_publishers` se carga vía seed. Falta una página
-`/configuracion/clientes/[slug]` o tab dentro de `/clientes/[slug]` para que
-el AM pueda:
-- Habilitar/deshabilitar publishers para ese cliente.
-- Cambiar el default de "agencia paga" / "cliente paga" por publisher.
-
-Ya tenemos las server actions en `app/actions/publishers.ts` para el catálogo
-global; faltan equivalentes para `client_publishers`.
-
-Probablemente se hace junto con Parte B (paso 1) — todas las admin UIs
-per-cliente conviene tenerlas en el mismo lugar visual.
+Resuelto: `publishers` es per-cliente y se administra desde la sección
+Publishers de `/configuracion/clientes/[slug]` (crear / renombrar / habilitar /
+agency_pays / borrar). Se eliminó el catálogo global y la tabla
+`client_publishers`. Ver el bloque de sesión arriba + `db/publishers-per-client.sql`.
 
 ### 4. Admin UI para clientes y budget origins
 

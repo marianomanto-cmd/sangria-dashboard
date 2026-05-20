@@ -18,7 +18,11 @@ import {
   deleteBudgetOrigin,
   updateBudgetOrigin,
 } from "@/app/actions/budget-origins";
-import { upsertClientPublisher } from "@/app/actions/publishers";
+import {
+  createPublisher,
+  deletePublisher,
+  updatePublisher,
+} from "@/app/actions/publishers";
 import type {
   budgetOrigins as budgetOriginsTable,
   markets as marketsTable,
@@ -81,9 +85,9 @@ export function ClientConfigSections({
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Publishers — toggle enabled + agency_pays. El catálogo de publishers sigue
-// siendo global; lo que se edita acá es la columna client_publishers
-// (mapping enable/disable + agency_pays per cliente).
+// Publishers per-cliente. Mismo patrón que Mercados/Métricas: cada cliente
+// tiene su propia lista. Acá se crean, renombran, habilitan/deshabilitan,
+// se define agencia/cliente paga, y se borran (si no están en uso en planes).
 // ────────────────────────────────────────────────────────────────────────────
 
 function PublishersSection({
@@ -97,15 +101,49 @@ function PublishersSection({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [showAdd, setShowAdd] = useState(false);
+  const [draft, setDraft] = useState({ name: "", slug: "", agencyPays: true });
+  const [error, setError] = useState<string | null>(null);
 
-  const toggle = (publisherId: string, field: "enabled" | "agencyPays", v: boolean) => {
+  const onCreate = () => {
+    if (!draft.name.trim()) {
+      setError("Nombre requerido");
+      return;
+    }
+    setError(null);
     startTransition(async () => {
-      const r = await upsertClientPublisher({
+      const r = await createPublisher({
         clientId,
-        publisherId,
         clientSlug,
-        ...(field === "enabled" ? { enabled: v } : { agencyPays: v }),
+        name: draft.name.trim(),
+        slug: draft.slug.trim() || undefined,
+        agencyPays: draft.agencyPays,
       });
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      setDraft({ name: "", slug: "", agencyPays: true });
+      setShowAdd(false);
+      router.refresh();
+    });
+  };
+
+  const onUpdate = (
+    id: string,
+    partial: { name?: string; agencyPays?: boolean; enabled?: boolean },
+  ) => {
+    startTransition(async () => {
+      const r = await updatePublisher({ id, clientSlug, ...partial });
+      if (!r.ok) alert(r.error);
+      router.refresh();
+    });
+  };
+
+  const onDelete = (id: string, name: string) => {
+    if (!confirm(`¿Eliminar el publisher "${name}"?`)) return;
+    startTransition(async () => {
+      const r = await deletePublisher({ id, clientSlug });
       if (!r.ok) alert(r.error);
       router.refresh();
     });
@@ -115,68 +153,153 @@ function PublishersSection({
     <section id="publishers">
       <header className="mb-3 flex items-baseline justify-between">
         <h2 className="text-base font-semibold">Publishers</h2>
-        <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
-          {rows.filter((r) => r.enabled).length} de {rows.length} habilitados
-        </span>
+        <button
+          type="button"
+          onClick={() => setShowAdd((s) => !s)}
+          className="inline-flex items-center gap-1 rounded-md bg-ink text-white px-2.5 py-1 text-xs font-medium hover:bg-ink-2"
+        >
+          <Plus size={12} />
+          Nuevo publisher
+        </button>
       </header>
       <p className="text-xs text-muted mb-3 max-w-2xl">
-        Habilitá los publishers que este cliente usa y definí si la agencia
-        paga directo o el cliente paga al publisher. El catálogo de publishers
-        es global; agregás nuevos en{" "}
-        <a href="/configuracion/publishers" className="text-accent hover:underline">
-          /configuracion/publishers
-        </a>
-        .
+        Cada cliente tiene su propia lista de publishers. Definí si la agencia
+        paga directo o el cliente le paga al publisher (afecta facturación; el
+        tracking aplica igual). Podés deshabilitar los que el cliente dejó de
+        usar — los que estén en uso en algún plan no se pueden borrar.
       </p>
+      {showAdd && (
+        <div className="rounded-lg border border-line bg-paper-2 p-4 mb-3 space-y-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+            <input
+              type="text"
+              placeholder="Nombre (ej. YouTube)"
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
+            />
+            <input
+              type="text"
+              placeholder="slug (opcional, ej. youtube)"
+              value={draft.slug}
+              onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
+            />
+            <select
+              value={draft.agencyPays ? "agency" : "client"}
+              onChange={(e) =>
+                setDraft({ ...draft, agencyPays: e.target.value === "agency" })
+              }
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
+            >
+              <option value="agency">Agencia paga</option>
+              <option value="client">Cliente paga directo</option>
+            </select>
+          </div>
+          {error && <p className="text-xs text-danger">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onCreate}
+              disabled={pending}
+              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
+            >
+              Crear
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAdd(false);
+                setError(null);
+              }}
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-muted hover:text-ink"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
       <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-paper">
             <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
               <th className="text-left font-medium px-5 py-2.5">Publisher</th>
+              <th className="text-left font-medium px-5 py-2.5">Slug</th>
               <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
               <th className="text-left font-medium px-5 py-2.5">Pago</th>
+              <th className="w-10" />
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr
-                key={r.publisherId}
-                className="border-t border-line-soft hover:bg-paper-2/50"
-              >
-                <td className="px-5 py-2">
-                  <span className="font-medium text-ink">{r.publisherName}</span>
-                  <span className="ml-2 text-[11px] font-mono text-muted">
-                    {r.publisherSlug}
-                  </span>
-                </td>
-                <td className="px-5 py-2">
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={r.enabled}
-                      disabled={pending}
-                      onChange={(e) =>
-                        toggle(r.publisherId, "enabled", e.target.checked)
-                      }
-                    />
-                    <span className="text-muted">{r.enabled ? "Sí" : "No"}</span>
-                  </label>
-                </td>
-                <td className="px-5 py-2">
-                  <select
-                    value={r.agencyPays ? "agency" : "client"}
-                    disabled={pending || !r.enabled}
-                    onChange={(e) =>
-                      toggle(r.publisherId, "agencyPays", e.target.value === "agency")
-                    }
-                    className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs disabled:opacity-50"
-                  >
-                    <option value="agency">Agencia paga</option>
-                    <option value="client">Cliente paga directo</option>
-                  </select>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-5 py-8 text-center text-xs text-muted italic">
+                  Sin publishers. Agregá el primero con el botón de arriba.
                 </td>
               </tr>
-            ))}
+            ) : (
+              rows.map((r) => (
+                <tr
+                  key={r.publisherId}
+                  className="border-t border-line-soft hover:bg-paper-2/50"
+                >
+                  <td className="px-5 py-2">
+                    <input
+                      type="text"
+                      defaultValue={r.publisherName}
+                      disabled={pending}
+                      onBlur={(e) =>
+                        e.target.value !== r.publisherName &&
+                        onUpdate(r.publisherId, { name: e.target.value })
+                      }
+                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                    />
+                  </td>
+                  <td className="px-5 py-2 font-mono text-xs text-muted">
+                    {r.publisherSlug}
+                  </td>
+                  <td className="px-5 py-2">
+                    <label className="inline-flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={r.enabled}
+                        disabled={pending}
+                        onChange={(e) =>
+                          onUpdate(r.publisherId, { enabled: e.target.checked })
+                        }
+                      />
+                      <span className="text-muted">{r.enabled ? "Sí" : "No"}</span>
+                    </label>
+                  </td>
+                  <td className="px-5 py-2">
+                    <select
+                      value={r.agencyPays ? "agency" : "client"}
+                      disabled={pending}
+                      onChange={(e) =>
+                        onUpdate(r.publisherId, {
+                          agencyPays: e.target.value === "agency",
+                        })
+                      }
+                      className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs disabled:opacity-50"
+                    >
+                      <option value="agency">Agencia paga</option>
+                      <option value="client">Cliente paga directo</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-2">
+                    <button
+                      type="button"
+                      onClick={() => onDelete(r.publisherId, r.publisherName)}
+                      disabled={pending}
+                      className="text-muted hover:text-danger p-1"
+                      aria-label="Eliminar"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
