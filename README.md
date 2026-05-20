@@ -117,6 +117,7 @@ components/                 # UI compartida
 db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
+  rls.sql                   # ENABLE ROW LEVEL SECURITY en todas las tablas (cierra la REST API pública de Supabase)
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
@@ -333,6 +334,22 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
 - **Setup de prod** (no automático): ver `.env.example` para los
   pasos en Supabase dashboard y Google Cloud Console.
 
+### Seguridad: RLS en todas las tablas de `public`
+- Supabase expone **automáticamente** cada tabla del schema `public` vía su
+  REST API (PostgREST), accesible con la anon key — que es **pública por
+  diseño** (`NEXT_PUBLIC_SUPABASE_ANON_KEY` viaja en el bundle del browser,
+  ver `lib/supabase/client.ts`). RLS es lo único que cierra esa puerta; el
+  OAuth solo protege el acceso a la app, **no** la REST API.
+- **Todas las tablas de `public` tienen RLS activado, sin policies permisivas**
+  → los roles `anon`/`authenticated` quedan denegados en la REST API (lecturas
+  devuelven `[]`, escrituras dan error `42501`).
+- La app **no** se ve afectada: conecta como el rol `postgres` (dueño de las
+  tablas) vía Drizzle/`DATABASE_URL`, y el dueño bypassa RLS por defecto. **No**
+  se usa `FORCE ROW LEVEL SECURITY` a propósito, para preservar ese bypass.
+- El SQL aplicado vive en [`db/rls.sql`](db/rls.sql) (idempotente, con query de
+  verificación). **Toda tabla nueva** que se agregue al schema necesita su
+  propio `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`.
+
 ### Idioma operativo del cliente (i18n)
 - `clients.language` (`'en' | 'es'`, default `'en'`) define el idioma en
   el que la UI y los exports se renderizan **cuando ese cliente está
@@ -489,8 +506,10 @@ Idempotente: limpia las tablas antes de insertar.
 
 ## Issues conocidos / a resolver
 
-- **Auth/permisos**: aún no hay autenticación. La idea es Supabase Auth con
-  roles (Account Manager, Media Planner, Finance, Viewer).
+- **Permisos por rol**: ya hay autenticación (Google OAuth, sangria.agency-only
+  — ver "Auth" arriba) y RLS cierra la REST API pública de Supabase. Falta el
+  modelo de roles (Account Manager, Media Planner, Finance, Viewer): hoy todo
+  usuario logueado del dominio tiene acceso total dentro de la app.
 - **Reportes**: `/reportes` son specs sin implementar.
 - **Admin de clientes**: `/configuracion/clientes` ya existe (CRUD básico
   con idioma operativo). `/configuracion/usuarios` sigue siendo placeholder
