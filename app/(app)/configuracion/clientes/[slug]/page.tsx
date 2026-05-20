@@ -4,7 +4,6 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
-  clientPublishers,
   clients,
   markets,
   metricsCatalog,
@@ -26,38 +25,20 @@ export default async function ClientConfigPage({ params }: Props) {
     .limit(1);
   if (!client) notFound();
 
-  // Publishers: traemos el catálogo global, marcando para cada uno si está
-  // habilitado para este cliente + su agencyPays propio. Los que no tienen
-  // mapping se muestran con enabled=false / agencyPays=default global.
-  const allPubs = await db
+  // Publishers del cliente (todos, incluso deshabilitados). Cada cliente tiene
+  // su propia lista — se crean/editan acá, no hay catálogo global.
+  const pubRows = await db
     .select()
     .from(publishers)
-    .where(eq(publishers.enabled, true))
+    .where(eq(publishers.clientId, client.id))
     .orderBy(asc(publishers.sortOrder), asc(publishers.name));
-  const clientPubMap = new Map<
-    string,
-    { enabled: boolean; agencyPays: boolean }
-  >();
-  const cpRows = await db
-    .select()
-    .from(clientPublishers)
-    .where(eq(clientPublishers.clientId, client.id));
-  for (const r of cpRows) {
-    clientPubMap.set(r.publisherId, {
-      enabled: r.enabled,
-      agencyPays: r.agencyPays,
-    });
-  }
-  const publisherRows = allPubs.map((p) => {
-    const cp = clientPubMap.get(p.id);
-    return {
-      publisherId: p.id,
-      publisherName: p.name,
-      publisherSlug: p.slug,
-      enabled: cp?.enabled ?? false,
-      agencyPays: cp?.agencyPays ?? p.agencyPaysDefault,
-    };
-  });
+  const publisherRows = pubRows.map((p) => ({
+    publisherId: p.id,
+    publisherName: p.name,
+    publisherSlug: p.slug,
+    enabled: p.enabled,
+    agencyPays: p.agencyPays,
+  }));
 
   // Métricas del cliente (todas, incluso deshabilitadas).
   const metricRows = await db

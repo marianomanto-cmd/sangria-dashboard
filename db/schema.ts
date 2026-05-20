@@ -150,25 +150,37 @@ export const metricsCatalog = pgTable(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
-// Catálogo de publishers (editable desde /configuracion/publishers).
+// Catálogo de publishers — per-cliente.
+// Igual que markets y metrics_catalog: cada cliente tiene su propia lista de
+// publishers, con su slug/nombre, su regla de "agencia paga / cliente paga"
+// (agency_pays) y su flag enabled. NO hay catálogo global. Unique en
+// (client_id, slug). Se administra en /configuracion/clientes/[slug].
 // ════════════════════════════════════════════════════════════════════════════
 
 export const publishers = pgTable(
   "publishers",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    slug: text("slug").notNull().unique(),       // youtube, meta, tiktok
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),                 // youtube, meta, tiktok
     name: text("name").notNull(),                 // YouTube, Meta, TikTok
     enabled: boolean("enabled").notNull().default(true),
-    // Default agency-pays. La agencia factura los publishers que ella paga;
-    // los que el cliente paga directo no aparecen en facturas (tracking sí).
-    agencyPaysDefault: boolean("agency_pays_default").notNull().default(true),
+    // Default per-cliente de "agencia paga". La agencia factura los publishers
+    // que ella paga; los que el cliente paga directo no aparecen en facturas
+    // (el tracking sí). Se puede overridear por bloque del plan vía
+    // media_plan_publishers.agency_pays_override.
+    agencyPays: boolean("agency_pays").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("idx_publishers_enabled").on(t.enabled, t.sortOrder)],
+  (t) => [
+    unique("publishers_client_slug_uq").on(t.clientId, t.slug),
+    index("idx_publishers_client_enabled").on(t.clientId, t.enabled, t.sortOrder),
+  ],
 );
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -187,38 +199,6 @@ export const clients = pgTable("clients", {
     .notNull()
     .defaultNow(),
 });
-
-// ════════════════════════════════════════════════════════════════════════════
-// Mapping per-cliente del catálogo de publishers.
-// Cada cliente tiene su propia lista de publishers habilitados y su propio
-// default de "agencia paga" / "cliente paga" para cada uno. El catálogo
-// global (`publishers`) sigue siendo la lista maestra de todos los publishers
-// conocidos; `client_publishers` define qué subset usa cada cliente y bajo
-// qué condiciones de pago.
-// ════════════════════════════════════════════════════════════════════════════
-
-export const clientPublishers = pgTable(
-  "client_publishers",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    clientId: uuid("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
-    publisherId: uuid("publisher_id")
-      .notNull()
-      .references(() => publishers.id, { onDelete: "cascade" }),
-    agencyPays: boolean("agency_pays").notNull().default(true),
-    enabled: boolean("enabled").notNull().default(true),
-    sortOrder: integer("sort_order").notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    unique("uq_cp_client_publisher").on(t.clientId, t.publisherId),
-    index("idx_cp_client").on(t.clientId, t.enabled, t.sortOrder),
-  ],
-);
 
 // ════════════════════════════════════════════════════════════════════════════
 // Budget Origins (centros de costos / fuentes de presupuesto del cliente).
@@ -330,7 +310,7 @@ export const mediaPlanPublishers = pgTable(
     })
       .notNull()
       .default("0"),
-    // Si está seteado, override del agencyPaysDefault del catálogo.
+    // Si está seteado, override del agency_pays per-cliente del publisher.
     agencyPaysOverride: boolean("agency_pays_override"),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })

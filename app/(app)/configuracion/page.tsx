@@ -16,12 +16,6 @@ const SECTIONS: Array<{
     status: "ready",
   },
   {
-    href: "/configuracion/publishers",
-    title: "Publishers (catálogo global)",
-    description: "Catálogo maestro de publishers (YouTube, Meta, TikTok, …). El subset y agency_pays se configura per cliente en /configuracion/clientes/[slug].",
-    status: "ready",
-  },
-  {
     href: "/configuracion/markets",
     title: "Mercados (per cliente)",
     description: "Cada cliente tiene su propia lista de mercados. Click para ir al cliente y editarlos.",

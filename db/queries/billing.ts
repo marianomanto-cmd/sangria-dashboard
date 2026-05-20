@@ -227,7 +227,7 @@ export async function getBillingDetail(id: string): Promise<BillingDetail | null
   const planPubs = await db
     .select({
       mpp: mediaPlanPublishers,
-      pub: { id: publishers.id, name: publishers.name, slug: publishers.slug, agencyPaysDefault: publishers.agencyPaysDefault, sortOrder: publishers.sortOrder },
+      pub: { id: publishers.id, name: publishers.name, slug: publishers.slug, agencyPaysDefault: publishers.agencyPays, sortOrder: publishers.sortOrder },
     })
     .from(mediaPlanPublishers)
     .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))

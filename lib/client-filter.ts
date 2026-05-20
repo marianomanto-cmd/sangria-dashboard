@@ -19,7 +19,6 @@ const CLIENT_FILTER_ROUTES = [
   "/reportes",
   "/reportes/calendario",
   "/configuracion",
-  "/configuracion/publishers",
   "/configuracion/markets",
   "/configuracion/metricas",
 ] as const;
