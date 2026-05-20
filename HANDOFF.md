@@ -2,6 +2,31 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 20/may/2026 — RLS en Supabase (cerrar la REST API pública)
+
+- **Row-Level Security activado en todas las tablas del schema `public`.**
+  Supabase expone automáticamente cada tabla de `public` vía su REST API
+  (PostgREST), accesible con la anon key — que es **pública por diseño**
+  (`NEXT_PUBLIC_SUPABASE_ANON_KEY` viaja en el bundle del browser, ver
+  `lib/supabase/client.ts`). Sin RLS, cualquiera con la URL del proyecto +
+  la anon key podía leer/editar/borrar toda la data vía esa API. Esto disparó
+  la alerta "Table publicly accessible" de Supabase. Importante: el OAuth NO
+  cubre esto — protege el acceso a la app (puerta 1), no la REST API (puerta 2).
+- **El fix no rompe la app.** La app conecta como el rol `postgres` (dueño de
+  las tablas) vía Drizzle/`DATABASE_URL`, y el dueño bypassa RLS por defecto.
+  **No** se usó `FORCE ROW LEVEL SECURITY` justamente para preservar ese
+  bypass. Como no hay policies permisivas, los roles `anon`/`authenticated`
+  quedan denegados en la REST API (lecturas → `[]`, escrituras → error 42501).
+- **`db/rls.sql`** (nuevo): registro del SQL aplicado. Idempotente, con bloque
+  de verificación (debe devolver 0 filas) y una variante dinámica para activar
+  RLS en todas las tablas de una (útil para tablas futuras).
+
+**Acciones requeridas en prod**: correr el contenido de `db/rls.sql` en el SQL
+Editor de Supabase (**ya aplicado el 20/may/2026**). Verificar con la query del
+final del archivo. **Toda tabla nueva** que se agregue al schema necesita su
+propio `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` (o re-correr el bloque
+dinámico).
+
 ### Cambios de la sesión 18/may/2026 (pm-3) — OAuth Google + Sangria.agency-only + audit author
 
 - **OAuth con Google Workspace** vía Supabase Auth. Toda la app está
@@ -485,6 +510,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+d9adeea  Enable RLS en todas las tablas de public — cierra la REST API pública de Supabase
 3b1a674  Proyectos: editar/eliminar + sacar el identificador del alta y la vista (#35)
 953ac29  Excel del plan: quitar columna Auto de Fees + grand total legible (#33)
 d0ac3bc  Excel del plan: quitar "(agencia paga)" del nombre del publisher (#31)
@@ -1032,6 +1058,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el render del log de auditoría / papelera | `app/(app)/auditoria/page.tsx` (log), `app/(app)/auditoria/papelera/page.tsx` (papelera). Sustantivos / verbos / labels de timestamp en `lib/audit-format.ts` — agregar nuevos entityType acá. |
 | Tocar la auth (login con Google, dominio permitido, sign-out) | `lib/supabase/{server,client,middleware}.ts` (cliente Supabase), `lib/auth.ts` (`getCurrentUser`), `proxy.ts` (route protection — Next.js 16 reemplaza middleware.ts), `app/login/`, `app/auth/{callback,signout}/`. El dominio `@sangria.agency` está hardcodeado en `proxy.ts` y `callback/route.ts` — cambiarlo en ambos. |
 | Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
+| Activar RLS / cerrar la REST API pública de Supabase | `db/rls.sql` — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` en todas las tablas de `public`. Pegarlo en el SQL Editor. La app no se ve afectada (conecta como `postgres`, dueño → bypassa RLS; no se usa `FORCE`). **Toda tabla nueva** necesita su propio ENABLE. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
 | Configurar conexión DB                 | `db/index.ts`                                             |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |

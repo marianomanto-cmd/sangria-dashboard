@@ -4,7 +4,16 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# Doc upkeep on merges to main
+# La documentación SIEMPRE tiene que estar al día (regla dura)
+
+En este proyecto, mantener la documentación actualizada NO es opcional: es
+parte de "terminar" cualquier cambio. `README.md`, `HANDOFF.md` y este
+`AGENTS.md` deben reflejar siempre el estado real del código y de prod. Si
+tocás algo que un doc ya describe (schema, convenciones, estructura, issues,
+acciones de prod), actualizá el doc en la misma sesión — nunca dejes la
+documentación desincronizada del código.
+
+## Doc upkeep on merges to main
 
 Whenever a change is merged to `main`, update the documentation in the same
 session so the repo reflects the new state. Concretely:
