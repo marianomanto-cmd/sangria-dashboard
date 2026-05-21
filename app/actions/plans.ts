@@ -176,6 +176,40 @@ export async function restorePlan(input: { planId: string }): Promise<Result> {
   return { ok: true };
 }
 
+// Borra DEFINITIVAMENTE un plan desde la papelera (hard delete). Sólo se
+// permite si el plan ya está en la papelera (deletedAt != null). El delete
+// físico cascadea a publishers / placements / fees / snapshots / billings
+// (FKs onDelete: cascade). Es irreversible.
+export async function hardDeletePlan(input: { planId: string }): Promise<Result> {
+  if (!input.planId) return { ok: false, error: "Falta plan_id" };
+
+  const [before] = await db
+    .select()
+    .from(mediaPlans)
+    .where(eq(mediaPlans.id, input.planId))
+    .limit(1);
+  if (!before) return { ok: false, error: "Plan no encontrado" };
+  if (!before.deletedAt) {
+    return {
+      ok: false,
+      error: "El plan no está en la papelera. Borralo primero para poder eliminarlo definitivamente.",
+    };
+  }
+
+  await db.delete(mediaPlans).where(eq(mediaPlans.id, input.planId));
+
+  await recordAudit({
+    entityType: "media_plan",
+    entityId: input.planId,
+    action: "delete",
+    beforeJson: before,
+  });
+
+  revalidatePath("/configuracion/papelera-planes");
+
+  return { ok: true };
+}
+
 // Duplica un plan existente dentro de un proyecto (puede ser el mismo del
 // plan fuente o uno distinto del mismo cliente). Clona el plan + todos sus
 // publishers + placements + fees. El plan nuevo arranca en estado 'draft',
