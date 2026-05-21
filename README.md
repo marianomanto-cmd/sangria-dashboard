@@ -128,7 +128,7 @@ scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
 lib/
-  format.ts                 # formatUsd, formatPct, formatUsdCompact
+  format.ts                 # formatUsd, formatPct, formatUsdCompact + inputs US: formatIntInput / formatAmountInput / parseNumberInput
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
@@ -147,6 +147,16 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
 ---
 
 ## Arquitectura: convenciones clave
+
+### Cifras numéricas: SIEMPRE formato US
+- Punto = decimales, coma = separador de miles (ej: `15,000.00`, `1,500,000`).
+  Nunca usar `Intl.NumberFormat("es-AR")` para cifras (la coma decimal de es-AR
+  rompe el round-trip de los inputs editables).
+- Todo input numérico editable muestra el valor con `formatIntInput` /
+  `formatAmountInput` (`en-US`) y parsea lo tipeado con `parseNumberInput`
+  (descarta la coma de miles, conserva el punto decimal) — todo en `lib/format.ts`.
+- Para inputs nativos usar `<input type="number">` (su `.value` ya es US,
+  independiente del locale del browser), como hace el simulador.
 
 ### El plan vive dentro del proyecto, peer con otros planes
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).
@@ -534,6 +544,9 @@ Idempotente: limpia las tablas antes de insertar.
   línea de atraso si hoy > delivery_date. Marcar entregado transiciona el
   proyecto a `reportado`. **Requiere `npm run db:push` + `npm run db:backfill-reports`**
   en prod para sembrar la nueva tabla y dar de alta los closed existentes.
+  Debajo del Gantt hay un listado de **Reportes enviados** (`delivered_at != null`)
+  con fecha de envío + fecha objetivo y un filtro de texto libre por proyecto o
+  campaña (`getSentReports` en `db/queries/reports.ts`).
 - **PDF**: formato básico (lista de texto plano, sin tablas estilizadas).
   Respeta el `clients.language` del plan exportado.
 - **i18n parcial**: las áreas de mayor visibilidad (dashboard, listas

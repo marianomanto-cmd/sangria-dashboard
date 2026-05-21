@@ -40,7 +40,14 @@ import type {
   markets as marketsTable,
   metricsCatalog as metricsTable,
 } from "@/db/schema";
-import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+import {
+  formatAmountInput,
+  formatIntInput,
+  formatPct,
+  formatUsd,
+  formatUsdCompact,
+  parseNumberInput,
+} from "@/lib/format";
 import {
   COST_METHOD_PRIMARY_METRIC,
   COST_METHOD_PAIR,
@@ -1090,7 +1097,8 @@ function RateInput({
       disabled={disabled}
       placeholder="0.0000"
       onBlur={(e) => {
-        const v = Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        const parsed = parseNumberInput(e.target.value);
+        const v = Number.isFinite(parsed) ? parsed : 0;
         if (value == null || Math.abs(v - value) >= 0.000001) onCommit(v);
       }}
       className="w-full font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
@@ -1107,10 +1115,7 @@ function DeliveryInput({
   disabled: boolean;
   onCommit: (v: number) => void;
 }) {
-  const display =
-    value != null
-      ? new Intl.NumberFormat("es-AR", { maximumFractionDigits: 0 }).format(value)
-      : "";
+  const display = value != null ? formatIntInput(value) : "";
   return (
     <input
       key={display}
@@ -1120,8 +1125,8 @@ function DeliveryInput({
       disabled={disabled}
       placeholder="0"
       onBlur={(e) => {
-        const v =
-          Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        const parsed = parseNumberInput(e.target.value);
+        const v = Number.isFinite(parsed) ? parsed : 0;
         if (value == null || Math.abs(v - value) >= 1) onCommit(v);
       }}
       className="w-full font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
@@ -1637,15 +1642,18 @@ function NumberInput({
   disabled?: boolean;
   className?: string;
 }) {
+  const display = value > 0 ? formatAmountInput(value) : "";
   return (
     <input
+      key={display}
       type="text"
       inputMode="decimal"
-      defaultValue={value > 0 ? value.toFixed(2) : ""}
+      defaultValue={display}
       disabled={disabled}
       placeholder="0"
       onBlur={(e) => {
-        const v = Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        const parsed = parseNumberInput(e.target.value);
+        const v = Number.isFinite(parsed) ? parsed : 0;
         if (Math.abs(v - value) >= 0.01) onCommit(v);
       }}
       className={`tabular-nums bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 disabled:opacity-50 ${className}`}
@@ -1673,12 +1681,11 @@ function RatePctInput({
         disabled={disabled}
         placeholder="—"
         onBlur={(e) => {
-          const text = e.target.value.replace(/[^0-9.]/g, "");
-          if (!text) {
+          const v = parseNumberInput(e.target.value);
+          if (Number.isNaN(v)) {
             if (value != null) onCommit(null);
             return;
           }
-          const v = Number.parseFloat(text);
           if (!Number.isFinite(v)) return;
           if (value == null || Math.abs(v - value) >= 0.01) onCommit(v);
         }}

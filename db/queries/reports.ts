@@ -1,8 +1,9 @@
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
   clients,
+  mediaPlans,
   projects,
   projectReports,
 } from "@/db/schema";
@@ -137,11 +138,33 @@ export async function getOpenReportsCount(
   return rows.length;
 }
 
-// Reports con delivered_at != null (para futuro: tab de historial). No se
-// usa por la página principal pero lo dejo armado.
-export async function getDeliveredReports(
+// ════════════════════════════════════════════════════════════════════════════
+// Reportes enviados: los que ya tienen delivered_at (proyecto = 'reportado').
+// Se listan en la página /reportes/calendario debajo del Gantt, con filtro de
+// texto libre por proyecto o campaña.
+//
+// Trae además los nombres de las campañas (media_plans) de cada proyecto para
+// que el filtro de texto pueda matchear por campaña, no sólo por proyecto.
+// ════════════════════════════════════════════════════════════════════════════
+
+export type SentReport = {
+  reportId: string;
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  clientId: string;
+  clientName: string;
+  clientSlug: string;
+  budgetOriginName: string;
+  closedAt: string;             // ISO timestamp
+  deliveryDate: string | null;  // YYYY-MM-DD — fecha objetivo comprometida
+  deliveredAt: string;          // ISO timestamp — fecha real de envío
+  planNames: string[];          // nombres de campañas/planes del proyecto
+};
+
+export async function getSentReports(
   clientId?: string | null,
-): Promise<CalendarReport[]> {
+): Promise<SentReport[]> {
   const conds = [isNotNull(projectReports.deliveredAt)];
   if (clientId) conds.push(eq(projects.clientId, clientId));
 
@@ -157,14 +180,30 @@ export async function getDeliveredReports(
       budgetOriginName: budgetOrigins.name,
       closedAt: projectReports.closedAt,
       deliveryDate: projectReports.deliveryDate,
-      deliveryDateAssignedAt: projectReports.deliveryDateAssignedAt,
+      deliveredAt: projectReports.deliveredAt,
     })
     .from(projectReports)
     .innerJoin(projects, eq(projectReports.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
     .where(and(...conds))
-    .orderBy(asc(projectReports.deliveredAt));
+    .orderBy(desc(projectReports.deliveredAt));
+
+  if (rows.length === 0) return [];
+
+  // Nombres de campañas (planes) por proyecto para el filtro de texto.
+  const projectIds = [...new Set(rows.map((r) => r.projectId))];
+  const planRows = await db
+    .select({ projectId: mediaPlans.projectId, name: mediaPlans.name })
+    .from(mediaPlans)
+    .where(inArray(mediaPlans.projectId, projectIds));
+
+  const plansByProject = new Map<string, string[]>();
+  for (const p of planRows) {
+    const arr = plansByProject.get(p.projectId) ?? [];
+    arr.push(p.name);
+    plansByProject.set(p.projectId, arr);
+  }
 
   return rows.map((r) => ({
     reportId: r.reportId,
@@ -177,11 +216,10 @@ export async function getDeliveredReports(
     budgetOriginName: r.budgetOriginName,
     closedAt: r.closedAt instanceof Date ? r.closedAt.toISOString() : String(r.closedAt),
     deliveryDate: r.deliveryDate,
-    deliveryDateAssignedAt:
-      r.deliveryDateAssignedAt instanceof Date
-        ? r.deliveryDateAssignedAt.toISOString()
-        : r.deliveryDateAssignedAt
-          ? String(r.deliveryDateAssignedAt)
-          : null,
+    deliveredAt:
+      r.deliveredAt instanceof Date
+        ? r.deliveredAt.toISOString()
+        : String(r.deliveredAt),
+    planNames: plansByProject.get(r.projectId) ?? [],
   }));
 }

@@ -11,7 +11,12 @@ import {
   transitionBillingStatus,
 } from "@/app/actions/plan-billing";
 import type { planBillings as planBillingsTable } from "@/db/schema";
-import { formatUsd, formatUsdCompact } from "@/lib/format";
+import {
+  formatAmountInput,
+  formatUsd,
+  formatUsdCompact,
+  parseNumberInput,
+} from "@/lib/format";
 
 type Billing = typeof planBillingsTable.$inferSelect;
 
@@ -610,11 +615,13 @@ function NumInput({
   max?: number;
 }) {
   const overCap = max !== undefined && value > max + 0.01;
+  const display = value > 0 ? formatAmountInput(value) : "";
   return (
     <input
+      key={display}
       type="text"
       inputMode="decimal"
-      defaultValue={value > 0 ? value.toFixed(2) : ""}
+      defaultValue={display}
       disabled={disabled}
       placeholder="0"
       title={
@@ -623,7 +630,8 @@ function NumInput({
           : undefined
       }
       onBlur={(e) => {
-        let v = Number.parseFloat(e.target.value.replace(/[^0-9.]/g, "")) || 0;
+        const parsed = parseNumberInput(e.target.value);
+        let v = Number.isFinite(parsed) ? parsed : 0;
         if (max !== undefined && v > max + 0.01) {
           // Hard cap: avisamos y clampeamos al máximo permitido.
           alert(
@@ -631,7 +639,7 @@ function NumInput({
           );
           v = Math.max(0, max);
           // Reflejamos el clamp en el input
-          e.target.value = v > 0 ? v.toFixed(2) : "";
+          e.target.value = v > 0 ? formatAmountInput(v) : "";
         }
         if (Math.abs(v - value) >= 0.01) onCommit(v);
       }}

@@ -2,6 +2,34 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 21/may/2026 — Cifras siempre en formato US + listado de reportes enviados
+
+- **Cifras en formato US (punto decimal, coma de miles)**: los inputs numéricos
+  del plan de medios y del billing confundían punto/coma. El caso roto era el
+  input de *delivery* (impresiones) que se mostraba con `Intl.NumberFormat("es-AR")`
+  → "1.500.000"; al re-parsear quedaba `1.5` (corrupción de dato).
+  - Nuevos helpers en `lib/format.ts`: `formatIntInput`, `formatAmountInput`
+    (ambos `en-US`) y `parseNumberInput` (descarta la coma de miles, conserva el
+    punto decimal). **Regla**: todo input numérico nuevo debe usarlos.
+  - `editor.tsx` (plan): `DeliveryInput` ahora muestra `en-US`; `NumberInput`
+    muestra montos con coma de miles (`15,000.00`) y remonta vía `key`; todos los
+    parseos pasan por `parseNumberInput`.
+  - `billing/editor.tsx`: `NumInput` igual (coma de miles + `parseNumberInput`).
+  - **Simulador**: sin cambios — ya usaba `<input type="number">` (cuyo `.value`
+    es siempre US, punto decimal, independiente del locale del browser) + display
+    `en-US` (`formatInt`/`toFixed`). No tenía la corrupción punto/coma.
+- **Reporting calendar — listado de "Reportes enviados"**: nueva sección en
+  `/reportes/calendario` (debajo del Gantt) que lista los reports con
+  `delivered_at` (proyecto = `reportado`), con fecha de envío real + fecha
+  objetivo, y un **filtro de texto libre** que matchea por proyecto (nombre/código)
+  o campaña (nombre de plan).
+  - `db/queries/reports.ts`: se reemplazó el placeholder `getDeliveredReports`
+    por `getSentReports(clientId?)`, que además trae `deliveredAt` y `planNames`
+    (nombres de campañas vía `media_plans`) para el filtro.
+  - `reporting-calendar-client.tsx`: nuevo componente `SentReportsSection` con el
+    input de búsqueda (filtrado client-side, case-insensitive).
+  - No requiere acciones en prod (sin cambios de schema).
+
 ### Cambios de la sesión 21/may/2026 — Fix: el simulador rebotaba al dashboard al elegir cliente
 
 - **Síntoma**: al entrar a `/reportes/simulador` sin cliente, el empty-state
@@ -559,7 +587,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/fix-simulator-redirect-loop-5Uavr)  Fix: el simulador rebotaba al dashboard al elegir cliente — agregar /reportes/simulador a CLIENT_FILTER_ROUTES
+(branch claude/vigilant-darwin-8vSa4)  Cifras siempre en formato US (plan + billing) + listado de reportes enviados con filtro de texto en el reporting calendar
+42fa754  Fix: el simulador rebotaba al dashboard al elegir cliente (#50)
 eda75b8  Publishers per-cliente: eliminar catálogo global + client_publishers (#49)
 d9adeea  Enable RLS en todas las tablas de public — cierra la REST API pública de Supabase
 3b1a674  Proyectos: editar/eliminar + sacar el identificador del alta y la vista (#35)

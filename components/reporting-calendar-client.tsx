@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { Search } from "lucide-react";
 import {
   markReportDelivered,
   setReportDeliveryDate,
 } from "@/app/actions/reports";
 import { ReportingGantt } from "@/components/reporting-gantt";
-import type { CalendarReport } from "@/db/queries/reports";
+import type { CalendarReport, SentReport } from "@/db/queries/reports";
 import { formatDate, type Language } from "@/lib/i18n";
 
 type DialogState =
@@ -18,10 +19,12 @@ type DialogState =
 export function ReportingCalendarClient({
   pending,
   inProgress,
+  sent,
   lang,
 }: {
   pending: CalendarReport[];
   inProgress: CalendarReport[];
+  sent: SentReport[];
   lang: Language;
 }) {
   const [dialog, setDialog] = useState<DialogState>({ kind: "closed" });
@@ -182,6 +185,8 @@ export function ReportingCalendarClient({
         />
       </section>
 
+      <SentReportsSection sent={sent} lang={lang} />
+
       {/* Dialog: asignar / editar fecha */}
       {dialog.kind === "assign" && (
         <Modal onClose={close}>
@@ -250,6 +255,134 @@ export function ReportingCalendarClient({
         </Modal>
       )}
     </>
+  );
+}
+
+function SentReportsSection({
+  sent,
+  lang,
+}: {
+  sent: SentReport[];
+  lang: Language;
+}) {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sent;
+    return sent.filter((r) => {
+      const haystack = [
+        r.projectName,
+        r.projectCode,
+        ...r.planNames,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [sent, query]);
+
+  return (
+    <section className="mt-8">
+      <header className="mb-3 flex items-baseline justify-between gap-4">
+        <h2 className="text-sm font-semibold">
+          {lang === "es" ? "Reportes enviados" : "Sent reports"}
+        </h2>
+        <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+          {filtered.length}
+          {query.trim() ? ` / ${sent.length}` : ""}
+          {lang === "es"
+            ? ` reporte${(query.trim() ? sent.length : filtered.length) === 1 ? "" : "s"}`
+            : ` report${(query.trim() ? sent.length : filtered.length) === 1 ? "" : "s"}`}
+        </span>
+      </header>
+
+      <div className="relative mb-3 max-w-sm">
+        <Search
+          size={14}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+        />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={
+            lang === "es"
+              ? "Filtrar por proyecto o campaña…"
+              : "Filter by project or campaign…"
+          }
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+      </div>
+
+      {sent.length === 0 ? (
+        <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-8 text-center text-sm text-muted">
+          {lang === "es"
+            ? "Todavía no hay reportes enviados. Cuando marques uno como entregado aparecerá acá."
+            : "No sent reports yet. Reports marked as delivered will appear here."}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-8 text-center text-sm text-muted">
+          {lang === "es"
+            ? "Ningún reporte enviado coincide con el filtro."
+            : "No sent report matches the filter."}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-paper-2 border-b border-line">
+              <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
+                <th className="px-4 py-2.5">
+                  {lang === "es" ? "Proyecto" : "Project"}
+                </th>
+                <th className="px-4 py-2.5">
+                  {lang === "es" ? "Cliente" : "Client"}
+                </th>
+                <th className="px-4 py-2.5">
+                  {lang === "es" ? "Campañas" : "Campaigns"}
+                </th>
+                <th className="px-4 py-2.5">
+                  {lang === "es" ? "Enviado el" : "Sent on"}
+                </th>
+                <th className="px-4 py-2.5">
+                  {lang === "es" ? "Fecha objetivo" : "Target date"}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr
+                  key={r.reportId}
+                  className="border-t border-line-soft hover:bg-paper-2 transition-colors"
+                >
+                  <td className="px-4 py-2.5">
+                    <Link
+                      href={`/proyectos/${r.projectCode}`}
+                      className="font-medium text-ink hover:text-accent"
+                    >
+                      {r.projectName}
+                    </Link>
+                    <p className="text-[11px] text-muted font-mono">
+                      {r.projectCode}
+                    </p>
+                  </td>
+                  <td className="px-4 py-2.5">{r.clientName}</td>
+                  <td className="px-4 py-2.5 text-muted">
+                    {r.planNames.length > 0 ? r.planNames.join(", ") : "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-muted font-mono">
+                    {formatDate(r.deliveredAt.slice(0, 10), lang)}
+                  </td>
+                  <td className="px-4 py-2.5 text-muted font-mono">
+                    {r.deliveryDate ? formatDate(r.deliveryDate, lang) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
