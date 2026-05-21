@@ -176,8 +176,8 @@ export function PendingBoard({
           title={es ? "Facturas impagas" : "Unpaid invoices"}
           subtitle={
             es
-              ? "Facturas emitidas pendientes de cobro"
-              : "Issued invoices awaiting payment"
+              ? "Billings pendientes de cobro (todo lo no pagado)"
+              : "Billings awaiting payment (anything not paid)"
           }
           lang={lang}
         >
@@ -186,7 +186,7 @@ export function PendingBoard({
               key={i.billingId}
               href={`/proyectos/${i.projectCode}/planes/${i.planId}/billing`}
               primary={i.projectName}
-              secondary={`${i.planName} · ${formatMonth(i.month, lang)}${i.invoiceNumber ? ` · #${i.invoiceNumber}` : ""}`}
+              secondary={`${i.planName} · ${formatMonth(i.month, lang)} · ${billingStatusLabel(i.status, es)}${i.invoiceNumber ? ` · #${i.invoiceNumber}` : ""}`}
               right={
                 <span className="flex flex-col items-end gap-0.5">
                   <span className="font-mono">{formatUsd(i.totalUsd)}</span>
@@ -205,6 +205,17 @@ export function PendingBoard({
       </div>
     </section>
   );
+}
+
+function billingStatusLabel(status: string, es: boolean): string {
+  const map: Record<string, { es: string; en: string }> = {
+    draft: { es: "borrador", en: "draft" },
+    ready: { es: "listo", en: "ready" },
+    sent: { es: "enviado", en: "sent" },
+    invoiced: { es: "facturado", en: "invoiced" },
+  };
+  const entry = map[status];
+  return entry ? (es ? entry.es : entry.en) : status;
 }
 
 function dueLabel(daysUntil: number, es: boolean): string {

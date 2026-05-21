@@ -23,8 +23,8 @@ import { getReportingCalendar } from "@/db/queries/reports";
 //                  (o que nunca se trackearon).
 //   3. reports   — reports del calendario (con delivery_date, sin entregar):
 //                  upcoming = a ≤7 días de la fecha; overdue = fecha ya pasada.
-//   4. invoices  — facturas emitidas (status 'invoiced') sin paidAt. Las que
-//                  pasaron su due_date se marcan vencidas.
+//   4. invoices  — cualquier billing sin pagar (paid_at null: draft/ready/
+//                  sent/invoiced). Las que pasaron su due_date se marcan vencidas.
 //
 // Todo respeta el filtro global por cliente (?client=slug).
 // ════════════════════════════════════════════════════════════════════════════
@@ -67,6 +67,7 @@ export type PendingInvoice = {
   projectName: string;
   clientName: string;
   month: string;
+  status: string; // draft | ready | sent | invoiced
   invoiceNumber: string | null;
   totalUsd: number;
   dueDate: string | null;
@@ -289,16 +290,14 @@ async function getPendingTracking(
 }
 
 // ── 4. Facturas impagas ──────────────────────────────────────────────────────
+// "Cualquier billing sin pagar": todo plan_billing con paid_at = null (incluye
+// draft / ready / sent / invoiced). Se excluyen sólo los ya pagados.
 
 async function getPendingInvoices(
   clientId: string | null | undefined,
   today: string,
 ): Promise<PendingInvoice[]> {
-  const conds = [
-    eq(planBillings.status, "invoiced"),
-    isNull(planBillings.paidAt),
-    isNull(mediaPlans.deletedAt),
-  ];
+  const conds = [isNull(planBillings.paidAt), isNull(mediaPlans.deletedAt)];
   if (clientId) conds.push(eq(projects.clientId, clientId));
 
   const rows = await db
@@ -310,6 +309,7 @@ async function getPendingInvoices(
       projectName: projects.name,
       clientName: clients.name,
       month: planBillings.month,
+      status: planBillings.status,
       invoiceNumber: planBillings.invoiceNumber,
       totalUsd: planBillings.totalUsd,
       dueDate: planBillings.dueDate,
@@ -328,6 +328,7 @@ async function getPendingInvoices(
     projectName: r.projectName,
     clientName: r.clientName,
     month: r.month,
+    status: r.status,
     invoiceNumber: r.invoiceNumber,
     totalUsd: Number.parseFloat(r.totalUsd ?? "0"),
     dueDate: r.dueDate,
