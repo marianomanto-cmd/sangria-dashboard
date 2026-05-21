@@ -30,6 +30,39 @@ export function ReportingCalendarClient({
   const [dialog, setDialog] = useState<DialogState>({ kind: "closed" });
   const [pendingAction, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [budgetOrigin, setBudgetOrigin] = useState<string>("");
+
+  // Budget origins presentes en cualquiera de las tres secciones, para el
+  // filtro. El filtro aplica a pendientes + Gantt + enviados.
+  const budgetOrigins = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of pending) set.add(r.budgetOriginName);
+    for (const r of inProgress) set.add(r.budgetOriginName);
+    for (const r of sent) set.add(r.budgetOriginName);
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [pending, inProgress, sent]);
+
+  const fPending = useMemo(
+    () =>
+      budgetOrigin
+        ? pending.filter((r) => r.budgetOriginName === budgetOrigin)
+        : pending,
+    [pending, budgetOrigin],
+  );
+  const fInProgress = useMemo(
+    () =>
+      budgetOrigin
+        ? inProgress.filter((r) => r.budgetOriginName === budgetOrigin)
+        : inProgress,
+    [inProgress, budgetOrigin],
+  );
+  const fSent = useMemo(
+    () =>
+      budgetOrigin
+        ? sent.filter((r) => r.budgetOriginName === budgetOrigin)
+        : sent,
+    [sent, budgetOrigin],
+  );
 
   const openAssign = (
     reportId: string,
@@ -78,6 +111,30 @@ export function ReportingCalendarClient({
 
   return (
     <>
+      {budgetOrigins.length > 1 && (
+        <div className="mb-5 flex items-center gap-2">
+          <label
+            htmlFor="bo-filter"
+            className="text-[10px] uppercase tracking-[0.08em] text-muted font-medium"
+          >
+            Budget Origin
+          </label>
+          <select
+            id="bo-filter"
+            value={budgetOrigin}
+            onChange={(e) => setBudgetOrigin(e.target.value)}
+            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            <option value="">{lang === "es" ? "Todos" : "All"}</option>
+            {budgetOrigins.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <section className="mb-8">
         <header className="mb-3 flex items-baseline justify-between">
           <h2 className="text-sm font-semibold">
@@ -86,13 +143,13 @@ export function ReportingCalendarClient({
               : "Closed projects pending date assignment"}
           </h2>
           <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
-            {pending.length}
+            {fPending.length}
             {lang === "es"
-              ? ` proyecto${pending.length === 1 ? "" : "s"}`
-              : ` project${pending.length === 1 ? "" : "s"}`}
+              ? ` proyecto${fPending.length === 1 ? "" : "s"}`
+              : ` project${fPending.length === 1 ? "" : "s"}`}
           </span>
         </header>
-        {pending.length === 0 ? (
+        {fPending.length === 0 ? (
           <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-8 text-center text-sm text-muted">
             {lang === "es"
               ? "No hay proyectos cerrados pendientes. Cuando cierres uno aparecerá acá."
@@ -163,29 +220,29 @@ export function ReportingCalendarClient({
             {lang === "es" ? "Calendario de entregas" : "Delivery calendar"}
           </h2>
           <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
-            {inProgress.length}
+            {fInProgress.length}
             {lang === "es"
-              ? ` reporte${inProgress.length === 1 ? "" : "s"} en curso`
-              : ` report${inProgress.length === 1 ? "" : "s"} in progress`}
+              ? ` reporte${fInProgress.length === 1 ? "" : "s"} en curso`
+              : ` report${fInProgress.length === 1 ? "" : "s"} in progress`}
             <span className="text-line"> · </span>
             {lang === "es" ? "ventana -30 / +30 días" : "window -30 / +30 days"}
           </span>
         </header>
         <ReportingGantt
-          reports={inProgress}
+          reports={fInProgress}
           lang={lang}
           onAssignDate={(reportId, current) => {
-            const r = inProgress.find((x) => x.reportId === reportId);
+            const r = fInProgress.find((x) => x.reportId === reportId);
             openAssign(reportId, current, r?.projectName ?? "");
           }}
           onMarkDelivered={(reportId) => {
-            const r = inProgress.find((x) => x.reportId === reportId);
+            const r = fInProgress.find((x) => x.reportId === reportId);
             openMarkDelivered(reportId, r?.projectName ?? "");
           }}
         />
       </section>
 
-      <SentReportsSection sent={sent} lang={lang} />
+      <SentReportsSection sent={fSent} lang={lang} />
 
       {/* Dialog: asignar / editar fecha */}
       {dialog.kind === "assign" && (

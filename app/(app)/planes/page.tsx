@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -66,11 +66,11 @@ export default async function PlanesPage({ searchParams }: Props) {
   const validOrigin =
     sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
 
-  const conds = [];
+  const conds = [isNull(mediaPlans.deletedAt)];
   if (filter) conds.push(eq(mediaPlans.status, filter as never));
   if (validOrigin) conds.push(eq(projects.budgetOriginId, validOrigin));
   if (clientId) conds.push(eq(projects.clientId, clientId));
-  const where = conds.length === 0 ? undefined : conds.length === 1 ? conds[0] : and(...conds);
+  const where = conds.length === 1 ? conds[0] : and(...conds);
 
   const baseQuery = db
     .select({
