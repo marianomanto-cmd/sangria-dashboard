@@ -23,8 +23,8 @@ import { getReportingCalendar } from "@/db/queries/reports";
 //                  (o que nunca se trackearon).
 //   3. reports   — reports del calendario (con delivery_date, sin entregar):
 //                  upcoming = a ≤7 días de la fecha; overdue = fecha ya pasada.
-//   4. invoices  — facturas emitidas (status 'invoiced') sin paidAt. Las que
-//                  pasaron su due_date se marcan vencidas.
+//   4. invoices  — cualquier billing sin pagar (paid_at null: draft/ready/
+//                  sent/invoiced). Las que pasaron su due_date se marcan vencidas.
 //
 // Todo respeta el filtro global por cliente (?client=slug).
 // ════════════════════════════════════════════════════════════════════════════
