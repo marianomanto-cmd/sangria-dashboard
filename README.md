@@ -333,8 +333,8 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
     anterior a hoy (o que nunca se trackearon).
   - **Entregas de reportes**: de `getReportingCalendar().inProgress` (delivery
     date asignada, sin entregar) — `upcoming` = a ≤7 días; `overdue` = ya pasó.
-  - **Facturas impagas**: `plan_billings.status = 'invoiced'` con `paid_at` null;
-    se marcan vencidas si `due_date < hoy`.
+  - **Facturas impagas**: cualquier `plan_billings` con `paid_at` null (incluye
+    draft/ready/sent/invoiced); se marcan vencidas si `due_date < hoy`.
 - Cada card es colapsable (arranca cerrada) y sus filas linkean al área
   correspondiente (billing del plan, campaign tracker, calendario de reportes).
   Si una categoría está vacía muestra "Al día" en verde.
