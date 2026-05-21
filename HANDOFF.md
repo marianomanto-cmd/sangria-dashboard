@@ -2,6 +2,24 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 21/may/2026 — N° de factura: editable + único
+
+- **Unicidad del número de factura**: `plan_billings.invoice_number` ya tenía
+  unique constraint global, pero `markBillingInvoiced` no pre-chequeaba, así
+  que un duplicado reventaba con error crudo de la DB. Ahora:
+  - `markBillingInvoiced` (`app/actions/plan-billing.ts`) hace un pre-check
+    contra otros billings (excluyendo el propio) y devuelve un error legible
+    (`"El número de factura "X" ya está asignado a otro billing (mes YYYY-MM)…"`).
+  - `persistTransition` envuelve el UPDATE en try/catch para el caso de carrera
+    (dos cargas concurrentes que pasan el pre-check) y devuelve error amigable
+    en vez de tirar la unique violation cruda.
+  - El alert ya existía en la UI (`onFacturar` → `alert(r.error)`).
+- **Editable también en `paid`**: el editor de billing sólo mostraba "Editar
+  número" en estado `invoiced`. La action ya permitía editar en `paid`, así que
+  se agregó el botón "Editar número" en el branch `paid` de `BillingStatusActions`
+  (`billing/editor.tsx`).
+- Sin cambios de schema → no requiere acciones en prod.
+
 ### Cambios de la sesión 21/may/2026 — Cifras siempre en formato US + listado de reportes enviados
 
 - **Cifras en formato US (punto decimal, coma de miles)**: los inputs numéricos
@@ -587,7 +605,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/vigilant-darwin-8vSa4)  Cifras siempre en formato US (plan + billing) + listado de reportes enviados con filtro de texto en el reporting calendar
+(branch claude/vigilant-darwin-8vSa4)  N° de factura editable + único (pre-check + try/catch) en billing
+af1bae6  Cifras en formato US (plan + billing) + listado de reportes enviados (#51)
 42fa754  Fix: el simulador rebotaba al dashboard al elegir cliente (#50)
 eda75b8  Publishers per-cliente: eliminar catálogo global + client_publishers (#49)
 d9adeea  Enable RLS en todas las tablas de public — cierra la REST API pública de Supabase
