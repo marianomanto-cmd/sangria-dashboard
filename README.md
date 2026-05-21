@@ -124,7 +124,8 @@ db/
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
     clients.ts, billing.ts, billing-tracker.ts, audit-log.ts, budget-origins.ts,
-    reports.ts, campaign-tracker.ts, plan-trash.ts (planes borrados)
+    reports.ts, campaign-tracker.ts, plan-trash.ts (planes borrados),
+    pendings.ts (tablero de pendientes del dashboard)
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -319,6 +320,24 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
   variación coloreada. El estimado del mes anterior se recomputa contra
   los planes actuales — no es snapshot histórico; sirve como sanity check
   para detectar planes modificados después de facturar.
+
+### Tablero de pendientes del dashboard
+- `getDashboardPendings(clientId)` en `db/queries/pendings.ts` arma las cuatro
+  listas que muestra `components/pending-board.tsx`, debajo de la tabla de
+  proyectos. Todo se deriva de columnas existentes (no hay flags nuevos):
+  - **Billing reports a completar**: por cada plan `approved` (no borrado), los
+    meses dentro del span de sus placements cuyo cierre ya pasó (`mes < mes
+    actual`) y que no tienen fila en `plan_billings`.
+  - **Tracking del día pendiente**: planes `approved` vigentes hoy (hoy dentro
+    del período) cuyo `max(snapshot_date)` de `campaign_actual_snapshots` es
+    anterior a hoy (o que nunca se trackearon).
+  - **Entregas de reportes**: de `getReportingCalendar().inProgress` (delivery
+    date asignada, sin entregar) — `upcoming` = a ≤7 días; `overdue` = ya pasó.
+  - **Facturas impagas**: `plan_billings.status = 'invoiced'` con `paid_at` null;
+    se marcan vencidas si `due_date < hoy`.
+- Cada card es colapsable (arranca cerrada) y sus filas linkean al área
+  correspondiente (billing del plan, campaign tracker, calendario de reportes).
+  Si una categoría está vacía muestra "Al día" en verde.
 
 ### Audit log
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` +

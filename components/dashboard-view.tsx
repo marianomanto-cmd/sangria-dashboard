@@ -4,12 +4,14 @@ import { useSyncExternalStore } from "react";
 import { LayoutGrid, Table2 } from "lucide-react";
 import { FacturacionChart } from "@/components/facturacion-chart";
 import { KpiCard } from "@/components/kpi-card";
+import { PendingBoard } from "@/components/pending-board";
 import { ProjectsTableExpandable } from "@/components/projects-table-expandable";
 import type {
   DashboardKpis,
   DashboardProjects,
   MonthlyTotal,
 } from "@/db/queries/dashboard";
+import type { DashboardPendings } from "@/db/queries/pendings";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 import type { Language } from "@/lib/i18n";
 
@@ -40,6 +42,7 @@ type Props = {
   kpis: DashboardKpis;
   projects: DashboardProjects;
   monthly: MonthlyTotal[];
+  pendings: DashboardPendings;
   clientName?: string | null;
   lang?: Language;
 };
@@ -48,6 +51,7 @@ export function DashboardView({
   kpis,
   projects,
   monthly,
+  pendings,
   clientName,
   lang = "en",
 }: Props) {
@@ -88,6 +92,8 @@ export function DashboardView({
       ) : (
         <LayoutC kpis={kpis} projects={projects} lang={lang} />
       )}
+
+      <PendingBoard pendings={pendings} lang={lang} />
     </main>
   );
 }
@@ -139,7 +145,12 @@ function LayoutA({
   projects,
   monthly,
   lang = "en",
-}: Props) {
+}: {
+  kpis: DashboardKpis;
+  projects: DashboardProjects;
+  monthly: MonthlyTotal[];
+  lang?: Language;
+}) {
   const labels = LABELS[lang];
   return (
     <>
