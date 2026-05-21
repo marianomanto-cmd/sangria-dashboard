@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageShell } from "@/components/page-shell";
+import { HardDeletePlanButton } from "@/components/hard-delete-plan-button";
 import { RestorePlanButton } from "@/components/restore-plan-button";
 import { getDeletedPlans } from "@/db/queries/plan-trash";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
@@ -60,8 +61,14 @@ export default async function PlanTrashPage({ searchParams }: Props) {
                   <td className="px-4 py-2.5 text-muted font-mono">
                     {formatDate(p.deletedAt.slice(0, 10), "en")}
                   </td>
-                  <td className="px-4 py-2.5 text-right">
-                    <RestorePlanButton planId={p.planId} />
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center justify-end gap-2">
+                      <RestorePlanButton planId={p.planId} />
+                      <HardDeletePlanButton
+                        planId={p.planId}
+                        planName={p.planName}
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}

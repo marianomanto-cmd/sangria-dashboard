@@ -24,7 +24,11 @@ Estado del repo al cierre y plan para retomar en otra sesión.
 - **Papelera en configuración**: nueva página `/configuracion/papelera-planes`
   (card en `/configuracion`) que lista los planes borrados (`getDeletedPlans`
   en `db/queries/plan-trash.ts`) y permite **restaurarlos**
-  (`restorePlan` + `components/restore-plan-button.tsx`). UI en inglés.
+  (`restorePlan` + `components/restore-plan-button.tsx`) o **borrarlos
+  definitivamente** (`hardDeletePlan` + `components/hard-delete-plan-button.tsx`,
+  con modal de confirmación irreversible). El hard delete sólo se permite si el
+  plan ya está en la papelera y cascadea a publishers/placements/fees/billings.
+  UI en inglés.
 - **Unicidad de nombre**: ahora es un partial unique index
   `(project_id, name) WHERE deleted_at IS NULL` — se puede re-crear un nombre
   cuyo plan fue borrado, y hay varios borrados con el mismo nombre. `createPlan`
