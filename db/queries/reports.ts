@@ -196,7 +196,7 @@ export async function getSentReports(
   const planRows = await db
     .select({ projectId: mediaPlans.projectId, name: mediaPlans.name })
     .from(mediaPlans)
-    .where(inArray(mediaPlans.projectId, projectIds));
+    .where(and(inArray(mediaPlans.projectId, projectIds), isNull(mediaPlans.deletedAt)));
 
   const plansByProject = new Map<string, string[]>();
   for (const p of planRows) {

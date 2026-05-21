@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -81,7 +81,7 @@ export async function getBillingsList(
       dueDate: planBillings.dueDate,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
@@ -126,7 +126,7 @@ export async function getBillingFilterOptions(
       name: budgetOrigins.name,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id));
 
@@ -138,7 +138,7 @@ export async function getBillingFilterOptions(
       clientId: projects.clientId,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id));
 
   const monthsQuery = db
@@ -147,7 +147,7 @@ export async function getBillingFilterOptions(
       maxMonth: sql<string | null>`max(${planBillings.month})`,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id));
 
   const [originsRows, projectsRows, monthsRow] = await Promise.all([
@@ -214,7 +214,7 @@ export async function getBillingDetail(id: string): Promise<BillingDetail | null
       origin: { id: budgetOrigins.id, name: budgetOrigins.name },
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))

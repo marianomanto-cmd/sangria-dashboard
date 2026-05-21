@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lte, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, ne, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   clients,
@@ -92,7 +92,7 @@ export async function getBillingTracker(
       clientSlug: clients.slug,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .where(and(...conds))
@@ -190,7 +190,7 @@ export async function getBillingTrackerFilterOptions(
         name: projects.name,
       })
       .from(planBillings)
-      .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+      .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
       .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
       .innerJoin(clients, eq(projects.clientId, clients.id))
       .where(where),
@@ -200,7 +200,7 @@ export async function getBillingTrackerFilterOptions(
         maxMonth: sql<string | null>`max(${planBillings.month})`,
       })
       .from(planBillings)
-      .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+      .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
       .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
       .innerJoin(clients, eq(projects.clientId, clients.id))
       .where(where),

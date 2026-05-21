@@ -99,6 +99,7 @@ app/
     configuracion/
       markets/, metricas/     # accesos a catálogos per-cliente
       clientes/               # alta/edición de clientes + config per-cliente (publishers, métricas, mercados, budget origins)
+      papelera-planes/        # papelera de planes borrados (soft delete) + restaurar
     reportes/
       page.tsx              # placeholders de los 6 reports analíticos
       calendario/           # Reporting Calendar (closed → reportado)
@@ -123,7 +124,7 @@ db/
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
     clients.ts, billing.ts, billing-tracker.ts, audit-log.ts, budget-origins.ts,
-    reports.ts, campaign-tracker.ts
+    reports.ts, campaign-tracker.ts, plan-trash.ts (planes borrados)
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -157,6 +158,17 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
   (descarta la coma de miles, conserva el punto decimal) — todo en `lib/format.ts`.
 - Para inputs nativos usar `<input type="number">` (su `.value` ya es US,
   independiente del locale del browser), como hace el simulador.
+
+### Borrar un plan es soft delete (papelera)
+- Borrar un plan desde la vista de proyecto setea `media_plans.deleted_at` (no
+  lo elimina). Se conserva ad eternum y se restaura desde
+  `/configuracion/papelera-planes`.
+- **Regla**: toda query que liste planes (o billings/datos derivados de planes)
+  debe filtrar `deleted_at IS NULL` — en el ON del join a `media_plans` o en el
+  WHERE. Si agregás una query nueva sobre `media_plans`, acordate del filtro.
+- La unicidad de nombre por proyecto es un **partial unique index**
+  `(project_id, name) WHERE deleted_at IS NULL`: se puede reusar el nombre de un
+  plan borrado.
 
 ### El plan vive dentro del proyecto, peer con otros planes
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).

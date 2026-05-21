@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
@@ -31,7 +31,8 @@ export async function createPlan(input: {
   if (!input.projectId) return { ok: false, error: "Falta project_id" };
   if (!input.name.trim()) return { ok: false, error: "El plan necesita un nombre" };
 
-  // Validar nombre único en el proyecto
+  // Validar nombre único entre los planes VIVOS del proyecto (los borrados en
+  // la papelera no cuentan — su nombre se puede reusar).
   const [existing] = await db
     .select({ id: mediaPlans.id })
     .from(mediaPlans)
@@ -39,6 +40,7 @@ export async function createPlan(input: {
       and(
         eq(mediaPlans.projectId, input.projectId),
         eq(mediaPlans.name, input.name.trim()),
+        isNull(mediaPlans.deletedAt),
       ),
     )
     .limit(1);
@@ -75,6 +77,103 @@ export async function createPlan(input: {
   if (proj) revalidatePath(`/proyectos/${proj.code}`);
 
   return { ok: true, planId: plan.id };
+}
+
+// Borra un plan (soft delete): lo manda a la papelera (deletedAt = now) en vez
+// de eliminarlo físicamente. Se conserva ad eternum con todos sus publishers /
+// placements / fees / billings, que dejan de aparecer porque las queries de
+// listado filtran por deletedAt IS NULL. Se puede restaurar desde la papelera.
+export async function deletePlan(input: { planId: string }): Promise<Result> {
+  if (!input.planId) return { ok: false, error: "Falta plan_id" };
+
+  const [before] = await db
+    .select()
+    .from(mediaPlans)
+    .where(eq(mediaPlans.id, input.planId))
+    .limit(1);
+  if (!before) return { ok: false, error: "Plan no encontrado" };
+  if (before.deletedAt) return { ok: true }; // ya está en la papelera
+
+  const [after] = await db
+    .update(mediaPlans)
+    .set({ deletedAt: new Date() })
+    .where(eq(mediaPlans.id, input.planId))
+    .returning();
+
+  await recordAudit({
+    entityType: "media_plan",
+    entityId: input.planId,
+    action: "delete",
+    beforeJson: before,
+    afterJson: after,
+  });
+
+  const [proj] = await db
+    .select({ code: projects.code })
+    .from(projects)
+    .where(eq(projects.id, before.projectId))
+    .limit(1);
+  if (proj) revalidatePath(`/proyectos/${proj.code}`);
+  revalidatePath("/configuracion/papelera-planes");
+
+  return { ok: true };
+}
+
+// Restaura un plan desde la papelera (deletedAt = null). Si en el proyecto ya
+// hay un plan VIVO con el mismo nombre, el partial unique index lo rechazaría,
+// así que pre-chequeamos y devolvemos un error legible.
+export async function restorePlan(input: { planId: string }): Promise<Result> {
+  if (!input.planId) return { ok: false, error: "Falta plan_id" };
+
+  const [before] = await db
+    .select()
+    .from(mediaPlans)
+    .where(eq(mediaPlans.id, input.planId))
+    .limit(1);
+  if (!before) return { ok: false, error: "Plan no encontrado" };
+  if (!before.deletedAt) return { ok: true }; // ya está vivo
+
+  const [clash] = await db
+    .select({ id: mediaPlans.id })
+    .from(mediaPlans)
+    .where(
+      and(
+        eq(mediaPlans.projectId, before.projectId),
+        eq(mediaPlans.name, before.name),
+        isNull(mediaPlans.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (clash) {
+    return {
+      ok: false,
+      error: `Ya existe un plan activo llamado "${before.name}" en el proyecto. Renombralo o borralo antes de restaurar este.`,
+    };
+  }
+
+  const [after] = await db
+    .update(mediaPlans)
+    .set({ deletedAt: null })
+    .where(eq(mediaPlans.id, input.planId))
+    .returning();
+
+  await recordAudit({
+    entityType: "media_plan",
+    entityId: input.planId,
+    action: "update",
+    beforeJson: before,
+    afterJson: after,
+  });
+
+  const [proj] = await db
+    .select({ code: projects.code })
+    .from(projects)
+    .where(eq(projects.id, before.projectId))
+    .limit(1);
+  if (proj) revalidatePath(`/proyectos/${proj.code}`);
+  revalidatePath("/configuracion/papelera-planes");
+
+  return { ok: true };
 }
 
 // Duplica un plan existente dentro de un proyecto (puede ser el mismo del
@@ -125,6 +224,7 @@ export async function duplicatePlan(input: {
       and(
         eq(mediaPlans.projectId, input.targetProjectId),
         eq(mediaPlans.name, input.newName.trim()),
+        isNull(mediaPlans.deletedAt),
       ),
     )
     .limit(1);
@@ -995,7 +1095,7 @@ export async function listSourcePlansForClient(
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
     .leftJoin(markets, eq(mediaPlanPlacements.marketId, markets.id))
-    .where(eq(projects.clientId, clientId))
+    .where(and(eq(projects.clientId, clientId), isNull(mediaPlans.deletedAt)))
     .groupBy(mediaPlans.id, projects.id);
 
   // El "sum distinct" arriba es un workaround porque drizzle no nos deja
