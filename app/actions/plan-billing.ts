@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
@@ -49,7 +49,7 @@ export async function ensureBillingForMonth(input: {
   const [plan] = await db
     .select()
     .from(mediaPlans)
-    .where(eq(mediaPlans.id, input.planId))
+    .where(and(eq(mediaPlans.id, input.planId), isNull(mediaPlans.deletedAt)))
     .limit(1);
   if (!plan) return { ok: false, error: "Plan no encontrado" };
 

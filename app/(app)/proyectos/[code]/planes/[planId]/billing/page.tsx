@@ -1,4 +1,4 @@
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
@@ -56,7 +56,7 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
-    .where(eq(mediaPlans.id, planId))
+    .where(and(eq(mediaPlans.id, planId), isNull(mediaPlans.deletedAt)))
     .limit(1);
 
   if (!planRow || planRow.project.code !== code) notFound();

@@ -2,6 +2,21 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 21/may/2026 — Filtro budget origin en reporting calendar + fix leak de planes borrados
+
+- **Filtro de Budget Origin en el reporting calendar**: dropdown client-side en
+  `reporting-calendar-client.tsx` que filtra las tres secciones (pendientes,
+  Gantt, enviados) por budget origin. Aparece sólo si hay >1 origin en los datos.
+- **Fix: planes borrados aparecían en "Planes de Medios" (`/planes`)**. Esa
+  página arma su query de `media_plans` inline (no usa `db/queries/`), así que
+  se le había escapado el filtro `deleted_at IS NULL`. Agregado. De paso se
+  cerró el mismo filtro en otros accesos por-id / write-paths que faltaban:
+  `billing/page.tsx` (loader del editor de billing), `plan-billing.ts`
+  (getOrCreate billing) y `simulator.ts` (chequeo de nombre único al promover).
+- **Lección**: si agregás una query nueva sobre `media_plans` (en page o action,
+  no sólo en `db/queries/`), acordate del `deleted_at IS NULL`.
+- Sin cambios de schema → no requiere acciones en prod.
+
 ### Cambios de la sesión 21/may/2026 — Borrar planes → papelera (soft delete)
 
 > **ACCIÓN REQUERIDA EN PROD**: este cambio agrega la columna
@@ -641,7 +656,9 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/vigilant-darwin-8vSa4)  Borrar planes → papelera (soft delete) + N° de factura editable/único — REQUIERE npm run db:push
+(branch claude/vigilant-darwin-8vSa4)  Filtro budget origin en reporting calendar + fix: planes borrados se mostraban en /planes
+2590560  Papelera de planes: borrado definitivo (hard delete) (#54)
+9448e9f  Borrar planes → papelera (soft delete) + restaurar (#53) — REQUIERE npm run db:push
 7ea45a9  N° de factura de billing: editable + único (#52)
 af1bae6  Cifras en formato US (plan + billing) + listado de reportes enviados (#51)
 42fa754  Fix: el simulador rebotaba al dashboard al elegir cliente (#50)

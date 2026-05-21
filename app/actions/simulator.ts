@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
@@ -223,7 +223,7 @@ export async function promoteScenarioToPlan(input: {
   const [existing] = await db
     .select({ id: mediaPlans.id })
     .from(mediaPlans)
-    .where(and(eq(mediaPlans.projectId, input.projectId), eq(mediaPlans.name, name)))
+    .where(and(eq(mediaPlans.projectId, input.projectId), eq(mediaPlans.name, name), isNull(mediaPlans.deletedAt)))
     .limit(1);
   if (existing) {
     return {
