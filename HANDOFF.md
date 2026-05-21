@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 21/may/2026 — Fix: el simulador rebotaba al dashboard al elegir cliente
+
+- **Síntoma**: al entrar a `/reportes/simulador` sin cliente, el empty-state
+  invita a elegir uno en el picker del topbar. Al elegirlo, el picker
+  redirigía al **dashboard** (`/?client=slug`) en vez de quedarse en el
+  simulador, obligando a volver a entrar a mano (esta vez ya con `?client=`).
+- **Causa**: `/reportes/simulador` no estaba en `CLIENT_FILTER_ROUTES`
+  (`lib/client-filter.ts`). Por eso `redirectTargetForClientChange()` no lo
+  reconocía como ruta que acepta el filtro ni matcheaba ningún prefijo, y caía
+  al `return "/"` final.
+- **Fix**: se agregó `/reportes/simulador` a `CLIENT_FILTER_ROUTES`. Ahora al
+  elegir cliente desde el simulador se queda en `/reportes/simulador?client=slug`
+  y renderiza la vista del cliente. No requiere acciones en prod.
+
 ### Cambios de la sesión 20/may/2026 — Publishers per-cliente (eliminar catálogo global)
 
 - **`publishers` pasa a ser per-cliente**, igual que `markets` y
@@ -545,7 +559,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/fix-publisher-visibility-RXmV3)  Publishers per-cliente: elimina catálogo global + client_publishers; CRUD en config del cliente + migración db/publishers-per-client.sql
+(branch claude/fix-simulator-redirect-loop-5Uavr)  Fix: el simulador rebotaba al dashboard al elegir cliente — agregar /reportes/simulador a CLIENT_FILTER_ROUTES
+eda75b8  Publishers per-cliente: eliminar catálogo global + client_publishers (#49)
 d9adeea  Enable RLS en todas las tablas de public — cierra la REST API pública de Supabase
 3b1a674  Proyectos: editar/eliminar + sacar el identificador del alta y la vista (#35)
 953ac29  Excel del plan: quitar columna Auto de Fees + grand total legible (#33)
