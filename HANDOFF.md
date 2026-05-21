@@ -2,6 +2,38 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 21/may/2026 — Borrar planes → papelera (soft delete)
+
+> **ACCIÓN REQUERIDA EN PROD**: este cambio agrega la columna
+> `media_plans.deleted_at` y convierte la unique constraint de nombre en un
+> **partial unique index**. Hay que correr **`npm run db:push`** después del
+> deploy. Hasta que se corra, las queries que filtran `deleted_at` van a
+> fallar (rompe varias páginas). No hay backfill: los planes existentes quedan
+> con `deleted_at = null` (vivos), como corresponde.
+
+- **Borrar un plan desde la vista de proyecto**: cada `PlanCard` tiene un botón
+  de tacho (`components/delete-plan-button.tsx`) que abre un modal de
+  confirmación **en inglés** ("Delete plan?"). Al confirmar llama a `deletePlan`.
+- **Soft delete + papelera**: `deletePlan` (`app/actions/plans.ts`) no borra
+  físicamente: setea `deleted_at = now()`. El plan (con sus publishers /
+  placements / fees / billings) se conserva ad eternum y deja de aparecer
+  porque **todas las queries de listado ahora filtran `deleted_at IS NULL`**
+  (billing, billing-tracker, dashboard, client-detail, campaign-tracker,
+  project-detail, reports, simulator). El filtro se agregó en el ON de los
+  joins a `media_plans` o en el WHERE según el caso.
+- **Papelera en configuración**: nueva página `/configuracion/papelera-planes`
+  (card en `/configuracion`) que lista los planes borrados (`getDeletedPlans`
+  en `db/queries/plan-trash.ts`) y permite **restaurarlos**
+  (`restorePlan` + `components/restore-plan-button.tsx`). UI en inglés.
+- **Unicidad de nombre**: ahora es un partial unique index
+  `(project_id, name) WHERE deleted_at IS NULL` — se puede re-crear un nombre
+  cuyo plan fue borrado, y hay varios borrados con el mismo nombre. `createPlan`
+  y `duplicatePlan` chequean colisión sólo contra planes vivos. `restorePlan`
+  pre-chequea colisión y devuelve error legible si ya hay un plan vivo igual.
+- `deletePlan` queda en el audit_log como `action: "delete"`, así que el plan
+  también aparece en `/auditoria/papelera` (consulta histórica). La papelera de
+  configuración es la que permite restaurar.
+
 ### Cambios de la sesión 21/may/2026 — N° de factura: editable + único
 
 - **Unicidad del número de factura**: `plan_billings.invoice_number` ya tenía
@@ -605,7 +637,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/vigilant-darwin-8vSa4)  N° de factura editable + único (pre-check + try/catch) en billing
+(branch claude/vigilant-darwin-8vSa4)  Borrar planes → papelera (soft delete) + N° de factura editable/único — REQUIERE npm run db:push
+7ea45a9  N° de factura de billing: editable + único (#52)
 af1bae6  Cifras en formato US (plan + billing) + listado de reportes enviados (#51)
 42fa754  Fix: el simulador rebotaba al dashboard al elegir cliente (#50)
 eda75b8  Publishers per-cliente: eliminar catálogo global + client_publishers (#49)

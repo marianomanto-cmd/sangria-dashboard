@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
   campaignActualSnapshots,
@@ -297,7 +297,7 @@ export async function getBenchmarkDetail(input: {
       mediaPlanPlacements,
       eq(mediaPlanPlacements.id, campaignActualSnapshots.placementId),
     )
-    .innerJoin(mediaPlans, eq(mediaPlans.id, campaignActualSnapshots.mediaPlanId))
+    .innerJoin(mediaPlans, and(eq(mediaPlans.id, campaignActualSnapshots.mediaPlanId), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(projects.id, campaignActualSnapshots.projectId))
     .where(and(...conds))
     .orderBy(
@@ -424,6 +424,7 @@ export async function listCompareablePlans(
     .where(
       and(
         eq(projects.clientId, clientId),
+        isNull(mediaPlans.deletedAt),
         // Aceptamos tanto approved como ready_to_send: el ready ya está
         // congelado por el MM y tiene sentido compararlo.
         // archivados y drafts no.

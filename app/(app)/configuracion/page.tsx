@@ -28,6 +28,12 @@ const SECTIONS: Array<{
     status: "ready",
   },
   {
+    href: "/configuracion/papelera-planes",
+    title: "Papelera de planes",
+    description: "Planes borrados desde la vista de proyecto. Se guardan acá para siempre y se pueden restaurar.",
+    status: "ready",
+  },
+  {
     href: "/configuracion/usuarios",
     title: "Usuarios y roles",
     description: "Gestión de usuarios (Account Manager, Media Planner, Finance, Viewer). Llega después de Auth.",

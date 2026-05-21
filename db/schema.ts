@@ -11,6 +11,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -276,11 +277,22 @@ export const mediaPlans = pgTable(
     // incrementa este contador.
     currentVersion: integer("current_version").notNull().default(0),
     notesMd: text("notes_md"),
+    // Soft delete: borrar un plan lo manda a la papelera (deletedAt != null) y
+    // se guarda ad eternum. Todas las queries de listado filtran
+    // `deletedAt IS NULL`. La papelera vive en /configuracion/papelera-planes.
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [unique("uq_media_plan_project_name").on(t.projectId, t.name)],
+  // Unicidad de nombre por proyecto sólo entre planes VIVOS (partial unique
+  // index): permite re-crear un nombre cuyo plan fue borrado y tener varios
+  // borrados con el mismo nombre en la papelera.
+  (t) => [
+    uniqueIndex("uq_media_plan_project_name")
+      .on(t.projectId, t.name)
+      .where(sql`${t.deletedAt} IS NULL`),
+  ],
 );
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   clients,
@@ -74,7 +74,7 @@ export async function getDashboardKpis(
       value: sql<string>`coalesce(sum(${planBillings.totalUsd}), 0)`,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(
       and(
@@ -90,7 +90,7 @@ export async function getDashboardKpis(
     })
     .from(planBillingPublishers)
     .innerJoin(planBillings, eq(planBillingPublishers.planBillingId, planBillings.id))
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(projectsActive);
 
@@ -196,7 +196,7 @@ export async function getDashboardProjects(
     })
     .from(projects)
     .innerJoin(clients, eq(projects.clientId, clients.id))
-    .leftJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
+    .leftJoin(mediaPlans, and(eq(mediaPlans.projectId, projects.id), isNull(mediaPlans.deletedAt)))
     .leftJoin(planBillings, eq(planBillings.mediaPlanId, mediaPlans.id))
     .leftJoin(
       planBillingPublishers,
@@ -215,7 +215,7 @@ export async function getDashboardProjects(
       total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
     })
     .from(projects)
-    .innerJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
+    .innerJoin(mediaPlans, and(eq(mediaPlans.projectId, projects.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(planBillings, eq(planBillings.mediaPlanId, mediaPlans.id))
     .innerJoin(
       planBillingPublishers,
@@ -294,7 +294,7 @@ async function getPlansSummaryForProjects(
       mediaPlanPlacements,
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
-    .where(inArray(mediaPlans.projectId, projectIds))
+    .where(and(inArray(mediaPlans.projectId, projectIds), isNull(mediaPlans.deletedAt)))
     .groupBy(mediaPlans.id)
     .orderBy(asc(mediaPlans.createdAt));
 
@@ -544,7 +544,7 @@ export async function getMonthlyTotals(
       total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .leftJoin(
       planBillingPublishers,
@@ -851,7 +851,7 @@ export async function getBillingEstimate(options: {
       pubBilled: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}) filter (where ${planBillingPublishers.isBillable}), 0)`,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .leftJoin(
       planBillingPublishers,
@@ -877,7 +877,7 @@ export async function getBillingEstimate(options: {
       feeBilled: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
     })
     .from(planBillings)
-    .innerJoin(mediaPlans, eq(planBillings.mediaPlanId, mediaPlans.id))
+    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .leftJoin(
       planBillingFees,

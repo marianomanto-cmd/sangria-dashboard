@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowUpRight, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { budgetOrigins } from "@/db/schema";
@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { getBillingEstimate } from "@/db/queries/dashboard";
 import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
 import { ProjectEditPanel } from "./edit-panel";
+import { DeletePlanButton } from "@/components/delete-plan-button";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 import {
   DEFAULT_LANGUAGE,
@@ -292,40 +293,41 @@ function PlanCard({
       : 0;
 
   return (
-    <Link
-      href={`/proyectos/${projectCode}/planes/${plan.id}`}
-      className="group rounded-lg border border-line bg-white dark:bg-paper-2 p-4 hover:border-ink-2 transition-colors"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-semibold text-ink truncate">{plan.name}</h3>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[10px] font-medium ${style.cls}`}
-            >
+    <div className="relative group">
+      <DeletePlanButton
+        planId={plan.id}
+        planName={plan.name}
+        className="absolute top-2.5 right-2.5 z-10"
+      />
+      <Link
+        href={`/proyectos/${projectCode}/planes/${plan.id}`}
+        className="block rounded-lg border border-line bg-white dark:bg-paper-2 p-4 hover:border-ink-2 transition-colors"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 pr-6">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-semibold text-ink truncate">{plan.name}</h3>
               <span
-                className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`}
-              />
-              {style.label}
-            </span>
-            {plan.currentVersion > 0 && (
-              <span className="font-mono text-[10px] text-muted">
-                v{plan.currentVersion}
+                className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[10px] font-medium ${style.cls}`}
+              >
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`}
+                />
+                {style.label}
               </span>
-            )}
+              {plan.currentVersion > 0 && (
+                <span className="font-mono text-[10px] text-muted">
+                  v{plan.currentVersion}
+                </span>
+              )}
+            </div>
+            <p className="font-mono text-[11px] text-muted mt-1 truncate">
+              {projectCode}.{plan.name}
+            </p>
           </div>
-          <p className="font-mono text-[11px] text-muted mt-1 truncate">
-            {projectCode}.{plan.name}
-          </p>
         </div>
-        <ArrowUpRight
-          size={14}
-          strokeWidth={2}
-          className="text-muted group-hover:text-ink transition-colors shrink-0 mt-1"
-        />
-      </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="mt-3 grid grid-cols-2 gap-3">
         <div>
           <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
             {lang === "es" ? "Período" : "Period"}
@@ -374,13 +376,14 @@ function PlanCard({
         )}
       </div>
 
-      {plan.lastSnapshotAt && (
-        <p className="text-[10px] text-muted mt-3 font-mono">
-          {lang === "es" ? "última aprobación" : "last approval"}:{" "}
-          {formatDate(plan.lastSnapshotAt.toISOString().slice(0, 10), lang)}
-        </p>
-      )}
-    </Link>
+        {plan.lastSnapshotAt && (
+          <p className="text-[10px] text-muted mt-3 font-mono">
+            {lang === "es" ? "última aprobación" : "last approval"}:{" "}
+            {formatDate(plan.lastSnapshotAt.toISOString().slice(0, 10), lang)}
+          </p>
+        )}
+      </Link>
+    </div>
   );
 }
 

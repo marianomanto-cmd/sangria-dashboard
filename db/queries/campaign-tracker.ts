@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -142,7 +142,7 @@ export async function getCampaignTrackerHub(
       mediaPlanPlacements,
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
-    .where(and(...conds))
+    .where(and(...conds, isNull(mediaPlans.deletedAt)))
     .groupBy(mediaPlans.id, projects.id, clients.id, budgetOrigins.id);
 
   // Clasificamos cada plan en vigente / concluido / futuro. Excluimos los
@@ -388,7 +388,7 @@ export async function getCampaignTrackerPlan(
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
-    .where(eq(mediaPlans.id, planId))
+    .where(and(eq(mediaPlans.id, planId), isNull(mediaPlans.deletedAt)))
     .limit(1);
 
   if (!planRow) return null;

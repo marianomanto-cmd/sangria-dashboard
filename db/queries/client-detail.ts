@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -84,7 +84,7 @@ export async function getClientDetail(
       planCount: sql<number>`count(distinct ${mediaPlans.id})::int`,
     })
     .from(projects)
-    .leftJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
+    .leftJoin(mediaPlans, and(eq(mediaPlans.projectId, projects.id), isNull(mediaPlans.deletedAt)))
     .leftJoin(planBillings, eq(planBillings.mediaPlanId, mediaPlans.id))
     .leftJoin(
       planBillingPublishers,
@@ -100,7 +100,7 @@ export async function getClientDetail(
       endDate: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
     })
     .from(projects)
-    .innerJoin(mediaPlans, eq(mediaPlans.projectId, projects.id))
+    .innerJoin(mediaPlans, and(eq(mediaPlans.projectId, projects.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(
       mediaPlanPublishers,
       eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),

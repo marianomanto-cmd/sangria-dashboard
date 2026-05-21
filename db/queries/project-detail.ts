@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -92,7 +92,7 @@ export async function getProjectWithPlans(
       mediaPlanPublishers,
       eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
     )
-    .where(eq(mediaPlans.projectId, row.project.id))
+    .where(and(eq(mediaPlans.projectId, row.project.id), isNull(mediaPlans.deletedAt)))
     .groupBy(mediaPlans.id)
     .orderBy(asc(mediaPlans.createdAt));
 
@@ -304,7 +304,7 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
-    .where(eq(mediaPlans.id, planId))
+    .where(and(eq(mediaPlans.id, planId), isNull(mediaPlans.deletedAt)))
     .limit(1);
 
   if (!planRow) return null;
