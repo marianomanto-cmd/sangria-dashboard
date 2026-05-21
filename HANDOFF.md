@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 21/may/2026 — Tablero de pendientes en el dashboard
+
+- **Nuevo "Tablero de pendientes"** debajo de la tabla de proyectos del
+  dashboard (`components/pending-board.tsx`, alimentado por
+  `getDashboardPendings` en `db/queries/pendings.ts`). Cuatro cards colapsables,
+  cada una con badge de conteo y filas que linkean al área correspondiente:
+  1. Billing reports a completar (meses cerrados de planes aprobados sin billing).
+  2. Tracking del día pendiente (campañas vigentes sin cierre hoy).
+  3. Entregas de reportes (próximas a ≤7 días + vencidas sin entregar).
+  4. Facturas impagas (`status='invoiced'` sin `paid_at`; vencidas resaltadas).
+- Todo se deriva de columnas existentes → **sin cambios de schema, sin acción
+  en prod**. Respeta el filtro global `?client=`.
+- Ver detalle de las reglas en README → "Tablero de pendientes del dashboard".
+
 ### Cambios de la sesión 21/may/2026 — Filtro budget origin en reporting calendar + fix leak de planes borrados
 
 - **Filtro de Budget Origin en el reporting calendar**: dropdown client-side en
@@ -656,7 +670,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/vigilant-darwin-8vSa4)  Filtro budget origin en reporting calendar + fix: planes borrados se mostraban en /planes
+(branch claude/vigilant-darwin-8vSa4)  Tablero de pendientes en el dashboard
+15eda3c  Filtro budget origin en reporting calendar + fix planes borrados en /planes (#55)
 2590560  Papelera de planes: borrado definitivo (hard delete) (#54)
 9448e9f  Borrar planes → papelera (soft delete) + restaurar (#53) — REQUIERE npm run db:push
 7ea45a9  N° de factura de billing: editable + único (#52)
