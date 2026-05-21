@@ -540,14 +540,36 @@ function BillingStatusActions({
         </>
       )}
       {status === "paid" && (
-        <button
-          type="button"
-          onClick={() => onTransition("invoiced")}
-          disabled={pending}
-          className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
-        >
-          Revertir a facturado
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={() => onTransition("invoiced")}
+            disabled={pending}
+            className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+          >
+            Revertir a facturado
+          </button>
+          {showInvoiceInput ? (
+            <InvoiceInput
+              initial={currentInvoiceNumber ?? ""}
+              pending={pending}
+              onCancel={() => setShowInvoiceInput(false)}
+              onSubmit={(v) => {
+                setShowInvoiceInput(false);
+                onFacturar(v);
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowInvoiceInput(true)}
+              disabled={pending}
+              className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+            >
+              Editar número
+            </button>
+          )}
+        </>
       )}
     </div>
   );

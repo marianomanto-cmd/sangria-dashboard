@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
@@ -501,6 +501,28 @@ export async function markBillingInvoiced(input: {
     };
   }
 
+  // El número de factura es único en todo el sistema. Pre-chequeamos contra
+  // otros billings (excluyendo este) para dar un error legible antes de pegarle
+  // a la unique constraint de la DB.
+  if (invoiceNumber !== before.invoiceNumber) {
+    const [dup] = await db
+      .select({ id: planBillings.id, month: planBillings.month })
+      .from(planBillings)
+      .where(
+        and(
+          eq(planBillings.invoiceNumber, invoiceNumber),
+          ne(planBillings.id, input.billingId),
+        ),
+      )
+      .limit(1);
+    if (dup) {
+      return {
+        ok: false,
+        error: `El número de factura "${invoiceNumber}" ya está asignado a otro billing (mes ${dup.month}). No se puede repetir.`,
+      };
+    }
+  }
+
   const update: Record<string, unknown> = { invoiceNumber };
   if (before.status === "sent") {
     update.status = "invoiced";
@@ -520,11 +542,25 @@ async function persistTransition(
   update: Record<string, unknown>,
   billingId: string,
 ): Promise<Result> {
-  const [after] = await db
-    .update(planBillings)
-    .set(update)
-    .where(eq(planBillings.id, billingId))
-    .returning();
+  let after: typeof planBillings.$inferSelect;
+  try {
+    [after] = await db
+      .update(planBillings)
+      .set(update)
+      .where(eq(planBillings.id, billingId))
+      .returning();
+  } catch (e) {
+    // Único caso esperable acá: dos cargas concurrentes del mismo número de
+    // factura que pasan el pre-check y chocan con la unique constraint.
+    const msg = e instanceof Error ? e.message : "error desconocido";
+    if (msg.includes("unique") || msg.includes("duplicate")) {
+      return {
+        ok: false,
+        error: "El número de factura ya está asignado a otro billing. No se puede repetir.",
+      };
+    }
+    return { ok: false, error: msg };
+  }
 
   await recordAudit({
     entityType: "plan_billing",
