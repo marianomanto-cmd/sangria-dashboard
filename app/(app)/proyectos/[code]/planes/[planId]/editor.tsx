@@ -4,14 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
-  ChevronDown,
-  ChevronRight,
   Copy,
   Download,
   FileText,
-  GripVertical,
   Plus,
   Receipt,
+  Scale,
   Trash2,
   X,
 } from "lucide-react";
@@ -68,6 +66,11 @@ type PublisherCatalog = {
 };
 type Market = (typeof marketsTable.$inferSelect);
 type MetricCatalog = (typeof metricsTable.$inferSelect);
+type UpdatePlacementPartial = Omit<
+  Parameters<typeof updatePlacement>[0],
+  "placementId"
+>;
+type StartTransition = ReturnType<typeof useTransition>[1];
 
 const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> = {
   draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
@@ -95,8 +98,6 @@ export function PlanEditor({
 
   const refresh = () => router.refresh();
 
-  // Un publisher puede agregarse N veces (cada bloque es independiente).
-  // El dropdown muestra siempre el catálogo completo del cliente.
   const availablePublishers = allPublishers;
 
   const projectBudget = Number.parseFloat(detail.project.totalGrossBudgetUsd ?? "0");
@@ -104,7 +105,6 @@ export function PlanEditor({
   const coveragePct = projectBudget > 0 ? (planTotal / projectBudget) * 100 : 0;
   const overBudget = coveragePct > 100;
 
-  // Período del plan derivado de las fechas de los placements
   const allPlacements = detail.publishers.flatMap((p) => p.placements);
   const periodStart =
     allPlacements
@@ -118,7 +118,6 @@ export function PlanEditor({
       .sort()
       .pop() ?? null;
 
-  // ─── Plan-level handlers ────────────────────────────────────────────
   const onChangePlanField = (field: "name" | "notesMd", value: string) => {
     startTransition(async () => {
       await updatePlanMetadata({ planId: detail.plan.id, [field]: value });
@@ -358,13 +357,13 @@ export function PlanEditor({
         </section>
       )}
 
-      {/* Publishers + placements */}
-      <section className="space-y-3">
+      {/* Workspace: planilla de placements (izq) + inspector (der) */}
+      <section className="space-y-2">
         <h2 className="text-sm font-semibold flex items-baseline justify-between">
           <span>
             Publishers
             <span className="ml-2 text-xs font-normal text-muted">
-              ({detail.publishers.length} · {detail.publishers.reduce((s, p) => s + p.placements.length, 0)} placements)
+              ({detail.publishers.length} · {allPlacements.length} placements)
             </span>
           </span>
           <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
@@ -372,25 +371,17 @@ export function PlanEditor({
           </span>
         </h2>
 
-        {detail.publishers.map((pub) => (
-          <PublisherSection
-            key={pub.id}
-            pub={pub}
-            editable={editable}
-            allMarkets={allMarkets}
-            allMetrics={allMetrics}
-            onChange={refresh}
-            startTransition={startTransition}
-          />
-        ))}
-
-        {editable && availablePublishers.length > 0 && (
-          <AddPublisherDropdown
-            publishers={availablePublishers}
-            onSelect={onAddPublisher}
-            disabled={pending}
-          />
-        )}
+        <PlanWorkspace
+          detail={detail}
+          editable={editable}
+          allMarkets={allMarkets}
+          allMetrics={allMetrics}
+          onChange={refresh}
+          startTransition={startTransition}
+          availablePublishers={availablePublishers}
+          onAddPublisher={onAddPublisher}
+          pending={pending}
+        />
       </section>
 
       {/* Fees */}
@@ -524,23 +515,124 @@ export function PlanEditor({
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Publisher section
+// Workspace: planilla (izquierda) + inspector del placement seleccionado (der).
+// La selección vive acá; sobrevive a router.refresh() porque el componente no
+// se desmonta. Si el placement seleccionado se borra, el inspector muestra el
+// placeholder.
 // ════════════════════════════════════════════════════════════════════════════
 
-function PublisherSection({
-  pub,
+function PlanWorkspace({
+  detail,
   editable,
   allMarkets,
   allMetrics,
+  onChange,
+  startTransition,
+  availablePublishers,
+  onAddPublisher,
+  pending,
+}: {
+  detail: PlanDetail;
+  editable: boolean;
+  allMarkets: Market[];
+  allMetrics: MetricCatalog[];
+  onChange: () => void;
+  startTransition: StartTransition;
+  availablePublishers: PublisherCatalog[];
+  onAddPublisher: (id: string) => void;
+  pending: boolean;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const allPlacements = detail.publishers.flatMap((p) => p.placements);
+  const selected = allPlacements.find((p) => p.id === selectedId) ?? null;
+
+  const updateSelected = (partial: UpdatePlacementPartial) => {
+    if (!selected) return;
+    startTransition(async () => {
+      await updatePlacement({ ...partial, placementId: selected.id });
+      onChange();
+    });
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 items-start">
+      {/* Planilla */}
+      <div className="space-y-3 min-w-0">
+        {detail.publishers.map((pub) => (
+          <PublisherGroup
+            key={pub.id}
+            pub={pub}
+            editable={editable}
+            allMarkets={allMarkets}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            onChange={onChange}
+            startTransition={startTransition}
+          />
+        ))}
+
+        {detail.publishers.length === 0 && (
+          <div className="rounded-lg border border-dashed border-line px-5 py-8 text-center text-xs text-muted">
+            Todavía no hay publishers en este plan.
+          </div>
+        )}
+
+        {editable && availablePublishers.length > 0 && (
+          <AddPublisherDropdown
+            publishers={availablePublishers}
+            onSelect={onAddPublisher}
+            disabled={pending}
+          />
+        )}
+      </div>
+
+      {/* Inspector */}
+      <div className="lg:sticky lg:top-4">
+        {selected ? (
+          <PlacementInspector
+            key={selected.id}
+            placement={selected}
+            editable={editable}
+            allMetrics={allMetrics}
+            update={updateSelected}
+          />
+        ) : (
+          <div className="rounded-lg border border-dashed border-line bg-paper-2/40 px-5 py-10 text-center">
+            <p className="text-sm font-medium text-muted">
+              Seleccioná un placement
+            </p>
+            <p className="text-xs text-muted mt-1">
+              Hacé clic en una fila para ver y editar fechas, audiencia,
+              métricas y notas acá.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Grupo de publisher: cabecera (total, balance, dup/remove) + filas de
+// placements. Sin acordeón: todo visible, una sola superficie.
+// ════════════════════════════════════════════════════════════════════════════
+
+function PublisherGroup({
+  pub,
+  editable,
+  allMarkets,
+  selectedId,
+  onSelect,
   onChange,
   startTransition,
 }: {
   pub: PlanPublisherGroup;
   editable: boolean;
   allMarkets: Market[];
-  allMetrics: MetricCatalog[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
   onChange: () => void;
-  startTransition: ReturnType<typeof useTransition>[1];
+  startTransition: StartTransition;
 }) {
   const balance = pub.totalPlannedUsd - pub.placementsTotalUsd;
   const balanced = Math.abs(balance) < 0.01;
@@ -548,6 +640,16 @@ function PublisherSection({
   const onUpdateTotal = (newTotal: number) => {
     startTransition(async () => {
       await updatePlanPublisher({ mppId: pub.id, totalPlannedUsd: newTotal });
+      onChange();
+    });
+  };
+
+  const onBalance = () => {
+    startTransition(async () => {
+      await updatePlanPublisher({
+        mppId: pub.id,
+        totalPlannedUsd: pub.placementsTotalUsd,
+      });
       onChange();
     });
   };
@@ -580,13 +682,9 @@ function PublisherSection({
   };
 
   return (
-    <details
-      open
-      className="group rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden"
-    >
-      <summary className="flex items-center gap-3 px-5 py-3 cursor-pointer list-none [&::-webkit-details-marker]:hidden hover:bg-paper-2/50">
-        <ChevronDown size={14} strokeWidth={2} className="text-muted shrink-0 transition-transform -rotate-90 group-open:rotate-0" />
-        <span className="font-semibold text-ink flex-1">
+    <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft bg-paper/60">
+        <span className="font-semibold text-ink flex-1 min-w-0 truncate">
           {pub.publisherName}
           {!pub.agencyPays && (
             <span className="ml-2 text-[10px] font-normal text-muted bg-paper-2 border border-line px-1.5 py-0.5 rounded">
@@ -594,124 +692,137 @@ function PublisherSection({
             </span>
           )}
         </span>
-        <span className="text-xs text-muted">
+        <span className="text-xs text-muted shrink-0">
           {pub.placements.length} placement{pub.placements.length === 1 ? "" : "s"}
         </span>
-        <NumberInput
-          value={pub.totalPlannedUsd}
-          onCommit={onUpdateTotal}
-          disabled={!editable}
-          className="w-32 text-right font-mono font-semibold"
-        />
+        <span className="flex items-center gap-1 shrink-0">
+          <span className="text-[10px] uppercase tracking-[0.06em] text-muted">
+            total
+          </span>
+          <NumberInput
+            value={pub.totalPlannedUsd}
+            onCommit={onUpdateTotal}
+            disabled={!editable}
+            className="w-28 text-right font-mono font-semibold"
+          />
+        </span>
         {editable && (
           <>
             <button
               type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                onDuplicatePub();
-              }}
-              className="text-muted hover:text-ink p-1"
+              onClick={onDuplicatePub}
+              className="text-muted hover:text-ink p-1 shrink-0"
               title="Duplicar publisher (con todos sus placements)"
             >
               <Copy size={14} />
             </button>
             <button
               type="button"
-              onClick={(e) => {
-                e.preventDefault();
-                onRemovePub();
-              }}
-              className="text-muted hover:text-danger p-1 -mr-2"
+              onClick={onRemovePub}
+              className="text-muted hover:text-danger p-1 -mr-1 shrink-0"
               title="Eliminar publisher"
             >
               <Trash2 size={14} />
             </button>
           </>
         )}
-      </summary>
+      </div>
 
       {!balanced && (
-        <div className="border-t border-warn-soft bg-warn-soft/40 px-5 py-1.5 text-[11px] text-warn font-medium">
-          {balance > 0
-            ? `Faltan ${formatUsd(balance)} para llegar al total del publisher`
-            : `Hay ${formatUsd(-balance)} de más en los placements vs el total del publisher`}
+        <div className="flex items-center gap-2 border-b border-warn-soft bg-warn-soft/40 px-4 py-1.5 text-[11px] text-warn font-medium">
+          <span className="flex-1">
+            {balance > 0
+              ? `Faltan ${formatUsd(balance)} para llegar al total del publisher`
+              : `Hay ${formatUsd(-balance)} de más en los placements vs el total`}
+          </span>
+          {editable && (
+            <button
+              type="button"
+              onClick={onBalance}
+              className="inline-flex items-center gap-1 rounded border border-warn/40 px-1.5 py-0.5 hover:bg-warn-soft"
+              title="Poner el total del publisher igual a la suma de placements"
+            >
+              <Scale size={11} strokeWidth={2} />
+              Balancear
+            </button>
+          )}
         </div>
       )}
 
-      <div className="border-t border-line-soft">
-        {pub.placements.length === 0 ? (
-          <div className="px-5 py-6 text-center text-xs text-muted">
-            Sin placements cargados todavía.
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-paper">
-              <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
-                <th className="w-6"></th>
-                <th className="text-left font-medium px-3 py-2">Placement</th>
-                <th className="text-left font-medium px-3 py-2">Mercado</th>
-                <th className="text-left font-medium px-3 py-2">Cost method</th>
-                <th className="text-right font-medium px-3 py-2">Monto</th>
-                {editable && <th className="w-16"></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {pub.placements.map((pl) => (
-                <PlacementRow
-                  key={pl.id}
-                  placement={pl}
-                  editable={editable}
-                  allMarkets={allMarkets}
-                  allMetrics={allMetrics}
-                  onChange={onChange}
-                  startTransition={startTransition}
-                />
-              ))}
-            </tbody>
-          </table>
-        )}
-        {editable && (
-          <div className="border-t border-line-soft px-5 py-2">
-            <button
-              type="button"
-              onClick={onAddPlacement}
-              className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink"
-            >
-              <Plus size={12} strokeWidth={2.5} />
-              Agregar placement
-            </button>
-          </div>
-        )}
-      </div>
-    </details>
+      {pub.placements.length === 0 ? (
+        <div className="px-4 py-5 text-center text-xs text-muted">
+          Sin placements cargados todavía.
+        </div>
+      ) : (
+        <table className="w-full text-xs">
+          <thead className="bg-paper">
+            <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
+              <th className="text-left font-medium px-3 py-1.5">Placement</th>
+              <th className="text-left font-medium px-2 py-1.5">Mercado</th>
+              <th className="text-left font-medium px-2 py-1.5">Método</th>
+              <th className="text-right font-medium px-2 py-1.5">Monto</th>
+              <th className="text-right font-medium px-2 py-1.5">Tarifa</th>
+              <th className="text-right font-medium px-2 py-1.5">Delivery</th>
+              {editable && <th className="w-12"></th>}
+            </tr>
+          </thead>
+          <tbody>
+            {pub.placements.map((pl) => (
+              <PlacementGridRow
+                key={pl.id}
+                placement={pl}
+                editable={editable}
+                allMarkets={allMarkets}
+                selected={pl.id === selectedId}
+                onSelect={onSelect}
+                onChange={onChange}
+                startTransition={startTransition}
+              />
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {editable && (
+        <div className="border-t border-line-soft px-4 py-2">
+          <button
+            type="button"
+            onClick={onAddPlacement}
+            className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink"
+          >
+            <Plus size={12} strokeWidth={2.5} />
+            Agregar placement
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Placement row con expandible para campos avanzados
+// Fila de la planilla: campos esenciales inline (nombre, mercado, método,
+// monto, tarifa⇄delivery de la métrica principal). Click selecciona la fila
+// para el inspector.
 // ════════════════════════════════════════════════════════════════════════════
 
-function PlacementRow({
+function PlacementGridRow({
   placement,
   editable,
   allMarkets,
-  allMetrics,
+  selected,
+  onSelect,
   onChange,
   startTransition,
 }: {
   placement: PlanPlacement;
   editable: boolean;
   allMarkets: Market[];
-  allMetrics: MetricCatalog[];
+  selected: boolean;
+  onSelect: (id: string) => void;
   onChange: () => void;
-  startTransition: ReturnType<typeof useTransition>[1];
+  startTransition: StartTransition;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const update = (
-    partial: Omit<Parameters<typeof updatePlacement>[0], "placementId">,
-  ) => {
+  const update = (partial: UpdatePlacementPartial) => {
     startTransition(async () => {
       await updatePlacement({ ...partial, placementId: placement.id });
       onChange();
@@ -734,104 +845,144 @@ function PlacementRow({
     });
   };
 
+  const pair = placement.costMethod ? COST_METHOD_PAIR[placement.costMethod] : undefined;
+  const eff = placement.costMethod
+    ? effectivePair(placement.metricsJson, placement.costMethod, placement.amountUsd)
+    : null;
+
   return (
-    <>
-      <tr className="border-t border-line-soft hover:bg-paper-2/40">
-        <td className="px-2 py-1.5 text-center">
+    <tr
+      onClick={() => onSelect(placement.id)}
+      className={`border-t border-line-soft cursor-pointer ${
+        selected ? "bg-accent-soft/50" : "hover:bg-paper-2/40"
+      }`}
+    >
+      <td className="px-3 py-1">
+        <TextInput
+          value={placement.placementName}
+          onCommit={(v) => update({ placementName: v })}
+          disabled={!editable}
+          className="w-full"
+        />
+      </td>
+      <td className="px-2 py-1">
+        <select
+          value={placement.marketId ?? ""}
+          disabled={!editable}
+          onChange={(e) => update({ marketId: e.target.value || null })}
+          className="text-xs bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50 max-w-[130px]"
+        >
+          <option value="">— sin mercado —</option>
+          {allMarkets.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-2 py-1">
+        <select
+          value={placement.costMethod ?? ""}
+          disabled={!editable}
+          onChange={(e) =>
+            update({ costMethod: (e.target.value || null) as CostMethod | null })
+          }
+          className="text-xs font-mono bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50"
+        >
+          <option value="">—</option>
+          {COST_METHODS.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+      </td>
+      <td className="px-2 py-1 text-right">
+        <NumberInput
+          value={placement.amountUsd}
+          onCommit={(v) => update({ amountUsd: v })}
+          disabled={!editable}
+          className="w-24 text-right font-mono"
+        />
+      </td>
+      <td className="px-2 py-1 text-right">
+        {pair ? (
+          <RateInput
+            value={eff?.rate ?? null}
+            disabled={!editable}
+            onCommit={(v) =>
+              update({
+                metricsJson: applyPrimaryPairChange(
+                  placement.metricsJson,
+                  placement.costMethod as string,
+                  placement.amountUsd,
+                  "rate",
+                  v,
+                ),
+              })
+            }
+          />
+        ) : (
+          <span className="text-line">—</span>
+        )}
+      </td>
+      <td className="px-2 py-1 text-right">
+        {pair ? (
+          <DeliveryInput
+            value={eff?.delivery ?? null}
+            disabled={!editable}
+            onCommit={(v) =>
+              update({
+                metricsJson: applyPrimaryPairChange(
+                  placement.metricsJson,
+                  placement.costMethod as string,
+                  placement.amountUsd,
+                  "delivery",
+                  v,
+                ),
+              })
+            }
+          />
+        ) : (
+          <span className="text-line">—</span>
+        )}
+      </td>
+      {editable && (
+        <td className="px-1 py-1 text-center whitespace-nowrap">
           <button
             type="button"
-            onClick={() => setExpanded((e) => !e)}
-            className="text-muted hover:text-ink"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate();
+            }}
+            className="text-muted hover:text-ink p-1"
+            title="Duplicar placement"
           >
-            {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+            <Copy size={12} />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove();
+            }}
+            className="text-muted hover:text-danger p-1"
+            title="Eliminar"
+          >
+            <Trash2 size={12} />
           </button>
         </td>
-        <td className="px-3 py-1.5">
-          <TextInput
-            value={placement.placementName}
-            onCommit={(v) => update({ placementName: v })}
-            disabled={!editable}
-            className="w-full"
-          />
-        </td>
-        <td className="px-3 py-1.5">
-          <select
-            value={placement.marketId ?? ""}
-            disabled={!editable}
-            onChange={(e) =>
-              update({ marketId: e.target.value || null })
-            }
-            className="text-xs bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50 max-w-[180px]"
-          >
-            <option value="">— sin mercado —</option>
-            {allMarkets.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-        </td>
-        <td className="px-3 py-1.5">
-          <select
-            value={placement.costMethod ?? ""}
-            disabled={!editable}
-            onChange={(e) =>
-              update({ costMethod: (e.target.value || null) as CostMethod | null })
-            }
-            className="text-xs font-mono bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none disabled:opacity-50"
-          >
-            <option value="">—</option>
-            {COST_METHODS.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
-        </td>
-        <td className="px-3 py-1.5 text-right">
-          <NumberInput
-            value={placement.amountUsd}
-            onCommit={(v) => update({ amountUsd: v })}
-            disabled={!editable}
-            className="w-28 text-right font-mono"
-          />
-        </td>
-        {editable && (
-          <td className="px-1 py-1.5 text-center whitespace-nowrap">
-            <button
-              type="button"
-              onClick={onDuplicate}
-              className="text-muted hover:text-ink p-1"
-              title="Duplicar placement"
-            >
-              <Copy size={12} />
-            </button>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="text-muted hover:text-danger p-1"
-              title="Eliminar"
-            >
-              <Trash2 size={12} />
-            </button>
-          </td>
-        )}
-      </tr>
-      {expanded && (
-        <tr className="bg-paper-2/30">
-          <td colSpan={editable ? 6 : 5} className="px-5 py-3">
-            <PlacementDetails
-              placement={placement}
-              editable={editable}
-              allMetrics={allMetrics}
-              update={update}
-            />
-          </td>
-        </tr>
       )}
-    </>
+    </tr>
   );
 }
 
-function PlacementDetails({
+// ════════════════════════════════════════════════════════════════════════════
+// Inspector: detalle completo del placement seleccionado (fechas, audiencia,
+// métrica principal, métricas secundarias, notas). Reusa PrincipalPairEditor y
+// MetricsEditor. Se monta con key={placement.id} → su estado interno se resetea
+// al cambiar de placement.
+// ════════════════════════════════════════════════════════════════════════════
+
+function PlacementInspector({
   placement,
   editable,
   allMetrics,
@@ -840,11 +991,8 @@ function PlacementDetails({
   placement: PlanPlacement;
   editable: boolean;
   allMetrics: MetricCatalog[];
-  update: (
-    partial: Omit<Parameters<typeof updatePlacement>[0], "placementId">,
-  ) => void;
+  update: (partial: UpdatePlacementPartial) => void;
 }) {
-  // Métrica principal según el cost_method seleccionado
   const primarySlug = placement.costMethod
     ? COST_METHOD_PRIMARY_METRIC[placement.costMethod] ?? null
     : null;
@@ -853,8 +1001,17 @@ function PlacementDetails({
     : null;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="space-y-3">
+    <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-line-soft bg-paper/60">
+        <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+          Placement
+        </p>
+        <p className="text-sm font-semibold text-ink truncate">
+          {placement.placementName || "—"}
+        </p>
+      </div>
+
+      <div className="px-4 py-3 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Fecha inicio">
             <input
@@ -886,8 +1043,8 @@ function PlacementDetails({
           <textarea
             defaultValue={placement.audience ?? ""}
             disabled={!editable}
-            rows={3}
-            placeholder="25-44 viajeros frecuentes, lookalike de site visitors, retargeting, etc."
+            rows={2}
+            placeholder="25-44 viajeros frecuentes, lookalike, retargeting, etc."
             onBlur={(e) =>
               e.target.value !== (placement.audience ?? "") &&
               update({ audience: e.target.value || null })
@@ -896,21 +1053,6 @@ function PlacementDetails({
           />
         </Field>
 
-        <Field label="Notas / formatos / detalles">
-          <textarea
-            defaultValue={placement.notesMd ?? ""}
-            disabled={!editable}
-            rows={3}
-            placeholder="Formato: video vertical 15-30s, 3 versiones rotativas, etc."
-            onBlur={(e) =>
-              e.target.value !== (placement.notesMd ?? "") &&
-              update({ notesMd: e.target.value || null })
-            }
-            className="w-full text-sm bg-white dark:bg-paper-2 border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
-          />
-        </Field>
-      </div>
-      <div>
         {primaryMetric && placement.costMethod && (
           <PrincipalPairEditor
             costMethod={placement.costMethod}
@@ -922,6 +1064,7 @@ function PlacementDetails({
             onCommit={(m) => update({ metricsJson: m })}
           />
         )}
+
         <MetricsEditor
           metrics={placement.metricsJson}
           allMetrics={allMetrics}
@@ -930,15 +1073,88 @@ function PlacementDetails({
           primaryMetricSlug={primarySlug}
           onCommit={(m) => update({ metricsJson: m })}
         />
+
+        <Field label="Notas / formatos / detalles">
+          <textarea
+            defaultValue={placement.notesMd ?? ""}
+            disabled={!editable}
+            rows={2}
+            placeholder="Formato: video vertical 15-30s, 3 versiones rotativas, etc."
+            onBlur={(e) =>
+              e.target.value !== (placement.notesMd ?? "") &&
+              update({ notesMd: e.target.value || null })
+            }
+            className="w-full text-sm bg-white dark:bg-paper-2 border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
+          />
+        </Field>
       </div>
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Helpers tarifa↔delivery de la métrica principal (compartidos por la planilla
+// y el PrincipalPairEditor). El planner edita uno y se recalcula el otro desde
+// amount × multiplier; se guardan AMBOS en metrics_json.
+// ════════════════════════════════════════════════════════════════════════════
+
+function effectivePair(
+  metricsJson: Record<string, number>,
+  costMethod: string,
+  amountUsd: number,
+): { rate: number | null; delivery: number | null } | null {
+  const pair = COST_METHOD_PAIR[costMethod];
+  if (!pair) return null;
+  const rateInJson = metricsJson[pair.rate];
+  const deliveryInJson = metricsJson[pair.delivery];
+  let effRate: number | null =
+    typeof rateInJson === "number" && rateInJson > 0 ? rateInJson : null;
+  let effDelivery: number | null =
+    typeof deliveryInJson === "number" && deliveryInJson > 0
+      ? deliveryInJson
+      : null;
+  if (effRate == null && effDelivery != null && amountUsd > 0) {
+    effRate = (amountUsd * pair.multiplier) / effDelivery;
+  }
+  if (effDelivery == null && effRate != null && amountUsd > 0) {
+    effDelivery = (amountUsd * pair.multiplier) / effRate;
+  }
+  return { rate: effRate, delivery: effDelivery };
+}
+
+function applyPrimaryPairChange(
+  metricsJson: Record<string, number>,
+  costMethod: string,
+  amountUsd: number,
+  field: "rate" | "delivery",
+  newValue: number,
+): Record<string, number> {
+  const pair = COST_METHOD_PAIR[costMethod];
+  if (!pair) return metricsJson;
+  if (newValue <= 0) {
+    const next = { ...metricsJson };
+    delete next[pair.rate];
+    delete next[pair.delivery];
+    return next;
+  }
+  if (field === "rate") {
+    const newDelivery = amountUsd > 0 ? (amountUsd * pair.multiplier) / newValue : 0;
+    return {
+      ...metricsJson,
+      [pair.rate]: Number(newValue.toFixed(6)),
+      [pair.delivery]: Math.round(newDelivery),
+    };
+  }
+  const newRate = amountUsd > 0 ? (amountUsd * pair.multiplier) / newValue : 0;
+  return {
+    ...metricsJson,
+    [pair.rate]: Number(newRate.toFixed(6)),
+    [pair.delivery]: Math.round(newValue),
+  };
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Editor del par tarifa↔delivery según el cost method del placement.
-// El planner edita uno y la app recalcula el otro desde amount × multiplier.
-// Se almacenan AMBOS valores en metrics_json para no perder data.
 // ════════════════════════════════════════════════════════════════════════════
 
 function PrincipalPairEditor({
@@ -963,21 +1179,9 @@ function PrincipalPairEditor({
 
   const rateInJson = metricsJson[pair.rate];
   const deliveryInJson = metricsJson[pair.delivery];
-
-  // Effective values: si una está cargada, computamos la otra; si no, ambas vacías.
-  let effRate: number | null =
-    typeof rateInJson === "number" && rateInJson > 0 ? rateInJson : null;
-  let effDelivery: number | null =
-    typeof deliveryInJson === "number" && deliveryInJson > 0
-      ? deliveryInJson
-      : null;
-
-  if (effRate == null && effDelivery != null && amountUsd > 0) {
-    effRate = (amountUsd * pair.multiplier) / effDelivery;
-  }
-  if (effDelivery == null && effRate != null && amountUsd > 0) {
-    effDelivery = (amountUsd * pair.multiplier) / effRate;
-  }
+  const eff = effectivePair(metricsJson, costMethod, amountUsd);
+  const effRate = eff?.rate ?? null;
+  const effDelivery = eff?.delivery ?? null;
 
   // Detectar inconsistencia (si ambas vinieron del jsonb y la cuenta no cierra)
   const bothFromJson =
@@ -992,42 +1196,15 @@ function PrincipalPairEditor({
     if (diff > 0.005) inconsistency = diff;
   }
 
-  const onChangeRate = (newRate: number) => {
-    if (newRate <= 0) {
-      const next = { ...metricsJson };
-      delete next[pair.rate];
-      delete next[pair.delivery];
-      onCommit(next);
-      return;
-    }
-    const newDelivery =
-      amountUsd > 0 ? (amountUsd * pair.multiplier) / newRate : 0;
-    onCommit({
-      ...metricsJson,
-      [pair.rate]: Number(newRate.toFixed(6)),
-      [pair.delivery]: Math.round(newDelivery),
-    });
-  };
-
-  const onChangeDelivery = (newDelivery: number) => {
-    if (newDelivery <= 0) {
-      const next = { ...metricsJson };
-      delete next[pair.rate];
-      delete next[pair.delivery];
-      onCommit(next);
-      return;
-    }
-    const newRate =
-      amountUsd > 0 ? (amountUsd * pair.multiplier) / newDelivery : 0;
-    onCommit({
-      ...metricsJson,
-      [pair.rate]: Number(newRate.toFixed(6)),
-      [pair.delivery]: Math.round(newDelivery),
-    });
-  };
+  const onChangeRate = (v: number) =>
+    onCommit(applyPrimaryPairChange(metricsJson, costMethod, amountUsd, "rate", v));
+  const onChangeDelivery = (v: number) =>
+    onCommit(
+      applyPrimaryPairChange(metricsJson, costMethod, amountUsd, "delivery", v),
+    );
 
   return (
-    <div className="mb-2 px-3 py-2 bg-accent-soft/40 border border-accent-soft rounded text-[11px] text-ink">
+    <div className="px-3 py-2 bg-accent-soft/40 border border-accent-soft rounded text-[11px] text-ink">
       <p className="mb-1.5">
         <span className="font-medium uppercase tracking-[0.06em] text-accent">
           Métrica principal por {costMethod}:
@@ -1040,11 +1217,7 @@ function PrincipalPairEditor({
           <label className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted block mb-0.5">
             Tarifa ({pair.rate.toUpperCase()})
           </label>
-          <RateInput
-            value={effRate}
-            disabled={!editable}
-            onCommit={onChangeRate}
-          />
+          <RateInput value={effRate} disabled={!editable} onCommit={onChangeRate} />
         </div>
         <div>
           <label className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted block mb-0.5">
@@ -1058,13 +1231,11 @@ function PrincipalPairEditor({
         </div>
       </div>
       <p className="mt-1.5 text-[10px] text-muted">
-        Editás uno y la app calcula el otro desde el monto del placement
-        ({" "}
+        Editás uno y la app calcula el otro desde el monto del placement (
         <span className="font-mono">${amountUsd.toFixed(2)}</span>
         {pair.multiplier !== 1 && (
           <span className="font-mono"> × {pair.multiplier}</span>
-        )}
-        {" "}
+        )}{" "}
         / X = Y).
       </p>
       {inconsistency !== null && (
@@ -1085,8 +1256,6 @@ function RateInput({
   disabled: boolean;
   onCommit: (v: number) => void;
 }) {
-  // Tarifas suelen ser pequeñas (CPV $0.0028, CPM $5.20); 4 decimales por
-  // defecto. Aceptamos que el planner ingrese hasta 6.
   const display = value != null ? formatRateDisplay(value) : "";
   return (
     <input
@@ -1096,6 +1265,7 @@ function RateInput({
       defaultValue={display}
       disabled={disabled}
       placeholder="0.0000"
+      onClick={(e) => e.stopPropagation()}
       onBlur={(e) => {
         const parsed = parseNumberInput(e.target.value);
         const v = Number.isFinite(parsed) ? parsed : 0;
@@ -1124,6 +1294,7 @@ function DeliveryInput({
       defaultValue={display}
       disabled={disabled}
       placeholder="0"
+      onClick={(e) => e.stopPropagation()}
       onBlur={(e) => {
         const parsed = parseNumberInput(e.target.value);
         const v = Number.isFinite(parsed) ? parsed : 0;
@@ -1160,20 +1331,10 @@ function MetricsEditor({
   primaryMetricSlug: string | null;
   onCommit: (m: Record<string, number>) => void;
 }) {
-  // Solo guardamos las métricas direct + sus rates equivalentes. Las demás
-  // calculated se derivan al render desde el draft.
   const directMetrics = allMetrics.filter((m) => m.kind === "direct");
   const calculatedMetrics = allMetrics.filter((m) => m.kind === "calculated");
   const directBySlug = new Map(directMetrics.map((m) => [m.slug, m]));
 
-  // Cada row del editor representa una métrica direct SECUNDARIA (delivery).
-  // La métrica principal NO entra en el draft — la maneja PrincipalPairEditor
-  // sobre el mismo metrics_json. Excluirla del draft evita que aparezca
-  // duplicada en la tabla, incluso para data vieja que la haya guardado
-  // explícitamente como secundaria.
-  // Si la métrica tiene un rate pair en DIRECT_METRIC_RATES (lib/cost-methods.ts),
-  // mostramos dos inputs (tarifa + delivery) con cálculo bidireccional. Si
-  // no, mostramos solo el input de delivery.
   const [draft, setDraft] = useState<
     Array<{ slug: string; delivery: string; rate: string }>
   >(
@@ -1193,19 +1354,9 @@ function MetricsEditor({
       }),
   );
 
-  // commit construye el metrics_json completo:
-  //  - Las keys de la métrica principal (delivery + rate) se preservan
-  //    desde metrics_json: este editor NO debe pisarlas (las maneja
-  //    PrincipalPairEditor).
-  //  - Los slugs direct secundarios con su valor de delivery.
-  //  - Los rates (slug cpX) de cada secundaria cuando exista.
-  //  - El resto de calculated previamente almacenadas se descartan: se
-  //    derivan al render. Los rates SÍ se persisten porque son entrada
-  //    del usuario, no derivados.
   const commit = (next: typeof draft) => {
     const obj: Record<string, number> = {};
 
-    // Preservar la métrica principal (delivery + rate) intacta.
     if (primaryMetricSlug) {
       const pd = metrics[primaryMetricSlug];
       if (typeof pd === "number" && Number.isFinite(pd)) {
@@ -1220,11 +1371,10 @@ function MetricsEditor({
       }
     }
 
-    // Secundarias del draft.
     for (const { slug, delivery, rate } of next) {
       const k = slug.trim();
       if (!k) continue;
-      if (k === primaryMetricSlug) continue; // safety: nunca duplicar la principal
+      if (k === primaryMetricSlug) continue;
       const d = Number.parseFloat(delivery);
       if (Number.isFinite(d)) obj[k] = d;
       const pair = DIRECT_METRIC_RATES[k];
@@ -1236,8 +1386,6 @@ function MetricsEditor({
     onCommit(obj);
   };
 
-  // Editar la tarifa de una row: recomputa delivery desde el amount del
-  // placement. Idéntica lógica al PrincipalPairEditor pero indexada por row.
   const onChangeRate = (idx: number, newRate: number) => {
     const row = draft[idx];
     const pair = DIRECT_METRIC_RATES[row.slug];
@@ -1293,15 +1441,10 @@ function MetricsEditor({
     commit(next);
   };
 
-  // Slugs ya usados en el draft + la métrica principal del placement, para
-  // filtrar el dropdown (no permitir duplicar).
   const usedSlugs = new Set(draft.map((d) => d.slug).filter(Boolean));
   if (primaryMetricSlug) usedSlugs.add(primaryMetricSlug);
   const availableMetrics = directMetrics.filter((m) => !usedSlugs.has(m.slug));
 
-  // Cómputo de métricas calculadas: la principal vive en metrics_json
-  // (la setea PrincipalPairEditor y no aparece en el draft de este editor);
-  // las secundarias son la fuente de verdad desde el draft.
   const directValues: Record<string, number> = {};
   if (primaryMetricSlug) {
     const v = metrics[primaryMetricSlug];
@@ -1313,9 +1456,6 @@ function MetricsEditor({
   }
 
   function evalCalculated(formula: string): number | null {
-    // Soportamos fórmulas simples: "amount/views", "clicks/impressions",
-    // "amount/impressions × 1000", "amount/conversions", "views/impressions".
-    // Si hay un × N, multiplicamos al final.
     let f = formula.toLowerCase().replace(/\s+/g, "");
     let multiplier = 1;
     const xMatch = f.match(/×(\d+)/);
@@ -1363,8 +1503,6 @@ function MetricsEditor({
               {draft.map((row, idx) => {
                 const metric = directBySlug.get(row.slug);
                 const pair = row.slug ? DIRECT_METRIC_RATES[row.slug] : undefined;
-                // Effective values: si una está cargada, computamos la otra
-                // en pantalla para el display (no se persiste hasta blur).
                 const rateNum = Number.parseFloat(row.rate);
                 const deliveryNum = Number.parseFloat(row.delivery);
                 const hasRate = Number.isFinite(rateNum) && rateNum > 0;
@@ -1516,7 +1654,7 @@ function FeeRow({
   fee: PlanFee;
   editable: boolean;
   onChange: () => void;
-  startTransition: ReturnType<typeof useTransition>[1];
+  startTransition: StartTransition;
 }) {
   const update = (
     partial: Omit<Parameters<typeof updateFee>[0], "feeId">,
@@ -1625,6 +1763,7 @@ function TextInput({
       defaultValue={value}
       disabled={disabled}
       placeholder={placeholder}
+      onClick={(e) => e.stopPropagation()}
       onBlur={(e) => e.target.value !== value && onCommit(e.target.value)}
       className={`bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 -mx-1 disabled:opacity-50 ${className}`}
     />
@@ -1651,6 +1790,7 @@ function NumberInput({
       defaultValue={display}
       disabled={disabled}
       placeholder="0"
+      onClick={(e) => e.stopPropagation()}
       onBlur={(e) => {
         const parsed = parseNumberInput(e.target.value);
         const v = Number.isFinite(parsed) ? parsed : 0;
@@ -1744,6 +1884,3 @@ function Field({
     </div>
   );
 }
-
-// Suppress unused
-void GripVertical;
