@@ -132,12 +132,29 @@ export async function getDashboardPendings(
   const { dateStr: today, monthStr: currentMonth } = todayParts();
   const lastClosedMonth = previousMonth(currentMonth);
 
+  // DEBUG (tablero-alertas): instrumentación temporal para ver en los Runtime
+  // Logs de Vercel exactamente en qué query/paso se cuelga. Quitar al resolver.
+  console.log("[pendings] start", { clientId, today, lastClosedMonth });
+
   const [billings, tracking, calendar, invoices] = await Promise.all([
-    getPendingBillings(clientId, lastClosedMonth),
-    getPendingTracking(clientId, today),
-    getReportingCalendar(clientId),
-    getPendingInvoices(clientId, today),
+    getPendingBillings(clientId, lastClosedMonth).then((r) => {
+      console.log("[pendings] billings OK", r.length);
+      return r;
+    }),
+    getPendingTracking(clientId, today).then((r) => {
+      console.log("[pendings] tracking OK", r.length);
+      return r;
+    }),
+    getReportingCalendar(clientId).then((r) => {
+      console.log("[pendings] calendar OK", r.inProgress.length);
+      return r;
+    }),
+    getPendingInvoices(clientId, today).then((r) => {
+      console.log("[pendings] invoices OK", r.length);
+      return r;
+    }),
   ]);
+  console.log("[pendings] all queries done");
 
   const reportsUpcoming: PendingReport[] = [];
   const reportsOverdue: PendingReport[] = [];
@@ -158,6 +175,7 @@ export async function getDashboardPendings(
   reportsUpcoming.sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
   reportsOverdue.sort((a, b) => a.deliveryDate.localeCompare(b.deliveryDate));
 
+  console.log("[pendings] returning");
   return { billings, tracking, reportsUpcoming, reportsOverdue, invoices };
 }
 
