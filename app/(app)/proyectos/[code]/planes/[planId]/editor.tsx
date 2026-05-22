@@ -554,8 +554,30 @@ function PlanWorkspace({
     });
   };
 
+  const grand = detail.totals.grand;
+  const projectBudget = Number.parseFloat(
+    detail.project.totalGrossBudgetUsd ?? "0",
+  );
+  const coveragePct = projectBudget > 0 ? (grand / projectBudget) * 100 : 0;
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 items-start">
+    <div>
+      <div className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-md border border-line bg-white/95 dark:bg-paper-2/95 backdrop-blur px-4 py-2 text-xs">
+        <TotalChip label="Media" value={formatUsd(detail.totals.media)} />
+        <TotalChip label="Fees" value={formatUsd(detail.totals.fees)} />
+        <TotalChip label="Total" value={formatUsd(grand)} strong />
+        {projectBudget > 0 && (
+          <TotalChip
+            label="Cobertura"
+            value={formatPct(coveragePct, 0)}
+            warn={coveragePct > 100}
+          />
+        )}
+        <span className="ml-auto text-[11px] text-muted">
+          {allPlacements.length} placements · {detail.publishers.length} publishers
+        </span>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 items-start">
       {/* Planilla */}
       <div className="space-y-3 min-w-0">
         {detail.publishers.map((pub) => (
@@ -607,6 +629,7 @@ function PlanWorkspace({
             </p>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -682,12 +705,13 @@ function PublisherGroup({
   };
 
   return (
-    <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2.5 border-b border-line-soft bg-paper/60">
-        <span className="font-semibold text-ink flex-1 min-w-0 truncate">
+    <div className="rounded-lg border border-line border-l-2 border-l-accent bg-white dark:bg-paper-2 overflow-hidden">
+      <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-line bg-paper-2">
+        <span className="inline-block h-2 w-2 rounded-full bg-accent shrink-0" />
+        <span className="text-[15px] font-semibold text-ink flex-1 min-w-0 truncate">
           {pub.publisherName}
           {!pub.agencyPays && (
-            <span className="ml-2 text-[10px] font-normal text-muted bg-paper-2 border border-line px-1.5 py-0.5 rounded">
+            <span className="ml-2 text-[10px] font-normal text-muted bg-white dark:bg-paper border border-line px-1.5 py-0.5 rounded">
               cliente paga directo
             </span>
           )}
@@ -695,7 +719,16 @@ function PublisherGroup({
         <span className="text-xs text-muted shrink-0">
           {pub.placements.length} placement{pub.placements.length === 1 ? "" : "s"}
         </span>
-        <span className="flex items-center gap-1 shrink-0">
+        <span className="flex items-center gap-1.5 shrink-0 text-xs">
+          <span className="text-[10px] uppercase tracking-[0.06em] text-muted">
+            subtotal
+          </span>
+          <span
+            className={`font-mono tabular-nums ${balanced ? "text-muted" : "text-warn"}`}
+          >
+            {formatUsd(pub.placementsTotalUsd)}
+          </span>
+          <span className="text-line">/</span>
           <span className="text-[10px] uppercase tracking-[0.06em] text-muted">
             total
           </span>
@@ -703,7 +736,7 @@ function PublisherGroup({
             value={pub.totalPlannedUsd}
             onCommit={onUpdateTotal}
             disabled={!editable}
-            className="w-28 text-right font-mono font-semibold"
+            className="w-24 text-right font-mono font-semibold"
           />
         </span>
         {editable && (
@@ -754,10 +787,13 @@ function PublisherGroup({
           Sin placements cargados todavía.
         </div>
       ) : (
-        <table className="w-full text-xs">
+        <table
+          className="w-full text-xs"
+          onKeyDown={(e) => moveGridFocus(e, onAddPlacement)}
+        >
           <thead className="bg-paper">
             <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
-              <th className="text-left font-medium px-3 py-1.5">Placement</th>
+              <th className="text-left font-medium pl-5 pr-2 py-1.5">Placement</th>
               <th className="text-left font-medium px-2 py-1.5">Mercado</th>
               <th className="text-left font-medium px-2 py-1.5">Método</th>
               <th className="text-right font-medium px-2 py-1.5">Monto</th>
@@ -857,7 +893,7 @@ function PlacementGridRow({
         selected ? "bg-accent-soft/50" : "hover:bg-paper-2/40"
       }`}
     >
-      <td className="px-3 py-1">
+      <td className="pl-5 pr-2 py-1">
         <TextInput
           value={placement.placementName}
           onCommit={(v) => update({ placementName: v })}
@@ -1883,4 +1919,65 @@ function Field({
       <dd className="mt-1">{children}</dd>
     </div>
   );
+}
+
+function TotalChip({
+  label,
+  value,
+  strong,
+  warn,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+  warn?: boolean;
+}) {
+  return (
+    <span className="flex items-baseline gap-1.5">
+      <span className="text-[10px] uppercase tracking-[0.06em] text-muted">
+        {label}
+      </span>
+      <span
+        className={`font-mono tabular-nums ${
+          warn ? "text-warn" : strong ? "text-ink font-semibold" : "text-ink-2"
+        }`}
+      >
+        {value}
+      </span>
+    </span>
+  );
+}
+
+// Navegación tipo planilla: Enter mueve a la misma columna en la fila de abajo
+// (Shift+Enter, arriba); Enter en la última fila agrega un placement. Sólo
+// actúa sobre <input> para no romper la selección nativa de los <select>.
+function moveGridFocus(
+  e: React.KeyboardEvent<HTMLTableElement>,
+  onAddRow: () => void,
+) {
+  if (e.key !== "Enter") return;
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement)) return;
+  const td = el.closest("td");
+  const tr = el.closest("tr");
+  if (!td || !tr) return;
+  e.preventDefault();
+  const colIndex = td.cellIndex;
+  const sib = e.shiftKey ? tr.previousElementSibling : tr.nextElementSibling;
+  if (sib instanceof HTMLTableRowElement) {
+    const cell = sib.cells[colIndex];
+    const focusable =
+      cell?.querySelector<HTMLInputElement>("input") ??
+      sib.querySelector<HTMLInputElement>("input");
+    if (focusable) {
+      el.blur();
+      focusable.focus();
+      focusable.select();
+    }
+    return;
+  }
+  if (!e.shiftKey) {
+    el.blur();
+    onAddRow();
+  }
 }
