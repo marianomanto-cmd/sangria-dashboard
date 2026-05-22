@@ -2,65 +2,6 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 22/may/2026 — Incidente prod: pooler saturado + caché del dashboard
-
-- **Síntoma**: dashboard caído en prod con `57014 statement timeout` (en
-  distintas queries) y luego `504 FUNCTION_INVOCATION_TIMEOUT`, pese a que las
-  queries corridas solas en el SQL Editor tardaban <1ms (datos chicos: 9
-  billings, 11 planes).
-- **Causa raíz**: la query lenta original (fan-out de tracking, ver entrada de
-  abajo) hacía que los renders del dashboard se pasaran del timeout de la
-  función de Vercel (504). Cada Lambda muerta dejaba su conexión colgada en
-  `active/ClientRead` (visto en `pg_stat_activity` con `xact_age` de 1-2 min)
-  ocupando un slot del Transaction Pooler. Al acumularse, el pool se agotó →
-  hasta queries triviales colgaban o daban 57014 → más 504 → más fugas
-  (espiral). El SQL Editor seguía instantáneo porque usa otro path de conexión.
-- **Fixes de código (este commit)**:
-  - **Caché del dashboard**: `app/(app)/page.tsx` envuelve sus 4 bloques de
-    datos en `unstable_cache` (`revalidate: 60`, tag `"dashboard"`, keyado por
-    `clientId`). ~20x menos carga sobre el pooler. Staleness ≤60s (ok interno);
-    invalidar al instante con `revalidateTag("dashboard")`.
-  - **Menos conexiones por instancia**: `db/index.ts` `max: 5 → 3`.
-- **Acciones requeridas en prod** (las hace el usuario, NO son código):
-  1. **Reiniciar el proyecto** en Supabase (Settings → Restart) para limpiar
-     las conexiones colgadas y cortar el espiral — esto es lo que levanta la
-     página ya.
-  2. Setear timeouts moderados a nivel rol para reapear conexiones colgadas a
-     futuro (NO subir a 60s, que las hace linger más):
-     ```sql
-     ALTER ROLE postgres SET statement_timeout = '15s';
-     ALTER ROLE postgres SET idle_in_transaction_session_timeout = '20s';
-     ```
-- Detalle completo en README → "Si Vercel falla con statement_timeout".
-
-### Cambios de la sesión 22/may/2026 — Pendientes: criterio de facturas + fix timeout de tracking
-
-- **Facturas impagas**: el card ahora lista **cualquier `plan_billing` con
-  `paid_at` null** (draft/ready/sent/invoiced), no sólo `status='invoiced'`.
-  Cada fila muestra el status del billing. (`db/queries/pendings.ts`,
-  `components/pending-board.tsx`).
-- **Fix prod (statement timeout)**: `getPendingTracking` joineaba
-  `campaign_actual_snapshots` como una segunda rama 1:N sobre `media_plans`
-  mientras `media_plan_placements` cuelga de publishers → producto cartesiano
-  `placements × snapshots` por plan, que en campañas trackeadas a diario
-  disparaba `57014 canceling statement due to statement timeout`. Ahora el
-  último cierre de tracking se calcula en una query aparte (agregada por plan)
-  y se mergea en JS → sin fan-out. **Sin cambios de schema, sin acción en prod.**
-
-### Cambios de la sesión 21/may/2026 — Tablero de pendientes en el dashboard
-
-- **Nuevo "Tablero de pendientes"** debajo de la tabla de proyectos del
-  dashboard (`components/pending-board.tsx`, alimentado por
-  `getDashboardPendings` en `db/queries/pendings.ts`). Cuatro cards colapsables,
-  cada una con badge de conteo y filas que linkean al área correspondiente:
-  1. Billing reports a completar (meses cerrados de planes aprobados sin billing).
-  2. Tracking del día pendiente (campañas vigentes sin cierre hoy).
-  3. Entregas de reportes (próximas a ≤7 días + vencidas sin entregar).
-  4. Facturas impagas (cualquier billing con `paid_at` null; vencidas resaltadas).
-- Todo se deriva de columnas existentes → **sin cambios de schema, sin acción
-  en prod**. Respeta el filtro global `?client=`.
-- Ver detalle de las reglas en README → "Tablero de pendientes del dashboard".
-
 ### Cambios de la sesión 21/may/2026 — Filtro budget origin en reporting calendar + fix leak de planes borrados
 
 - **Filtro de Budget Origin en el reporting calendar**: dropdown client-side en
@@ -715,8 +656,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/vigilant-darwin-8vSa4)  Tablero de pendientes en el dashboard
-15eda3c  Filtro budget origin en reporting calendar + fix planes borrados en /planes (#55)
+(branch claude/vigilant-darwin-8vSa4)  Filtro budget origin en reporting calendar + fix: planes borrados se mostraban en /planes
 2590560  Papelera de planes: borrado definitivo (hard delete) (#54)
 9448e9f  Borrar planes → papelera (soft delete) + restaurar (#53) — REQUIERE npm run db:push
 7ea45a9  N° de factura de billing: editable + único (#52)

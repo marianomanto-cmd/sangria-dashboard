@@ -124,8 +124,7 @@ db/
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
     clients.ts, billing.ts, billing-tracker.ts, audit-log.ts, budget-origins.ts,
-    reports.ts, campaign-tracker.ts, plan-trash.ts (planes borrados),
-    pendings.ts (tablero de pendientes del dashboard)
+    reports.ts, campaign-tracker.ts, plan-trash.ts (planes borrados)
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -321,24 +320,6 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
   los planes actuales — no es snapshot histórico; sirve como sanity check
   para detectar planes modificados después de facturar.
 
-### Tablero de pendientes del dashboard
-- `getDashboardPendings(clientId)` en `db/queries/pendings.ts` arma las cuatro
-  listas que muestra `components/pending-board.tsx`, debajo de la tabla de
-  proyectos. Todo se deriva de columnas existentes (no hay flags nuevos):
-  - **Billing reports a completar**: por cada plan `approved` (no borrado), los
-    meses dentro del span de sus placements cuyo cierre ya pasó (`mes < mes
-    actual`) y que no tienen fila en `plan_billings`.
-  - **Tracking del día pendiente**: planes `approved` vigentes hoy (hoy dentro
-    del período) cuyo `max(snapshot_date)` de `campaign_actual_snapshots` es
-    anterior a hoy (o que nunca se trackearon).
-  - **Entregas de reportes**: de `getReportingCalendar().inProgress` (delivery
-    date asignada, sin entregar) — `upcoming` = a ≤7 días; `overdue` = ya pasó.
-  - **Facturas impagas**: cualquier `plan_billings` con `paid_at` null (incluye
-    draft/ready/sent/invoiced); se marcan vencidas si `due_date < hoy`.
-- Cada card es colapsable (arranca cerrada) y sus filas linkean al área
-  correspondiente (billing del plan, campaign tracker, calendario de reportes).
-  Si una categoría está vacía muestra "Al día" en verde.
-
 ### Audit log
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` +
   `after_json` + `user_id` + `user_email` (denormalizado para no
@@ -486,22 +467,9 @@ sql<string>`max(${tbl.col})::text`
 ```
 Y parsear con `new Date(str)` después.
 
-### Caché del dashboard
-[app/(app)/page.tsx](app/(app)/page.tsx) envuelve sus 4 bloques de datos
-(KPIs, proyectos, monthly, pendientes) en `unstable_cache` con `revalidate: 60`
-y tag `"dashboard"`, **keyado por `clientId`**. El dashboard era la página más
-pesada (~15-20 queries por carga) y sin caché cada request/refresh le pegaba a
-la DB — eso saturó el pooler en prod (ver "Pool de conexiones"). Con la caché,
-los datos pueden quedar hasta 60s desactualizados (ok para uso interno); para
-refrescar al instante tras una edición, llamar `revalidateTag("dashboard")`
-desde la Server Action que muta.
-
-### Pool de conexiones
-- `prepare: false` para Transaction Pooler (puerto 6543).
-- `max: 3` por warm-instance. En serverless Next escala a muchas Lambdas; pocas
-  conexiones por instancia evitan saturar el pooler. Cuando una Lambda se mata
-  por timeout (504) deja conexiones colgadas en `active/ClientRead` que ocupan
-  slots del pooler — bajar `max` reduce cuántas se filtran por Lambda muerta.
+### Lock de conexiones
+- `prepare: false` para Transaction Pooler.
+- `max: 5` para que `Promise.all` no se queue en una conexión sola.
 - `idle_timeout: 20`, `connect_timeout: 10`.
 
 ---
@@ -516,38 +484,17 @@ desde la Server Action que muta.
   existentes**: hay que **Redeploy** (Deployments → último → ⋯ → Redeploy,
   desmarcando "Use existing Build Cache").
 
-### Si Vercel falla con statement_timeout (57014) o 504 FUNCTION_INVOCATION_TIMEOUT
+### Si Vercel falla con statement_timeout
 
-**Lección del incidente del 22/may/2026**: una query lenta (un fan-out
-cartesiano en el tablero de pendientes) hacía que los renders del dashboard
-tardaran y las funciones de Vercel se mataran por timeout (504). Cada función
-muerta dejaba su conexión colgada en `active/ClientRead` ocupando un slot del
-Transaction Pooler; al acumularse, el pool se agotó y **hasta queries
-triviales (<1ms) empezaron a dar `57014 statement timeout` o a colgar (504)**.
-La query directa en el SQL Editor seguía instantánea porque usa otro path de
-conexión — síntoma claro de saturación del pooler, no de SQL lento.
+Plan free de Supabase tiene 8s por query. Si alguna query se acerca, ejecutar
+en Supabase → SQL Editor:
 
-Diagnóstico rápido (SQL Editor, mientras está caída):
 ```sql
--- conexiones colgadas: active + wait_event=ClientRead con xact_age de minutos
-select pid, state, wait_event, now()-xact_start as age, left(query,60)
-from pg_stat_activity where datname = current_database() and state <> 'idle';
+ALTER ROLE authenticated SET statement_timeout = '60s';
+ALTER ROLE anon SET statement_timeout = '60s';
+ALTER ROLE service_role SET statement_timeout = '60s';
+ALTER DATABASE postgres SET statement_timeout = '60s';
 ```
-
-Recuperación: **reiniciar el proyecto** en Supabase (Settings → Restart) limpia
-las conexiones colgadas y corta el espiral.
-
-Prevención (ya aplicada / recomendada):
-- **No subir** `statement_timeout` a 60s: un timeout largo hace que las
-  conexiones filtradas linger MÁS. Con las queries ya rápidas + dashboard
-  cacheado, conviene un timeout MODERADO que reape conexiones colgadas:
-  ```sql
-  ALTER ROLE postgres SET statement_timeout = '15s';
-  ALTER ROLE postgres SET idle_in_transaction_session_timeout = '20s';
-  ```
-  (Scripts largos como `db:seed` pueden overridear con `SET statement_timeout = 0;`.)
-- Dashboard cacheado (`unstable_cache`, 60s) → ~20x menos carga sobre el pooler.
-- `max: 3` conexiones por instancia (ver "Pool de conexiones").
 
 ---
 
