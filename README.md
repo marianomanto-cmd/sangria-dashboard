@@ -486,9 +486,22 @@ sql<string>`max(${tbl.col})::text`
 ```
 Y parsear con `new Date(str)` después.
 
-### Lock de conexiones
-- `prepare: false` para Transaction Pooler.
-- `max: 5` para que `Promise.all` no se queue en una conexión sola.
+### Caché del dashboard
+[app/(app)/page.tsx](app/(app)/page.tsx) envuelve sus 4 bloques de datos
+(KPIs, proyectos, monthly, pendientes) en `unstable_cache` con `revalidate: 60`
+y tag `"dashboard"`, **keyado por `clientId`**. El dashboard era la página más
+pesada (~15-20 queries por carga) y sin caché cada request/refresh le pegaba a
+la DB — eso saturó el pooler en prod (ver "Pool de conexiones"). Con la caché,
+los datos pueden quedar hasta 60s desactualizados (ok para uso interno); para
+refrescar al instante tras una edición, llamar `revalidateTag("dashboard")`
+desde la Server Action que muta.
+
+### Pool de conexiones
+- `prepare: false` para Transaction Pooler (puerto 6543).
+- `max: 3` por warm-instance. En serverless Next escala a muchas Lambdas; pocas
+  conexiones por instancia evitan saturar el pooler. Cuando una Lambda se mata
+  por timeout (504) deja conexiones colgadas en `active/ClientRead` que ocupan
+  slots del pooler — bajar `max` reduce cuántas se filtran por Lambda muerta.
 - `idle_timeout: 20`, `connect_timeout: 10`.
 
 ---
@@ -503,17 +516,38 @@ Y parsear con `new Date(str)` después.
   existentes**: hay que **Redeploy** (Deployments → último → ⋯ → Redeploy,
   desmarcando "Use existing Build Cache").
 
-### Si Vercel falla con statement_timeout
+### Si Vercel falla con statement_timeout (57014) o 504 FUNCTION_INVOCATION_TIMEOUT
 
-Plan free de Supabase tiene 8s por query. Si alguna query se acerca, ejecutar
-en Supabase → SQL Editor:
+**Lección del incidente del 22/may/2026**: una query lenta (un fan-out
+cartesiano en el tablero de pendientes) hacía que los renders del dashboard
+tardaran y las funciones de Vercel se mataran por timeout (504). Cada función
+muerta dejaba su conexión colgada en `active/ClientRead` ocupando un slot del
+Transaction Pooler; al acumularse, el pool se agotó y **hasta queries
+triviales (<1ms) empezaron a dar `57014 statement timeout` o a colgar (504)**.
+La query directa en el SQL Editor seguía instantánea porque usa otro path de
+conexión — síntoma claro de saturación del pooler, no de SQL lento.
 
+Diagnóstico rápido (SQL Editor, mientras está caída):
 ```sql
-ALTER ROLE authenticated SET statement_timeout = '60s';
-ALTER ROLE anon SET statement_timeout = '60s';
-ALTER ROLE service_role SET statement_timeout = '60s';
-ALTER DATABASE postgres SET statement_timeout = '60s';
+-- conexiones colgadas: active + wait_event=ClientRead con xact_age de minutos
+select pid, state, wait_event, now()-xact_start as age, left(query,60)
+from pg_stat_activity where datname = current_database() and state <> 'idle';
 ```
+
+Recuperación: **reiniciar el proyecto** en Supabase (Settings → Restart) limpia
+las conexiones colgadas y corta el espiral.
+
+Prevención (ya aplicada / recomendada):
+- **No subir** `statement_timeout` a 60s: un timeout largo hace que las
+  conexiones filtradas linger MÁS. Con las queries ya rápidas + dashboard
+  cacheado, conviene un timeout MODERADO que reape conexiones colgadas:
+  ```sql
+  ALTER ROLE postgres SET statement_timeout = '15s';
+  ALTER ROLE postgres SET idle_in_transaction_session_timeout = '20s';
+  ```
+  (Scripts largos como `db:seed` pueden overridear con `SET statement_timeout = 0;`.)
+- Dashboard cacheado (`unstable_cache`, 60s) → ~20x menos carga sobre el pooler.
+- `max: 3` conexiones por instancia (ver "Pool de conexiones").
 
 ---
 

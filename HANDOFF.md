@@ -2,6 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 22/may/2026 — Incidente prod: pooler saturado + caché del dashboard
+
+- **Síntoma**: dashboard caído en prod con `57014 statement timeout` (en
+  distintas queries) y luego `504 FUNCTION_INVOCATION_TIMEOUT`, pese a que las
+  queries corridas solas en el SQL Editor tardaban <1ms (datos chicos: 9
+  billings, 11 planes).
+- **Causa raíz**: la query lenta original (fan-out de tracking, ver entrada de
+  abajo) hacía que los renders del dashboard se pasaran del timeout de la
+  función de Vercel (504). Cada Lambda muerta dejaba su conexión colgada en
+  `active/ClientRead` (visto en `pg_stat_activity` con `xact_age` de 1-2 min)
+  ocupando un slot del Transaction Pooler. Al acumularse, el pool se agotó →
+  hasta queries triviales colgaban o daban 57014 → más 504 → más fugas
+  (espiral). El SQL Editor seguía instantáneo porque usa otro path de conexión.
+- **Fixes de código (este commit)**:
+  - **Caché del dashboard**: `app/(app)/page.tsx` envuelve sus 4 bloques de
+    datos en `unstable_cache` (`revalidate: 60`, tag `"dashboard"`, keyado por
+    `clientId`). ~20x menos carga sobre el pooler. Staleness ≤60s (ok interno);
+    invalidar al instante con `revalidateTag("dashboard")`.
+  - **Menos conexiones por instancia**: `db/index.ts` `max: 5 → 3`.
+- **Acciones requeridas en prod** (las hace el usuario, NO son código):
+  1. **Reiniciar el proyecto** en Supabase (Settings → Restart) para limpiar
+     las conexiones colgadas y cortar el espiral — esto es lo que levanta la
+     página ya.
+  2. Setear timeouts moderados a nivel rol para reapear conexiones colgadas a
+     futuro (NO subir a 60s, que las hace linger más):
+     ```sql
+     ALTER ROLE postgres SET statement_timeout = '15s';
+     ALTER ROLE postgres SET idle_in_transaction_session_timeout = '20s';
+     ```
+- Detalle completo en README → "Si Vercel falla con statement_timeout".
+
 ### Cambios de la sesión 22/may/2026 — Pendientes: criterio de facturas + fix timeout de tracking
 
 - **Facturas impagas**: el card ahora lista **cualquier `plan_billing` con
