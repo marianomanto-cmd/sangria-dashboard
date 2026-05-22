@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 22/may/2026 — Pendientes: criterio de facturas + fix timeout de tracking
+
+- **Facturas impagas**: el card ahora lista **cualquier `plan_billing` con
+  `paid_at` null** (draft/ready/sent/invoiced), no sólo `status='invoiced'`.
+  Cada fila muestra el status del billing. (`db/queries/pendings.ts`,
+  `components/pending-board.tsx`).
+- **Fix prod (statement timeout)**: `getPendingTracking` joineaba
+  `campaign_actual_snapshots` como una segunda rama 1:N sobre `media_plans`
+  mientras `media_plan_placements` cuelga de publishers → producto cartesiano
+  `placements × snapshots` por plan, que en campañas trackeadas a diario
+  disparaba `57014 canceling statement due to statement timeout`. Ahora el
+  último cierre de tracking se calcula en una query aparte (agregada por plan)
+  y se mergea en JS → sin fan-out. **Sin cambios de schema, sin acción en prod.**
+
 ### Cambios de la sesión 21/may/2026 — Tablero de pendientes en el dashboard
 
 - **Nuevo "Tablero de pendientes"** debajo de la tabla de proyectos del
@@ -11,7 +25,7 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   1. Billing reports a completar (meses cerrados de planes aprobados sin billing).
   2. Tracking del día pendiente (campañas vigentes sin cierre hoy).
   3. Entregas de reportes (próximas a ≤7 días + vencidas sin entregar).
-  4. Facturas impagas (`status='invoiced'` sin `paid_at`; vencidas resaltadas).
+  4. Facturas impagas (cualquier billing con `paid_at` null; vencidas resaltadas).
 - Todo se deriva de columnas existentes → **sin cambios de schema, sin acción
   en prod**. Respeta el filtro global `?client=`.
 - Ver detalle de las reglas en README → "Tablero de pendientes del dashboard".
