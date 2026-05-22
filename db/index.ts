@@ -30,18 +30,17 @@ function getClient(): ReturnType<typeof postgres> {
       "DATABASE_URL no está definida — revisá .env.local (en dev) o las env vars del deploy.",
     );
   }
-  // `max: 3` por warm-instance. En serverless (Vercel) Next escala a muchas
-  // Lambdas en paralelo; si cada una abre demasiadas conexiones, se satura el
-  // Transaction Pooler de Supabase. Cuando una Lambda se mata por timeout (504)
-  // deja conexiones colgadas en `active/ClientRead` que ocupan slots del pooler
-  // hasta que un statement_timeout del lado del server las cancela — bajar el
-  // max reduce cuántas se filtran por cada Lambda muerta. El dashboard ahora
-  // cachea sus datos (ver app/(app)/page.tsx), así que casi nunca dispara las
-  // ~15-20 queries en paralelo que motivaban un pool más grande.
+  // `max: 8` por warm-instance. El motivo original para bajarlo a 3 era la
+  // fuga de conexiones, pero esa fuga la causaba un loop infinito en
+  // enumerateMonths (ya arreglado): una función que colgaba 300s, se mataba por
+  // timeout y dejaba conexiones trabadas. Sin ese loop, conviene MÁS pool para
+  // que las ~12 queries concurrentes del dashboard no queueen ni se traben si
+  // alguna conexión queda lenta. La protección de fondo es el statement_timeout
+  // a nivel rol en Supabase (reapea conexiones trabadas a los 15s).
   // `connect_timeout: 10` evita que cuelgue indefinido al levantar la conn.
   const client = postgres(connectionString, {
     prepare: false,
-    max: 3,
+    max: 8,
     idle_timeout: 20,
     connect_timeout: 10,
   });
