@@ -1,4 +1,3 @@
-import { unstable_cache } from "next/cache";
 import { DashboardView } from "@/components/dashboard-view";
 import {
   getDashboardKpis,
@@ -13,46 +12,21 @@ type Props = {
   searchParams: Promise<{ client?: string }>;
 };
 
-// El dashboard es la página más pesada: dispara ~15-20 queries por carga
-// (KPIs + proyectos/planes + monthly + pendientes). Para no pegarle a la DB en
-// cada request ni en cada refresh —lo que saturaba el pooler de Supabase y
-// tiraba la página— cacheamos cada bloque por cliente con revalidación de 60s.
-// Los números pueden quedar hasta 60s desactualizados (aceptable para un
-// dashboard interno). Para invalidar al instante tras una edición se puede
-// llamar revalidateTag("dashboard") desde la Server Action correspondiente.
-const REVALIDATE_SECONDS = 60;
-
-const loadKpis = unstable_cache(
-  (clientId: string | null) => getDashboardKpis({ clientId }),
-  ["dashboard-kpis"],
-  { revalidate: REVALIDATE_SECONDS, tags: ["dashboard"] },
-);
-const loadProjects = unstable_cache(
-  (clientId: string | null) => getDashboardProjects({ clientId }),
-  ["dashboard-projects"],
-  { revalidate: REVALIDATE_SECONDS, tags: ["dashboard"] },
-);
-const loadMonthly = unstable_cache(
-  (clientId: string | null) => getMonthlyTotals({ clientId }),
-  ["dashboard-monthly"],
-  { revalidate: REVALIDATE_SECONDS, tags: ["dashboard"] },
-);
-const loadPendings = unstable_cache(
-  (clientId: string | null) => getDashboardPendings(clientId),
-  ["dashboard-pendings"],
-  { revalidate: REVALIDATE_SECONDS, tags: ["dashboard"] },
-);
-
+// NOTE (tablero-alertas / debug): unstable_cache sacado a propósito para aislar
+// si la capa de caché era la causante del cuelgue de la preview (durante el
+// hang no había NINGUNA conexión de la app a Postgres → el cuelgue era antes de
+// llamar a la DB, sospechoso #1: la caché). Con los datos actuales (tiny) las
+// queries directas son instantáneas, así que la caché no aporta performance.
 export default async function DashboardPage({ searchParams }: Props) {
   const sp = await searchParams;
   const client = await resolveClientFromSearchParams(sp);
   const clientId = client?.id ?? null;
   const lang = client?.language ?? DEFAULT_LANGUAGE;
   const [kpis, projects, monthly, pendings] = await Promise.all([
-    loadKpis(clientId),
-    loadProjects(clientId),
-    loadMonthly(clientId),
-    loadPendings(clientId),
+    getDashboardKpis({ clientId }),
+    getDashboardProjects({ clientId }),
+    getMonthlyTotals({ clientId }),
+    getDashboardPendings(clientId),
   ]);
 
   return (
