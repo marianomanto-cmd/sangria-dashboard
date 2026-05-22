@@ -571,6 +571,7 @@ export async function getMonthlyTotals(
   const realRows = filterClient
     ? await realRowsBase.where(eq(projects.clientId, filterClient))
     : await realRowsBase;
+  console.log("[monthly] realRows OK", realRows.length);
 
   // Proyectado: para cada plan approved, prorrateamos el budget de cada
   // PLACEMENT entre los meses de su [start, end] (el período del plan ya
@@ -595,6 +596,7 @@ export async function getMonthlyTotals(
         ? and(eq(mediaPlans.status, "approved"), eq(projects.clientId, filterClient))
         : eq(mediaPlans.status, "approved"),
     );
+  console.log("[monthly] placementSpans OK", placementSpans.length);
 
   const projectedByMonth: Record<string, number> = {};
   for (const p of placementSpans) {
@@ -609,6 +611,7 @@ export async function getMonthlyTotals(
       projectedByMonth[m] = (projectedByMonth[m] ?? 0) + monthly;
     }
   }
+  console.log("[monthly] loop done");
 
   const allMonths = Array.from(
     new Set([...realRows.map((r) => r.month), ...Object.keys(projectedByMonth)]),
