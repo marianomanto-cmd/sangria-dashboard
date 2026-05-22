@@ -12,34 +12,17 @@ type Props = {
   searchParams: Promise<{ client?: string }>;
 };
 
-// NOTE (tablero-alertas / debug): unstable_cache sacado a propósito para aislar
-// si la capa de caché era la causante del cuelgue de la preview (durante el
-// hang no había NINGUNA conexión de la app a Postgres → el cuelgue era antes de
-// llamar a la DB, sospechoso #1: la caché). Con los datos actuales (tiny) las
-// queries directas son instantáneas, así que la caché no aporta performance.
 export default async function DashboardPage({ searchParams }: Props) {
   const sp = await searchParams;
   const client = await resolveClientFromSearchParams(sp);
   const clientId = client?.id ?? null;
   const lang = client?.language ?? DEFAULT_LANGUAGE;
-  // DEBUG (tablero-alertas): markers temporales para los Runtime Logs de Vercel.
-  console.log("[dashboard] client resuelto, lanzando queries", { clientId });
   const [kpis, projects, monthly, pendings] = await Promise.all([
-    getDashboardKpis({ clientId }).then((r) => {
-      console.log("[dashboard] kpis OK");
-      return r;
-    }),
-    getDashboardProjects({ clientId }).then((r) => {
-      console.log("[dashboard] projects OK", r.rows.length);
-      return r;
-    }),
-    getMonthlyTotals({ clientId }).then((r) => {
-      console.log("[dashboard] monthly OK", r.length);
-      return r;
-    }),
+    getDashboardKpis({ clientId }),
+    getDashboardProjects({ clientId }),
+    getMonthlyTotals({ clientId }),
     getDashboardPendings(clientId),
   ]);
-  console.log("[dashboard] todas las queries OK, renderizando");
 
   return (
     <DashboardView
