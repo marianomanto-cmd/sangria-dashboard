@@ -238,7 +238,12 @@ async function getPendingTracking(
   const conds = [eq(mediaPlans.status, "approved"), isNull(mediaPlans.deletedAt)];
   if (clientId) conds.push(eq(projects.clientId, clientId));
 
-  const rows = await db
+  // 1. Período de cada plan (min start / max end). El join publishers→placements
+  //    es jerárquico (1 fila por placement del plan), no multiplica. NO se
+  //    joinea campaign_actual_snapshots acá: sería una segunda rama 1:N sobre
+  //    media_plans y el producto cartesiano placements × snapshots dispara el
+  //    statement timeout en prod. El último cierre se trae aparte (paso 3).
+  const planRows = await db
     .select({
       planId: mediaPlans.id,
       planName: mediaPlans.name,
@@ -247,7 +252,6 @@ async function getPendingTracking(
       clientName: clients.name,
       periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
       periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
-      lastClose: sql<string | null>`max(${campaignActualSnapshots.snapshotDate})::text`,
     })
     .from(mediaPlans)
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
@@ -260,28 +264,45 @@ async function getPendingTracking(
       mediaPlanPlacements,
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
-    .leftJoin(
-      campaignActualSnapshots,
-      eq(campaignActualSnapshots.mediaPlanId, mediaPlans.id),
-    )
     .where(and(...conds))
     .groupBy(mediaPlans.id, projects.id, clients.id);
 
+  // 2. Sólo planes vigentes hoy (hoy dentro del período).
+  const live = planRows.filter(
+    (r) =>
+      r.periodStart &&
+      r.periodEnd &&
+      today >= r.periodStart &&
+      today <= r.periodEnd,
+  );
+  if (live.length === 0) return [];
+
+  // 3. Último cierre de tracking por plan (agregado aparte → 1 fila por plan,
+  //    sin fan-out contra placements).
+  const liveIds = live.map((r) => r.planId);
+  const closeRows = await db
+    .select({
+      planId: campaignActualSnapshots.mediaPlanId,
+      lastClose: sql<string | null>`max(${campaignActualSnapshots.snapshotDate})::text`,
+    })
+    .from(campaignActualSnapshots)
+    .where(inArray(campaignActualSnapshots.mediaPlanId, liveIds))
+    .groupBy(campaignActualSnapshots.mediaPlanId);
+  const lastCloseByPlan = new Map(closeRows.map((c) => [c.planId, c.lastClose]));
+
   const out: PendingTracking[] = [];
-  for (const r of rows) {
-    if (!r.periodStart || !r.periodEnd) continue;
-    // Vigente hoy: hoy dentro del período del plan.
-    if (today < r.periodStart || today > r.periodEnd) continue;
+  for (const r of live) {
+    const lastClose = lastCloseByPlan.get(r.planId) ?? null;
     // Ya cerró hoy → no pendiente.
-    if (r.lastClose && r.lastClose >= today) continue;
+    if (lastClose && lastClose >= today) continue;
     out.push({
       planId: r.planId,
       planName: r.planName,
       projectCode: r.projectCode,
       projectName: r.projectName,
       clientName: r.clientName,
-      lastCloseDate: r.lastClose,
-      daysSinceClose: r.lastClose ? daysBetween(r.lastClose, today) : null,
+      lastCloseDate: lastClose,
+      daysSinceClose: lastClose ? daysBetween(lastClose, today) : null,
     });
   }
   // Más rezagados (más días sin cerrar / nunca) primero.
