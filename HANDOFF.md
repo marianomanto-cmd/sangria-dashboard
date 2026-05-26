@@ -2,6 +2,25 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Métricas completas en exports + PDF apaisado
+
+- **Todas las métricas por placement (Excel y PDF)**: las calculated (CTR, VTR,
+  engagement rate, CPM, etc.) **no se guardan** en `metrics_json` (el editor las
+  computa al vuelo), así que antes no salían en los exports. Ahora se computan
+  por placement y cada métrica tiene su columna/celda. Se muestran las
+  calculated que **resuelven** (sus inputs existen) en al menos un placement;
+  donde faltan inputs, la celda queda en blanco.
+- **Lógica compartida nueva**: `lib/plan-metrics.ts` (`evalFormula`,
+  `placementMetricValue`, `resolveMetricColumns`) — fuente única para PDF y
+  Excel. Se eliminó la copia local de `evalFormula` del XLSX.
+- **PDF ahora apaisado (landscape) con tabla de métricas**: una fila por
+  placement, una columna por métrica, subtotales por publisher + fila MEDIA
+  TOTAL (antes el PDF listaba las métricas como texto inline y sin calculated).
+  El render se extrajo a `lib/plan-pdf.ts` (`renderPlanPdf(detail, allMetrics)`)
+  para poder testearlo sin DB; `export.pdf/route.ts` quedó como thin handler.
+- **Excel**: las columnas de métricas ahora incluyen las calculated; cada
+  placement, subtotal y TOTAL MEDIA las computan con la fórmula del catálogo.
+
 ### Cambios de la sesión 26/may/2026 — Logo + disclaimer legal en los exports del plan
 
 - **Logo de marca en PDF y XLSX**: ambos exports dibujan el logo en la esquina

@@ -2,6 +2,11 @@ import ExcelJS from "exceljs";
 import { getBrandLogo } from "@/lib/brand-logo";
 import { getPlanDetail, type PlanPlacement } from "@/db/queries/project-detail";
 import { listMetricsForClient } from "@/app/actions/plans";
+import {
+  evalFormula,
+  placementMetricValue,
+  resolveMetricColumns,
+} from "@/lib/plan-metrics";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
 
 // Paleta de marca — sincronizada con los design tokens de app/globals.css.
@@ -18,39 +23,6 @@ const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers de cálculo
 // ────────────────────────────────────────────────────────────────────────────
-
-// Evalúa fórmulas simples del catálogo de métricas:
-//   "amount / clicks", "clicks / impressions", "amount / impressions × 1000",
-//   "views / impressions", etc. Devuelve null si falta algún input o si la
-//   fórmula no encaja con el patrón soportado.
-function evalFormula(
-  formula: string | null | undefined,
-  amount: number,
-  directs: Record<string, number>,
-): number | null {
-  if (!formula) return null;
-  let f = formula.toLowerCase().replace(/\s+/g, "");
-  let multiplier = 1;
-  const xMatch = f.match(/×(\d+)/);
-  if (xMatch) {
-    multiplier = Number.parseInt(xMatch[1], 10);
-    f = f.replace(/×\d+/, "");
-  }
-  const m = f.match(/^([a-z_]+)\/([a-z_]+)$/);
-  if (!m) return null;
-  const [, num, den] = m;
-  const n = num === "amount" ? amount : directs[num];
-  const d = den === "amount" ? amount : directs[den];
-  if (
-    n == null ||
-    d == null ||
-    !Number.isFinite(n) ||
-    !Number.isFinite(d) ||
-    d === 0
-  )
-    return null;
-  return (n / d) * multiplier;
-}
 
 // Prorratea un monto entre los meses que cubre [startISO, endISO] usando
 // proporción de días (inclusive en ambos extremos). Si faltan fechas devuelve
@@ -146,34 +118,19 @@ export async function GET(
   const allMetrics = await listMetricsForClient(detail.client.id);
   const metricBySlug = new Map(allMetrics.map((m) => [m.slug, m]));
 
-  // ─── Slugs de métricas presentes en el plan (direct + calculated) ────────
-  const usedSlugs = (() => {
-    const set = new Set<string>();
-    for (const grp of detail.publishers) {
-      for (const pl of grp.placements) {
-        for (const slug of Object.keys(pl.metricsJson ?? {})) {
-          const v = pl.metricsJson?.[slug];
-          if (typeof v === "number" && Number.isFinite(v)) set.add(slug);
-        }
-      }
-    }
-    return set;
-  })();
-
-  const sortBySlug = (a: string, b: string) =>
-    (metricBySlug.get(a)?.sortOrder ?? 999) -
-    (metricBySlug.get(b)?.sortOrder ?? 999);
-
-  const directSlugs = [...usedSlugs]
-    .filter((s) => metricBySlug.get(s)?.kind === "direct")
-    .sort(sortBySlug);
-  const calculatedSlugs = [...usedSlugs]
-    .filter((s) => metricBySlug.get(s)?.kind === "calculated")
-    .sort(sortBySlug);
-  const metricSlugs = [...directSlugs, ...calculatedSlugs];
-  const metricHeaders = metricSlugs.map(
-    (slug) => metricBySlug.get(slug)?.name ?? slug,
-  );
+  // ─── Columnas de métricas: directs presentes + calculated que resuelven ──
+  // (calculated como CTR/engagement rate se computan por placement; no se
+  // guardan en metrics_json). Orden: direct→calculated, por sortOrder.
+  const allPlacements = detail.publishers.flatMap((g) => g.placements);
+  const metricColumns = resolveMetricColumns(allMetrics, allPlacements);
+  const directSlugs = metricColumns
+    .filter((m) => m.kind === "direct")
+    .map((m) => m.slug);
+  const calculatedSlugs = metricColumns
+    .filter((m) => m.kind === "calculated")
+    .map((m) => m.slug);
+  const metricSlugs = metricColumns.map((m) => m.slug);
+  const metricHeaders = metricColumns.map((m) => m.name);
 
   const wb = new ExcelJS.Workbook();
   wb.creator = "Sangria Dashboard";
@@ -417,10 +374,8 @@ export async function GET(
 
       metricSlugs.forEach((slug, i) => {
         const cell = row.getCell(baseCols + 1 + i);
-        const v = pl.metricsJson?.[slug];
-        if (typeof v === "number" && Number.isFinite(v)) {
-          applyMetricFormat(cell, slug, v);
-        }
+        const meta = metricBySlug.get(slug);
+        applyMetricFormat(cell, slug, meta ? placementMetricValue(meta, pl) : null);
       });
 
       // Indentación real (no espacios) para anidar el placement bajo su
@@ -437,7 +392,6 @@ export async function GET(
   }
 
   // ─── Fila TOTAL MEDIA con totales de métricas ───────────────────────────
-  const allPlacements = detail.publishers.flatMap((g) => g.placements);
   const planDirects = sumDirects(allPlacements, directSlugs);
 
   const totalMediaRow = ws.getRow(currentRow);
