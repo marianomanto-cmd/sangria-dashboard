@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { getBrandLogo } from "@/lib/brand-logo";
 import { getPlanDetail, type PlanPlacement } from "@/db/queries/project-detail";
 import { listMetricsForClient } from "@/app/actions/plans";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
@@ -271,6 +272,23 @@ export async function GET(
     ws.mergeCells(rowIdx, 2, rowIdx, totalCols);
     row.height = 20;
   });
+
+  // ─── Logo de marca (arriba a la derecha) ─────────────────────────────────
+  // Lo anclamos sobre las columnas de la derecha del bloque de metadata, que
+  // tienen fondo blanco (los valores van alineados a la izquierda), evitando
+  // el clash con el fondo de color del banner si el logo es un JPG opaco.
+  const logo = getBrandLogo();
+  if (logo) {
+    const imageId = wb.addImage({
+      base64: logo.bytes.toString("base64"),
+      extension: logo.type === "png" ? "png" : "jpeg",
+    });
+    ws.addImage(imageId, {
+      tl: { col: Math.max(2, totalCols - 2), row: 1.1 },
+      ext: { width: 150, height: 52 },
+      editAs: "oneCell",
+    });
+  }
 
   // Título (1 fila) + pares (N filas) + 1 fila de aire antes de la tabla.
   const headerEndRow = headerPairs.length + 1;
@@ -559,6 +577,15 @@ export async function GET(
   const sigDateRow = ws.getRow(currentRow);
   sigDateRow.getCell(1).value = t("export.dateLabel", lang);
   sigDateRow.getCell(1).font = { color: { argb: MUTED } };
+  currentRow += 2; // fila en blanco antes del disclaimer
+
+  // ─── Disclaimer legal (debajo de la firma) ──────────────────────────────
+  const discRow = ws.getRow(currentRow);
+  discRow.getCell(1).value = t("export.signatureDisclaimer", lang);
+  discRow.getCell(1).font = { italic: true, size: 9, color: { argb: MUTED } };
+  discRow.getCell(1).alignment = { wrapText: true, vertical: "top" };
+  ws.mergeCells(currentRow, 1, currentRow, Math.min(totalCols, 8));
+  discRow.height = 46;
 
   // ─────────────────────────────────────────────────────────────────────────
   // TAB 2 — Budget split por mercado (prorrateo mensual, sin métricas)

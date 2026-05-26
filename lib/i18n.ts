@@ -221,6 +221,13 @@ const DICT: Record<string, Record<Language, string>> = {
     en: "Date: ____________________",
     es: "Fecha: ____________________",
   },
+  // Texto legal exacto provisto por el cliente; se mantiene en inglés en ambos
+  // idiomas (nombra a "Sangria, LLC" e "Insertion Order"). No traducir sin
+  // aprobación legal.
+  "export.signatureDisclaimer": {
+    en: "By signing this agreement, the Client named on this agreement agrees to be solely liable for payment of all amounts due to Sangria, LLC for the execution of this Insertion Order.",
+    es: "By signing this agreement, the Client named on this agreement agrees to be solely liable for payment of all amounts due to Sangria, LLC for the execution of this Insertion Order.",
+  },
 };
 
 export function t(key: keyof typeof DICT | string, lang: Language): string {

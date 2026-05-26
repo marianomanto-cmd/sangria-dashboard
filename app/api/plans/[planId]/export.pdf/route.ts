@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { getBrandLogo } from "@/lib/brand-logo";
 import { getPlanDetail } from "@/db/queries/project-detail";
 import {
   DEFAULT_LANGUAGE,
@@ -146,6 +147,32 @@ export async function GET(
     return v.toLocaleString(numberLocale);
   }
 
+  // ─── Logo de marca (esquina superior derecha) ───────────────────────
+  // El header de texto se escribe alineado a la izquierda, así que el logo a
+  // la derecha no se solapa. Se acota a una caja para no invadir la metadata.
+  const logo = getBrandLogo();
+  if (logo) {
+    try {
+      const img =
+        logo.type === "png"
+          ? await pdf.embedPng(logo.bytes)
+          : await pdf.embedJpg(logo.bytes);
+      const boxW = 150;
+      const boxH = 64;
+      const scale = Math.min(boxW / img.width, boxH / img.height);
+      const w = img.width * scale;
+      const h = img.height * scale;
+      page.drawImage(img, {
+        x: PAGE_W - MARGIN - w,
+        y: PAGE_H - MARGIN - h,
+        width: w,
+        height: h,
+      });
+    } catch {
+      // imagen inválida o no embebible: seguimos sin logo
+    }
+  }
+
   // ─── Header ──────────────────────────────────────────────────────────
   writeLine(t("export.mediaPlan", lang), {
     size: 8,
@@ -246,6 +273,15 @@ export async function GET(
       }
     }
   }
+
+  // ─── Firma + disclaimer ──────────────────────────────────────────────
+  writeSeparator();
+  y -= 6;
+  writeLine(t("export.signaturePrompt", lang), { size: 10 });
+  y -= 2;
+  writeLine(t("export.dateLabel", lang), { size: 10 });
+  y -= 8;
+  writeWrapped(t("export.signatureDisclaimer", lang), { size: 8 });
 
   // ─── Footer ──────────────────────────────────────────────────────────
   writeSeparator();
