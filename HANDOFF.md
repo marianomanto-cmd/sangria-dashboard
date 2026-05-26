@@ -2,6 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 22/may/2026 — Tablero + rediseño dashboard/editor + fix del cuelgue
+
+Todo esto se probó aislado en la rama `tablero-alertas` (con login deshabilitado
+y un Preview de Vercel) y se integró a `main` al final, con el login re-activado.
+
+- **Fix raíz del cuelgue (crítico)**: `getPendingBillings` entraba en loop
+  infinito en `enumerateMonths` cuando un placement tenía una fecha malformada
+  (mes que parsea a `NaN`, p.ej. `-infinity`): la función colgaba 300s, Vercel
+  la mataba y filtraba conexiones hasta agotar el pooler (cualquier query
+  trivial colgaba después → parecía "la DB caída"). Se blindó `enumerateMonths`
+  (en `pendings.ts` y `dashboard.ts`): valida año/mes enteros finitos + tope
+  duro de 1200 iteraciones. Diagnóstico vía `console.log` por query (ya quitados).
+- **Dashboard "Operativo"**: pendientes/alertas arriba (hero, grid 2×2 con ítems
+  inline + barra de alerta de vencidos), KPIs como strip compacto, chart y tabla
+  abajo. Sin toggle A/C. (`components/dashboard-view.tsx`, `pending-board.tsx`.)
+- **Editor de planes "Planilla + Inspector"** (`editor.tsx`): pantalla partida
+  en vez de acordeones + expand. Planilla con campos esenciales inline (incl.
+  tarifa⇄delivery de la métrica principal) + inspector lateral sticky del
+  placement seleccionado. Jerarquía de color Publisher>Placement, totales en
+  vivo, subtotal por publisher + botón "Balancear", navegación por teclado
+  (Enter baja/crea fila). El Excel/PDF NO se tocó (mismo formato).
+- **Caché del dashboard sacada**: `unstable_cache` se probó y se removió (no era
+  la causa del cuelgue). Resiliencia del pooler vía `max: 8` (era 3) +
+  `statement_timeout` a nivel rol.
+- **Pendientes (follow-ups del editor)**: drag-reorder, recordar última tarifa
+  por método, fill-down.
+- **Acción requerida en prod (una vez)**: setear timeouts a nivel rol (si no se
+  hizo): `ALTER ROLE postgres SET statement_timeout = '15s';` y
+  `... idle_in_transaction_session_timeout = '20s';`. Ver README → "Si Vercel
+  falla con statement_timeout".
+
 ### Cambios de la sesión 22/may/2026 — Incidente prod: pooler saturado + caché del dashboard
 
 - **Síntoma**: dashboard caído en prod con `57014 statement timeout` (en

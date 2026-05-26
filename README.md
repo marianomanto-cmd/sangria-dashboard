@@ -486,22 +486,21 @@ sql<string>`max(${tbl.col})::text`
 ```
 Y parsear con `new Date(str)` después.
 
-### Caché del dashboard
-[app/(app)/page.tsx](app/(app)/page.tsx) envuelve sus 4 bloques de datos
-(KPIs, proyectos, monthly, pendientes) en `unstable_cache` con `revalidate: 60`
-y tag `"dashboard"`, **keyado por `clientId`**. El dashboard era la página más
-pesada (~15-20 queries por carga) y sin caché cada request/refresh le pegaba a
-la DB — eso saturó el pooler en prod (ver "Pool de conexiones"). Con la caché,
-los datos pueden quedar hasta 60s desactualizados (ok para uso interno); para
-refrescar al instante tras una edición, llamar `revalidateTag("dashboard")`
-desde la Server Action que muta.
+### Dashboard: sin caché (queries directas)
+[app/(app)/page.tsx](app/(app)/page.tsx) corre sus 4 bloques de datos (KPIs,
+proyectos, monthly, pendientes) en `Promise.all`, **sin caché**. Se probó
+`unstable_cache` durante el incidente del pooler pero se sacó: no era la causa
+del cuelgue (era un loop infinito en `enumerateMonths`, ver más abajo) y con la
+DB chica las queries son instantáneas. La resiliencia del pooler la dan hoy
+`max: 8` conexiones (ver "Pool de conexiones") + el `statement_timeout` a nivel
+rol. Si en el futuro crece el tráfico, se puede reintroducir caché por cliente.
 
 ### Pool de conexiones
 - `prepare: false` para Transaction Pooler (puerto 6543).
-- `max: 3` por warm-instance. En serverless Next escala a muchas Lambdas; pocas
-  conexiones por instancia evitan saturar el pooler. Cuando una Lambda se mata
-  por timeout (504) deja conexiones colgadas en `active/ClientRead` que ocupan
-  slots del pooler — bajar `max` reduce cuántas se filtran por Lambda muerta.
+- `max: 8` por warm-instance. Da lugar a las ~12 queries concurrentes del
+  dashboard sin que queueen ni se traben. (Se probó `max: 3` durante el
+  incidente del pooler, pero la fuga de conexiones que motivaba bajarlo la
+  causaba un loop infinito en `enumerateMonths`, ya arreglado.)
 - `idle_timeout: 20`, `connect_timeout: 10`.
 
 ---
@@ -537,17 +536,23 @@ from pg_stat_activity where datname = current_database() and state <> 'idle';
 Recuperación: **reiniciar el proyecto** en Supabase (Settings → Restart) limpia
 las conexiones colgadas y corta el espiral.
 
-Prevención (ya aplicada / recomendada):
+**Causa raíz real**: además del fan-out, `getPendingBillings` entraba en un
+**loop infinito** en `enumerateMonths` cuando un placement tenía una fecha
+malformada (p.ej. `start_date` que parsea a mes `NaN`): la función colgaba
+300s, Vercel la mataba y filtraba conexiones → pool agotado. Ya está blindado
+(`enumerateMonths` valida año/mes finitos + tope duro de iteraciones).
+
+Prevención (ya aplicada):
 - **No subir** `statement_timeout` a 60s: un timeout largo hace que las
-  conexiones filtradas linger MÁS. Con las queries ya rápidas + dashboard
-  cacheado, conviene un timeout MODERADO que reape conexiones colgadas:
+  conexiones filtradas linger MÁS. Conviene un timeout MODERADO que reape
+  conexiones colgadas:
   ```sql
   ALTER ROLE postgres SET statement_timeout = '15s';
   ALTER ROLE postgres SET idle_in_transaction_session_timeout = '20s';
   ```
   (Scripts largos como `db:seed` pueden overridear con `SET statement_timeout = 0;`.)
-- Dashboard cacheado (`unstable_cache`, 60s) → ~20x menos carga sobre el pooler.
-- `max: 3` conexiones por instancia (ver "Pool de conexiones").
+- `enumerateMonths` blindado contra fechas malformadas (no más loop infinito).
+- `max: 8` conexiones por instancia (ver "Pool de conexiones").
 
 ---
 

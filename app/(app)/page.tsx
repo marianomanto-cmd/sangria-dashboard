@@ -17,27 +17,12 @@ export default async function DashboardPage({ searchParams }: Props) {
   const client = await resolveClientFromSearchParams(sp);
   const clientId = client?.id ?? null;
   const lang = client?.language ?? DEFAULT_LANGUAGE;
-  // DEBUG (tablero-alertas): markers para Runtime Logs de Vercel.
-  console.log("[dashboard] lanzando queries", { clientId });
   const [kpis, projects, monthly, pendings] = await Promise.all([
-    getDashboardKpis({ clientId }).then((r) => {
-      console.log("[dashboard] kpis OK");
-      return r;
-    }),
-    getDashboardProjects({ clientId }).then((r) => {
-      console.log("[dashboard] projects OK", r.rows.length);
-      return r;
-    }),
-    getMonthlyTotals({ clientId }).then((r) => {
-      console.log("[dashboard] monthly OK", r.length);
-      return r;
-    }),
-    getDashboardPendings(clientId).then((r) => {
-      console.log("[dashboard] pendings OK");
-      return r;
-    }),
+    getDashboardKpis({ clientId }),
+    getDashboardProjects({ clientId }),
+    getMonthlyTotals({ clientId }),
+    getDashboardPendings(clientId),
   ]);
-  console.log("[dashboard] todas OK, renderizando");
 
   return (
     <DashboardView
