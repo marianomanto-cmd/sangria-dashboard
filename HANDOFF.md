@@ -2,6 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Sync de documentación (sin cambios de código)
+
+Pasada de documentación para que README/HANDOFF reflejen el estado real del
+código (regla dura de AGENTS.md). **Sin cambios de código ni de schema.**
+
+- **README → Stack**: el export de Excel usa **ExcelJS**, no `xlsx` (era el
+  nombre viejo de la dependencia; `package.json` tiene `exceljs`).
+- **README → Filtro global de cliente**: el último bullet decía que
+  publishers/markets/metrics seguían siendo catálogos globales y la edición
+  per-cliente era "Parte B". Hace rato que los cuatro catálogos (publishers,
+  métricas, mercados, budget origins) son per-cliente y se editan desde
+  `/configuracion/clientes/[slug]`. Corregido.
+- **README → Datos de seed**: describía "catálogos globales (11 publishers +
+  14 markets + 17 metrics)" y "~24 mappings cliente↔publisher", que ya no
+  existen. Ahora refleja los catálogos per-cliente (14 mercados + 23 métricas
+  replicados a cada cliente + la conversión custom de Banco Pacífico).
+- **HANDOFF → Commits recientes**: actualizado hasta `95a7a1a`; incluye el
+  merge del tablero (`900a405`) y el color picker de budget origins
+  (`2d24784`), que faltaban.
+- **HANDOFF → Próximos pasos**: §1 (markets/metrics per-cliente), §2 (auth),
+  §4 (admin de clientes) y §5 (polish PDF/Excel) estaban listados como
+  pendientes pero ya están HECHOS; se marcaron como tales dejando sólo lo que
+  realmente falta (el modelo de roles).
+- **HANDOFF → gotcha "Statement timeout"**: recomendaba subir el timeout a 60s,
+  exactamente lo contrario de la lección del incidente del 22/may (timeout
+  largo = conexiones filtradas que linger más). Alineado a 15s.
+- **scripts/seed.ts**: el comentario de cabecera decía "9 proyectos"; el seed
+  crea 11.
+
+**Acciones requeridas en prod**: ninguna. Solo documentación.
+
 ### Cambios de la sesión 26/may/2026 — Métricas completas en exports + PDF apaisado
 
 - **Todas las métricas por placement (Excel y PDF)**: las calculated (CTR, VTR,
@@ -812,14 +843,19 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-ed940fa  Exports: filename `{plan}-V{versión}` + sacar tag de pago del publisher
+95a7a1a  docs: documentar exhaustivamente los exports del plan (PDF/Excel)
+ed940fa  Exports: nombre de archivo = plan-Vx + sacar tag de pago del publisher
 ac9e440  PDF: línea de iniciales por página en planes multipágina
-7967e30  PDF: fix overlaps de título/separadores + GRAND TOTAL bajo fees
-be47564  Fix PDF 500: sanitizar control chars (newline/tab) para WinAnsi
-95e729a  Fix PDF: separar nombre de placement de su sub-línea (overlap)
+7967e30  PDF: arreglar overlaps de título/separadores + GRAND TOTAL bajo fees
+be47564  Fix PDF 500: sanitizar control chars (newline/tab) para el encoder WinAnsi
+95e729a  Fix PDF: separar nombre de placement de su sub-línea (overlap de interlineado)
 29bad1e  docs: registrar el merge de exports en Commits recientes (HANDOFF)
-acf2fe6  Merge: exports del plan — logo + firma/disclaimer + todas las métricas por placement (PDF landscape)
-(branch claude/vigilant-darwin-8vSa4)  Tablero de pendientes en el dashboard
+acf2fe6  Merge: media plan exports — logo, signature disclaimer, all metrics per placement (landscape PDF)
+aba5b2f  Exports: mostrar todas las métricas por placement (incl. calculated)
+4116eea  Logo en exports: preservar aspect ratio en XLSX + traer el asset a la rama
+a18749a  Exports del plan: logo de marca + disclaimer legal de firma
+2d24784  Budget origins: desplegable de 10 colores en vez de hex a mano (#62)
+900a405  Integrar tablero + rediseño dashboard/editor a main (#61)
 15eda3c  Filtro budget origin en reporting calendar + fix planes borrados en /planes (#55)
 2590560  Papelera de planes: borrado definitivo (hard delete) (#54)
 9448e9f  Borrar planes → papelera (soft delete) + restaurar (#53) — REQUIERE npm run db:push
@@ -1123,84 +1159,30 @@ Si pasa algo raro con la DB, `npm run db:check` para diagnosticar.
 
 ## Próximos pasos sugeridos (orden recomendado)
 
-### 1. Parte B — Markets y Metrics per-cliente
+### 1. Parte B — Markets y Metrics per-cliente — HECHO (sesión 13/may/2026 noche-3 + 20/may)
 
-**Contexto**: en la sesión del 11/may se hizo el filtro global de cliente
-(`?client=slug`). En esa charla se pidió que `markets` y `metrics_catalog`
-fueran per-cliente para que cada cliente pueda tener su propia lista. Hoy
-son catálogos globales — la edición per-cliente requiere migración de
-schema y NO se hizo en este PR para no romper data.
+Resuelto con **Opción B (columna directa)**: `markets` y `metrics_catalog`
+tienen `client_id` (FK a `clients`, unique `(client_id, slug)`) y cada cliente
+tiene su propia lista, incluyendo conversiones custom (ej. "Solicitudes de
+tarjeta" en Banco Pacífico). Publishers también pasó a per-cliente el 20/may
+(se eliminó el catálogo global + la tabla puente `client_publishers`). Los
+cuatro catálogos (publishers, métricas, mercados, budget origins) se editan
+desde `/configuracion/clientes/[slug]` (`sections.tsx`). Ver los bloques de
+sesión 13/may/2026 (noche-3) y 20/may/2026 arriba.
 
-**Estado del schema hoy**:
-- `markets` — global, sin FK a cliente.
-- `metrics_catalog` — global, sin FK a cliente.
-- `publishers` — global, pero con tabla join `client_publishers` que ya
-  permite per-cliente (sólo falta UI).
-- `budget_origins` — ya es per-cliente (`client_id` FK).
+### 2. Auth + permisos — auth HECHO (18/may/2026), roles PENDIENTE
 
-**Decisiones a tomar antes de codear**:
+**Hecho**: OAuth con Google (Supabase Auth) detrás de `proxy.ts` (Next.js 16
+reemplazó `middleware.ts`), restringido al dominio `@sangria.agency` (defensa en
+profundidad: callback + proxy). Login en `app/login/`, callback/signout en
+`app/auth/`. El `audit_log` ya graba autor (`user_id` + `user_email`). Ver el
+bloque de sesión 18/may/2026 (pm-3) + README → "Auth" y "Seguridad: RLS".
 
-1. **¿Mapping tables o columnas directas?**
-   - **Opción A** (mappings — sigue el patrón de `client_publishers`):
-     nuevas tablas `client_markets (client_id, market_id, enabled,
-     sort_order)` y `client_metrics (client_id, metric_id, enabled)`. El
-     catálogo global queda como lista maestra editable por admins; cada
-     cliente activa el subset que usa.
-   - **Opción B** (column directa): agregar `client_id` a `markets` y
-     `metrics_catalog`. Cada cliente tiene sus propios markets/metrics
-     completamente independientes; no hay catálogo global. Más simple
-     conceptualmente pero significa duplicar la lista para cada cliente
-     nuevo.
-
-2. **Migración de data existente**: hoy hay markets/metrics que se usan en
-   `media_plan_placements.market_id` y `media_plan_placements.metrics_json`.
-   - Si vamos Opción A: la FK existente en `placements` queda como está; el
-     mapping `client_markets` se rellena para todos los clientes con el set
-     global actual (mantener compat).
-   - Si vamos Opción B: hay que duplicar cada row global a cada cliente
-     existente Y reescribir las FKs en `placements` para apuntar al
-     market_id correcto del cliente. Más invasivo.
-
-3. **UI**: la página `/configuracion/markets` y `/configuracion/metricas`
-   hoy editan el catálogo global. Cuando hay `?client=` activo, deberían
-   mostrar el subset/lista de ese cliente. Sin cliente seleccionado: ver el
-   catálogo maestro (Opción A) o mostrar mensaje "elegí un cliente"
-   (Opción B).
-
-4. **Publishers UI**: aprovechar para hacer la UI de `client_publishers`
-   también (hoy se cargan vía seed). Misma página que markets/metrics: con
-   cliente seleccionado, editar los publishers habilitados + sus
-   `agency_pays`.
-
-**Mi recomendación**: Opción A (mappings). Es coherente con `client_publishers`
-que ya existe, la migración es backwards-compatible (data global queda
-intacta), y el catálogo maestro sigue siendo un lugar útil para admins.
-
-**Cuando se retome**: arrancar con la decisión Opción A vs B antes de
-tocar schema. El filtro global de cliente ya está listo, así que el wiring
-de la página queda mecánico una vez decidido el modelo de datos.
-
-### 2. Auth + permisos (lo que pediste para el lunes)
-
-El requerimiento: la app está abierta hoy para mostrar al manager. El
-próximo paso es agregar autenticación con roles.
-
-**Camino sugerido**:
-- Supabase Auth (ya tenés Supabase configurado, viene gratis).
-- Middleware en `middleware.ts` que redirija a `/login` si no hay sesión.
-- Roles en una tabla `users` (mapeada por `auth.users.id`):
-  - `admin` (todo)
-  - `account_manager` (CRUD proyectos + billing)
-  - `media_planner` (CRUD planes)
-  - `finance` (billing y reportes, read-only en planes)
-  - `viewer` (solo lectura)
-- Server Actions chequean rol antes de cada mutación.
-- Login page en `app/login/page.tsx` (fuera del grupo `(app)`).
-
-**Decisiones a tomar**:
-- ¿SSO con Google Workspace de Sangria, o email+password?
-- ¿Roles per-cliente o globales? (ej. ¿un AM puede ser AM solo de Copa?)
-- ¿Cómo manejamos el flujo de aprobación de un plan — quién firma?
+**Pendiente**: el modelo de roles (admin / account_manager / media_planner /
+finance / viewer) con chequeo en las server actions antes de cada mutación.
+Hoy todo usuario logueado del dominio tiene acceso total dentro de la app.
+Decisiones abiertas: ¿roles per-cliente o globales (un AM solo de Copa)?
+¿quién firma la aprobación de un plan?
 
 ### 3. Admin UI para per-client publishers — HECHO (sesión 20/may/2026)
 
@@ -1209,23 +1191,23 @@ Publishers de `/configuracion/clientes/[slug]` (crear / renombrar / habilitar /
 agency_pays / borrar). Se eliminó el catálogo global y la tabla
 `client_publishers`. Ver el bloque de sesión arriba + `db/publishers-per-client.sql`.
 
-### 4. Admin UI para clientes y budget origins
+### 4. Admin UI para clientes y budget origins — HECHO
 
-Los **budget origins** ya tienen CRUD per-cliente en
-`/configuracion/clientes/[slug]` (sesión 14/may). Lo que falta es el alta
-de **clientes** desde la UI — hoy crear un cliente sigue siendo vía seed.
-Sería en `/configuracion/clientes` (ya está en placeholders).
+Tanto el **alta/edición de clientes** (con idioma operativo en/es y
+archivar/des-archivar) como el CRUD de **budget origins** per-cliente viven en
+`/configuracion/clientes` y `/configuracion/clientes/[slug]` (sesiones 14/may).
+Lo único que sigue como placeholder ("próximamente") es `/configuracion/usuarios`,
+que depende del modelo de roles (ver paso 2).
 
-### 5. Polish del PDF/Excel
+### 5. Polish del PDF/Excel — HECHO (sesiones 14/may y 26/may)
 
-El PDF está en texto plano sin tablas; el Excel tiene 4 hojas básicas. Si
-los media planners van a mandarlo al cliente, conviene hacerlos más
-presentables:
-- PDF con tablas reales (probablemente migrando a `@react-pdf/renderer` o
-  similar).
-- Excel con formato (bordes, colores, formulas para los CPM/CPC, fila de
-  totales por publisher, etc.).
-- Header con logo de Sangria y datos del cliente.
+Ambos exports quedaron presentables y listos para mandar al cliente: PDF
+apaisado con tabla real (una fila por placement, columna por métrica,
+subtotales por publisher + GRAND TOTAL), logo de marca, firma + disclaimer
+legal e iniciales por página; Excel con formato de marca, outline colapsable y
+tab de budget por mercado. No se migró a `@react-pdf/renderer`: se hizo con
+`pdf-lib` (`lib/plan-pdf.ts`) y ExcelJS. Detalle completo en README → "Exports
+del plan (PDF / Excel)" y los bloques de sesión 26/may/2026 arriba.
 
 ### 6. Reportes
 
@@ -1245,15 +1227,17 @@ genere data histórica y se pueda benchmarkear.
 - Si querés cambiar el password, Supabase no lo muestra de nuevo: **resetealo**
   desde Supabase → Settings → Database → Database password.
 
-### Statement timeout en Supabase free
-Si una query tarda >8s, Supabase la cancela. Si pasa, ejecutar en SQL
-Editor de Supabase:
+### Statement timeout en Supabase
+Mantener un timeout **moderado** a nivel rol. **No subirlo a 60s**: un timeout
+largo hace que las conexiones filtradas por funciones de Vercel muertas queden
+colgadas MÁS tiempo y saturen el Transaction Pooler (incidente del 22/may/2026,
+ver README → "Si Vercel falla con statement_timeout (57014) o 504"). Un timeout
+moderado reapea esas conexiones colgadas:
 ```sql
-ALTER ROLE authenticated SET statement_timeout = '60s';
-ALTER ROLE anon SET statement_timeout = '60s';
-ALTER ROLE service_role SET statement_timeout = '60s';
-ALTER DATABASE postgres SET statement_timeout = '60s';
+ALTER ROLE postgres SET statement_timeout = '15s';
+ALTER ROLE postgres SET idle_in_transaction_session_timeout = '20s';
 ```
+Scripts largos (`db:seed`) pueden overridear con `SET statement_timeout = 0;`.
 
 ### Drizzle + postgres-js
 - **No usar** `sql\`= ANY(${arr})\`` — interpola mal. **Usar** `inArray()`.

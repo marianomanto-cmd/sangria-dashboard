@@ -5,7 +5,7 @@
 //     propio subset de publishers y su propia regla de "agencia/cliente paga"
 //   · Catálogos per-cliente: publishers + markets + metrics (cada cliente
 //     tiene su propia lista; no hay catálogo global)
-//   · 9 proyectos cubriendo TODOS los estados: planning / active / paused / closed
+//   · 11 proyectos cubriendo TODOS los estados: planning / active / paused / closed
 //   · ~14 planes peer cubriendo TODOS los estados: draft / ready_to_send /
 //     approved / archived
 //   · Billings de muestra (paid + sent + draft) para alimentar la estimación

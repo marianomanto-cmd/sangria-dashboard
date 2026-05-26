@@ -70,7 +70,7 @@ producción real conviene migrar a `db:generate` + `db:migrate`.
 - **postgres-js** como driver
 - **lucide-react** para íconos
 - **recharts** para el chart de facturación
-- **xlsx** + **pdf-lib** para exports
+- **ExcelJS** + **pdf-lib** para exports
 
 ---
 
@@ -451,9 +451,11 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - Para agregar una nueva ruta al filtro: incluirla en `CLIENT_FILTER_ROUTES`
   en `lib/client-filter.ts` + leer `searchParams.client` en la page +
   agregar `clientId` opcional a la query relevante.
-- **Configuración**: por ahora publishers/markets/metrics siguen siendo
-  catálogos globales aunque haya un cliente seleccionado (banner aclaratorio
-  en `/configuracion`). La edición per-cliente es Parte B (ver HANDOFF.md).
+- **Configuración per-cliente**: publishers, métricas, mercados y budget
+  origins son catálogos **per-cliente** (cada uno con `client_id`, unique
+  `(client_id, slug)`) y se editan desde `/configuracion/clientes/[slug]`. No
+  dependen del filtro global `?client=` — éste sólo afecta las vistas de datos
+  (Dashboard, `/proyectos`, `/planes`, `/billing`).
 
 ---
 
@@ -698,10 +700,12 @@ Prevención (ya aplicada):
 `scripts/seed.ts` crea:
 - **4 clientes**: Copa Airlines (active), Cervecería Andina (active), Banco
   Pacífico (active), Tienda Roma (paused).
-- **8 budget origins** repartidos.
-- **11 publishers + 14 markets + 17 metrics** en catálogos globales.
-- **~24 mappings cliente↔publisher** con reglas de pago variadas (Spotify =
-  cliente paga directo en Andina, OOH = agencia paga override en BPAC, etc.).
+- **8 budget origins** repartidos (3 Copa, 2 Andina, 2 BPAC, 1 Tienda Roma).
+- **Catálogos per-cliente** replicados a cada cliente: 14 mercados + 23
+  métricas (11 direct + 12 calculated) cada uno, más una conversión custom
+  ("Solicitudes de tarjeta") sólo en Banco Pacífico. Publishers per-cliente con
+  reglas de pago variadas (Spotify = cliente paga directo en Andina, OOH =
+  agencia paga override en BPAC, etc.). No hay catálogo global ni tabla puente.
 - **11 proyectos** cubriendo los 4 estados (planning, active, paused, closed).
 - **14+ planes peer** mezclando draft/ready_to_send/approved/archived.
 - **9 plan_billings** (paid + sent + draft) para alimentar la estimación y el
