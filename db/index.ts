@@ -30,15 +30,17 @@ function getClient(): ReturnType<typeof postgres> {
       "DATABASE_URL no está definida — revisá .env.local (en dev) o las env vars del deploy.",
     );
   }
-  // `max: 5` permite que las páginas con muchas queries paralelas
-  // (Promise.all en el dashboard) no las queueen en una sola conexión.
-  // El Transaction Pooler de Supabase aguanta ~200 conexiones en total, así
-  // que 5 por warm-instance es seguro. En el Session Pooler (límite 15) ya
-  // no rinde — pero el deploy usa el Transaction Pooler.
+  // `max: 8` por warm-instance. El motivo original para bajarlo a 3 era la
+  // fuga de conexiones, pero esa fuga la causaba un loop infinito en
+  // enumerateMonths (ya arreglado): una función que colgaba 300s, se mataba por
+  // timeout y dejaba conexiones trabadas. Sin ese loop, conviene MÁS pool para
+  // que las ~12 queries concurrentes del dashboard no queueen ni se traben si
+  // alguna conexión queda lenta. La protección de fondo es el statement_timeout
+  // a nivel rol en Supabase (reapea conexiones trabadas a los 15s).
   // `connect_timeout: 10` evita que cuelgue indefinido al levantar la conn.
   const client = postgres(connectionString, {
     prepare: false,
-    max: 5,
+    max: 8,
     idle_timeout: 20,
     connect_timeout: 10,
   });
