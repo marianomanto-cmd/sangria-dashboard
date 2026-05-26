@@ -2,6 +2,47 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Métricas completas en exports + PDF apaisado
+
+- **Todas las métricas por placement (Excel y PDF)**: las calculated (CTR, VTR,
+  engagement rate, CPM, etc.) **no se guardan** en `metrics_json` (el editor las
+  computa al vuelo), así que antes no salían en los exports. Ahora se computan
+  por placement y cada métrica tiene su columna/celda. Se muestran las
+  calculated que **resuelven** (sus inputs existen) en al menos un placement;
+  donde faltan inputs, la celda queda en blanco.
+- **Lógica compartida nueva**: `lib/plan-metrics.ts` (`evalFormula`,
+  `placementMetricValue`, `resolveMetricColumns`) — fuente única para PDF y
+  Excel. Se eliminó la copia local de `evalFormula` del XLSX.
+- **PDF ahora apaisado (landscape) con tabla de métricas**: una fila por
+  placement, una columna por métrica, subtotales por publisher + fila MEDIA
+  TOTAL (antes el PDF listaba las métricas como texto inline y sin calculated).
+  El render se extrajo a `lib/plan-pdf.ts` (`renderPlanPdf(detail, allMetrics)`)
+  para poder testearlo sin DB; `export.pdf/route.ts` quedó como thin handler.
+- **Excel**: las columnas de métricas ahora incluyen las calculated; cada
+  placement, subtotal y TOTAL MEDIA las computan con la fórmula del catálogo.
+
+### Cambios de la sesión 26/may/2026 — Logo + disclaimer legal en los exports del plan
+
+- **Logo de marca en PDF y XLSX**: ambos exports dibujan el logo en la esquina
+  superior derecha. Se lee de `public/sangria-logo.png` (o `.jpg`/`.jpeg`) vía
+  el helper nuevo `lib/brand-logo.ts`. Si el archivo no existe, el export se
+  genera igual, sin logo (no rompe la descarga). En el XLSX se ancla sobre el
+  área blanca de la metadata (no sobre el banner de color) para que un JPG opaco
+  no muestre un recuadro blanco sobre el acento.
+- **PDF: línea de firma + disclaimer**: el PDF antes no tenía firma (sí la tenía
+  el XLSX). Ahora el PDF cierra con `Signature: ___ / Date: ___` y, debajo, el
+  disclaimer legal. En el XLSX el disclaimer se agregó debajo del bloque de
+  firma existente.
+- **Texto legal (exacto, provisto por el cliente)**: nueva key i18n
+  `export.signatureDisclaimer`. Se mantiene en inglés en ambos idiomas (nombra a
+  "Sangria, LLC" e "Insertion Order"); no traducir sin aprobación legal.
+- **`next.config.ts`**: `outputFileTracingIncludes` incluye
+  `./public/sangria-logo.*` en el bundle de `/api/plans/**` para que el asset
+  viaje a las funciones de export al desplegar.
+- **Acción requerida (una vez)**: subir el logo a `public/sangria-logo.png`
+  (PNG con transparencia es lo ideal; `.jpg`/`.jpeg` también sirve). Hasta que
+  exista el archivo, los exports salen sin logo.
+
 ### Cambios de la sesión 22/may/2026 — Tablero + rediseño dashboard/editor + fix del cuelgue
 
 Todo esto se probó aislado en la rama `tablero-alertas` (con login deshabilitado

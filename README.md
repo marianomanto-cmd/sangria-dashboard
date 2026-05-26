@@ -105,8 +105,8 @@ app/
       calendario/           # Reporting Calendar (closed → reportado)
   api/
     plans/[planId]/
-      export.xlsx/route.ts  # XLSX del plan
-      export.pdf/route.ts   # PDF del plan
+      export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas)
+      export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts)
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
     budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts
@@ -132,6 +132,9 @@ scripts/
 lib/
   format.ts                 # formatUsd, formatPct, formatUsdCompact + inputs US: formatIntInput / formatAmountInput / parseNumberInput
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
+  brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
+  plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns (compartido PDF/Excel)
+  plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
   cost-methods.ts           # mapping cost method → métrica principal
@@ -608,6 +611,18 @@ Idempotente: limpia las tablas antes de insertar.
   con la fórmula del catálogo sobre el subtotal/total correspondiente). Tab 2
   (Budget por mercado) prorratea la inversión de cada placement por días entre
   los meses que abarca y la agrega por mercado × mes. Sin métricas, solo USD.
+- **Logo + firma en exports**: PDF y XLSX dibujan el logo de marca arriba a la
+  derecha (de `public/sangria-logo.png|jpg`, vía `lib/brand-logo.ts`; si falta
+  el archivo, salen sin logo). Ambos cierran con línea de firma + el disclaimer
+  legal (key i18n `export.signatureDisclaimer`, en inglés en ambos idiomas). El
+  asset se incluye en el bundle vía `outputFileTracingIncludes` en `next.config.ts`.
+- **Métricas en exports**: cada métrica usada tiene su columna/celda por
+  placement. Las **calculated** (CTR, VTR, engagement rate, CPM…) no se guardan
+  en `metrics_json` (el editor las computa al vuelo), así que los exports las
+  recomputan por placement con `lib/plan-metrics.ts`; se muestran las que
+  resuelven (inputs presentes) en algún placement. El **PDF es apaisado** y
+  renderiza una tabla (fila por placement × columna por métrica, subtotales por
+  publisher + MEDIA TOTAL).
 - **Reporting Calendar** (`/reportes/calendario`): listado de proyectos
   closed pendientes de reporte + Gantt de 60 días (-30/+30 desde hoy). Una
   fila por reporte en curso con símbolos para closed/assigned/delivery y
