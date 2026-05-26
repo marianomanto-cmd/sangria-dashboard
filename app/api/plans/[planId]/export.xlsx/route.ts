@@ -283,9 +283,20 @@ export async function GET(
       base64: logo.bytes.toString("base64"),
       extension: logo.type === "png" ? "png" : "jpeg",
     });
+    // Encajamos el logo en una caja preservando el aspect ratio (px). Si no se
+    // pudieron leer las dimensiones, caemos a un tamaño por defecto.
+    const boxW = 150;
+    const boxH = 64;
+    let w = boxW;
+    let h = boxH;
+    if (logo.width > 0 && logo.height > 0) {
+      const scale = Math.min(boxW / logo.width, boxH / logo.height);
+      w = Math.round(logo.width * scale);
+      h = Math.round(logo.height * scale);
+    }
     ws.addImage(imageId, {
       tl: { col: Math.max(2, totalCols - 2), row: 1.1 },
-      ext: { width: 150, height: 52 },
+      ext: { width: w, height: h },
       editAs: "oneCell",
     });
   }
