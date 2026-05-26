@@ -18,12 +18,29 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 
 function enumerateMonths(start: string, end: string): string[] {
-  const out: string[] = [];
   const [sy, sm] = start.split("-").map(Number);
   const [ey, em] = end.split("-").map(Number);
+  // Defensa dura contra fechas malformadas (NaN / Infinity / fuera de rango),
+  // p.ej. un placement con start_date '-infinity': al parsear, el mes queda NaN
+  // y `NaN > 12` es false, por lo que el año nunca incrementa → loop infinito.
+  if (
+    !Number.isInteger(sy) ||
+    !Number.isInteger(sm) ||
+    !Number.isInteger(ey) ||
+    !Number.isInteger(em) ||
+    sm < 1 ||
+    sm > 12 ||
+    em < 1 ||
+    em > 12
+  ) {
+    return [];
+  }
+  if (sy > ey || (sy === ey && sm > em)) return [];
+  const out: string[] = [];
   let y = sy;
   let m = sm;
-  while (y < ey || (y === ey && m <= em)) {
+  // Tope de seguridad (100 años) para que NUNCA pueda colgar.
+  for (let guard = 0; guard < 1200 && (y < ey || (y === ey && m <= em)); guard++) {
     out.push(`${y}-${String(m).padStart(2, "0")}`);
     m += 1;
     if (m > 12) {
