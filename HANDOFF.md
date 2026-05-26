@@ -848,6 +848,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+bb755a4  Tablero de pendientes: layout compacto + colapsable desde el encabezado
 de347e9  Planes y Proyectos: orden A-Z por default + buscador en vivo (nombre/código)
 ed940fa  Exports: filename `{plan}-V{versión}` + sacar tag de pago del publisher
 ac9e440  PDF: línea de iniciales por página en planes multipágina
