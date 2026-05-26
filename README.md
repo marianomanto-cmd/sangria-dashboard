@@ -147,6 +147,9 @@ lib/
     client.ts               # cliente Supabase para Client Components
     middleware.ts           # updateSession() — usado por proxy.ts (route protection)
 proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
+public/
+  sangria-logo.png          # logo de marca para los exports (PDF/XLSX). Ver "Exports del plan"
+next.config.ts              # outputFileTracingIncludes del logo para las rutas de export
 ```
 
 ---
@@ -242,6 +245,11 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
 - `metric_kind = 'calculated'` → derivadas por fórmula de otras. Hoy en
   catálogo: `ctr`, `cpc`, `cpm`, `cpv`, `cpa`, `vtr`, `cpr`, `cpe`, `cpf`,
   `cpl`, `cpi`, `cpvis`. La fórmula está en `metrics_catalog.formula`.
+- **Las calculated NO se persisten** en `media_plan_placements.metrics_json`:
+  el editor las computa al vuelo y los exports las recomputan por placement con
+  `lib/plan-metrics.ts`. En `metrics_json` solo viven valores direct (y sus
+  "rate companions" tipo `cpm`/`cpc` que el editor sí guarda). Ver
+  "Exports del plan".
 
 ### Mercados como catálogo editable
 - `markets` puede tener países (`costa-rica`, `panama`) o agrupaciones
@@ -449,6 +457,117 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
 
 ---
 
+## Exports del plan (PDF / Excel)
+
+El plan se descarga en dos formatos desde el editor
+(`app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`, dos botones que
+linkean a las rutas de abajo). Ambos comparten idioma, logo, métricas, firma y
+disclaimer; difieren en el layout.
+
+### Rutas
+
+- `GET /api/plans/[planId]/export.pdf` — **thin handler**: hace `getPlanDetail`
+  + `listMetricsForClient`, delega el render a `lib/plan-pdf.ts`
+  (`renderPlanPdf(detail, allMetrics)`) y arma la `Response`. La separación
+  permite testear el render sin DB.
+- `GET /api/plans/[planId]/export.xlsx` — genera el workbook inline con ExcelJS.
+
+### Nombre de archivo
+
+`{plan.name}-V{currentVersion}.{pdf|xlsx}`, sanitizado a `[A-Za-z0-9._-]` (el
+resto → `_`). **No** incluye el código ni el nombre del proyecto. Ej:
+`Q3_Always-On-V3.pdf`.
+
+### Idioma y formato numérico
+
+Sigue `clients.language` del cliente del plan. Los **nombres** de métricas van
+siempre en inglés (decisión de producto); los **números** se formatean con el
+locale (`es-AR` / `en-US`). El disclaimer legal va en inglés en ambos idiomas.
+
+### Logo de marca
+
+- `lib/brand-logo.ts` → `getBrandLogo()` lee `public/sangria-logo.png` (o
+  `.jpg`/`.jpeg`, gana el primero que exista) del filesystem, parsea las
+  dimensiones intrínsecas (PNG `IHDR` / JPEG `SOFn`) y devuelve
+  `{ bytes, type, width, height }` o `null`.
+- **Defensivo**: si no hay archivo, el export se genera igual, sin logo (no
+  rompe la descarga).
+- `next.config.ts` → `outputFileTracingIncludes: { "/api/plans/**":
+  ["./public/sangria-logo.*"] }` para que el asset viaje en el bundle de las
+  funciones serverless en Vercel (las rutas lo leen en runtime).
+- Posición: arriba a la derecha, preservando el aspect ratio. PDF: caja
+  150×58pt. XLSX: anclado sobre el área blanca de la metadata (no sobre el
+  banner de color, para que un JPG opaco no muestre un recuadro blanco).
+
+### Métricas en los exports (clave)
+
+Las métricas **calculated** (`ctr`, `cpm`, `vtr`, engagement rate, etc.) **no
+se persisten** en `media_plan_placements.metrics_json` — el editor las computa
+al vuelo desde las direct + el monto. Por eso los exports las **recomputan**.
+Lógica compartida en `lib/plan-metrics.ts`:
+
+- `evalFormula(formula, amount, directs)` — evalúa fórmulas simples del catálogo
+  (`a/b`, `a/b×N`). `null` si falta algún input.
+- `placementMetricValue(meta, pl)` — valor guardado si es finito (honra lo
+  cargado a mano), o el computado por la fórmula desde los directs + `amountUsd`
+  del placement.
+- `resolveMetricColumns(allMetrics, placements)` — qué columnas mostrar:
+  directs presentes en algún placement + calculated que **resuelven** (sus
+  inputs existen) en ≥1 placement; ordenadas direct→calculated por `sortOrder`.
+
+Subtotales por publisher y total del plan: directs = suma; calculated =
+`evalFormula` sobre la suma de directs + el total invertido del grupo/plan.
+Donde una calculated no resuelve para un placement, la celda queda en blanco.
+
+### PDF (`lib/plan-pdf.ts`)
+
+- **Landscape** letter (792×612pt, margin 40) para que entren las columnas de
+  métricas.
+- Estructura: header (label `MEDIA PLAN` + nombre del plan, truncado al ancho
+  libre a la izquierda del logo + project code + metadata) → Totales → **tabla**
+  → Fees → **GRAND TOTAL** → firma + disclaimer → footer.
+- Tabla: columnas = Publisher/Placement (flexible) + Invest (USD) + una por
+  métrica (ancho y fuente 7–8pt según cantidad). Filas: subtotal por publisher
+  (fondo accent-soft, **sin** tag de quién paga), placements (nombre + sub-línea
+  gris `mercado · audiencia · cost method · fechas`), fila `MEDIA TOTAL`
+  (accent). El **header de la tabla se redibuja en cada salto de página**.
+- **Sanitización WinAnsi**: la fuente Helvetica de pdf-lib no codifica fuera de
+  Latin-1 ni caracteres de control. `sanitize()` mapea flechas/comillas
+  tipográficas/`×`/`…` a ASCII, los **control chars y C1 (newline, tab) a
+  espacio**, y el resto fuera de `0x20–0xFF` a `?`. Sin esto, una `audience` o
+  `placementName` con un salto de línea reventaba el encoder → **HTTP 500**.
+- **GRAND TOTAL**: barra oscura con `(Media + Fees)` y el total, debajo de Fees.
+- **Firma**: `Signature: ___` / `Date: ___` + disclaimer legal
+  (`export.signatureDisclaimer`).
+- **Iniciales por página**: en planes **multipágina**, cada página menos la
+  última lleva `Client initials: ___` abajo a la derecha (la última conserva la
+  firma completa). Se dibuja al final iterando `pdf.getPages()`, cuando ya se
+  conoce el total de páginas.
+
+### Excel (`export.xlsx/route.ts`, ExcelJS)
+
+- **Tab 1 "Media plan"**: banner de título + metadata; tabla con columnas base
+  (publisher/placement, start, end, audience, notes, cost method, investment) +
+  una por métrica. Filas: subtotal por publisher (colapsable vía outline),
+  placements (indentados), `TOTAL MEDIA`, sección `Fees`, `GRAND TOTAL` (INK).
+  Bloque de firma + disclaimer al final. Logo anclado arriba a la derecha
+  (base64).
+- **Tab 2 "Budget por mercado"**: prorratea la inversión de cada placement por
+  días entre los meses que cubre `[startDate, endDate]` y la agrega por
+  mercado × mes (los sin fecha caen en una columna "Undated"/"Sin fecha"). Solo
+  USD, sin métricas.
+
+### i18n y decisiones
+
+- Keys: `export.mediaPlan`, `export.totals`, `export.publishersPlacements`,
+  `export.signaturePrompt`, `export.dateLabel`, `export.signatureDisclaimer`,
+  `export.initials`, `common.grandTotal`, etc. (`lib/i18n.ts`).
+- **No se imprime quién paga el publisher** (`agencyPays`): el tag
+  `[agency pays]`/`[client pays]` se sacó del PDF (el XLSX nunca lo tuvo). El
+  campo sigue en el modelo, solo no se muestra en el MP.
+
+---
+
 ## Patrones técnicos
 
 ### DB lazy con Proxy
@@ -606,23 +725,11 @@ Idempotente: limpia las tablas antes de insertar.
   catálogos per-cliente (tabla con `client_id`, unique `(client_id, slug)`) y
   se administran desde `/configuracion/clientes/[slug]`. Ya no hay catálogo
   global de publishers ni tabla puente `client_publishers`.
-- **Excel**: tab 1 (Media plan) muestra placements + subtotal por publisher
-  + TOTAL MEDIA, todos con sus métricas (direct = suma, calculated = recomputado
-  con la fórmula del catálogo sobre el subtotal/total correspondiente). Tab 2
-  (Budget por mercado) prorratea la inversión de cada placement por días entre
-  los meses que abarca y la agrega por mercado × mes. Sin métricas, solo USD.
-- **Logo + firma en exports**: PDF y XLSX dibujan el logo de marca arriba a la
-  derecha (de `public/sangria-logo.png|jpg`, vía `lib/brand-logo.ts`; si falta
-  el archivo, salen sin logo). Ambos cierran con línea de firma + el disclaimer
-  legal (key i18n `export.signatureDisclaimer`, en inglés en ambos idiomas). El
-  asset se incluye en el bundle vía `outputFileTracingIncludes` en `next.config.ts`.
-- **Métricas en exports**: cada métrica usada tiene su columna/celda por
-  placement. Las **calculated** (CTR, VTR, engagement rate, CPM…) no se guardan
-  en `metrics_json` (el editor las computa al vuelo), así que los exports las
-  recomputan por placement con `lib/plan-metrics.ts`; se muestran las que
-  resuelven (inputs presentes) en algún placement. El **PDF es apaisado** y
-  renderiza una tabla (fila por placement × columna por métrica, subtotales por
-  publisher + MEDIA TOTAL).
+- **Exports (PDF / Excel)**: resueltos y documentados en detalle en la sección
+  "Exports del plan (PDF / Excel)" arriba. Resumen: logo de marca, todas las
+  métricas (incl. calculated recomputadas) por placement, firma + disclaimer
+  legal, GRAND TOTAL, PDF apaisado con tabla + iniciales por página, nombre de
+  archivo `{plan}-V{versión}`.
 - **Reporting Calendar** (`/reportes/calendario`): listado de proyectos
   closed pendientes de reporte + Gantt de 60 días (-30/+30 desde hoy). Una
   fila por reporte en curso con símbolos para closed/assigned/delivery y
@@ -632,8 +739,6 @@ Idempotente: limpia las tablas antes de insertar.
   Debajo del Gantt hay un listado de **Reportes enviados** (`delivered_at != null`)
   con fecha de envío + fecha objetivo y un filtro de texto libre por proyecto o
   campaña (`getSentReports` en `db/queries/reports.ts`).
-- **PDF**: formato básico (lista de texto plano, sin tablas estilizadas).
-  Respeta el `clients.language` del plan exportado.
 - **i18n parcial**: las áreas de mayor visibilidad (dashboard, listas
   globales, exports, dates) están traducidas a `en`/`es`. Quedan strings
   hardcodeados en formularios secundarios (`/proyectos/nuevo`, editor
