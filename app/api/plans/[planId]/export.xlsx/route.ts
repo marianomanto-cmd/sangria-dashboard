@@ -560,7 +560,7 @@ export async function GET(
   // ─── Output ─────────────────────────────────────────────────────────────
   const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 
-  const filename = `${detail.project.code}.${detail.plan.name}.xlsx`.replace(
+  const filename = `${detail.plan.name}-V${detail.plan.currentVersion}.xlsx`.replace(
     /[^A-Za-z0-9._-]+/g,
     "_",
   );

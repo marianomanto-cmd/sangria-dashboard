@@ -15,7 +15,7 @@ export async function GET(
   const allMetrics = await listMetricsForClient(detail.client.id);
   const bytes = await renderPlanPdf(detail, allMetrics);
 
-  const filename = `${detail.project.code}.${detail.plan.name}.pdf`.replace(
+  const filename = `${detail.plan.name}-V${detail.plan.currentVersion}.pdf`.replace(
     /[^A-Za-z0-9._-]+/g,
     "_",
   );

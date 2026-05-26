@@ -39,6 +39,12 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   abajo a la derecha (la última conserva la firma completa). Key i18n
   `export.initials`. Se dibuja al final iterando `pdf.getPages()` (recién ahí
   se sabe el total de páginas).
+- **Nombre de archivo de los exports**: ahora es `{nombre del plan}-V{versión}`
+  (antes `{project.code}.{plan.name}`). Sin el nombre/código del proyecto. Aplica
+  a PDF y XLSX.
+- **Sacar el tag de pago del publisher**: se quitó `[agency pays]`/`[client
+  pays]` de las filas de publisher en el PDF (el XLSX nunca lo mostró). El campo
+  `agencyPays` sigue en el modelo, solo no se imprime en el MP.
 
 ### Cambios de la sesión 26/may/2026 — Logo + disclaimer legal en los exports del plan
 

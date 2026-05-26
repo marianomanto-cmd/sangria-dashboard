@@ -387,10 +387,7 @@ export async function renderPlanPdf(
     const rowH = 16;
     ensureRoom(rowH);
     page.drawRectangle({ x: MARGIN, y: y - rowH, width: tableW, height: rowH, color: rgb(...ACCENT_SOFT) });
-    const paysTag = grp.agencyPays
-      ? `[${t("common.agencyPays", lang)}]`
-      : `[${t("common.clientPays", lang)}]`;
-    textAt(truncate(`${grp.publisherName}  ${paysTag}`, fontBold, 8.5, nameW - 8), xName + 4, y - 11, {
+    textAt(truncate(grp.publisherName, fontBold, 8.5, nameW - 8), xName + 4, y - 11, {
       size: 8.5,
       bold: true,
     });
