@@ -133,7 +133,7 @@ scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
 lib/
-  format.ts                 # formatUsd, formatPct, formatUsdCompact + inputs US: formatIntInput / formatAmountInput / parseNumberInput
+  format.ts                 # formatUsd, formatPct, formatUsdCompact + inputs US: formatIntInput / formatAmountInput / parseNumberInput / evalNumberInput (fórmulas tipo Excel)
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
   brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
   plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns (compartido PDF/Excel)
@@ -164,10 +164,23 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   Nunca usar `Intl.NumberFormat("es-AR")` para cifras (la coma decimal de es-AR
   rompe el round-trip de los inputs editables).
 - Todo input numérico editable muestra el valor con `formatIntInput` /
-  `formatAmountInput` (`en-US`) y parsea lo tipeado con `parseNumberInput`
-  (descarta la coma de miles, conserva el punto decimal) — todo en `lib/format.ts`.
+  `formatAmountInput` (`en-US`) y parsea lo tipeado con `evalNumberInput`
+  (descarta la coma de miles y el símbolo de moneda, conserva el punto decimal)
+  — todo en `lib/format.ts`.
 - Para inputs nativos usar `<input type="number">` (su `.value` ya es US,
   independiente del locale del browser), como hace el simulador.
+- **Fórmulas estilo Excel**: `evalNumberInput` admite aritmética simple en
+  cualquier campo numérico del plan/billing (`+2*2` → 4, `=1000*12` → 12000,
+  `(1500+500)*3` → 6000), con `+ - * /`, paréntesis y signos unarios. El
+  evaluador es un parser propio de descenso recursivo (NO usa `eval()`);
+  devuelve `NaN` ante una fórmula inválida (incl. división por cero), y los
+  inputs en ese caso **restauran el valor previo** sin commitear. Los inputs
+  evalúan al perder foco y al apretar **Enter** (que además dispara la
+  navegación tipo planilla de la grilla de placements).
+- **Legibilidad**: los inputs numéricos del editor (`NumberInput`, `RateInput`,
+  `DeliveryInput`) usan caja blanca con borde (`text-sm`, ancho holgado:
+  `w-32`/`w-36`) para que entren cifras de millones sin recortarse. El monto del
+  placement quedó consistente con tarifa/delivery.
 
 ### Borrar un plan es soft delete (papelera)
 - Borrar un plan desde la vista de proyecto setea `media_plans.deleted_at` (no

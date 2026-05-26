@@ -27,7 +27,7 @@ export default async function PlanDetailPage({ params }: Props) {
   ]);
 
   return (
-    <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
+    <main className="px-8 py-10 max-w-[1800px] mx-auto w-full">
       <nav
         aria-label="Breadcrumb"
         className="text-xs text-muted flex items-center gap-1.5 mb-3"

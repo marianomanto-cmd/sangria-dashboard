@@ -12,10 +12,10 @@ import {
 } from "@/app/actions/plan-billing";
 import type { planBillings as planBillingsTable } from "@/db/schema";
 import {
+  evalNumberInput,
   formatAmountInput,
   formatUsd,
   formatUsdCompact,
-  parseNumberInput,
 } from "@/lib/format";
 
 type Billing = typeof planBillingsTable.$inferSelect;
@@ -651,18 +651,35 @@ function NumInput({
           ? `Máximo facturable este mes: $${max.toFixed(2)}`
           : undefined
       }
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
+      }}
       onBlur={(e) => {
-        const parsed = parseNumberInput(e.target.value);
-        let v = Number.isFinite(parsed) ? parsed : 0;
+        const raw = e.target.value.trim();
+        let v: number;
+        if (raw === "") {
+          v = 0;
+        } else {
+          const parsed = evalNumberInput(raw);
+          if (!Number.isFinite(parsed)) {
+            // Fórmula inválida → restaura el valor previo sin commitear.
+            e.target.value = display;
+            return;
+          }
+          v = parsed;
+        }
         if (max !== undefined && v > max + 0.01) {
           // Hard cap: avisamos y clampeamos al máximo permitido.
           alert(
             `Excede el plan: máximo facturable este mes es $${max.toFixed(2)}. Se ajusta el valor.`,
           );
           v = Math.max(0, max);
-          // Reflejamos el clamp en el input
-          e.target.value = v > 0 ? formatAmountInput(v) : "";
         }
+        // Reflejamos el resultado (fórmula evaluada / clamp) en el input.
+        e.target.value = v > 0 ? formatAmountInput(v) : "";
         if (Math.abs(v - value) >= 0.01) onCommit(v);
       }}
       className={`w-32 text-right font-mono tabular-nums bg-transparent border-b ${
