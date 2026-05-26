@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Tablero de pendientes: compacto + colapsable
+
+- **Colapsar todo el board**: el "Pendientes" del dashboard ahora se colapsa/
+  expande desde su encabezado (chevron que rota). La preferencia se persiste en
+  `localStorage` (`sangria:pending-board-collapsed`) para que se mantenga entre
+  visitas (el dashboard es lo primero de la página). Se lee con
+  `useSyncExternalStore` (server siempre arranca abierto) para no romper la
+  hidratación ni disparar setState en un effect.
+- **Más compacto**: densidad reducida en las cards (`px-3.5 py-2.5`), filas
+  (`px-3.5 py-1.5`), botones "+ N más"/"ver menos" y gap del grid (`gap-2.5`).
+- La `AlertBar` de vencidos sigue siempre visible (arriba del encabezado), aun
+  con el board colapsado, porque es el resumen urgente.
+- Solo se tocó `components/pending-board.tsx`; el resto del dashboard queda igual.
+
 ### Cambios de la sesión 26/may/2026 — Buscador + orden A-Z en Planes y Proyectos
 
 - **Tabs Planes (`/planes`) y Proyectos (`/proyectos`)**: ahora abren ordenadas

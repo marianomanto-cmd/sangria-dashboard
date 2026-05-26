@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Activity,
   Banknote,
   CalendarClock,
   Check,
+  ChevronRight,
   Receipt,
   TriangleAlert,
 } from "lucide-react";
@@ -29,6 +30,31 @@ const TONE_ICON: Record<Tone, string> = {
 // Cuántos ítems se muestran inline en cada card antes del "+N más".
 const PREVIEW = 3;
 
+// El estado colapsado del board se persiste en localStorage para que se
+// mantenga entre visitas al dashboard (es lo primero de la página). Se lee
+// con useSyncExternalStore para no romper la hidratación (server siempre
+// arranca abierto) ni disparar setState en un effect.
+const COLLAPSE_KEY = "sangria:pending-board-collapsed";
+const collapseListeners = new Set<() => void>();
+
+function subscribeCollapse(cb: () => void): () => void {
+  collapseListeners.add(cb);
+  window.addEventListener("storage", cb);
+  return () => {
+    collapseListeners.delete(cb);
+    window.removeEventListener("storage", cb);
+  };
+}
+
+function isBoardOpen(): boolean {
+  return localStorage.getItem(COLLAPSE_KEY) !== "1";
+}
+
+function setBoardCollapsed(collapsed: boolean): void {
+  localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
+  collapseListeners.forEach((cb) => cb());
+}
+
 export function PendingBoard({
   pendings,
   lang,
@@ -43,6 +69,9 @@ export function PendingBoard({
   const total =
     billings.length + tracking.length + reportsCount + invoices.length;
   const overdueInvoices = invoices.filter((i) => i.overdue).length;
+
+  const open = useSyncExternalStore(subscribeCollapse, isBoardOpen, () => true);
+  const toggle = () => setBoardCollapsed(open);
 
   const billingRows: ReactNode[] = billings.map((b) => (
     <Row
@@ -136,10 +165,22 @@ export function PendingBoard({
         overdueInvoices={overdueInvoices}
       />
 
-      <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-sm font-semibold">
-          {es ? "Pendientes" : "Pending tasks"}
-        </h2>
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="mb-2.5 flex w-full items-center justify-between gap-3 text-left group"
+      >
+        <span className="flex items-center gap-1.5">
+          <ChevronRight
+            size={15}
+            strokeWidth={2.5}
+            className={`text-muted transition-transform duration-200 group-hover:text-ink ${open ? "rotate-90" : "rotate-0"}`}
+          />
+          <h2 className="text-sm font-semibold">
+            {es ? "Pendientes" : "Pending tasks"}
+          </h2>
+        </span>
         <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
           {total === 0
             ? es
@@ -147,44 +188,46 @@ export function PendingBoard({
               : "All clear"
             : `${total} ${es ? (total === 1 ? "pendiente" : "pendientes") : total === 1 ? "item" : "items"}`}
         </span>
-      </div>
+      </button>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Card
-          icon={Receipt}
-          tone="warn"
-          title={es ? "Billing reports a completar" : "Billing reports to complete"}
-          subtitle={es ? "Meses cerrados sin billing" : "Closed months without billing"}
-          rows={billingRows}
-          lang={lang}
-        />
-        <Card
-          icon={Activity}
-          tone="warn"
-          title={es ? "Tracking del día" : "Daily tracking"}
-          subtitle={
-            es ? "Campañas vigentes sin cierre hoy" : "In-flight, not tracked today"
-          }
-          rows={trackingRows}
-          lang={lang}
-        />
-        <Card
-          icon={CalendarClock}
-          tone={reportsOverdue.length > 0 ? "danger" : "warn"}
-          title={es ? "Entregas de reportes" : "Report deliveries"}
-          subtitle={es ? "Próximos o vencidos" : "Upcoming or overdue"}
-          rows={reportRows}
-          lang={lang}
-        />
-        <Card
-          icon={Banknote}
-          tone={overdueInvoices > 0 ? "danger" : "warn"}
-          title={es ? "Facturas impagas" : "Unpaid invoices"}
-          subtitle={es ? "Billings sin cobrar" : "Billings awaiting payment"}
-          rows={invoiceRows}
-          lang={lang}
-        />
-      </div>
+      {open && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <Card
+            icon={Receipt}
+            tone="warn"
+            title={es ? "Billing reports a completar" : "Billing reports to complete"}
+            subtitle={es ? "Meses cerrados sin billing" : "Closed months without billing"}
+            rows={billingRows}
+            lang={lang}
+          />
+          <Card
+            icon={Activity}
+            tone="warn"
+            title={es ? "Tracking del día" : "Daily tracking"}
+            subtitle={
+              es ? "Campañas vigentes sin cierre hoy" : "In-flight, not tracked today"
+            }
+            rows={trackingRows}
+            lang={lang}
+          />
+          <Card
+            icon={CalendarClock}
+            tone={reportsOverdue.length > 0 ? "danger" : "warn"}
+            title={es ? "Entregas de reportes" : "Report deliveries"}
+            subtitle={es ? "Próximos o vencidos" : "Upcoming or overdue"}
+            rows={reportRows}
+            lang={lang}
+          />
+          <Card
+            icon={Banknote}
+            tone={overdueInvoices > 0 ? "danger" : "warn"}
+            title={es ? "Facturas impagas" : "Unpaid invoices"}
+            subtitle={es ? "Billings sin cobrar" : "Billings awaiting payment"}
+            rows={invoiceRows}
+            lang={lang}
+          />
+        </div>
+      )}
     </section>
   );
 }
@@ -276,7 +319,7 @@ function Card({
 
   return (
     <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden flex flex-col">
-      <div className="px-4 py-3 flex items-center justify-between gap-3 border-b border-line">
+      <div className="px-3.5 py-2.5 flex items-center justify-between gap-3 border-b border-line">
         <span className="flex items-center gap-2.5 min-w-0">
           <Icon
             size={16}
@@ -310,7 +353,7 @@ function Card({
             <button
               type="button"
               onClick={() => setExpanded(true)}
-              className="w-full px-4 py-2 text-left text-[11px] font-medium text-accent hover:bg-paper-2 transition-colors"
+              className="w-full px-3.5 py-1.5 text-left text-[11px] font-medium text-accent hover:bg-paper-2 transition-colors"
             >
               + {extra} {es ? "más" : "more"}
             </button>
@@ -319,7 +362,7 @@ function Card({
             <button
               type="button"
               onClick={() => setExpanded(false)}
-              className="w-full px-4 py-2 text-left text-[11px] font-medium text-muted hover:bg-paper-2 transition-colors"
+              className="w-full px-3.5 py-1.5 text-left text-[11px] font-medium text-muted hover:bg-paper-2 transition-colors"
             >
               {es ? "ver menos" : "show less"}
             </button>
@@ -344,7 +387,7 @@ function Row({
   return (
     <Link
       href={href}
-      className="flex items-center justify-between gap-3 px-4 py-2 text-sm hover:bg-paper-2 transition-colors group"
+      className="flex items-center justify-between gap-3 px-3.5 py-1.5 text-sm hover:bg-paper-2 transition-colors group"
     >
       <span className="min-w-0">
         <span className="block font-medium text-ink truncate group-hover:text-accent">

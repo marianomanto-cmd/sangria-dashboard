@@ -357,9 +357,14 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     date asignada, sin entregar) — `upcoming` = a ≤7 días; `overdue` = ya pasó.
   - **Facturas impagas**: cualquier `plan_billings` con `paid_at` null (incluye
     draft/ready/sent/invoiced); se marcan vencidas si `due_date < hoy`.
-- Cada card es colapsable (arranca cerrada) y sus filas linkean al área
-  correspondiente (billing del plan, campaign tracker, calendario de reportes).
-  Si una categoría está vacía muestra "Al día" en verde.
+- El board entero se colapsa/expande desde su encabezado (chevron). La
+  preferencia se guarda en `localStorage` (`sangria:pending-board-collapsed`,
+  leída con `useSyncExternalStore` para no romper la hidratación) y se mantiene
+  entre visitas; el server siempre arranca abierto.
+- Cada card muestra hasta 3 filas (`PREVIEW`) con "+ N más" para ver el resto;
+  sus filas linkean al área correspondiente (billing del plan, campaign tracker,
+  calendario de reportes). Si una categoría está vacía muestra "Al día" en
+  verde. El layout es compacto (densidad reducida en cards y filas).
 
 ### Audit log
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` +
