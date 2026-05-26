@@ -787,6 +787,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+acf2fe6  Merge: exports del plan — logo + firma/disclaimer + todas las métricas por placement (PDF landscape)
 (branch claude/vigilant-darwin-8vSa4)  Tablero de pendientes en el dashboard
 15eda3c  Filtro budget origin en reporting calendar + fix planes borrados en /planes (#55)
 2590560  Papelera de planes: borrado definitivo (hard delete) (#54)
