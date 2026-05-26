@@ -29,6 +29,11 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   línea o tab hacía explotar el encoder WinAnsi de pdf-lib (`WinAnsi cannot
   encode 0x000a`) → 500. `sanitize()` ahora también mapea los caracteres de control y C1 (newline, tab, etc.) a espacio. (El Excel no se veía afectado;
   por eso uno andaba y el otro no.)
+- **Polish layout PDF + GRAND TOTAL bajo fees**: la línea de `writeSeparator()`
+  cortaba los títulos de sección (size 12) y el label "PLAN DE MEDIOS" se pisaba
+  con el nombre del plan (interlínea < alto de fuente). Más aire en ambos.
+  Además se agregó una barra GRAND TOTAL (media + fees) debajo de la sección
+  Fees. Verificado rasterizando (es/en).
 
 ### Cambios de la sesión 26/may/2026 — Logo + disclaimer legal en los exports del plan
 

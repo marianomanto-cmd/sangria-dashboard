@@ -148,14 +148,16 @@ export async function renderPlanPdf(
   }
 
   function writeSeparator() {
-    newPageIfNeeded(8);
+    newPageIfNeeded(14);
     page.drawLine({
       start: { x: MARGIN, y: y - 2 },
       end: { x: PAGE_W - MARGIN, y: y - 2 },
       thickness: 0.5,
       color: rgb(0.7, 0.7, 0.7),
     });
-    y -= 8;
+    // Bajamos lo suficiente para que el título de sección (size 12) que suele
+    // venir después no toque la línea con sus ascendentes.
+    y -= 14;
   }
 
   // ─── Primitivas de texto para la tabla (no avanzan y) ────────────────────
@@ -278,6 +280,7 @@ export async function renderPlanPdf(
   // pisarlo (ambos viven en la misma banda superior).
   const headerMaxW = PAGE_W - MARGIN * 2 - (logoW > 0 ? logoW + 18 : 0);
   writeLine(t("export.mediaPlan", lang), { size: 8, bold: true, color: ACCENT });
+  y -= 5; // aire extra: el título (17pt) que sigue es más alto que su interlínea
   writeLine(truncate(detail.plan.name, fontBold, 17, headerMaxW), { size: 17, bold: true });
   writeLine(truncate(detail.project.code, fontMono, 10, headerMaxW), {
     size: 10,
@@ -505,6 +508,27 @@ export async function renderPlanPdf(
       }
     }
   }
+
+  // ─── Total del plan (media + fees) ───────────────────────────────────────
+  y -= 8;
+  const gtH = 18;
+  newPageIfNeeded(gtH + 2);
+  page.drawRectangle({
+    x: MARGIN,
+    y: y - gtH,
+    width: PAGE_W - MARGIN * 2,
+    height: gtH,
+    color: rgb(0.11, 0.098, 0.09),
+  });
+  textAt(t("common.grandTotal", lang), MARGIN + 6, y - 13, { size: 10, bold: true, color: WHITE });
+  textAt(
+    `(${t("common.media", lang)} ${fmtUsd(detail.totals.media)}  +  ${t("common.fees", lang)} ${fmtUsd(detail.totals.fees)})`,
+    MARGIN + 116,
+    y - 12,
+    { size: 8, color: [0.78, 0.78, 0.78] },
+  );
+  textRight(fmtUsd(detail.totals.grand), PAGE_W - MARGIN - 6, y - 13, { size: 11, bold: true, color: WHITE });
+  y -= gtH;
 
   // ─── Firma + disclaimer ──────────────────────────────────────────────────
   writeSeparator();
