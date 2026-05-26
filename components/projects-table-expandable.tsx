@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronRight, Search } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
 import type {
   DashboardPlanSummary,
@@ -30,6 +30,10 @@ type Props = {
   showClient?: boolean;
   dense?: boolean;
   lang?: Language;
+  // Cuando true, antepone un buscador en vivo (nombre/código) y ordena A-Z
+  // por nombre. Usado en la tab Proyectos; el dashboard lo deja en false para
+  // conservar el orden de la query y no mostrar el buscador.
+  searchable?: boolean;
 };
 
 export function ProjectsTableExpandable({
@@ -37,8 +41,10 @@ export function ProjectsTableExpandable({
   showClient = true,
   dense = false,
   lang = "en",
+  searchable = false,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [query, setQuery] = useState("");
 
   const toggle = (id: string) => {
     setExpanded((prev) => {
@@ -49,48 +55,105 @@ export function ProjectsTableExpandable({
     });
   };
 
+  // Orden A-Z por nombre del proyecto como default (locale-aware para acentos).
+  const sorted = useMemo(
+    () =>
+      [...rows].sort((a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      ),
+    [rows],
+  );
+
+  // Filtro en vivo por nombre del proyecto o código.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sorted;
+    return sorted.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q),
+    );
+  }, [sorted, query]);
+
   // Densidades unificadas. Antes había una mezcla de py-2 / py-2.5 / py-3
   // según componente; ahora los dos modos son consistentes y reusables.
   const cellPad = dense ? "px-5 py-2" : "px-5 py-3";
   const headerPad = dense ? "px-5 py-2" : "px-5 py-2.5";
 
-  return (
-    // overflow-x-auto + min-w-[820px] para que en pantallas chicas la tabla
-    // siga siendo legible (scroll horizontal) en vez de comprimirse.
+  const displayRows = searchable ? filtered : rows;
+
+  // overflow-x-auto + min-w-[820px] para que en pantallas chicas la tabla
+  // siga siendo legible (scroll horizontal) en vez de comprimirse.
+  const table = (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[820px] text-sm">
-      <thead className="bg-paper-2/60">
-        <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-          <th className="w-8"></th>
-          <th className={`text-left font-medium ${headerPad}`}>Proyecto</th>
-          {showClient && (
-            <th className={`text-left font-medium ${headerPad}`}>Cliente</th>
-          )}
-          <th className={`text-left font-medium ${headerPad}`}>Estado</th>
-          <th className={`text-right font-medium ${headerPad}`}>Budget</th>
-          <th className={`text-right font-medium ${headerPad}`}>Gastado</th>
-          <th className={`text-left font-medium ${headerPad} w-[180px]`}>
-            Avance
-          </th>
-          <th className={`text-right font-medium ${headerPad} w-[60px]`}>
-            Planes
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((p) => (
-          <ProjectRowExpandable
-            key={p.id}
-            project={p}
-            isOpen={expanded.has(p.id)}
-            onToggle={() => toggle(p.id)}
-            showClient={showClient}
-            cellPad={cellPad}
-            lang={lang}
-          />
-        ))}
-      </tbody>
+        <thead className="bg-paper-2/60">
+          <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+            <th className="w-8"></th>
+            <th className={`text-left font-medium ${headerPad}`}>Proyecto</th>
+            {showClient && (
+              <th className={`text-left font-medium ${headerPad}`}>Cliente</th>
+            )}
+            <th className={`text-left font-medium ${headerPad}`}>Estado</th>
+            <th className={`text-right font-medium ${headerPad}`}>Budget</th>
+            <th className={`text-right font-medium ${headerPad}`}>Gastado</th>
+            <th className={`text-left font-medium ${headerPad} w-[180px]`}>
+              Avance
+            </th>
+            <th className={`text-right font-medium ${headerPad} w-[60px]`}>
+              Planes
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {displayRows.map((p) => (
+            <ProjectRowExpandable
+              key={p.id}
+              project={p}
+              isOpen={expanded.has(p.id)}
+              onToggle={() => toggle(p.id)}
+              showClient={showClient}
+              cellPad={cellPad}
+              lang={lang}
+            />
+          ))}
+        </tbody>
       </table>
+    </div>
+  );
+
+  if (!searchable) return table;
+
+  return (
+    <div className="space-y-3">
+      <div className="relative max-w-sm">
+        <Search
+          size={14}
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+        />
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={
+            lang === "es"
+              ? "Buscar por nombre o código…"
+              : "Search by name or code…"
+          }
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+      </div>
+
+      {displayRows.length === 0 ? (
+        <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center text-sm text-muted">
+          {lang === "es"
+            ? "Ningún proyecto coincide con la búsqueda."
+            : "No projects match your search."}
+        </div>
+      ) : (
+        <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+          {table}
+        </section>
+      )}
     </div>
   );
 }

@@ -122,9 +122,7 @@ export default async function ProyectosPage({ searchParams }: Props) {
             : "No projects match this selection."}
         </div>
       ) : (
-        <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-          <ProjectsTableExpandable rows={data.rows} showClient lang={lang} />
-        </section>
+        <ProjectsTableExpandable rows={data.rows} showClient lang={lang} searchable />
       )}
 
       <BillingEstimateCard

@@ -115,6 +115,8 @@ app/
 components/                 # UI compartida
   theme-toggle.tsx          # toggle claro/oscuro (clase .dark en <html>)
   skeleton.tsx              # placeholders shimmer para loading states
+  plans-table-client.tsx    # /planes: buscador en vivo (nombre/código) + orden A-Z (client)
+  projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
 db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
@@ -176,6 +178,15 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - La unicidad de nombre por proyecto es un **partial unique index**
   `(project_id, name) WHERE deleted_at IS NULL`: se puede reusar el nombre de un
   plan borrado.
+
+### Listados de Planes y Proyectos: orden A-Z + buscador
+- Las tabs `/planes` y `/proyectos` ordenan **A-Z por nombre** por default y
+  anteponen un buscador en vivo que filtra por **nombre o código** (del plan o
+  proyecto). Orden y filtro se computan en cliente sobre las filas ya cargadas
+  (no recargan la página) y son case-insensitive + locale-aware.
+- Planes: la tabla vive en `components/plans-table-client.tsx`. Proyectos: la
+  tabla es `ProjectsTableExpandable` con el prop `searchable` (el dashboard la
+  usa con `searchable=false` → sin buscador y con el orden de la query).
 
 ### El plan vive dentro del proyecto, peer con otros planes
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).

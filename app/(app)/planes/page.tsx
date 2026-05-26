@@ -12,11 +12,12 @@ import {
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { BudgetOriginSelector } from "@/components/budget-origin-selector";
 import { PageShell } from "@/components/page-shell";
+import { PlansTableClient } from "@/components/plans-table-client";
 import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { getBillingEstimate } from "@/db/queries/dashboard";
-import { formatUsd, formatUsdCompact } from "@/lib/format";
+import { formatUsdCompact } from "@/lib/format";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
-import { DEFAULT_LANGUAGE, formatDate } from "@/lib/i18n";
+import { DEFAULT_LANGUAGE } from "@/lib/i18n";
 
 function nextMonths(count: number): string[] {
   const out: string[] = [];
@@ -44,13 +45,6 @@ function previousMonth(): string {
   }
   return `${y}-${String(m).padStart(2, "0")}`;
 }
-
-const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> = {
-  draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-  ready_to_send: { label: "ready", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-  approved: { label: "approved", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  archived: { label: "archived", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-};
 
 type Props = {
   searchParams: Promise<{ status?: string; origin?: string; client?: string }>;
@@ -103,7 +97,7 @@ export default async function PlanesPage({ searchParams }: Props) {
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
     .groupBy(mediaPlans.id, projects.id, clients.id, budgetOrigins.id)
-    .orderBy(asc(projects.code), asc(mediaPlans.createdAt));
+    .orderBy(asc(mediaPlans.name));
 
   const allPlans = where ? await baseQuery.where(where) : await baseQuery;
 
@@ -194,93 +188,7 @@ export default async function PlanesPage({ searchParams }: Props) {
             : "No plans match the filter."}
         </div>
       ) : (
-        <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-paper">
-              <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-                <th className="text-left font-medium px-5 py-2.5">Plan</th>
-                <th className="text-left font-medium px-5 py-2.5">
-                  {lang === "es" ? "Proyecto" : "Project"}
-                </th>
-                <th className="text-left font-medium px-5 py-2.5">
-                  {lang === "es" ? "Cliente" : "Client"}
-                </th>
-                <th className="text-left font-medium px-5 py-2.5">
-                  {lang === "es" ? "Origen" : "Origin"}
-                </th>
-                <th className="text-left font-medium px-5 py-2.5">
-                  {lang === "es" ? "Estado" : "Status"}
-                </th>
-                <th className="text-left font-medium px-5 py-2.5">
-                  {lang === "es" ? "Período" : "Period"}
-                </th>
-                <th className="text-right font-medium px-5 py-2.5">
-                  {lang === "es" ? "Total media" : "Media total"}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {allPlans.map((p) => {
-                const style = STATUS_STYLE[p.status] ?? STATUS_STYLE.draft;
-                const totalMedia = Number.parseFloat(p.totalMediaUsd);
-                return (
-                  <tr
-                    key={p.id}
-                    className="border-t border-line-soft hover:bg-paper-2 transition-colors"
-                  >
-                    <td className="px-5 py-2.5">
-                      <Link
-                        href={`/proyectos/${p.projectCode}/planes/${p.id}`}
-                        className="font-medium text-ink hover:underline"
-                      >
-                        {p.name}
-                      </Link>
-                      {p.currentVersion > 0 && (
-                        <span className="ml-2 font-mono text-[10px] text-muted">
-                          v{p.currentVersion}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-2.5">
-                      <Link
-                        href={`/proyectos/${p.projectCode}`}
-                        className="text-ink-2 hover:underline"
-                      >
-                        {p.projectName}
-                      </Link>
-                      <div className="font-mono text-[11px] text-muted">{p.projectCode}</div>
-                    </td>
-                    <td className="px-5 py-2.5">
-                      <Link
-                        href={`/clientes/${p.clientSlug}`}
-                        className="text-ink-2 hover:underline"
-                      >
-                        {p.clientName}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-2.5 text-ink-2">{p.budgetOriginName}</td>
-                    <td className="px-5 py-2.5">
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${style.cls}`}
-                      >
-                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                        {style.label}
-                      </span>
-                    </td>
-                    <td className="px-5 py-2.5 font-mono text-[11px] text-ink-2">
-                      {formatDate(p.periodStart, lang)}
-                      <span className="text-line"> → </span>
-                      {formatDate(p.periodEnd, lang)}
-                    </td>
-                    <td className="px-5 py-2.5 text-right font-mono text-ink">
-                      {totalMedia > 0 ? formatUsd(totalMedia) : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </section>
+        <PlansTableClient plans={allPlans} lang={lang} />
       )}
 
       <BillingEstimateCard

@@ -2,6 +2,28 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Buscador + orden A-Z en Planes y Proyectos
+
+- **Tabs Planes (`/planes`) y Proyectos (`/proyectos`)**: ahora abren ordenadas
+  **A-Z por nombre** (antes Planes ordenaba por `project.code` + fecha de alta y
+  Proyectos por `project.code`). El orden se hace en cliente y es locale-aware
+  (respeta acentos), estable sin importar el orden de la query.
+- **Buscador en vivo (nombre o código)**: ambas tabs anteponen un input que
+  filtra las filas en tiempo real. En Planes matchea por nombre del plan o
+  código del proyecto; en Proyectos por nombre o `code` del proyecto.
+  Case-insensitive y sin pegarle a la DB (filtra el array ya cargado).
+- **Componentes**:
+  - `components/plans-table-client.tsx` (nuevo): client component que recibe las
+    filas de `/planes` (server) y rinde buscador + tabla. La tabla salió del
+    server component a este client para poder ordenar/filtrar sin recargar.
+  - `components/projects-table-expandable.tsx`: nuevo prop `searchable` (default
+    `false`). En `true` (tab Proyectos) muestra buscador + orden A-Z y envuelve
+    la tabla en su card. El dashboard lo deja en `false`, así que queda igual
+    que antes (sin buscador, con el orden de la query).
+- El filtro de **status** y el selector de **budget origin** de `/planes` siguen
+  resolviéndose server-side por querystring; el buscador opera sobre ese
+  subconjunto ya filtrado.
+
 ### Cambios de la sesión 26/may/2026 — Métricas completas en exports + PDF apaisado
 
 - **Todas las métricas por placement (Excel y PDF)**: las calculated (CTR, VTR,
