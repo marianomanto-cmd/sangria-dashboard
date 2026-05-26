@@ -20,6 +20,11 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   para poder testearlo sin DB; `export.pdf/route.ts` quedó como thin handler.
 - **Excel**: las columnas de métricas ahora incluyen las calculated; cada
   placement, subtotal y TOTAL MEDIA las computan con la fórmula del catálogo.
+- **Fix de interlineado del PDF**: el nombre del placement y su sub-línea
+  (mercado · audiencia · cost method · fechas) se pisaban (gap 8pt < alto de la
+  fuente). Se separó a 10pt + filas más altas; el título se trunca al ancho
+  libre a la izquierda del logo. Verificado rasterizando el PDF (incluido el
+  salto de página: el header de la tabla se repite).
 
 ### Cambios de la sesión 26/may/2026 — Logo + disclaimer legal en los exports del plan
 

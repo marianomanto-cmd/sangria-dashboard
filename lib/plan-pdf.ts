@@ -244,6 +244,7 @@ export async function renderPlanPdf(
   }
 
   // ─── Logo de marca (esquina superior derecha) ────────────────────────────
+  let logoW = 0;
   const logo = getBrandLogo();
   if (logo) {
     try {
@@ -252,10 +253,11 @@ export async function renderPlanPdf(
           ? await pdf.embedPng(logo.bytes)
           : await pdf.embedJpg(logo.bytes);
       const boxW = 150;
-      const boxH = 60;
+      const boxH = 58;
       const scale = Math.min(boxW / img.width, boxH / img.height);
       const w = img.width * scale;
       const h = img.height * scale;
+      logoW = w;
       page.drawImage(img, {
         x: PAGE_W - MARGIN - w,
         y: PAGE_H - MARGIN - h,
@@ -268,9 +270,16 @@ export async function renderPlanPdf(
   }
 
   // ─── Header ──────────────────────────────────────────────────────────────
+  // El título se trunca al ancho disponible a la izquierda del logo para no
+  // pisarlo (ambos viven en la misma banda superior).
+  const headerMaxW = PAGE_W - MARGIN * 2 - (logoW > 0 ? logoW + 18 : 0);
   writeLine(t("export.mediaPlan", lang), { size: 8, bold: true, color: ACCENT });
-  writeLine(detail.plan.name, { size: 20, bold: true });
-  writeLine(detail.project.code, { size: 10, mono: true, color: [0.45, 0.45, 0.45] });
+  writeLine(truncate(detail.plan.name, fontBold, 17, headerMaxW), { size: 17, bold: true });
+  writeLine(truncate(detail.project.code, fontMono, 10, headerMaxW), {
+    size: 10,
+    mono: true,
+    color: [0.45, 0.45, 0.45],
+  });
   y -= 4;
 
   // ─── Metadata ──────────────────────────────────────────────────────────
@@ -318,7 +327,7 @@ export async function renderPlanPdf(
 
   // Header de la tabla (texto wrap a 1-3 líneas según ancho de columna).
   const headerSize = 7;
-  const headerLineH = 8;
+  const headerLineH = 9;
   const investHdr = lang === "es" ? "Inv. (USD)" : "Invest. (USD)";
   type Hdr = { lines: string[]; right: boolean; x: number };
   const headerCols: Hdr[] = [
@@ -335,7 +344,7 @@ export async function renderPlanPdf(
     })),
   ];
   const maxLines = Math.max(1, ...headerCols.map((c) => c.lines.length));
-  const headerH = maxLines * headerLineH + 6;
+  const headerH = maxLines * headerLineH + 8;
 
   function drawTableHeader() {
     page.drawRectangle({
@@ -347,7 +356,7 @@ export async function renderPlanPdf(
     });
     for (const c of headerCols) {
       c.lines.forEach((ln, li) => {
-        const ty = y - 8 - li * headerLineH;
+        const ty = y - 9 - li * headerLineH;
         if (c.right) {
           const w = fontBold.widthOfTextAtSize(ln, headerSize);
           page.drawText(ln, { x: c.x - w, y: ty, size: headerSize, font: fontBold, color: rgb(...WHITE) });
@@ -368,7 +377,7 @@ export async function renderPlanPdf(
   }
 
   function drawGroupRow(grp: PlanPublisherGroup) {
-    const rowH = 15;
+    const rowH = 16;
     ensureRoom(rowH);
     page.drawRectangle({ x: MARGIN, y: y - rowH, width: tableW, height: rowH, color: rgb(...ACCENT_SOFT) });
     const paysTag = grp.agencyPays
@@ -407,20 +416,21 @@ export async function renderPlanPdf(
     const subLine = [pl.marketName, pl.audience, pl.costMethod, dates]
       .filter(Boolean)
       .join("  ·  ");
-    const rowH = subLine ? 20 : 13;
+    const rowH = subLine ? 25 : 15;
     ensureRoom(rowH);
-    textAt(truncate(pl.placementName, font, 8.5, nameW - 10), xName + 6, y - 10, { size: 8.5 });
+    const lineY = y - 11;
+    textAt(truncate(pl.placementName, font, 8.5, nameW - 10), xName + 6, lineY, { size: 8.5 });
     if (subLine) {
-      textAt(truncate(subLine, font, 6.5, nameW - 12), xName + 8, y - 18, {
+      textAt(truncate(subLine, font, 6.5, nameW - 12), xName + 8, y - 21, {
         size: 6.5,
         color: [0.45, 0.45, 0.45],
       });
     }
-    textRight(fmtUsd(pl.amountUsd), investRight, y - 10, { size: 8.5 });
+    textRight(fmtUsd(pl.amountUsd), investRight, lineY, { size: 8.5 });
     metricCols.forEach((m, i) => {
       const v = placementMetricValue(m, pl);
       if (v != null && Number.isFinite(v)) {
-        textRight(fmtMetric(v, m.unit), metricRight(i), y - 10, { size: bodyFont });
+        textRight(fmtMetric(v, m.unit), metricRight(i), lineY, { size: bodyFont });
       }
     });
     page.drawLine({
@@ -433,15 +443,15 @@ export async function renderPlanPdf(
   }
 
   function drawTotalRow() {
-    const rowH = 16;
+    const rowH = 17;
     ensureRoom(rowH);
     page.drawRectangle({ x: MARGIN, y: y - rowH, width: tableW, height: rowH, color: rgb(...ACCENT) });
-    textAt(lang === "es" ? "TOTAL MEDIA" : "MEDIA TOTAL", xName + 4, y - 11, {
+    textAt(lang === "es" ? "TOTAL MEDIA" : "MEDIA TOTAL", xName + 4, y - 12, {
       size: 9,
       bold: true,
       color: WHITE,
     });
-    textRight(fmtUsd(totalMediaUsd), investRight, y - 11, { size: 9, bold: true, color: WHITE });
+    textRight(fmtUsd(totalMediaUsd), investRight, y - 12, { size: 9, bold: true, color: WHITE });
     const planDirects = sumDirects(allPlacements, directSlugs);
     metricCols.forEach((m, i) => {
       const v =
@@ -449,7 +459,7 @@ export async function renderPlanPdf(
           ? (planDirects[m.slug] ?? null)
           : evalFormula(m.formula, totalMediaUsd, planDirects);
       if (v != null && Number.isFinite(v)) {
-        textRight(fmtMetric(v, m.unit), metricRight(i), y - 11, {
+        textRight(fmtMetric(v, m.unit), metricRight(i), y - 12, {
           size: bodyFont,
           bold: true,
           color: WHITE,
