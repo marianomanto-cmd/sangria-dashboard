@@ -25,6 +25,10 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   fuente). Se separó a 10pt + filas más altas; el título se trunca al ancho
   libre a la izquierda del logo. Verificado rasterizando el PDF (incluido el
   salto de página: el header de la tabla se repite).
+- **Fix HTTP 500 del PDF en prod**: una `audience`/`placementName` con salto de
+  línea o tab hacía explotar el encoder WinAnsi de pdf-lib (`WinAnsi cannot
+  encode 0x000a`) → 500. `sanitize()` ahora también mapea los caracteres de control y C1 (newline, tab, etc.) a espacio. (El Excel no se veía afectado;
+  por eso uno andaba y el otro no.)
 
 ### Cambios de la sesión 26/may/2026 — Logo + disclaimer legal en los exports del plan
 

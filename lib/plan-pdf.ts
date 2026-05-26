@@ -63,6 +63,9 @@ export async function renderPlanPdf(
   // Helvetica/Courier de pdf-lib usan WinAnsi: caracteres fuera de ese set
   // (arrows, em-dash, smart quotes, etc.) explotan al renderizar. Sanitizamos
   // a equivalentes ASCII antes de dibujar. Acentos latinos sí están en WinAnsi.
+  // Los caracteres de control (newline, tab, C1) también explotan el encoder
+  // (p.ej. una audience multilínea) → los pasamos a espacio. Acentos latinos
+  // (0xA0-0xFF) sí están en WinAnsi.
   function sanitize(text: string): string {
     return text
       .replace(/→/g, "->")
@@ -74,7 +77,8 @@ export async function renderPlanPdf(
       .replace(/‘|’/g, "'")
       .replace(/×/g, "x")
       .replace(/…/g, "...")
-      .replace(/[^\x00-\xFF]/g, "?");
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+      .replace(/[^\x20-\xFF]/g, "?");
   }
 
   function writeLine(
