@@ -221,6 +221,10 @@ const DICT: Record<string, Record<Language, string>> = {
     en: "Date: ____________________",
     es: "Fecha: ____________________",
   },
+  "export.initials": {
+    en: "Client initials: ______________",
+    es: "Iniciales del cliente: ______________",
+  },
   // Texto legal exacto provisto por el cliente; se mantiene en inglés en ambos
   // idiomas (nombra a "Sangria, LLC" e "Insertion Order"). No traducir sin
   // aprobación legal.

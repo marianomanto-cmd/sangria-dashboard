@@ -548,5 +548,24 @@ export async function renderPlanPdf(
     { size: 8, color: [0.55, 0.55, 0.55], mono: true },
   );
 
+  // ─── Iniciales por página (solo multipágina) ─────────────────────────────
+  // En planes largos el cliente inicializa cada página; la última lleva la
+  // firma completa, así que la línea de iniciales va en todas menos la última.
+  const pages = pdf.getPages();
+  if (pages.length > 1) {
+    const initials = sanitize(t("export.initials", lang));
+    const size = 8;
+    const w = font.widthOfTextAtSize(initials, size);
+    for (let i = 0; i < pages.length - 1; i++) {
+      pages[i].drawText(initials, {
+        x: PAGE_W - MARGIN - w,
+        y: 20,
+        size,
+        font,
+        color: rgb(0.45, 0.45, 0.45),
+      });
+    }
+  }
+
   return await pdf.save();
 }

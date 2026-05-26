@@ -34,6 +34,11 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   con el nombre del plan (interlínea < alto de fuente). Más aire en ambos.
   Además se agregó una barra GRAND TOTAL (media + fees) debajo de la sección
   Fees. Verificado rasterizando (es/en).
+- **Iniciales por página (multipágina)**: en planes que ocupan más de una
+  página, cada página menos la última lleva una línea "Client initials: ___"
+  abajo a la derecha (la última conserva la firma completa). Key i18n
+  `export.initials`. Se dibuja al final iterando `pdf.getPages()` (recién ahí
+  se sabe el total de páginas).
 
 ### Cambios de la sesión 26/may/2026 — Logo + disclaimer legal en los exports del plan
 
