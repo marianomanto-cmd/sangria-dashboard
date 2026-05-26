@@ -834,6 +834,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+de347e9  Planes y Proyectos: orden A-Z por default + buscador en vivo (nombre/código)
 ed940fa  Exports: filename `{plan}-V{versión}` + sacar tag de pago del publisher
 ac9e440  PDF: línea de iniciales por página en planes multipágina
 7967e30  PDF: fix overlaps de título/separadores + GRAND TOTAL bajo fees
