@@ -848,6 +848,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+46aedbe  docs: referencia rápida de buscador/orden + tablero colapsable
 bb755a4  Tablero de pendientes: layout compacto + colapsable desde el encabezado
 de347e9  Planes y Proyectos: orden A-Z por default + buscador en vivo (nombre/código)
 ed940fa  Exports: filename `{plan}-V{versión}` + sacar tag de pago del publisher
