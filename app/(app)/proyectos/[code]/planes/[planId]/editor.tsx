@@ -39,12 +39,12 @@ import type {
   metricsCatalog as metricsTable,
 } from "@/db/schema";
 import {
+  evalNumberInput,
   formatAmountInput,
   formatIntInput,
   formatPct,
   formatUsd,
   formatUsdCompact,
-  parseNumberInput,
 } from "@/lib/format";
 import {
   COST_METHOD_PRIMARY_METRIC,
@@ -736,7 +736,7 @@ function PublisherGroup({
             value={pub.totalPlannedUsd}
             onCommit={onUpdateTotal}
             disabled={!editable}
-            className="w-24 text-right font-mono font-semibold"
+            className="w-32 text-right font-mono font-semibold"
           />
         </span>
         {editable && (
@@ -936,7 +936,7 @@ function PlacementGridRow({
           value={placement.amountUsd}
           onCommit={(v) => update({ amountUsd: v })}
           disabled={!editable}
-          className="w-24 text-right font-mono"
+          className="w-32 text-right font-mono"
         />
       </td>
       <td className="px-2 py-1 text-right">
@@ -1293,6 +1293,22 @@ function RateInput({
   onCommit: (v: number) => void;
 }) {
   const display = value != null ? formatRateDisplay(value) : "";
+  const commit = (el: HTMLInputElement) => {
+    const raw = el.value.trim();
+    let v: number;
+    if (raw === "") {
+      v = 0;
+    } else {
+      const parsed = evalNumberInput(raw);
+      if (!Number.isFinite(parsed)) {
+        el.value = display;
+        return;
+      }
+      v = parsed;
+    }
+    el.value = formatRateDisplay(v);
+    if (value == null || Math.abs(v - value) >= 0.000001) onCommit(v);
+  };
   return (
     <input
       key={display}
@@ -1302,11 +1318,13 @@ function RateInput({
       disabled={disabled}
       placeholder="0.0000"
       onClick={(e) => e.stopPropagation()}
-      onBlur={(e) => {
-        const parsed = parseNumberInput(e.target.value);
-        const v = Number.isFinite(parsed) ? parsed : 0;
-        if (value == null || Math.abs(v - value) >= 0.000001) onCommit(v);
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
       }}
+      onBlur={(e) => commit(e.currentTarget)}
       className="w-full font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
     />
   );
@@ -1322,6 +1340,22 @@ function DeliveryInput({
   onCommit: (v: number) => void;
 }) {
   const display = value != null ? formatIntInput(value) : "";
+  const commit = (el: HTMLInputElement) => {
+    const raw = el.value.trim();
+    let v: number;
+    if (raw === "") {
+      v = 0;
+    } else {
+      const parsed = evalNumberInput(raw);
+      if (!Number.isFinite(parsed)) {
+        el.value = display;
+        return;
+      }
+      v = parsed;
+    }
+    el.value = v !== 0 ? formatIntInput(v) : "";
+    if (value == null || Math.abs(v - value) >= 1) onCommit(v);
+  };
   return (
     <input
       key={display}
@@ -1331,11 +1365,13 @@ function DeliveryInput({
       disabled={disabled}
       placeholder="0"
       onClick={(e) => e.stopPropagation()}
-      onBlur={(e) => {
-        const parsed = parseNumberInput(e.target.value);
-        const v = Number.isFinite(parsed) ? parsed : 0;
-        if (value == null || Math.abs(v - value) >= 1) onCommit(v);
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
       }}
+      onBlur={(e) => commit(e.currentTarget)}
       className="w-full font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
     />
   );
@@ -1748,7 +1784,7 @@ function FeeRow({
             value={fee.amountUsd}
             onCommit={(v) => update({ amountUsd: v })}
             disabled={!editable}
-            className="w-28 text-right font-mono"
+            className="w-36 text-right font-mono"
           />
         )}
       </td>
@@ -1818,6 +1854,22 @@ function NumberInput({
   className?: string;
 }) {
   const display = value > 0 ? formatAmountInput(value) : "";
+  const commit = (el: HTMLInputElement) => {
+    const raw = el.value.trim();
+    let v: number;
+    if (raw === "") {
+      v = 0;
+    } else {
+      const parsed = evalNumberInput(raw);
+      if (!Number.isFinite(parsed)) {
+        el.value = display; // fórmula inválida → restaura el valor previo
+        return;
+      }
+      v = parsed;
+    }
+    el.value = v > 0 ? formatAmountInput(v) : "";
+    if (Math.abs(v - value) >= 0.01) onCommit(v);
+  };
   return (
     <input
       key={display}
@@ -1827,12 +1879,14 @@ function NumberInput({
       disabled={disabled}
       placeholder="0"
       onClick={(e) => e.stopPropagation()}
-      onBlur={(e) => {
-        const parsed = parseNumberInput(e.target.value);
-        const v = Number.isFinite(parsed) ? parsed : 0;
-        if (Math.abs(v - value) >= 0.01) onCommit(v);
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          e.currentTarget.blur();
+        }
       }}
-      className={`tabular-nums bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 disabled:opacity-50 ${className}`}
+      onBlur={(e) => commit(e.currentTarget)}
+      className={`tabular-nums font-mono text-sm bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50 ${className}`}
     />
   );
 }
@@ -1847,6 +1901,20 @@ function RatePctInput({
   disabled?: boolean;
 }) {
   const display = value != null && value > 0 ? value.toFixed(2) : "";
+  const commit = (el: HTMLInputElement) => {
+    if (el.value.trim() === "") {
+      el.value = "";
+      if (value != null) onCommit(null);
+      return;
+    }
+    const v = evalNumberInput(el.value);
+    if (!Number.isFinite(v)) {
+      el.value = display; // fórmula inválida → restaura el valor previo
+      return;
+    }
+    el.value = v > 0 ? v.toFixed(2) : "";
+    if (value == null || Math.abs(v - value) >= 0.01) onCommit(v);
+  };
   return (
     <span className="inline-flex items-center gap-0.5 justify-end">
       <input
@@ -1856,15 +1924,13 @@ function RatePctInput({
         defaultValue={display}
         disabled={disabled}
         placeholder="—"
-        onBlur={(e) => {
-          const v = parseNumberInput(e.target.value);
-          if (Number.isNaN(v)) {
-            if (value != null) onCommit(null);
-            return;
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
           }
-          if (!Number.isFinite(v)) return;
-          if (value == null || Math.abs(v - value) >= 0.01) onCommit(v);
         }}
+        onBlur={(e) => commit(e.currentTarget)}
         className="w-16 text-right tabular-nums font-mono bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 disabled:opacity-50"
       />
       <span className="text-muted text-xs">%</span>

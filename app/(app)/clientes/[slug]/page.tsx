@@ -28,7 +28,7 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
   const lang: Language = detail.client.language ?? DEFAULT_LANGUAGE;
 
   return (
-    <main className="px-8 py-10 max-w-[1380px] mx-auto w-full">
+    <main className="px-8 py-10 max-w-[1800px] mx-auto w-full">
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="text-xs text-muted flex items-center gap-1.5 mb-3">
         <Link href="/clientes" className="hover:text-ink">

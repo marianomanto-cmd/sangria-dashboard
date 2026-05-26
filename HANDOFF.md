@@ -2,6 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Inputs del plan: legibilidad + fórmulas tipo Excel + más ancho de página
+
+- **Campos numéricos más legibles**: en el editor del plan los inputs `RateInput`
+  y `DeliveryInput` ya eran caja blanca con borde; el `NumberInput` (monto del
+  placement, total del publisher, monto de fee) era un underline transparente a
+  `text-xs` que recortaba las cifras grandes. Ahora `NumberInput` usa la misma
+  caja blanca (`text-sm`, borde, `rounded`) y se le ensancharon los anchos
+  (monto/total `w-32`, fee `w-36`) para que entren miles/millones sin cortarse.
+  Quedó consistente con las columnas de tarifa/delivery.
+- **Fórmulas estilo Excel en cualquier campo numérico**: nuevo helper
+  `evalNumberInput` en `lib/format.ts`. Si tipeás una expresión aritmética
+  (`+2*2`, `=1000*12`, `(1500+500)*3`) y salís del campo o apretás **Enter**, se
+  evalúa y queda el resultado formateado. Soporta `+ - * /`, paréntesis y signos
+  unarios; coma de miles y símbolo de moneda se descartan. Es un parser propio de
+  descenso recursivo (**no usa `eval()`**). Fórmula inválida (incl. división por
+  cero) → `NaN` y el input **restaura el valor previo** sin commitear. Cableado en
+  `editor.tsx` (`NumberInput`, `RateInput`, `DeliveryInput`, `RatePctInput`) y en
+  `billing/editor.tsx` (`NumInput`, respetando el cap de gasto). `parseNumberInput`
+  queda como fallback interno de `evalNumberInput`.
+- **Enter en la grilla de placements**: el handler de teclado de la tabla
+  (`moveGridFocus`) ya hacía blur+commit y bajaba a la fila siguiente; el nuevo
+  `onKeyDown` de los inputs es compatible (evalúa la fórmula en el commit y la
+  navegación tipo planilla se mantiene).
+- **Aprovechar el ancho horizontal**: las páginas data-densas estaban
+  encolumnadas a `max-w-[1380px]` centradas, dejando mucho aire a los costados
+  (peor con la sidebar colapsada). Se subió el tope a `max-w-[1800px]` en las 5
+  páginas que lo usaban: detalle de plan, billing del plan, campaign-tracker,
+  detalle de proyecto y detalle de cliente. (Ajustable; se puede ir a fluido si
+  se prefiere.)
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 26/may/2026 — Tablero de pendientes: compacto + colapsable
 
 - **Colapsar todo el board**: el "Pendientes" del dashboard ahora se colapsa/
@@ -848,6 +879,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+(branch claude/sweet-pascal-Vy8cG)  Inputs del plan: legibilidad + fórmulas tipo Excel (evalNumberInput) + ancho de página a 1800px
 46aedbe  docs: referencia rápida de buscador/orden + tablero colapsable
 bb755a4  Tablero de pendientes: layout compacto + colapsable desde el encabezado
 de347e9  Planes y Proyectos: orden A-Z por default + buscador en vivo (nombre/código)
