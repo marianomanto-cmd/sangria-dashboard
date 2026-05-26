@@ -739,6 +739,61 @@ function MarketsSection({
 // que tenga proyectos asociados (FK restrict; el action lo chequea).
 // ────────────────────────────────────────────────────────────────────────────
 
+// Paleta fija para budget origins: 10 colores distinguibles (shades ~700) que
+// andan bien en claro/oscuro. El planner elige de acá en vez de tipear un hex.
+const BUDGET_ORIGIN_COLORS: { name: string; hex: string }[] = [
+  { name: "Rojo", hex: "#b91c1c" },
+  { name: "Naranja", hex: "#c2410c" },
+  { name: "Ámbar", hex: "#b45309" },
+  { name: "Verde", hex: "#15803d" },
+  { name: "Teal", hex: "#0f766e" },
+  { name: "Azul", hex: "#0369a1" },
+  { name: "Índigo", hex: "#4338ca" },
+  { name: "Violeta", hex: "#7e22ce" },
+  { name: "Rosa", hex: "#be185d" },
+  { name: "Piedra", hex: "#57534e" },
+];
+
+function ColorSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string | null;
+  onChange: (hex: string | null) => void;
+  disabled?: boolean;
+}) {
+  const inPalette = value
+    ? BUDGET_ORIGIN_COLORS.some(
+        (c) => c.hex.toLowerCase() === value.toLowerCase(),
+      )
+    : true;
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span
+        className="inline-block h-4 w-4 rounded-sm border border-line shrink-0"
+        style={{ background: value ?? "transparent" }}
+      />
+      <select
+        value={value ?? ""}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs disabled:opacity-50 focus:outline-none focus:ring-1 focus:ring-accent"
+      >
+        <option value="">Sin color</option>
+        {!inPalette && value && (
+          <option value={value}>Personalizado ({value})</option>
+        )}
+        {BUDGET_ORIGIN_COLORS.map((c) => (
+          <option key={c.hex} value={c.hex}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
 function BudgetOriginsSection({
   clientId,
   clientSlug,
@@ -816,22 +871,18 @@ function BudgetOriginsSection({
       </p>
       {showAdd && (
         <div className="rounded-lg border border-line bg-paper-2 p-4 mb-3 space-y-2">
-          <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
             <input
               type="text"
               placeholder="Nombre (ej. Online)"
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
+              className="flex-1 min-w-[180px] rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
             />
-            <input
-              type="text"
-              placeholder="Color hex (opcional, #7a1f3d)"
-              value={draft.colorHex}
-              onChange={(e) =>
-                setDraft({ ...draft, colorHex: e.target.value })
-              }
-              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
+            <ColorSelect
+              value={draft.colorHex || null}
+              onChange={(hex) => setDraft({ ...draft, colorHex: hex ?? "" })}
+              disabled={pending}
             />
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
@@ -895,23 +946,11 @@ function BudgetOriginsSection({
                     />
                   </td>
                   <td className="px-5 py-2">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="inline-block h-4 w-4 rounded-sm border border-line shrink-0"
-                        style={{ background: b.colorHex ?? "transparent" }}
-                      />
-                      <input
-                        type="text"
-                        defaultValue={b.colorHex ?? ""}
-                        disabled={pending}
-                        placeholder="—"
-                        onBlur={(e) =>
-                          e.target.value !== (b.colorHex ?? "") &&
-                          onUpdate(b.id, { colorHex: e.target.value || null })
-                        }
-                        className="w-24 bg-transparent text-xs font-mono text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
-                      />
-                    </div>
+                    <ColorSelect
+                      value={b.colorHex}
+                      onChange={(hex) => onUpdate(b.id, { colorHex: hex })}
+                      disabled={pending}
+                    />
                   </td>
                   <td className="px-2 py-2">
                     <button
