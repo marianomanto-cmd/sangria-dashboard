@@ -117,6 +117,7 @@ components/                 # UI compartida
   skeleton.tsx              # placeholders shimmer para loading states
   plans-table-client.tsx    # /planes: buscador en vivo (nombre/código) + orden A-Z (client)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
+  pending-board.tsx         # dashboard: tablero de pendientes compacto + colapsable (persiste en localStorage)
 db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
