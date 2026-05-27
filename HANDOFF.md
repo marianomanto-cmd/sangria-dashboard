@@ -962,6 +962,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+06a217d  Reportes enviados: link opcional al PPT final (#69) — REQUIERE npm run db:push
+2664254  docs: hashes reales en Commits recientes (#63–#67) (#68)
 fd31de1  Editor: preview tipo Excel read-only (#67)
 6f313cb  Exports Excel+PDF: fechas de plan/publisher/placement (#66)
 04a0b93  Planilla: achicar tarifa/delivery de la métrica principal (#65)
