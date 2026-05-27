@@ -938,11 +938,11 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/sweet-pascal-Vy8cG)  Editor: preview tipo Excel read-only (ExcelPreview) + dedup sumDirectMetrics
-(PR #66)  Exports Excel+PDF: fechas de plan/publisher/placement (helper placementsPeriod)
-(PR #65)  Planilla: tarifa/delivery de la métrica principal angostadas (w-24/w-28)
-(PR #64)  Inspector del placement: ancho 440px + textareas de audiencia/notas más altas
-(PR #63)  Inputs del plan: legibilidad + fórmulas tipo Excel (evalNumberInput) + ancho de página a 1800px
+fd31de1  Editor: preview tipo Excel read-only (#67)
+6f313cb  Exports Excel+PDF: fechas de plan/publisher/placement (#66)
+04a0b93  Planilla: achicar tarifa/delivery de la métrica principal (#65)
+af6207c  Inspector del placement: más ancho + textareas de audiencia/notas más altas (#64)
+8852ed3  Editor de planes: inputs legibles + fórmulas tipo Excel + más ancho (#63)
 46aedbe  docs: referencia rápida de buscador/orden + tablero colapsable
 bb755a4  Tablero de pendientes: layout compacto + colapsable desde el encabezado
 de347e9  Planes y Proyectos: orden A-Z por default + buscador en vivo (nombre/código)
