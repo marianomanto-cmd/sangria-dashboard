@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Inspector del placement: más ancho + textareas más altas
+
+- **Continuación del cambio de inputs**: faltaba el panel inspector. Las métricas
+  secundarias ya usaban `RateInput`/`DeliveryInput` (caja + fórmulas), pero el
+  inspector medía `380px` y los apretaba; audiencia y notas eran textareas de 2
+  filas.
+- **Inspector más ancho**: `lg:grid-cols-[1fr_380px]` → `lg:grid-cols-[1fr_440px]`
+  en el workspace del editor, para que las métricas secundarias y las textareas
+  respiren. Se subieron las columnas Tarifa/Delivery de la tabla de indicadores a
+  `26%` y el `<select>` de métrica pasó a `text-sm`.
+- **Audiencia y notas**: `rows={2}` → `rows={3}`, `resize-y`, `min-h-[4.5rem]` y
+  un poco más de padding/interlínea para ver bien lo que se escribe.
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 26/may/2026 — Inputs del plan: legibilidad + fórmulas tipo Excel + más ancho de página
 
 - **Campos numéricos más legibles**: en el editor del plan los inputs `RateInput`
@@ -879,7 +893,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/sweet-pascal-Vy8cG)  Inputs del plan: legibilidad + fórmulas tipo Excel (evalNumberInput) + ancho de página a 1800px
+(branch claude/sweet-pascal-Vy8cG)  Inspector del placement: ancho 440px + textareas de audiencia/notas más altas
+(PR #63)  Inputs del plan: legibilidad + fórmulas tipo Excel (evalNumberInput) + ancho de página a 1800px
 46aedbe  docs: referencia rápida de buscador/orden + tablero colapsable
 bb755a4  Tablero de pendientes: layout compacto + colapsable desde el encabezado
 de347e9  Planes y Proyectos: orden A-Z por default + buscador en vivo (nombre/código)
