@@ -5,6 +5,7 @@ import { listMetricsForClient } from "@/app/actions/plans";
 import {
   evalFormula,
   placementMetricValue,
+  placementsPeriod,
   resolveMetricColumns,
 } from "@/lib/plan-metrics";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
@@ -166,22 +167,10 @@ export async function GET(
   ];
 
   // ─── Encabezado del documento ───────────────────────────────────────────
-  const periodStart =
-    detail.publishers
-      .flatMap((g) => g.placements)
-      .map((p) => p.startDate)
-      .filter((d): d is string => !!d)
-      .sort()[0] ?? "";
-  const periodEnd =
-    detail.publishers
-      .flatMap((g) => g.placements)
-      .map((p) => p.endDate)
-      .filter((d): d is string => !!d)
-      .sort()
-      .pop() ?? "";
+  const planPeriod = placementsPeriod(allPlacements);
   const periodFormatted =
-    periodStart && periodEnd
-      ? `${formatDate(periodStart, lang)} → ${formatDate(periodEnd, lang)}`
+    planPeriod.start && planPeriod.end
+      ? `${formatDate(planPeriod.start, lang)} → ${formatDate(planPeriod.end, lang)}`
       : "—";
 
   const statusLabel = t(`status.${detail.plan.status}`, lang);
@@ -320,6 +309,10 @@ export async function GET(
 
     const subRow = ws.getRow(currentRow);
     subRow.getCell(1).value = grp.publisherName;
+    // Fechas del publisher = más temprana / más tardía de sus placements.
+    const pubPeriod = placementsPeriod(grp.placements);
+    subRow.getCell(2).value = formatDate(pubPeriod.start, lang);
+    subRow.getCell(3).value = formatDate(pubPeriod.end, lang);
     subRow.getCell(7).value = grp.totalPlannedUsd;
     subRow.getCell(7).numFmt = '"$"#,##0.00';
     directSlugs.forEach((slug, i) => {

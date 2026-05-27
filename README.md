@@ -559,11 +559,13 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
 - **Landscape** letter (792×612pt, margin 40) para que entren las columnas de
   métricas.
 - Estructura: header (label `MEDIA PLAN` + nombre del plan, truncado al ancho
-  libre a la izquierda del logo + project code + metadata) → Totales → **tabla**
-  → Fees → **GRAND TOTAL** → firma + disclaimer → footer.
+  libre a la izquierda del logo + project code + metadata, **incluye `Período`
+  general del plan**) → Totales → **tabla** → Fees → **GRAND TOTAL** → firma +
+  disclaimer → footer.
 - Tabla: columnas = Publisher/Placement (flexible) + Invest (USD) + una por
   métrica (ancho y fuente 7–8pt según cantidad). Filas: subtotal por publisher
-  (fondo accent-soft, **sin** tag de quién paga), placements (nombre + sub-línea
+  (fondo accent-soft, **sin** tag de quién paga, con **sub-línea gris de fechas**
+  = más temprana/más tardía de sus placements), placements (nombre + sub-línea
   gris `mercado · audiencia · cost method · fechas`), fila `MEDIA TOTAL`
   (accent). El **header de la tabla se redibuja en cada salto de página**.
 - **Sanitización WinAnsi**: la fuente Helvetica de pdf-lib no codifica fuera de
@@ -581,12 +583,17 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
 
 ### Excel (`export.xlsx/route.ts`, ExcelJS)
 
-- **Tab 1 "Media plan"**: banner de título + metadata; tabla con columnas base
-  (publisher/placement, start, end, audience, notes, cost method, investment) +
-  una por métrica. Filas: subtotal por publisher (colapsable vía outline),
-  placements (indentados), `TOTAL MEDIA`, sección `Fees`, `GRAND TOTAL` (INK).
-  Bloque de firma + disclaimer al final. Logo anclado arriba a la derecha
-  (base64).
+- **Tab 1 "Media plan"**: banner de título + metadata (incluye `Período` general
+  del plan); tabla con columnas base (publisher/placement, start, end, audience,
+  notes, cost method, investment) + una por métrica. Filas: subtotal por
+  publisher (colapsable vía outline, con **start/end del publisher** =
+  más temprana/más tardía de sus placements en las columnas de fecha), placements
+  (indentados, con sus start/end), `TOTAL MEDIA`, sección `Fees`,
+  `GRAND TOTAL` (INK). Bloque de firma + disclaimer al final. Logo anclado arriba
+  a la derecha (base64).
+- **Fechas en los tres niveles** (helper compartido `placementsPeriod` en
+  `lib/plan-metrics.ts`): período del plan en la metadata, fechas del publisher
+  en su subtotal y fechas de cada placement en sus columnas. Idem en el PDF.
 - **Tab 2 "Budget por mercado"**: prorratea la inversión de cada placement por
   días entre los meses que cubre `[startDate, endDate]` y la agrega por
   mercado × mes (los sin fecha caen en una columna "Undated"/"Sin fecha"). Solo
