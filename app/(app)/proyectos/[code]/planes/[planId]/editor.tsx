@@ -944,6 +944,7 @@ function PlacementGridRow({
           <RateInput
             value={eff?.rate ?? null}
             disabled={!editable}
+            className="w-24 text-right"
             onCommit={(v) =>
               update({
                 metricsJson: applyPrimaryPairChange(
@@ -965,6 +966,7 @@ function PlacementGridRow({
           <DeliveryInput
             value={eff?.delivery ?? null}
             disabled={!editable}
+            className="w-28 text-right"
             onCommit={(v) =>
               update({
                 metricsJson: applyPrimaryPairChange(
@@ -1287,10 +1289,12 @@ function RateInput({
   value,
   disabled,
   onCommit,
+  className = "w-full",
 }: {
   value: number | null;
   disabled: boolean;
   onCommit: (v: number) => void;
+  className?: string;
 }) {
   const display = value != null ? formatRateDisplay(value) : "";
   const commit = (el: HTMLInputElement) => {
@@ -1325,7 +1329,7 @@ function RateInput({
         }
       }}
       onBlur={(e) => commit(e.currentTarget)}
-      className="w-full font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
+      className={`${className} font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50`}
     />
   );
 }
@@ -1334,10 +1338,12 @@ function DeliveryInput({
   value,
   disabled,
   onCommit,
+  className = "w-full",
 }: {
   value: number | null;
   disabled: boolean;
   onCommit: (v: number) => void;
+  className?: string;
 }) {
   const display = value != null ? formatIntInput(value) : "";
   const commit = (el: HTMLInputElement) => {
@@ -1372,7 +1378,7 @@ function DeliveryInput({
         }
       }}
       onBlur={(e) => commit(e.currentTarget)}
-      className="w-full font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50"
+      className={`${className} font-mono text-sm tabular-nums bg-white dark:bg-paper-2 border border-line rounded px-2 py-1 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent-soft disabled:opacity-50`}
     />
   );
 }

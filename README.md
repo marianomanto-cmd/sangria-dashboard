@@ -183,7 +183,9 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   placement quedó consistente con tarifa/delivery. El **inspector** del placement
   es más ancho (`lg:grid-cols-[1fr_440px]`) para dar aire a las métricas
   secundarias, y las textareas de **audiencia** y **notas** son más altas
-  (`rows={3}` + `resize-y`).
+  (`rows={3}` + `resize-y`). `RateInput`/`DeliveryInput` aceptan un prop
+  `className` (default `w-full` en inspector; en la **planilla** se angostan a
+  `w-24`/`w-28` right-aligned para no comerse el ancho de la fila).
 
 ### Borrar un plan es soft delete (papelera)
 - Borrar un plan desde la vista de proyecto setea `media_plans.deleted_at` (no

@@ -2,6 +2,16 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Planilla: achicar tarifa/delivery de la métrica principal
+
+- En la grilla de placements las cajas de **Tarifa** y **Delivery** (métrica
+  principal) eran `w-full` y se comían el ancho de la fila. Ahora `RateInput` y
+  `DeliveryInput` aceptan un prop `className` (default `w-full`, así el inspector
+  y la tabla de indicadores no cambian) y en la **planilla** se angostan a
+  `w-24` (tarifa) / `w-28` (delivery), right-aligned. Recupera espacio horizontal
+  por fila sin tocar las cajas del inspector.
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 26/may/2026 — Inspector del placement: más ancho + textareas más altas
 
 - **Continuación del cambio de inputs**: faltaba el panel inspector. Las métricas
@@ -893,7 +903,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/sweet-pascal-Vy8cG)  Inspector del placement: ancho 440px + textareas de audiencia/notas más altas
+(branch claude/sweet-pascal-Vy8cG)  Planilla: tarifa/delivery de la métrica principal angostadas (w-24/w-28)
+(PR #64)  Inspector del placement: ancho 440px + textareas de audiencia/notas más altas
 (PR #63)  Inputs del plan: legibilidad + fórmulas tipo Excel (evalNumberInput) + ancho de página a 1800px
 46aedbe  docs: referencia rápida de buscador/orden + tablero colapsable
 bb755a4  Tablero de pendientes: layout compacto + colapsable desde el encabezado
