@@ -577,7 +577,7 @@ function PlanWorkspace({
           {allPlacements.length} placements · {detail.publishers.length} publishers
         </span>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-3 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-3 items-start">
       {/* Planilla */}
       <div className="space-y-3 min-w-0">
         {detail.publishers.map((pub) => (
@@ -1079,13 +1079,13 @@ function PlacementInspector({
           <textarea
             defaultValue={placement.audience ?? ""}
             disabled={!editable}
-            rows={2}
+            rows={3}
             placeholder="25-44 viajeros frecuentes, lookalike, retargeting, etc."
             onBlur={(e) =>
               e.target.value !== (placement.audience ?? "") &&
               update({ audience: e.target.value || null })
             }
-            className="w-full text-sm bg-white dark:bg-paper-2 border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
+            className="w-full text-sm leading-relaxed bg-white dark:bg-paper-2 border border-line rounded-md px-2.5 py-2 resize-y min-h-[4.5rem] focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50 disabled:resize-none"
           />
         </Field>
 
@@ -1114,13 +1114,13 @@ function PlacementInspector({
           <textarea
             defaultValue={placement.notesMd ?? ""}
             disabled={!editable}
-            rows={2}
+            rows={3}
             placeholder="Formato: video vertical 15-30s, 3 versiones rotativas, etc."
             onBlur={(e) =>
               e.target.value !== (placement.notesMd ?? "") &&
               update({ notesMd: e.target.value || null })
             }
-            className="w-full text-sm bg-white dark:bg-paper-2 border border-line rounded-md px-2 py-1.5 focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50"
+            className="w-full text-sm leading-relaxed bg-white dark:bg-paper-2 border border-line rounded-md px-2.5 py-2 resize-y min-h-[4.5rem] focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50 disabled:resize-none"
           />
         </Field>
       </div>
@@ -1566,8 +1566,8 @@ function MetricsEditor({
             <thead>
               <tr className="border-b border-line-soft text-[10px] font-medium uppercase tracking-[0.06em] text-muted">
                 <th className="px-2 py-1.5 text-left">Métrica</th>
-                <th className="px-2 py-1.5 text-right w-[22%]">Tarifa</th>
-                <th className="px-2 py-1.5 text-right w-[22%]">Delivery</th>
+                <th className="px-2 py-1.5 text-right w-[26%]">Tarifa</th>
+                <th className="px-2 py-1.5 text-right w-[26%]">Delivery</th>
                 {editable && <th className="w-8" aria-label="acciones" />}
               </tr>
             </thead>
@@ -1594,7 +1594,7 @@ function MetricsEditor({
                         value={row.slug}
                         disabled={!editable}
                         onChange={(e) => updateRow(idx, { slug: e.target.value, rate: "", delivery: "" })}
-                        className="w-full text-xs bg-transparent focus:outline-none disabled:opacity-50"
+                        className="w-full text-sm bg-transparent focus:outline-none disabled:opacity-50"
                       >
                         {row.slug && !metric && (
                           <option value={row.slug}>{row.slug} (no en catálogo)</option>

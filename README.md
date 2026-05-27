@@ -180,7 +180,10 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - **Legibilidad**: los inputs numéricos del editor (`NumberInput`, `RateInput`,
   `DeliveryInput`) usan caja blanca con borde (`text-sm`, ancho holgado:
   `w-32`/`w-36`) para que entren cifras de millones sin recortarse. El monto del
-  placement quedó consistente con tarifa/delivery.
+  placement quedó consistente con tarifa/delivery. El **inspector** del placement
+  es más ancho (`lg:grid-cols-[1fr_440px]`) para dar aire a las métricas
+  secundarias, y las textareas de **audiencia** y **notas** son más altas
+  (`rows={3}` + `resize-y`).
 
 ### Borrar un plan es soft delete (papelera)
 - Borrar un plan desde la vista de proyecto setea `media_plans.deleted_at` (no
