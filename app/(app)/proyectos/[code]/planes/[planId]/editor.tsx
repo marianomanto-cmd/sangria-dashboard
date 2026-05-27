@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import {
+  ChevronDown,
   Copy,
   Download,
   FileText,
   Plus,
   Receipt,
   Scale,
+  Table,
   Trash2,
   X,
 } from "lucide-react";
@@ -54,6 +56,13 @@ import {
   type CostMethod,
 } from "@/lib/cost-methods";
 import { formatDate, type Language } from "@/lib/i18n";
+import {
+  evalFormula,
+  placementMetricValue,
+  placementsPeriod,
+  resolveMetricColumns,
+  sumDirectMetrics,
+} from "@/lib/plan-metrics";
 
 // Solo los campos que el editor consume — viene de listPublishersForClient.
 type PublisherCatalog = {
@@ -383,6 +392,9 @@ export function PlanEditor({
           pending={pending}
         />
       </section>
+
+      {/* Preview tipo Excel (read-only) */}
+      <ExcelPreview detail={detail} allMetrics={allMetrics} lang={lang} />
 
       {/* Fees */}
       <section>
@@ -1815,6 +1827,192 @@ function FeeRow({
         </td>
       )}
     </tr>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Preview tipo Excel (read-only): replica el layout del export — cada placement
+// con todas las métricas en columnas, subtotal por publisher y TOTAL MEDIA.
+// Reusa los helpers del export (lib/plan-metrics) para no divergir del archivo.
+// ════════════════════════════════════════════════════════════════════════════
+
+function ExcelPreview({
+  detail,
+  allMetrics,
+  lang,
+}: {
+  detail: PlanDetail;
+  allMetrics: MetricCatalog[];
+  lang: Language;
+}) {
+  const [open, setOpen] = useState(true);
+  const allPlacements = detail.publishers.flatMap((g) => g.placements);
+  const metricCols = resolveMetricColumns(allMetrics, allPlacements);
+  const directSlugs = metricCols
+    .filter((m) => m.kind === "direct")
+    .map((m) => m.slug);
+  const planDirects = sumDirectMetrics(allPlacements, directSlugs);
+
+  const fmtMetric = (v: number | null, unit: string | null): string => {
+    if (v == null || !Number.isFinite(v)) return "";
+    if (unit === "%") return `${(v * 100).toFixed(2)}%`;
+    if (unit === "$") return v < 1 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`;
+    return formatIntInput(v);
+  };
+
+  // Fila agregada (subtotal/total): direct = suma de directs; calculated =
+  // fórmula sobre esa suma + el monto base (igual que el export).
+  const aggMetric = (
+    m: MetricCatalog,
+    directs: Record<string, number>,
+    baseAmount: number,
+  ): number | null =>
+    m.kind === "direct"
+      ? (directs[m.slug] ?? null)
+      : evalFormula(m.formula, baseAmount, directs);
+
+  const L = {
+    title: lang === "es" ? "Vista previa (como el Excel)" : "Preview (like Excel)",
+    start: lang === "es" ? "Inicio" : "Start",
+    end: lang === "es" ? "Fin" : "End",
+    method: lang === "es" ? "Método" : "Method",
+    investment: lang === "es" ? "Inversión" : "Investment",
+    totalMedia: lang === "es" ? "TOTAL MEDIA" : "MEDIA TOTAL",
+    noPlacements: lang === "es" ? "Sin placements" : "No placements",
+    note:
+      lang === "es"
+        ? "Read-only. Audiencia, notas y fees no se muestran acá; sí salen en el Excel/PDF."
+        : "Read-only. Audience, notes and fees are omitted here; they do appear in the Excel/PDF.",
+  };
+
+  const numCell = "px-3 py-1.5 text-right font-mono tabular-nums";
+
+  return (
+    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 px-4 py-2.5 text-left hover:bg-paper-2/40"
+      >
+        <Table size={14} className="text-accent shrink-0" />
+        <span className="text-sm font-semibold flex-1">{L.title}</span>
+        <span className="text-xs text-muted">
+          {allPlacements.length} placements · {metricCols.length}{" "}
+          {lang === "es" ? "métricas" : "metrics"}
+        </span>
+        <ChevronDown
+          size={16}
+          className={`text-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && (
+        <>
+          <div className="overflow-x-auto border-t border-line-soft">
+            <table className="text-xs whitespace-nowrap">
+              <thead className="bg-paper">
+                <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
+                  <th className="text-left font-medium px-3 py-1.5">
+                    Publisher / Placement
+                  </th>
+                  <th className="text-left font-medium px-3 py-1.5">{L.start}</th>
+                  <th className="text-left font-medium px-3 py-1.5">{L.end}</th>
+                  <th className="text-left font-medium px-3 py-1.5">{L.method}</th>
+                  <th className="text-right font-medium px-3 py-1.5">
+                    {L.investment}
+                  </th>
+                  {metricCols.map((m) => (
+                    <th key={m.slug} className="text-right font-medium px-3 py-1.5">
+                      {m.name}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {detail.publishers.map((grp) => {
+                  const pubDirects = sumDirectMetrics(grp.placements, directSlugs);
+                  const pubPeriod = placementsPeriod(grp.placements);
+                  return (
+                    <Fragment key={grp.id}>
+                      <tr className="bg-accent-soft/60 font-semibold border-t border-line">
+                        <td className="px-3 py-1.5">{grp.publisherName}</td>
+                        <td className="px-3 py-1.5 text-ink-2 font-normal">
+                          {formatDate(pubPeriod.start, lang)}
+                        </td>
+                        <td className="px-3 py-1.5 text-ink-2 font-normal">
+                          {formatDate(pubPeriod.end, lang)}
+                        </td>
+                        <td className="px-3 py-1.5" />
+                        <td className={numCell}>{formatUsd(grp.totalPlannedUsd)}</td>
+                        {metricCols.map((m) => (
+                          <td key={m.slug} className={numCell}>
+                            {fmtMetric(aggMetric(m, pubDirects, grp.totalPlannedUsd), m.unit)}
+                          </td>
+                        ))}
+                      </tr>
+                      {grp.placements.length === 0 ? (
+                        <tr className="border-t border-line-soft">
+                          <td
+                            className="px-3 py-1.5 pl-7 text-muted italic"
+                            colSpan={5 + metricCols.length}
+                          >
+                            {L.noPlacements}
+                          </td>
+                        </tr>
+                      ) : (
+                        grp.placements.map((pl) => (
+                          <tr
+                            key={pl.id}
+                            className="border-t border-line-soft hover:bg-paper-2/40"
+                          >
+                            <td className="px-3 py-1.5 pl-7">
+                              {pl.placementName}
+                              {pl.marketName ? (
+                                <span className="text-muted"> · {pl.marketName}</span>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-1.5 text-muted">
+                              {formatDate(pl.startDate, lang)}
+                            </td>
+                            <td className="px-3 py-1.5 text-muted">
+                              {formatDate(pl.endDate, lang)}
+                            </td>
+                            <td className="px-3 py-1.5 font-mono text-ink-2">
+                              {pl.costMethod ?? ""}
+                            </td>
+                            <td className={numCell}>{formatUsd(pl.amountUsd)}</td>
+                            {metricCols.map((m) => (
+                              <td key={m.slug} className={numCell}>
+                                {fmtMetric(placementMetricValue(m, pl), m.unit)}
+                              </td>
+                            ))}
+                          </tr>
+                        ))
+                      )}
+                    </Fragment>
+                  );
+                })}
+                <tr className="bg-accent text-white font-semibold border-t-2 border-accent">
+                  <td className="px-3 py-1.5">{L.totalMedia}</td>
+                  <td className="px-3 py-1.5" />
+                  <td className="px-3 py-1.5" />
+                  <td className="px-3 py-1.5" />
+                  <td className={numCell}>{formatUsd(detail.totals.media)}</td>
+                  {metricCols.map((m) => (
+                    <td key={m.slug} className={numCell}>
+                      {fmtMetric(aggMetric(m, planDirects, detail.totals.media), m.unit)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="px-4 py-2 text-[11px] text-muted border-t border-line-soft">
+            {L.note}
+          </p>
+        </>
+      )}
+    </section>
   );
 }
 

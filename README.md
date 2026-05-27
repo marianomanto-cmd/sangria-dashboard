@@ -136,7 +136,7 @@ lib/
   format.ts                 # formatUsd, formatPct, formatUsdCompact + inputs US: formatIntInput / formatAmountInput / parseNumberInput / evalNumberInput (fórmulas tipo Excel)
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
   brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
-  plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns (compartido PDF/Excel)
+  plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns + placementsPeriod + sumDirectMetrics (compartido PDF/Excel/preview)
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
@@ -498,6 +498,16 @@ El plan se descarga en dos formatos desde el editor
 (`app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`, dos botones que
 linkean a las rutas de abajo). Ambos comparten idioma, logo, métricas, firma y
 disclaimer; difieren en el layout.
+
+**Preview tipo Excel en el editor**: el componente `ExcelPreview` (en
+`editor.tsx`) renderiza una tabla **read-only** que replica el Tab 1 del Excel —
+cada placement con todas las métricas en columnas, subtotal por publisher
+(fechas + montos + métricas) y fila `TOTAL MEDIA`. Usa los **mismos helpers** que
+los exports (`resolveMetricColumns`, `placementMetricValue`, `evalFormula`,
+`sumDirectMetrics`, `placementsPeriod` en `lib/plan-metrics.ts`) para no divergir.
+Es colapsable; audiencia/notas/fees se omiten (sí salen en el Excel/PDF). La
+edición sigue en la grilla + inspector; el preview es solo visualización. (Una
+"planilla 100% editable" se evaluará aparte en otra branch.)
 
 ### Rutas
 
