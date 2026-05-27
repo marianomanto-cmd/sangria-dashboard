@@ -1,12 +1,13 @@
 import ExcelJS from "exceljs";
 import { getBrandLogo } from "@/lib/brand-logo";
-import { getPlanDetail, type PlanPlacement } from "@/db/queries/project-detail";
+import { getPlanDetail } from "@/db/queries/project-detail";
 import { listMetricsForClient } from "@/app/actions/plans";
 import {
   evalFormula,
   placementMetricValue,
   placementsPeriod,
   resolveMetricColumns,
+  sumDirectMetrics,
 } from "@/lib/plan-metrics";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
 
@@ -81,25 +82,6 @@ function parseDate(iso: string): Date | null {
 
 function daysBetween(a: Date, b: Date): number {
   return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
-
-// Suma direct metrics sobre una lista de placements (ignora calculated y
-// valores no finitos).
-function sumDirects(
-  placements: PlanPlacement[],
-  directSlugs: string[],
-): Record<string, number> {
-  const acc: Record<string, number> = {};
-  for (const slug of directSlugs) acc[slug] = 0;
-  for (const pl of placements) {
-    for (const slug of directSlugs) {
-      const v = pl.metricsJson?.[slug];
-      if (typeof v === "number" && Number.isFinite(v)) {
-        acc[slug] += v;
-      }
-    }
-  }
-  return acc;
 }
 
 export async function GET(
@@ -305,7 +287,7 @@ export async function GET(
   for (const grp of detail.publishers) {
     // Subtotal del publisher: direct = sum, calculated = formula sobre el
     // subtotal de directs + el totalPlannedUsd del publisher.
-    const pubDirects = sumDirects(grp.placements, directSlugs);
+    const pubDirects = sumDirectMetrics(grp.placements, directSlugs);
 
     const subRow = ws.getRow(currentRow);
     subRow.getCell(1).value = grp.publisherName;
@@ -385,7 +367,7 @@ export async function GET(
   }
 
   // ─── Fila TOTAL MEDIA con totales de métricas ───────────────────────────
-  const planDirects = sumDirects(allPlacements, directSlugs);
+  const planDirects = sumDirectMetrics(allPlacements, directSlugs);
 
   const totalMediaRow = ws.getRow(currentRow);
   totalMediaRow.getCell(1).value =

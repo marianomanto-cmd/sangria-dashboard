@@ -2,6 +2,22 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Editor: preview tipo Excel (read-only)
+
+- Nuevo componente `ExcelPreview` en `editor.tsx`: una tabla **read-only** debajo
+  del workspace de Publishers que replica el Tab 1 del Excel — cada placement con
+  **todas las métricas en columnas**, subtotal por publisher (fechas + monto +
+  métricas) y fila `TOTAL MEDIA`. Es colapsable (chevron) y scrollea horizontal.
+  Audiencia, notas y fees se omiten en el preview (sí salen en Excel/PDF).
+- **No cambia la edición**: la grilla + inspector siguen igual; el preview es solo
+  visualización. La "planilla 100% editable" se evaluará aparte en **otra branch**.
+- Reusa los mismos helpers que los exports para no divergir
+  (`resolveMetricColumns`, `placementMetricValue`, `evalFormula`,
+  `placementsPeriod` y el nuevo `sumDirectMetrics`, todos en `lib/plan-metrics.ts`).
+- De paso se **deduplicó `sumDirects`**: estaba copiado en el route del Excel y en
+  `plan-pdf.ts`; ahora ambos usan `sumDirectMetrics` compartido.
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 26/may/2026 — Exports (Excel + PDF): fechas en los tres niveles
 
 - Los exports del plan ahora muestran fechas en **plan / publisher / placement**,
@@ -922,7 +938,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/sweet-pascal-Vy8cG)  Exports Excel+PDF: fechas de plan/publisher/placement (helper placementsPeriod)
+(branch claude/sweet-pascal-Vy8cG)  Editor: preview tipo Excel read-only (ExcelPreview) + dedup sumDirectMetrics
+(PR #66)  Exports Excel+PDF: fechas de plan/publisher/placement (helper placementsPeriod)
 (PR #65)  Planilla: tarifa/delivery de la métrica principal angostadas (w-24/w-28)
 (PR #64)  Inspector del placement: ancho 440px + textareas de audiencia/notas más altas
 (PR #63)  Inputs del plan: legibilidad + fórmulas tipo Excel (evalNumberInput) + ancho de página a 1800px

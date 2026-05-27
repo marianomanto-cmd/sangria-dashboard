@@ -121,3 +121,21 @@ export function placementsPeriod(
     end: ends[ends.length - 1] ?? null,
   };
 }
+
+// Suma de cada métrica direct sobre una lista de placements (ignora calculated
+// y valores no finitos). Base para los subtotales por publisher y el TOTAL
+// MEDIA de los exports y del preview tipo Excel del editor.
+export function sumDirectMetrics(
+  placements: PlanPlacement[],
+  directSlugs: string[],
+): Record<string, number> {
+  const acc: Record<string, number> = {};
+  for (const slug of directSlugs) acc[slug] = 0;
+  for (const pl of placements) {
+    for (const slug of directSlugs) {
+      const v = pl.metricsJson?.[slug];
+      if (typeof v === "number" && Number.isFinite(v)) acc[slug] += v;
+    }
+  }
+  return acc;
+}

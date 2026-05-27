@@ -11,6 +11,7 @@ import {
   placementMetricValue,
   placementsPeriod,
   resolveMetricColumns,
+  sumDirectMetrics,
 } from "@/lib/plan-metrics";
 import {
   DEFAULT_LANGUAGE,
@@ -235,21 +236,6 @@ export async function renderPlanPdf(
     return v.toLocaleString(numberLocale, { maximumFractionDigits: 0 });
   }
 
-  function sumDirects(
-    placements: PlanPlacement[],
-    slugs: string[],
-  ): Record<string, number> {
-    const acc: Record<string, number> = {};
-    for (const s of slugs) acc[s] = 0;
-    for (const pl of placements) {
-      for (const s of slugs) {
-        const v = pl.metricsJson?.[s];
-        if (typeof v === "number" && Number.isFinite(v)) acc[s] += v;
-      }
-    }
-    return acc;
-  }
-
   // ─── Logo de marca (esquina superior derecha) ────────────────────────────
   let logoW = 0;
   const logo = getBrandLogo();
@@ -413,7 +399,7 @@ export async function renderPlanPdf(
       });
     }
     textRight(fmtUsd(grp.totalPlannedUsd), investRight, y - 11, { size: 8.5, bold: true });
-    const pubDirects = sumDirects(grp.placements, directSlugs);
+    const pubDirects = sumDirectMetrics(grp.placements, directSlugs);
     metricCols.forEach((m, i) => {
       const v =
         m.kind === "direct"
@@ -477,7 +463,7 @@ export async function renderPlanPdf(
       color: WHITE,
     });
     textRight(fmtUsd(totalMediaUsd), investRight, y - 12, { size: 9, bold: true, color: WHITE });
-    const planDirects = sumDirects(allPlacements, directSlugs);
+    const planDirects = sumDirectMetrics(allPlacements, directSlugs);
     metricCols.forEach((m, i) => {
       const v =
         m.kind === "direct"
