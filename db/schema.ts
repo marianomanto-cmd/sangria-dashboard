@@ -528,6 +528,9 @@ export const projectReports = pgTable(
       withTimezone: true,
     }),
     deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    // Link al PPT del reporte final (Drive u otro). Opcional: lo carga el
+    // analista para encontrarlo rápido a futuro. Solo se guarda la URL.
+    reportPptUrl: text("report_ppt_url"),
     notes: text("notes"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

@@ -790,7 +790,11 @@ Idempotente: limpia las tablas antes de insertar.
   en prod para sembrar la nueva tabla y dar de alta los closed existentes.
   Debajo del Gantt hay un listado de **Reportes enviados** (`delivered_at != null`)
   con fecha de envío + fecha objetivo y un filtro de texto libre por proyecto o
-  campaña (`getSentReports` en `db/queries/reports.ts`).
+  campaña (`getSentReports` en `db/queries/reports.ts`). Cada fila tiene un
+  **link opcional al PPT final** (`project_reports.report_ppt_url`, en Drive u
+  otro): el analista lo carga/edita/quita desde un modal (acción
+  `setReportPptUrl`) para encontrar el reporte rápido a futuro. **Requiere
+  `npm run db:push`** en prod para crear la columna `report_ppt_url`.
 - **i18n parcial**: las áreas de mayor visibilidad (dashboard, listas
   globales, exports, dates) están traducidas a `en`/`es`. Quedan strings
   hardcodeados en formularios secundarios (`/proyectos/nuevo`, editor

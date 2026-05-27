@@ -159,6 +159,7 @@ export type SentReport = {
   closedAt: string;             // ISO timestamp
   deliveryDate: string | null;  // YYYY-MM-DD — fecha objetivo comprometida
   deliveredAt: string;          // ISO timestamp — fecha real de envío
+  reportPptUrl: string | null;  // link al PPT final (Drive), opcional
   planNames: string[];          // nombres de campañas/planes del proyecto
 };
 
@@ -181,6 +182,7 @@ export async function getSentReports(
       closedAt: projectReports.closedAt,
       deliveryDate: projectReports.deliveryDate,
       deliveredAt: projectReports.deliveredAt,
+      reportPptUrl: projectReports.reportPptUrl,
     })
     .from(projectReports)
     .innerJoin(projects, eq(projectReports.projectId, projects.id))
@@ -220,6 +222,7 @@ export async function getSentReports(
       r.deliveredAt instanceof Date
         ? r.deliveredAt.toISOString()
         : String(r.deliveredAt),
+    reportPptUrl: r.reportPptUrl,
     planNames: plansByProject.get(r.projectId) ?? [],
   }));
 }

@@ -2,6 +2,30 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Reportes enviados: link al PPT final
+
+> **ACCIÓN REQUERIDA EN PROD**: este cambio agrega la columna
+> `project_reports.report_ppt_url` (text, nullable). Hay que correr
+> **`npm run db:push`** después del deploy. Es aditiva, sin backfill (las filas
+> existentes quedan con `report_ppt_url = null`). Hasta que se corra, la query
+> `getSentReports` (que ahora selecciona la columna) y la página
+> `/reportes/calendario` fallan.
+
+- En el listado de **Reportes enviados** (debajo del Gantt en
+  `/reportes/calendario`) cada fila ahora tiene una columna **"Reporte (PPT)"**:
+  - si no hay link → botón "Agregar link";
+  - si hay → link "Ver PPT" (abre en pestaña nueva) + lápiz para editar.
+- El analista carga/edita/quita la URL desde un modal (`LinkForm` en
+  `components/reporting-calendar-client.tsx`). Es **opcional**; sirve para
+  encontrar el PPT final (en Drive) rápido a futuro. Solo se guarda la URL, no
+  se sube ni valida el contenido.
+- Server action nueva `setReportPptUrl({ reportId, url })` en
+  `app/actions/reports.ts`: valida que sea `http(s)` (con `new URL`), url vacío
+  = quitar el link, audita (`ppt_url_set` / `ppt_url_clear`) y revalida
+  `/reportes/calendario`. `getSentReports` + el tipo `SentReport` ahora incluyen
+  `reportPptUrl`.
+- **Schema**: `project_reports.report_ppt_url` (`db/schema.ts`).
+
 ### Cambios de la sesión 26/may/2026 — Editor: preview tipo Excel (read-only)
 
 - Nuevo componente `ExcelPreview` en `editor.tsx`: una tabla **read-only** debajo
