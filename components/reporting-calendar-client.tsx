@@ -2,10 +2,11 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { ExternalLink, Link2, Pencil, Search } from "lucide-react";
 import {
   markReportDelivered,
   setReportDeliveryDate,
+  setReportPptUrl,
 } from "@/app/actions/reports";
 import { ReportingGantt } from "@/components/reporting-gantt";
 import type { CalendarReport, SentReport } from "@/db/queries/reports";
@@ -315,6 +316,12 @@ export function ReportingCalendarClient({
   );
 }
 
+type LinkEditing = {
+  reportId: string;
+  projectName: string;
+  current: string | null;
+};
+
 function SentReportsSection({
   sent,
   lang,
@@ -323,6 +330,31 @@ function SentReportsSection({
   lang: Language;
 }) {
   const [query, setQuery] = useState("");
+  const [linkEditing, setLinkEditing] = useState<LinkEditing | null>(null);
+  const [linkPending, startLinkTransition] = useTransition();
+  const [linkError, setLinkError] = useState<string | null>(null);
+
+  const openLink = (r: SentReport) => {
+    setLinkError(null);
+    setLinkEditing({
+      reportId: r.reportId,
+      projectName: r.projectName,
+      current: r.reportPptUrl,
+    });
+  };
+  const closeLink = () => {
+    setLinkEditing(null);
+    setLinkError(null);
+  };
+  const submitLink = (url: string) => {
+    if (!linkEditing) return;
+    setLinkError(null);
+    startLinkTransition(async () => {
+      const res = await setReportPptUrl({ reportId: linkEditing.reportId, url });
+      if (!res.ok) setLinkError(res.error);
+      else closeLink();
+    });
+  };
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -404,6 +436,9 @@ function SentReportsSection({
                 <th className="px-4 py-2.5">
                   {lang === "es" ? "Fecha objetivo" : "Target date"}
                 </th>
+                <th className="px-4 py-2.5">
+                  {lang === "es" ? "Reporte (PPT)" : "Report (PPT)"}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -433,13 +468,146 @@ function SentReportsSection({
                   <td className="px-4 py-2.5 text-muted font-mono">
                     {r.deliveryDate ? formatDate(r.deliveryDate, lang) : "—"}
                   </td>
+                  <td className="px-4 py-2.5">
+                    {r.reportPptUrl ? (
+                      <span className="inline-flex items-center gap-2">
+                        <a
+                          href={r.reportPptUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-accent text-xs font-medium hover:underline"
+                        >
+                          <ExternalLink size={12} />
+                          {lang === "es" ? "Ver PPT" : "View PPT"}
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => openLink(r)}
+                          title={lang === "es" ? "Editar link" : "Edit link"}
+                          className="text-muted hover:text-ink"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => openLink(r)}
+                        className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
+                      >
+                        <Link2 size={12} />
+                        {lang === "es" ? "Agregar link" : "Add link"}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {linkEditing && (
+        <Modal onClose={closeLink}>
+          <LinkForm
+            projectName={linkEditing.projectName}
+            initialUrl={linkEditing.current}
+            lang={lang}
+            pending={linkPending}
+            error={linkError}
+            onCancel={closeLink}
+            onSubmit={submitLink}
+          />
+        </Modal>
+      )}
     </section>
+  );
+}
+
+function LinkForm({
+  projectName,
+  initialUrl,
+  lang,
+  pending,
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  projectName: string;
+  initialUrl: string | null;
+  lang: Language;
+  pending: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (url: string) => void;
+}) {
+  const [value, setValue] = useState<string>(initialUrl ?? "");
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(value);
+      }}
+    >
+      <h3 className="text-base font-semibold">
+        {lang === "es" ? "Link al reporte (PPT)" : "Report link (PPT)"}
+      </h3>
+      <p className="text-sm text-muted">{projectName}</p>
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+          {lang === "es" ? "URL del PPT (Drive)" : "PPT URL (Drive)"}
+        </span>
+        <input
+          type="url"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          autoFocus
+          placeholder="https://drive.google.com/…"
+          className="mt-1 block w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+      </label>
+      <p className="text-[11px] text-muted italic">
+        {lang === "es"
+          ? "Opcional. Pegá el link del PPT final para encontrarlo rápido a futuro."
+          : "Optional. Paste the final PPT link so it's quick to find later."}
+      </p>
+      {error && <p className="text-xs text-danger">{error}</p>}
+      <div className="flex justify-end gap-2 pt-1">
+        {initialUrl && (
+          <button
+            type="button"
+            onClick={() => onSubmit("")}
+            disabled={pending}
+            className="mr-auto rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm text-danger hover:bg-paper-2 disabled:opacity-50"
+          >
+            {lang === "es" ? "Quitar link" : "Remove link"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm hover:bg-paper-2 disabled:opacity-50"
+        >
+          {lang === "es" ? "Cancelar" : "Cancel"}
+        </button>
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
+        >
+          {pending
+            ? lang === "es"
+              ? "Guardando…"
+              : "Saving…"
+            : lang === "es"
+              ? "Guardar"
+              : "Save"}
+        </button>
+      </div>
+    </form>
   );
 }
 

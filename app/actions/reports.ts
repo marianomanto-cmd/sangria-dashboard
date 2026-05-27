@@ -200,3 +200,53 @@ export async function markReportDelivered(input: {
   if (projBefore) revalidatePath(`/proyectos/${projBefore.code}`);
   return { ok: true };
 }
+
+// Setea (o limpia, con url vacío) el link al PPT del reporte final. Opcional:
+// lo carga el analista para encontrar el reporte rápido a futuro. Solo se
+// guarda la URL; no se sube ni valida el contenido en Drive.
+export async function setReportPptUrl(input: {
+  reportId: string;
+  url: string; // vacío = quitar el link
+}): Promise<Result> {
+  const raw = input.url.trim();
+  let url: string | null = null;
+  if (raw !== "") {
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      return {
+        ok: false,
+        error: "Link inválido (pegá la URL completa, ej: https://…)",
+      };
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return { ok: false, error: "El link tiene que empezar con http:// o https://" };
+    }
+    url = raw;
+  }
+
+  const [before] = await db
+    .select()
+    .from(projectReports)
+    .where(eq(projectReports.id, input.reportId))
+    .limit(1);
+  if (!before) return { ok: false, error: "Reporte no encontrado" };
+  if (before.reportPptUrl === url) return { ok: true };
+
+  await db
+    .update(projectReports)
+    .set({ reportPptUrl: url, updatedAt: new Date() })
+    .where(eq(projectReports.id, input.reportId));
+
+  await recordAudit({
+    entityType: "project_report",
+    entityId: input.reportId,
+    action: url ? "ppt_url_set" : "ppt_url_clear",
+    beforeJson: { reportPptUrl: before.reportPptUrl },
+    afterJson: { reportPptUrl: url },
+  });
+
+  revalidatePath("/reportes/calendario");
+  return { ok: true };
+}
