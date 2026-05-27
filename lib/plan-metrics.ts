@@ -99,3 +99,25 @@ export function resolveMetricColumns<M extends MetricMeta>(
 
   return [...direct, ...calculated];
 }
+
+// Período cubierto por una lista de placements: la fecha de inicio más temprana
+// y la de fin más tardía. Las fechas son ISO (YYYY-MM-DD), que ordenan
+// lexicográficamente = cronológicamente. Devuelve null en cada extremo si no
+// hay ninguna fecha cargada. Usado por los exports (período del plan y de cada
+// publisher).
+export function placementsPeriod(
+  placements: PlanPlacement[],
+): { start: string | null; end: string | null } {
+  const starts = placements
+    .map((p) => p.startDate)
+    .filter((d): d is string => !!d)
+    .sort();
+  const ends = placements
+    .map((p) => p.endDate)
+    .filter((d): d is string => !!d)
+    .sort();
+  return {
+    start: starts[0] ?? null,
+    end: ends[ends.length - 1] ?? null,
+  };
+}

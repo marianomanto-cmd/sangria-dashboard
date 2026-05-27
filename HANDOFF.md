@@ -2,6 +2,25 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/may/2026 — Exports (Excel + PDF): fechas en los tres niveles
+
+- Los exports del plan ahora muestran fechas en **plan / publisher / placement**,
+  tanto en Excel como en PDF:
+  1. **Período general del plan** (más temprana/más tardía de todos los
+     placements) — Excel: ya estaba en la metadata; PDF: se agregó la línea
+     `Período` en el encabezado (antes faltaba).
+  2. **Fecha de cada publisher** = más temprana/más tardía de sus placements —
+     Excel: en las columnas start/end de la fila de subtotal; PDF: sub-línea gris
+     bajo el nombre del publisher (la fila crece a 24pt cuando hay fechas).
+  3. **Fecha de cada placement** — ya estaba en ambos (columnas en Excel,
+     sub-línea en PDF).
+- Helper compartido nuevo `placementsPeriod(placements)` en `lib/plan-metrics.ts`
+  (min start / max end; las ISO ordenan cronológicamente). El cálculo inline del
+  período del plan en el Excel se reemplazó por este helper.
+- Verificado con un smoke test de `renderPlanPdf` (fixture con un publisher con
+  fechas y otro sin fechas) → PDF válido, sin romper.
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 26/may/2026 — Planilla: achicar tarifa/delivery de la métrica principal
 
 - En la grilla de placements las cajas de **Tarifa** y **Delivery** (métrica
@@ -903,7 +922,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-(branch claude/sweet-pascal-Vy8cG)  Planilla: tarifa/delivery de la métrica principal angostadas (w-24/w-28)
+(branch claude/sweet-pascal-Vy8cG)  Exports Excel+PDF: fechas de plan/publisher/placement (helper placementsPeriod)
+(PR #65)  Planilla: tarifa/delivery de la métrica principal angostadas (w-24/w-28)
 (PR #64)  Inspector del placement: ancho 440px + textareas de audiencia/notas más altas
 (PR #63)  Inputs del plan: legibilidad + fórmulas tipo Excel (evalNumberInput) + ancho de página a 1800px
 46aedbe  docs: referencia rápida de buscador/orden + tablero colapsable

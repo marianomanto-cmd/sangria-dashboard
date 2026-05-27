@@ -9,6 +9,7 @@ import {
   evalFormula,
   type MetricMeta,
   placementMetricValue,
+  placementsPeriod,
   resolveMetricColumns,
 } from "@/lib/plan-metrics";
 import {
@@ -293,6 +294,13 @@ export async function renderPlanPdf(
   writeLine(`${t("common.client", lang)}: ${detail.client.name}`);
   writeLine(`${t("common.project", lang)}: ${detail.project.name}`);
   writeLine(`${t("common.budgetOrigin", lang)}: ${detail.budgetOrigin.name}`);
+  // Período general del plan = más temprana/más tardía de todos los placements.
+  const planPeriod = placementsPeriod(allPlacements);
+  const planPeriodStr =
+    planPeriod.start && planPeriod.end
+      ? `${formatDate(planPeriod.start, lang)} -> ${formatDate(planPeriod.end, lang)}`
+      : "—";
+  writeLine(`${t("common.period", lang)}: ${planPeriodStr}`);
   const statusLabel = t(`status.${detail.plan.status}`, lang);
   writeLine(
     `${t("common.status", lang)}: ${statusLabel}${detail.plan.currentVersion > 0 ? `   ·   v${detail.plan.currentVersion}` : ""}`,
@@ -384,13 +392,26 @@ export async function renderPlanPdf(
   }
 
   function drawGroupRow(grp: PlanPublisherGroup) {
-    const rowH = 16;
+    // Fechas del publisher = más temprana/más tardía de sus placements; se
+    // dibujan como sub-línea bajo el nombre (consistente con los placements).
+    const period = placementsPeriod(grp.placements);
+    const periodStr =
+      period.start && period.end
+        ? `${formatDate(period.start, lang)} -> ${formatDate(period.end, lang)}`
+        : "";
+    const rowH = periodStr ? 24 : 16;
     ensureRoom(rowH);
     page.drawRectangle({ x: MARGIN, y: y - rowH, width: tableW, height: rowH, color: rgb(...ACCENT_SOFT) });
     textAt(truncate(grp.publisherName, fontBold, 8.5, nameW - 8), xName + 4, y - 11, {
       size: 8.5,
       bold: true,
     });
+    if (periodStr) {
+      textAt(truncate(periodStr, font, 6.5, nameW - 8), xName + 4, y - 20, {
+        size: 6.5,
+        color: [0.45, 0.45, 0.45],
+      });
+    }
     textRight(fmtUsd(grp.totalPlannedUsd), investRight, y - 11, { size: 8.5, bold: true });
     const pubDirects = sumDirects(grp.placements, directSlugs);
     metricCols.forEach((m, i) => {
