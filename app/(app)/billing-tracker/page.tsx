@@ -1,20 +1,25 @@
 import Link from "next/link";
-import { Building2, ChevronRight } from "lucide-react";
+import { Building2, ChevronRight, Receipt, TrendingUp } from "lucide-react";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { BillingTrackerFilters } from "@/components/billing-tracker-filters";
+import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import {
   getBillingTracker,
   getBillingTrackerFilterOptions,
 } from "@/db/queries/billing-tracker";
+import { getBillingEstimate } from "@/db/queries/dashboard";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { formatUsd } from "@/lib/format";
-import { DEFAULT_LANGUAGE, formatMonth } from "@/lib/i18n";
+import { DEFAULT_LANGUAGE, formatMonth, type Language } from "@/lib/i18n";
+
+type Tab = "tracker" | "estimates";
 
 type SearchParams = {
   client?: string;
   project?: string;
   from?: string;
   to?: string;
+  tab?: string;
 };
 
 type Props = {
@@ -38,15 +43,102 @@ function enumerateMonths(start: string, end: string): string[] {
   return out;
 }
 
+// Helpers para la pestaña Estimates: previo + 2 próximos meses (mismo
+// criterio que tenía /planes antes de mover la sección acá).
+function nextMonths(count: number): string[] {
+  const out: string[] = [];
+  const now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth() + 1;
+  for (let i = 0; i < count; i++) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m += 1;
+    if (m > 12) {
+      m = 1;
+      y += 1;
+    }
+  }
+  return out;
+}
+
+function previousMonth(): string {
+  const now = new Date();
+  let y = now.getFullYear();
+  let m = now.getMonth();
+  if (m === 0) {
+    y -= 1;
+    m = 12;
+  }
+  return `${y}-${String(m).padStart(2, "0")}`;
+}
+
 export default async function BillingTrackerPage({ searchParams }: Props) {
   const sp = await searchParams;
   const client = await resolveClientFromSearchParams(sp);
   const lang = client?.language ?? DEFAULT_LANGUAGE;
+  const tab: Tab = sp.tab === "estimates" ? "estimates" : "tracker";
 
+  const baseTitle =
+    lang === "es"
+      ? client
+        ? `Billing Tracker · ${client.name}`
+        : "Billing Tracker"
+      : client
+        ? `Billing Tracker · ${client.name}`
+        : "Billing Tracker";
+
+  // El contenido + subtitle dependen de la tab.
+  if (tab === "estimates") {
+    const months = nextMonths(2);
+    const prevMonth = previousMonth();
+    const allEstimates = await getBillingEstimate({
+      months: [prevMonth, ...months],
+      clientId: client?.id ?? null,
+    });
+    const previousEstimate =
+      allEstimates.find((e) => e.month === prevMonth) ?? null;
+    const estimates = allEstimates.filter((e) => e.month !== prevMonth);
+
+    const subtitle =
+      lang === "es"
+        ? "Estimación de facturación próxima vs lo ya emitido. Se suma cada placement de planes vigentes prorrateado por días."
+        : "Upcoming billing estimate vs what's already invoiced. Each placement of active plans is prorated by days.";
+
+    return (
+      <PageShell
+        eyebrow="Billing Tracker"
+        title={baseTitle}
+        subtitle={subtitle}
+      >
+        <TabsNav current={tab} lang={lang} search={sp} />
+        {estimates.length === 0 && !previousEstimate ? (
+          <EmptyState
+            title={
+              lang === "es"
+                ? "Sin planes vigentes para estimar"
+                : "No active plans to estimate"
+            }
+            hint={
+              lang === "es"
+                ? "Aparecen acá los planes con status approved o ready_to_send dentro del período."
+                : "Plans with status approved or ready_to_send within the period show here."
+            }
+          />
+        ) : (
+          <BillingEstimateCard
+            estimates={estimates}
+            previousMonth={previousEstimate}
+            lang={lang}
+          />
+        )}
+      </PageShell>
+    );
+  }
+
+  // Tab "tracker" (default).
   const filterOptions = await getBillingTrackerFilterOptions(
     client?.id ?? null,
   );
-
   const projects = await getBillingTracker({
     clientId: client?.id ?? null,
     projectId: sp.project || null,
@@ -64,21 +156,14 @@ export default async function BillingTrackerPage({ searchParams }: Props) {
     0,
   );
 
-  const title =
-    lang === "es"
-      ? client
-        ? `Billing Tracker · ${client.name}`
-        : "Billing Tracker"
-      : client
-        ? `Billing Tracker · ${client.name}`
-        : "Billing Tracker";
   const subtitle =
     lang === "es"
       ? `${invoiceCount} factura${invoiceCount === 1 ? "" : "s"} emitida${invoiceCount === 1 ? "" : "s"} en el rango. Desglose por proyecto y plan, con media vs fee por factura.`
       : `${invoiceCount} emitted invoice${invoiceCount === 1 ? "" : "s"} in range. Breakdown by project and plan, with media vs fee per invoice.`;
 
   return (
-    <PageShell eyebrow="Billing Tracker" title={title} subtitle={subtitle}>
+    <PageShell eyebrow="Billing Tracker" title={baseTitle} subtitle={subtitle}>
+      <TabsNav current={tab} lang={lang} search={sp} />
       <BillingTrackerFilters
         projects={filterOptions.projects}
         monthsList={monthsList}
@@ -106,6 +191,79 @@ export default async function BillingTrackerPage({ searchParams }: Props) {
         </div>
       )}
     </PageShell>
+  );
+}
+
+// ─── Tabs nav (URL-based, server-rendered con <Link>) ──────────────────────
+
+function TabsNav({
+  current,
+  lang,
+  search,
+}: {
+  current: Tab;
+  lang: Language;
+  search: SearchParams;
+}) {
+  // El tab "tracker" preserva los filtros del tracker (project/from/to); el
+  // tab "estimates" no los necesita y los descarta para limpiar la URL.
+  const trackerParams = new URLSearchParams();
+  if (search.client) trackerParams.set("client", search.client);
+  if (search.project) trackerParams.set("project", search.project);
+  if (search.from) trackerParams.set("from", search.from);
+  if (search.to) trackerParams.set("to", search.to);
+  const trackerQs = trackerParams.toString();
+  const trackerHref = trackerQs
+    ? `/billing-tracker?${trackerQs}`
+    : "/billing-tracker";
+
+  const estimateParams = new URLSearchParams();
+  if (search.client) estimateParams.set("client", search.client);
+  estimateParams.set("tab", "estimates");
+  const estimateHref = `/billing-tracker?${estimateParams.toString()}`;
+
+  const tabs = [
+    {
+      id: "tracker" as const,
+      href: trackerHref,
+      label: lang === "es" ? "Tracker" : "Tracker",
+      icon: Receipt,
+    },
+    {
+      id: "estimates" as const,
+      href: estimateHref,
+      label: lang === "es" ? "Estimación" : "Estimates",
+      icon: TrendingUp,
+    },
+  ];
+
+  return (
+    <nav
+      role="tablist"
+      aria-label={lang === "es" ? "Vistas" : "Views"}
+      className="border-b border-line mb-6 flex gap-1"
+    >
+      {tabs.map((t) => {
+        const Icon = t.icon;
+        const active = current === t.id;
+        return (
+          <Link
+            key={t.id}
+            href={t.href}
+            role="tab"
+            aria-selected={active}
+            className={`px-4 py-2 text-sm flex items-center gap-2 border-b-2 -mb-px transition-colors ${
+              active
+                ? "border-accent text-ink font-medium"
+                : "border-transparent text-muted hover:text-ink-2"
+            }`}
+          >
+            <Icon size={14} strokeWidth={2} />
+            {t.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 
