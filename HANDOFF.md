@@ -2,6 +2,27 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Fix bug: /planes inflaba el total media (cartesian publishers × placements)
+
+- Bug reportado por el usuario: un plan de 780K (real ~702K) en el listado
+  `/planes` aparecía como ~7M. Dentro del plan se veía bien.
+- Causa: la query de `app/(app)/planes/page.tsx` (y `getPlansSummaryForProjects`
+  en `db/queries/dashboard.ts`) joineaba `media_plan_publishers` **y**
+  `media_plan_placements` en la misma query y hacía
+  `sum(publisher.total_planned_usd)`. Como placements cuelga 1:N de publishers,
+  cada `total_planned_usd` se repetía una vez por placement → total inflado por
+  el factor "placements promedio por publisher". (min/max de fechas no
+  afectaban porque min/max son idempotentes.)
+- Fix: separar el `sum` del total media (en una query sobre
+  `media_plan_publishers` sola) del cálculo de `period` (min/max sobre
+  `placements`, joineando publishers solo para filtrar por plan). Se mergea en
+  JS. Mismo patrón ya usado en `db/queries/project-detail.ts` y en
+  `app/actions/plans.ts:1147`.
+- Verificado con SQL contra prod (13 planes afectados, factor 1.88x–11x). Tras
+  el fix, los totales del listado coinciden con los del editor del plan.
+- **Sin cambios de schema** → no requiere acciones en prod. Es un fix de
+  display; los datos en DB siempre fueron correctos.
+
 ### Cambios de la sesión 27/may/2026 — Billing del plan: management fee se autoprorratea por consumo
 
 - Pedido del usuario: cuando la analista carga el billing mensual de un plan,
