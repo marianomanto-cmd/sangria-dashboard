@@ -987,6 +987,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+eb889eb  Editor: tarifa/delivery rate-anchored al cambiar el monto (#71)
+a4f16d8  docs: registrar PR #69 en Commits recientes (#70)
 06a217d  Reportes enviados: link opcional al PPT final (#69) — REQUIERE npm run db:push
 2664254  docs: hashes reales en Commits recientes (#63–#67) (#68)
 fd31de1  Editor: preview tipo Excel read-only (#67)
