@@ -4,10 +4,8 @@ import { Plus } from "lucide-react";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { budgetOrigins } from "@/db/schema";
-import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { ProjectStatusChanger } from "@/components/project-status-changer";
 import { StatusBadge } from "@/components/status-badge";
-import { getBillingEstimate } from "@/db/queries/dashboard";
 import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
 import { ProjectEditPanel } from "./edit-panel";
 import { DeletePlanButton } from "@/components/delete-plan-button";
@@ -17,33 +15,6 @@ import {
   formatDate,
   type Language,
 } from "@/lib/i18n";
-
-function nextMonths(count: number): string[] {
-  const out: string[] = [];
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth() + 1;
-  for (let i = 0; i < count; i++) {
-    out.push(`${y}-${String(m).padStart(2, "0")}`);
-    m += 1;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-  }
-  return out;
-}
-
-function previousMonth(): string {
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth(); // 0-indexed → ya es "mes anterior"
-  if (m === 0) {
-    y -= 1;
-    m = 12;
-  }
-  return `${y}-${String(m).padStart(2, "0")}`;
-}
 
 type Props = { params: Promise<{ code: string }> };
 
@@ -87,15 +58,6 @@ export default async function ProjectDetailPage({ params }: Props) {
     .from(budgetOrigins)
     .where(eq(budgetOrigins.clientId, client.id))
     .orderBy(asc(budgetOrigins.name));
-
-  const months = nextMonths(2);
-  const prevMonth = previousMonth();
-  const allEstimates = await getBillingEstimate({
-    months: [prevMonth, ...months],
-    projectId: project.id,
-  });
-  const previousEstimate = allEstimates.find((e) => e.month === prevMonth) ?? null;
-  const estimates = allEstimates.filter((e) => e.month !== prevMonth);
 
   const totalPlanned = plans.reduce((s, p) => s + p.totalUsd, 0);
   const totalSpent = plans.reduce((s, p) => s + p.spentRealUsd, 0);
@@ -265,13 +227,6 @@ export default async function ProjectDetailPage({ params }: Props) {
           </div>
         )}
       </section>
-
-      <BillingEstimateCard
-        estimates={estimates}
-        previousMonth={previousEstimate}
-        hideProjectBreakdown
-        lang={lang}
-      />
     </main>
   );
 }
