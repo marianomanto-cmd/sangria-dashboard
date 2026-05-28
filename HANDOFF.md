@@ -1083,6 +1083,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+1efe5fe  /planes: KPI strip, density toggle, sort, agrupado, columna consumido (#79)
+7238510  docs: registrar PR #77 en Commits recientes (#78)
 0aeee2c  Billing Tracker: tabs "Tracker" + "Estimates" (movido desde /planes) (#77)
 e85df72  docs: registrar PR #75 en Commits recientes (#76)
 94439ae  Fix: /planes y dashboard inflaban total media por cartesian publishers × placements (#75)
