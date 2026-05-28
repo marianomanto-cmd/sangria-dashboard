@@ -946,7 +946,12 @@ function PlacementGridRow({
       <td className="px-2 py-1 text-right">
         <NumberInput
           value={placement.amountUsd}
-          onCommit={(v) => update({ amountUsd: v })}
+          onCommit={(v) =>
+            update({
+              amountUsd: v,
+              metricsJson: recomputeMetricsForAmount(placement.metricsJson, v),
+            })
+          }
           disabled={!editable}
           className="w-32 text-right font-mono"
         />
@@ -1203,6 +1208,27 @@ function applyPrimaryPairChange(
   };
 }
 
+// Cuando cambia el monto del placement, mantenemos la TARIFA fija (modelo
+// "rate-anchored": el CPM/CPC/etc. es lo negociado, el delivery escala con el
+// budget) y recalculamos el delivery de todo pair (principal + secundarios)
+// que tenga rate cargado. Sin esto, tocar el monto deja los pairs guardados
+// desincronizados — el inspector mostraba el warning de "Tarifa y delivery no
+// coinciden" y forzaba a re-editar a mano.
+function recomputeMetricsForAmount(
+  metricsJson: Record<string, number>,
+  newAmount: number,
+): Record<string, number> {
+  if (!Number.isFinite(newAmount) || newAmount <= 0) return metricsJson;
+  const next: Record<string, number> = { ...metricsJson };
+  for (const [deliverySlug, pair] of Object.entries(DIRECT_METRIC_RATES)) {
+    const rateVal = next[pair.rate];
+    if (typeof rateVal === "number" && rateVal > 0) {
+      next[deliverySlug] = Math.round((newAmount * pair.multiplier) / rateVal);
+    }
+  }
+  return next;
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Editor del par tarifa↔delivery según el cost method del placement.
 // ════════════════════════════════════════════════════════════════════════════
@@ -1443,6 +1469,40 @@ function MetricsEditor({
         };
       }),
   );
+
+  // Sincroniza el draft con metrics cuando metrics cambia "desde afuera"
+  // (típicamente: el monto del placement se editó en la grilla y los deliveries
+  // se recomputaron via recomputeMetricsForAmount). Sin esto las filas de
+  // métricas secundarias seguirían mostrando el delivery viejo.
+  // Patrón render-phase setState (React docs: "Adjusting state when a prop
+  // changes"): evita useEffect y los renders en cascada que pelea el linter.
+  // Filas nuevas en progreso (slug vacío) se preservan; si nada cambió se
+  // devuelve la misma referencia para no disparar re-render.
+  const [prevMetrics, setPrevMetrics] = useState(metrics);
+  if (prevMetrics !== metrics) {
+    setPrevMetrics(metrics);
+    setDraft((current) => {
+      let changed = false;
+      const next = current.map((row) => {
+        if (!row.slug) return row;
+        const stored = metrics[row.slug];
+        const pair = DIRECT_METRIC_RATES[row.slug];
+        const storedRate = pair ? metrics[pair.rate] : undefined;
+        const newDelivery =
+          typeof stored === "number" && Number.isFinite(stored)
+            ? String(stored)
+            : "";
+        const newRate =
+          typeof storedRate === "number" && Number.isFinite(storedRate)
+            ? String(storedRate)
+            : "";
+        if (row.delivery === newDelivery && row.rate === newRate) return row;
+        changed = true;
+        return { ...row, delivery: newDelivery, rate: newRate };
+      });
+      return changed ? next : current;
+    });
+  }
 
   const commit = (next: typeof draft) => {
     const obj: Record<string, number> = {};
