@@ -1123,6 +1123,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+b2cb11c  Generador de reportes históricos (Excel) con preview en vivo (#81)
+777027a  docs: registrar PR #79 en Commits recientes (#80)
 1efe5fe  /planes: KPI strip, density toggle, sort, agrupado, columna consumido (#79)
 7238510  docs: registrar PR #77 en Commits recientes (#78)
 0aeee2c  Billing Tracker: tabs "Tracker" + "Estimates" (movido desde /planes) (#77)
