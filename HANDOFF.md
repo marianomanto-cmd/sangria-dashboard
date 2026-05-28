@@ -2,6 +2,31 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Editor: tarifa/delivery rate-anchored al cambiar el monto
+
+- Bug que reportó el usuario: una vez que tarifa y delivery tenían valor,
+  tocar el monto del placement los dejaba inconsistentes (el inspector mostraba
+  el warning "Tarifa y delivery cargados no coinciden") y forzaba a re-editar a
+  mano para que volviera a calcular.
+- Fix: nuevo helper `recomputeMetricsForAmount(metricsJson, newAmount)` en
+  `editor.tsx`. Al editar el monto del placement, **mantiene la tarifa** y
+  recalcula el delivery proporcionalmente para todo pair con rate cargado —
+  principal y secundarios. Es el modelo "rate-anchored" típico de planificación
+  (la tarifa es lo negociado, el delivery escala con el budget). Se pasan los
+  dos campos (`amountUsd` + `metricsJson`) en el mismo `updatePlacement` para
+  que quede atómico.
+- Para que las filas de `MetricsEditor` (métricas secundarias) reflejen el
+  recálculo sin recargar, sincronicé el draft con `metrics` usando el patrón
+  **render-phase setState** (`if (prevMetrics !== metrics) { … }`). El linter
+  del repo bloquea `setState` dentro de `useEffect` y la guía de React
+  recomienda este patrón para "Adjusting state when a prop changes". Las filas
+  nuevas en progreso (slug vacío) se preservan.
+- El comportamiento "edita uno → recalcula el otro" ya estaba en
+  `applyPrimaryPairChange` / `onChangeRate`/`onChangeDelivery` — no hizo falta
+  cambiarlo, pero queda más visible ahora porque ya nunca se llega al estado
+  inconsistente que disparaba la sensación de "tengo que borrar ambos".
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 27/may/2026 — Reportes enviados: link al PPT final
 
 > **ACCIÓN REQUERIDA EN PROD**: este cambio agrega la columna

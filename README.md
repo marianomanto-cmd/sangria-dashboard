@@ -247,7 +247,16 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   [`lib/cost-methods.ts`](lib/cost-methods.ts) (`COST_METHOD_PRIMARY_METRIC`):
   `dCPV→views`, `dCPM→impressions`, `dCPC→clicks`, etc.
 - El editor permite ingresar **rate** o **delivery** indistintamente (el
-  banner principal calcula el otro automáticamente).
+  banner principal calcula el otro automáticamente). El recálculo dispara
+  **siempre que se edita uno de los dos**, incluso si el otro ya tenía valor
+  (`applyPrimaryPairChange` en `editor.tsx`).
+- **Rate-anchored**: al cambiar el **monto** del placement, la tarifa queda
+  fija y el delivery se recalcula proporcional (modelo de planificación: la
+  tarifa es lo negociado, el delivery escala con el budget). Aplica al pair
+  principal y a todos los secundarios con tarifa cargada
+  (`recomputeMetricsForAmount` en `editor.tsx`). El draft del `MetricsEditor`
+  se sincroniza con el render-phase setState pattern para que las filas
+  secundarias muestren el delivery recalculado sin esperar a recargar.
 - Las métricas se guardan en `media_plan_placements.metrics_json` (jsonb)
   con keys = slugs del catálogo `metrics_catalog`. Se persiste el delivery
   (impressions, clicks, etc.) y el rate (cpm, cpc, etc.) ingresado.
