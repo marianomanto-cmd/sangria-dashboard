@@ -2,6 +2,34 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Generador de reportes: column picker
+
+- Agregado al form de `/reportes/generador` un **column picker** (collapsible)
+  para elegir qué columnas mostrar en el preview y descargar en el Excel.
+  Tres categorías de checkboxes:
+  - **Identidad**: client, project, budget origin, plan, publisher, placement,
+    market, cost method, dates, audience.
+  - **Monto**: planned (USD), billed share (USD).
+  - **Métricas**: una checkbox por cada métrica del catálogo del cliente
+    (ej. impressions, clicks, views, CPM, CTR, etc.).
+- URL-based via `?cols=client,plan,placement,planned,impressions,...`
+  (comma-separated slugs). **Default sin `cols`** = todas las columnas
+  (back-compat con links viejos). Al primer toggle el form materializa el
+  set completo en la URL y empieza a destildar/tildar desde ahí.
+- Botón "Reset" devuelve a default. La selección preserva los filtros
+  existentes (project/plan/etc.) y viaja al Excel via los mismos query
+  params → preview y archivo siempre coinciden.
+- Si el usuario destilda todo, el resolver muestra al menos `placement` como
+  fallback (no tiene sentido un Excel sin columnas).
+- Implementación compartida en `lib/historical-report-columns.ts`
+  (`IDENTITY_COL_IDS`, `MONEY_COL_IDS`, `parseColsParam`,
+  `resolveReportColumns`) que usan los tres puntos: form, page y route
+  handler del Excel.
+- `getReportFilterOptions` ahora devuelve también el catálogo de métricas
+  (`metrics: {slug, name, unit, kind}[]`) del cliente para alimentar los
+  checkboxes.
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 27/may/2026 — Fixes UI: client picker en /reportes/generador + sacar BillingEstimateCard de /proyectos
 
 - **Fix (mismo patrón que /reportes/simulador en su momento)**: al cambiar de

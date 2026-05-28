@@ -398,16 +398,27 @@ export type ReportFilterOptions = {
   projects: { id: string; code: string; name: string; budgetOriginId: string }[];
   plans: { id: string; name: string; projectId: string }[];
   placements: { id: string; name: string; planId: string; publisherName: string }[];
+  // Catálogo de métricas del cliente, para el column picker del form. Incluye
+  // direct y calculated; el report sólo materializa los direct (los snapshots
+  // sólo guardan direct), pero la lista completa se expone para que el form
+  // sepa qué chequear.
+  metrics: { slug: string; name: string; unit: string | null; kind: "direct" | "calculated" }[];
 };
 
 export async function getReportFilterOptions(
   clientId: string | null,
 ): Promise<ReportFilterOptions> {
   if (!clientId) {
-    return { budgetOrigins: [], projects: [], plans: [], placements: [] };
+    return {
+      budgetOrigins: [],
+      projects: [],
+      plans: [],
+      placements: [],
+      metrics: [],
+    };
   }
 
-  const [origins, projs, plans, placs] = await Promise.all([
+  const [origins, projs, plans, placs, metrics] = await Promise.all([
     db
       .select({ id: budgetOrigins.id, name: budgetOrigins.name })
       .from(budgetOrigins)
@@ -454,7 +465,28 @@ export async function getReportFilterOptions(
         and(eq(projects.clientId, clientId), isNull(mediaPlans.deletedAt)),
       )
       .orderBy(mediaPlanPlacements.placementName),
+    db
+      .select({
+        slug: metricsCatalog.slug,
+        name: metricsCatalog.name,
+        unit: metricsCatalog.unit,
+        kind: metricsCatalog.kind,
+      })
+      .from(metricsCatalog)
+      .where(
+        and(
+          eq(metricsCatalog.clientId, clientId),
+          eq(metricsCatalog.enabled, true),
+        ),
+      )
+      .orderBy(metricsCatalog.sortOrder, metricsCatalog.name),
   ]);
 
-  return { budgetOrigins: origins, projects: projs, plans, placements: placs };
+  return {
+    budgetOrigins: origins,
+    projects: projs,
+    plans,
+    placements: placs,
+    metrics,
+  };
 }

@@ -8,6 +8,13 @@ import {
 } from "@/db/queries/historical-report";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { formatUsd } from "@/lib/format";
+import {
+  identityLabel,
+  moneyLabel,
+  parseColsParam,
+  resolveReportColumns,
+  type IdentityColId,
+} from "@/lib/historical-report-columns";
 import { DEFAULT_LANGUAGE, formatDate, type Language } from "@/lib/i18n";
 
 type SearchParams = {
@@ -18,6 +25,7 @@ type SearchParams = {
   placement?: string;
   from?: string;
   to?: string;
+  cols?: string;
 };
 
 type Props = {
@@ -50,9 +58,6 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
 
   const [options, report] = await Promise.all([
     getReportFilterOptions(client?.id ?? null),
-    // Sólo corremos la query si hay al menos un filtro: sin filtros la query
-    // sería un escaneo cross-cliente. El usuario tiene que arrancar eligiendo
-    // un cliente desde el global filter del topbar.
     hasAnyFilter
       ? getHistoricalReport(filters)
       : Promise.resolve({
@@ -62,15 +67,20 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
         }),
   ]);
 
+  const selectedCols = parseColsParam(sp.cols);
+  const cols = resolveReportColumns(
+    selectedCols,
+    options.metrics,
+    report.metricColumns,
+  );
+
   const title =
     lang === "es" ? "Generador de reportes" : "Report generator";
   const subtitle =
     lang === "es"
-      ? "Armá un Excel con los datos históricos cargados (billing + tracker). Filtrá por cliente, proyecto, plan, placement y rango de fechas. El preview muestra exactamente lo que va a salir en el Excel."
-      : "Build an Excel from loaded historical data (billing + tracker). Filter by client, project, plan, placement and date range. The preview mirrors the Excel output 1:1.";
+      ? "Armá un Excel con los datos históricos cargados (billing + tracker). Filtrá por cliente, proyecto, plan, placement, rango de fechas y elegí qué columnas mostrar. El preview es 1:1 con el Excel."
+      : "Build an Excel from loaded historical data (billing + tracker). Filter by client, project, plan, placement, date range and pick which columns to show. The preview mirrors the Excel 1:1.";
 
-  // El link de descarga preserva los mismos search params para que el route
-  // handler use la misma query y devuelva la misma data del preview.
   const downloadParams = new URLSearchParams();
   if (client?.slug) downloadParams.set("client", client.slug);
   if (sp.origin) downloadParams.set("origin", sp.origin);
@@ -79,6 +89,7 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
   if (sp.placement) downloadParams.set("placement", sp.placement);
   if (sp.from) downloadParams.set("from", sp.from);
   if (sp.to) downloadParams.set("to", sp.to);
+  if (sp.cols) downloadParams.set("cols", sp.cols);
   const downloadHref = `/api/reports/historical.xlsx${
     downloadParams.toString() ? `?${downloadParams.toString()}` : ""
   }`;
@@ -112,6 +123,7 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
           placement: sp.placement ?? null,
           from: sp.from ?? null,
           to: sp.to ?? null,
+          cols: sp.cols ?? null,
         }}
         hasClient={!!client}
         lang={lang}
@@ -141,13 +153,12 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
             <h2 className="text-sm font-semibold">
               {lang === "es" ? "Preview del Excel" : "Excel preview"}
               <span className="ml-2 text-xs font-normal text-muted">
-                {lang === "es"
-                  ? `${report.rows.length} placement${
-                      report.rows.length === 1 ? "" : "s"
-                    }`
-                  : `${report.rows.length} placement${
-                      report.rows.length === 1 ? "" : "s"
-                    }`}
+                {`${report.rows.length} placement${
+                  report.rows.length === 1 ? "" : "s"
+                }`}
+                {" · "}
+                {cols.identity.length + cols.money.length + cols.metrics.length}{" "}
+                {lang === "es" ? "columnas" : "columns"}
               </span>
             </h2>
             <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
@@ -160,20 +171,15 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
             <table className="text-xs whitespace-nowrap">
               <thead className="bg-paper">
                 <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
-                  <Th>{lang === "es" ? "Cliente" : "Client"}</Th>
-                  <Th>{lang === "es" ? "Proyecto" : "Project"}</Th>
-                  <Th>Plan</Th>
-                  <Th>Publisher</Th>
-                  <Th>Placement</Th>
-                  <Th>{lang === "es" ? "Mercado" : "Market"}</Th>
-                  <Th>{lang === "es" ? "Período" : "Period"}</Th>
-                  <Th align="right">
-                    {lang === "es" ? "Planeado" : "Planned"}
-                  </Th>
-                  <Th align="right">
-                    {lang === "es" ? "Facturado share" : "Billed share"}
-                  </Th>
-                  {report.metricColumns.map((m) => (
+                  {cols.identity.map((id) => (
+                    <Th key={id}>{identityLabel(id, lang)}</Th>
+                  ))}
+                  {cols.money.map((id) => (
+                    <Th key={id} align="right">
+                      {moneyLabel(id, lang)}
+                    </Th>
+                  ))}
+                  {cols.metrics.map((m) => (
                     <Th key={m.slug} align="right">
                       {m.name}
                     </Th>
@@ -186,39 +192,23 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
                     key={r.placementId}
                     className="border-t border-line-soft hover:bg-paper-2/40"
                   >
-                    <Td>{r.clientName}</Td>
-                    <Td>
-                      <span className="text-ink-2">{r.projectName}</span>
-                      <div className="font-mono text-[10px] text-muted">
-                        {r.projectCode}
-                      </div>
-                    </Td>
-                    <Td>{r.planName}</Td>
-                    <Td>{r.publisherName}</Td>
-                    <Td>{r.placementName}</Td>
-                    <Td>
-                      {r.marketName ?? (
-                        <span className="text-muted">—</span>
-                      )}
-                    </Td>
-                    <Td>
-                      <span className="font-mono text-[10px] text-muted">
-                        {formatDate(r.startDate, lang)}
-                        <span className="text-line"> → </span>
-                        {formatDate(r.endDate, lang)}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className="font-mono tabular-nums text-ink-2">
-                        {formatUsd(r.plannedUsd)}
-                      </span>
-                    </Td>
-                    <Td align="right">
-                      <span className="font-mono tabular-nums text-ink">
-                        {formatUsd(r.billedShareUsd)}
-                      </span>
-                    </Td>
-                    {report.metricColumns.map((m) => {
+                    {cols.identity.map((id) => (
+                      <Td key={id}>
+                        {renderIdentityCell(id, r, lang)}
+                      </Td>
+                    ))}
+                    {cols.money.map((id) => (
+                      <Td key={id} align="right">
+                        <span className="font-mono tabular-nums text-ink">
+                          {formatUsd(
+                            id === "planned"
+                              ? r.plannedUsd
+                              : r.billedShareUsd,
+                          )}
+                        </span>
+                      </Td>
+                    ))}
+                    {cols.metrics.map((m) => {
                       const v = r.trackedMetrics[m.slug];
                       return (
                         <Td key={m.slug} align="right">
@@ -245,6 +235,63 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
       )}
     </PageShell>
   );
+}
+
+function renderIdentityCell(
+  id: IdentityColId,
+  r: {
+    clientName: string;
+    projectName: string;
+    projectCode: string;
+    budgetOriginName: string;
+    planName: string;
+    publisherName: string;
+    placementName: string;
+    marketName: string | null;
+    costMethod: string | null;
+    startDate: string | null;
+    endDate: string | null;
+    audience: string | null;
+  },
+  lang: Language,
+): React.ReactNode {
+  switch (id) {
+    case "client":
+      return r.clientName;
+    case "project":
+      return (
+        <>
+          <span className="text-ink-2">{r.projectName}</span>
+          <div className="font-mono text-[10px] text-muted">
+            {r.projectCode}
+          </div>
+        </>
+      );
+    case "budgetOrigin":
+      return <span className="text-muted">{r.budgetOriginName}</span>;
+    case "plan":
+      return r.planName;
+    case "publisher":
+      return r.publisherName;
+    case "placement":
+      return r.placementName;
+    case "market":
+      return r.marketName ?? <span className="text-muted">—</span>;
+    case "costMethod":
+      return r.costMethod ?? <span className="text-muted">—</span>;
+    case "dates":
+      return (
+        <span className="font-mono text-[10px] text-muted">
+          {formatDate(r.startDate, lang)}
+          <span className="text-line"> → </span>
+          {formatDate(r.endDate, lang)}
+        </span>
+      );
+    case "audience":
+      return (
+        <span className="text-muted text-[11px]">{r.audience ?? "—"}</span>
+      );
+  }
 }
 
 function Th({
@@ -280,3 +327,4 @@ function Td({
     </td>
   );
 }
+
