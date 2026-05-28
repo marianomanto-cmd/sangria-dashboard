@@ -7,6 +7,8 @@ import {
   mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
+  planBillingPublishers,
+  planBillings,
   projects,
 } from "@/db/schema";
 import { BudgetOriginSelector } from "@/components/budget-origin-selector";
@@ -14,6 +16,7 @@ import { PageShell } from "@/components/page-shell";
 import { PlansTableClient } from "@/components/plans-table-client";
 import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
+import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { DEFAULT_LANGUAGE } from "@/lib/i18n";
 
 type Props = {
@@ -63,12 +66,15 @@ export default async function PlanesPage({ searchParams }: Props) {
 
   const basePlans = where ? await baseQuery.where(where) : await baseQuery;
 
-  // Total media + período por plan, cada uno en su propia query.
+  // Total media + período + consumido por plan, cada uno en su propia query
+  // (evita el cartesian entre publishers/placements/billings y mantiene cada
+  // suma sobre su tabla nativa).
   const totalsByPlan = new Map<string, number>();
   const periodsByPlan = new Map<string, { start: string | null; end: string | null }>();
+  const spentByPlan = new Map<string, number>();
   if (basePlans.length > 0) {
     const planIds = basePlans.map((p) => p.id);
-    const [totals, periods] = await Promise.all([
+    const [totals, periods, spent] = await Promise.all([
       db
         .select({
           mediaPlanId: mediaPlanPublishers.mediaPlanId,
@@ -90,6 +96,21 @@ export default async function PlanesPage({ searchParams }: Props) {
         )
         .where(inArray(mediaPlanPublishers.mediaPlanId, planIds))
         .groupBy(mediaPlanPublishers.mediaPlanId),
+      // Consumido real (media) = suma de plan_billing_publishers.amount_real_usd
+      // de todos los meses cargados para el plan (cualquier status). Coherente
+      // con `spentRealUsd` en db/queries/dashboard.ts.
+      db
+        .select({
+          mediaPlanId: planBillings.mediaPlanId,
+          spent: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+        })
+        .from(planBillings)
+        .leftJoin(
+          planBillingPublishers,
+          eq(planBillingPublishers.planBillingId, planBillings.id),
+        )
+        .where(inArray(planBillings.mediaPlanId, planIds))
+        .groupBy(planBillings.mediaPlanId),
     ]);
     for (const t of totals)
       totalsByPlan.set(t.mediaPlanId, Number.parseFloat(t.total));
@@ -98,11 +119,14 @@ export default async function PlanesPage({ searchParams }: Props) {
         start: p.periodStart,
         end: p.periodEnd,
       });
+    for (const s of spent)
+      spentByPlan.set(s.mediaPlanId, Number.parseFloat(s.spent));
   }
 
   const allPlans = basePlans.map((p) => ({
     ...p,
     totalMediaUsd: (totalsByPlan.get(p.id) ?? 0).toFixed(2),
+    spentMediaUsd: (spentByPlan.get(p.id) ?? 0).toFixed(2),
     periodStart: periodsByPlan.get(p.id)?.start ?? null,
     periodEnd: periodsByPlan.get(p.id)?.end ?? null,
   }));
@@ -113,6 +137,20 @@ export default async function PlanesPage({ searchParams }: Props) {
     approved: allPlans.filter((p) => p.status === "approved").length,
     archived: allPlans.filter((p) => p.status === "archived").length,
   };
+
+  // KPIs del set filtrado (todo lo que vaya a aparecer en la tabla, antes del
+  // search client-side).
+  const kpiTotalMedia = allPlans.reduce(
+    (s, p) => s + Number.parseFloat(p.totalMediaUsd),
+    0,
+  );
+  const kpiSpent = allPlans.reduce(
+    (s, p) => s + Number.parseFloat(p.spentMediaUsd),
+    0,
+  );
+  const kpiPctConsumed =
+    kpiTotalMedia > 0 ? (kpiSpent / kpiTotalMedia) * 100 : 0;
+  const kpiActive = counts.approved + counts.ready_to_send;
 
   const titleLabel =
     lang === "es"
@@ -139,6 +177,43 @@ export default async function PlanesPage({ searchParams }: Props) {
         basePath="/planes"
         preserveParams={{ status: filter, client: client?.slug }}
       />
+
+      {allPlans.length > 0 && (
+        <section
+          aria-label={lang === "es" ? "Resumen" : "Summary"}
+          className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3"
+        >
+          <KpiCard
+            label={lang === "es" ? "Total media" : "Media total"}
+            value={formatUsd(kpiTotalMedia)}
+            hint={lang === "es" ? `${allPlans.length} planes` : `${allPlans.length} plans`}
+          />
+          <KpiCard
+            label={lang === "es" ? "Consumido" : "Consumed"}
+            value={formatUsdCompact(kpiSpent)}
+            hint={`${kpiPctConsumed.toFixed(1)}%`}
+            progress={kpiPctConsumed}
+          />
+          <KpiCard
+            label={lang === "es" ? "Vigentes" : "Active"}
+            value={`${kpiActive}`}
+            hint={
+              lang === "es"
+                ? `${counts.approved} approved · ${counts.ready_to_send} ready`
+                : `${counts.approved} approved · ${counts.ready_to_send} ready`
+            }
+          />
+          <KpiCard
+            label="Draft"
+            value={`${counts.draft}`}
+            hint={
+              counts.archived > 0
+                ? `${counts.archived} ${lang === "es" ? "archivados" : "archived"}`
+                : undefined
+            }
+          />
+        </section>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
         <FilterPill label={lang === "es" ? "Estado" : "Status"}>
@@ -183,6 +258,42 @@ export default async function PlanesPage({ searchParams }: Props) {
         <PlansTableClient plans={allPlans} lang={lang} />
       )}
     </PageShell>
+  );
+}
+
+function KpiCard({
+  label,
+  value,
+  hint,
+  progress,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+  progress?: number;
+}) {
+  const clamped =
+    progress == null ? null : Math.max(0, Math.min(100, progress));
+  return (
+    <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-4 py-3">
+      <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-ink">
+        {value}
+      </p>
+      {clamped != null && (
+        <div className="mt-2 h-1.5 rounded-full bg-paper overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-accent to-accent-2"
+            style={{ width: `${clamped}%` }}
+          />
+        </div>
+      )}
+      {hint && (
+        <p className="mt-1.5 text-[11px] text-muted tabular-nums">{hint}</p>
+      )}
+    </div>
   );
 }
 
