@@ -2,6 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Billing del plan: management fee se autoprorratea por consumo
+
+- Pedido del usuario: cuando la analista carga el billing mensual de un plan,
+  el management fee del mes debería autopoblar como
+  `(gasto del mes / total media del plan) × total del fee`. Editable a mano,
+  respetando el cap del remanente.
+- Implementación: nuevo helper privado `autoRecomputeMgmtFees(billingId,
+  mediaPlanId)` en `app/actions/plan-billing.ts`. Se llama dentro de
+  `setPublisherConsumption` (después de upsertear la fila del publisher, antes
+  de `recalcBillingTotals`), así cada cambio de consumo recalcula la imputación
+  del management fee del mes.
+  - Cubre **todos** los `media_plan_fees` de `fee_type='management'` con
+    `rate_pct` válido (>0 y <100) del plan.
+  - Total del fee = `TM × ratePct / (100 − ratePct)` (misma fórmula que en el
+    schema y en el editor de plan).
+  - Gasto del mes = suma de `plan_billing_publishers.amount_real_usd` con
+    `is_billable=true` de este billing.
+  - Cap por remanente = `total − sum(otros meses)`. La proración se clampea
+    a `[0, remanente]`.
+  - Upsert con `onConflictDoUpdate` por las dudas (la fila normalmente la
+    pre-crea `ensureBillingForMonth` en cero).
+- **Modelo de override**: si la analista edita a mano vía `setFeeImputation`
+  (que ya existía y mantiene su validación de cap), el valor manual queda
+  guardado, pero el próximo cambio en un publisher de ese mes vuelve a
+  prorratearlo. Es el modelo más simple (sin flag de "manual override"); el
+  user-flow esperado es que la analista ajuste a mano al **final**, después de
+  cargar todos los consumos.
+- UI: en la fila del management fee del editor de billing del plan se muestra
+  un badge `auto` con tooltip explicando el comportamiento.
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 27/may/2026 — Editor: tarifa/delivery rate-anchored al cambiar el monto
 
 - Bug que reportó el usuario: una vez que tarifa y delivery tenían valor,
