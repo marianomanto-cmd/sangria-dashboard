@@ -2,6 +2,46 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Generador de reportes históricos (Excel)
+
+- Nueva ruta `/reportes/generador` que arma un Excel con los datos ya cargados
+  (billing + campaign tracker) filtrando por **cliente** (filtro global),
+  **budget origin**, **proyecto**, **plan**, **placement** y rango **from/to**
+  (YYYY-MM). 1 fila por placement con data histórica en la ventana.
+- **Preview en vivo**: la página renderiza la misma tabla que el Excel a medida
+  que cambian los filtros (URL-based, server-rendered). El botón "Descargar
+  Excel" usa los mismos query params, garantizando que preview y archivo sean
+  idénticos.
+- Granularidad:
+  - **Tracker**: último snapshot por (placement, metric) dentro de la ventana
+    (`campaign_actual_snapshots.value_accumulated` ordenado por
+    `snapshot_date` desc).
+  - **Billing**: suma de `plan_billing_publishers.amount_real_usd` por
+    (plan, publisher) dentro de la ventana, **prorrateado** a cada placement
+    por `placement.amount_usd / Σ amount_usd de placements del publisher en
+    el plan`. Única manera honesta de bajar billing (publisher×mes) a
+    granularidad de placement.
+- Columnas del Excel: cliente, proyecto + code, budget origin, plan,
+  publisher, placement, mercado, cost method, start/end, audiencia, planeado
+  USD, facturado share USD, + una columna por métrica del catálogo del cliente
+  que aparezca en algún snapshot.
+- Filtros cascading client-side desde una sola fetch server-side de
+  `getReportFilterOptions(clientId)`: origin → projects → plans → placements.
+  Cambiar un filtro padre limpia los hijos.
+- Archivos nuevos:
+  - `db/queries/historical-report.ts` (`getHistoricalReport` +
+    `getReportFilterOptions`).
+  - `app/api/reports/historical.xlsx/route.ts` (route handler que llama la
+    misma query y arma el Excel con ExcelJS, mismo estilo que el export de
+    plan: logo, banner, header con filtros, freeze, números formateados por
+    `unit` del catálogo).
+  - `app/(app)/reportes/generador/page.tsx` (server component con form +
+    preview).
+  - `components/report-generator-form.tsx` (client, URL-based, cascading).
+- Card nueva en la landing `/reportes`. Sidebar no se tocó — se llega vía la
+  landing.
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 27/may/2026 — /planes: KPIs, density toggle, sort, agrupado, consumo
 
 Cinco mejoras al listado de Planes de Medios para que deje de ser un catálogo
