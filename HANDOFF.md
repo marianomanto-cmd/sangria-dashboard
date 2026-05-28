@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Fixes UI: client picker en /reportes/generador + sacar BillingEstimateCard de /proyectos
+
+- **Fix (mismo patrón que /reportes/simulador en su momento)**: al cambiar de
+  cliente desde el topbar estando en `/reportes/generador`, el picker
+  redirigía al dashboard porque la ruta no estaba registrada en
+  `CLIENT_FILTER_ROUTES` (`lib/client-filter.ts`). Se la agregó. Ahora el
+  picker se queda en `/reportes/generador?client=slug`.
+- **Cleanup**: removimos las cards de `BillingEstimateCard` de `/proyectos`
+  (lista) y `/proyectos/[code]` (detalle). Esa estimación ya vive en
+  `/billing-tracker?tab=estimates` desde el PR #77; no tiene sentido
+  duplicarla en proyectos. Se sacaron también las queries y helpers
+  `nextMonths`/`previousMonth` que quedaron huérfanos.
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 27/may/2026 — Generador de reportes históricos (Excel)
 
 - Nueva ruta `/reportes/generador` que arma un Excel con los datos ya cargados
