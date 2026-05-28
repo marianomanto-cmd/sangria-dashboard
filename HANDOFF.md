@@ -2,6 +2,32 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — /planes: KPIs, density toggle, sort, agrupado, consumo
+
+Cinco mejoras al listado de Planes de Medios para que deje de ser un catálogo
+plano:
+
+- **Strip de KPIs** arriba del listado: total media + consumido (con barra de
+  progreso al accent) + cantidad de planes vigentes (approved + ready) +
+  drafts. Computado server-side desde el set ya filtrado por status / origen
+  / cliente.
+- **Toggle de densidad** (Normal / Compacta), persistido en localStorage
+  (`sangria:planes:density`). En compacta cambian padding y tamaño de tabla;
+  deja entrar ~50% más de filas por viewport.
+- **Sort por columnas**: Plan / Proyecto / Cliente / Estado / Período /
+  Media·Consumido son clickeables, alternan asc↔desc; default name asc.
+- **Vista "Por proyecto"** (toggle alternativo a Lista): cada proyecto es una
+  card con sus planes anidados y un mini-resumen (cantidad de planes + total
+  media + consumido). Preferencia persistida en `sangria:planes:view`.
+- **Columna Media·Consumido**: en cada plan se muestra el total media, una
+  barra de progreso del consumo real (basado en
+  `plan_billing_publishers.amount_real_usd`) y el % consumido. Para no
+  expandir el listado se queda en una sola columna.
+- Query nueva en `app/(app)/planes/page.tsx` (sum de `amount_real_usd` por
+  plan), en paralelo con las queries de total y período (sin cartesian con
+  placements/billings).
+- **Sin cambios de schema** → no requiere acciones en prod.
+
 ### Cambios de la sesión 27/may/2026 — Billing Tracker: tabs "Tracker" + "Estimates"
 
 - Movimos las cards de **Billing Estimate** de `/planes` a `/billing-tracker`.
