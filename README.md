@@ -92,7 +92,7 @@ app/
         billing/            # editor de facturación mensual
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
-    billing-tracker/        # /billing-tracker — vista jerárquica proyecto → planes → facturas emitidas con desglose media/fee
+    billing-tracker/        # /billing-tracker — tabs "Tracker" (proyecto→plan→facturas emitidas) + "Estimates" (estimación de facturación)
     campaign-tracker/       # /campaign-tracker — hub con filtro vigentes/concluidos/todos + vista de carga de consumo real vs goal
       [planId]/             # vista de carga: tabla editable (autosave) + chart de progreso
     auditoria/              # /auditoria — log legible + papelera (/auditoria/papelera)
@@ -101,12 +101,16 @@ app/
       clientes/               # alta/edición de clientes + config per-cliente (publishers, métricas, mercados, budget origins)
       papelera-planes/        # papelera de planes borrados (soft delete) + restaurar
     reportes/
-      page.tsx              # placeholders de los 6 reports analíticos
-      calendario/           # Reporting Calendar (closed → reportado)
+      page.tsx              # landing con cards a las 3 herramientas
+      calendario/           # Reporting Calendar (closed → reportado, link PPT por reporte)
+      simulador/            # Simulador de escenarios con benchmarks históricos
+      generador/            # Generador de reportes históricos (Excel) con preview en vivo + column picker
   api/
     plans/[planId]/
-      export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas)
+      export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + fechas por publisher/placement)
       export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts)
+    reports/
+      historical.xlsx/route.ts  # XLSX del generador (misma query que el preview, mismo resolveReportColumns)
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
     budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts
@@ -115,9 +119,14 @@ app/
 components/                 # UI compartida
   theme-toggle.tsx          # toggle claro/oscuro (clase .dark en <html>)
   skeleton.tsx              # placeholders shimmer para loading states
-  plans-table-client.tsx    # /planes: buscador en vivo (nombre/código) + orden A-Z (client)
+  plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   pending-board.tsx         # dashboard: tablero de pendientes compacto + colapsable (persiste en localStorage)
+  billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates
+  billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
+  reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
+  reporting-gantt.tsx       # Gantt diario -30/+30 días para reporting calendar
+  report-generator-form.tsx # /reportes/generador: filtros cascading + column picker URL-based
 db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
@@ -126,6 +135,7 @@ db/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
+    historical-report.ts    # getHistoricalReport + getReportFilterOptions (generador de reportes)
     clients.ts, billing.ts, billing-tracker.ts, audit-log.ts, budget-origins.ts,
     reports.ts, campaign-tracker.ts, plan-trash.ts (planes borrados),
     pendings.ts (tablero de pendientes del dashboard)
@@ -138,6 +148,7 @@ lib/
   brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
   plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns + placementsPeriod + sumDirectMetrics (compartido PDF/Excel/preview)
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas
+  historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
   cost-methods.ts           # mapping cost method → métrica principal
@@ -206,6 +217,23 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - Planes: la tabla vive en `components/plans-table-client.tsx`. Proyectos: la
   tabla es `ProjectsTableExpandable` con el prop `searchable` (el dashboard la
   usa con `searchable=false` → sin buscador y con el orden de la query).
+
+### `/planes`: vista panel (KPIs + sort + density + agrupado + consumido)
+- **Strip de KPIs** arriba del listado: total media + consumido (con barra
+  accent) + planes vigentes (approved + ready) + drafts. Computado server-side
+  desde el set ya filtrado por status / origen / cliente.
+- **Sort por columna**: Plan, Proyecto, Cliente, Estado, Período y Media son
+  clickeables y alternan asc↔desc. Default name asc.
+- **Density toggle** (Normal / Compacta), persistido en `localStorage`
+  (`sangria:planes:density`) vía `useSyncExternalStore` — mismo patrón que
+  `pending-board` y `theme-toggle`.
+- **Vista "Por proyecto"** (toggle alternativo a Lista, también persistido en
+  `sangria:planes:view`): planes anidados bajo cada proyecto, con mini-resumen
+  por card (cantidad + total media + consumido).
+- **Columna Media · Consumido**: cada plan muestra el total media, una barra
+  de progreso (`spent / total media`) y el % consumido. El consumo real se
+  calcula en query separada sobre `plan_billing_publishers.amount_real_usd`
+  para no joinear placements+billings (cartesian).
 
 ### El plan vive dentro del proyecto, peer con otros planes
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).
@@ -373,12 +401,16 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `alreadyBilledFeesUsd` de `plan_billing_fees`). Los totales `grossUsd` y
   `alreadyBilledUsd` se siguen exportando como sumas.
 - Acepta filtros opcionales: `months[]`, `budgetOriginId`, `projectId`,
-  `clientId`. Los usan `/proyectos`, `/proyectos/[code]` y `/planes`.
-- La UI (`components/billing-estimate-card.tsx`) renderiza 2 meses adelante
-  + 1 card del **mes anterior** con "Real vs Estimado recomputado" y
-  variación coloreada. El estimado del mes anterior se recomputa contra
-  los planes actuales — no es snapshot histórico; sirve como sanity check
-  para detectar planes modificados después de facturar.
+  `clientId`.
+- **Dónde vive**: en `/billing-tracker?tab=estimates`. Las cards se renderean
+  con `components/billing-estimate-card.tsx` — 2 meses adelante + 1 card del
+  **mes anterior** con "Real vs Estimado recomputado" y variación coloreada.
+  El estimado del mes anterior se recomputa contra los planes actuales — no
+  es snapshot histórico; sirve como sanity check para detectar planes
+  modificados después de facturar.
+- Histórico: estas cards también se mostraban en `/planes`, `/proyectos` y
+  `/proyectos/[code]`; se concentraron en `/billing-tracker` (tab Estimates)
+  para no duplicar (PRs #77 + #83).
 
 ### Tablero de pendientes del dashboard
 - `getDashboardPendings(clientId)` en `db/queries/pendings.ts` arma las cuatro
@@ -638,7 +670,72 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
 
 ---
 
+## Generador de reportes históricos (`/reportes/generador`)
+
+Herramienta separada del export por plan: arma un Excel **cross-plan** con los
+datos históricos cargados (billing + campaign tracker), filtrando por scope.
+
+### UX
+- Filtros URL-based: `client` (global topbar), `origin`, `project`, `plan`,
+  `placement`, `from`, `to` (YYYY-MM). Los dropdowns cascadean en el cliente
+  (origin → projects → plans → placements; cambiar un padre limpia los hijos).
+- **Preview en vivo**: la página server-rendera la misma tabla que va al Excel
+  a medida que cambian los filtros. Cero divergencia preview-vs-archivo porque
+  ambos llaman a `getHistoricalReport` con los mismos params.
+- **Column picker**: panel collapsible "Columnas a mostrar" con checkboxes
+  agrupados (Identidad / Monto / Métricas) — la selección se serializa a
+  `?cols=client,plan,placement,planned,impressions,...`. Default sin `cols` =
+  todas las columnas (back-compat con links viejos).
+
+### Granularidad de la data
+- **1 fila por placement** con data histórica en la ventana.
+- **Tracker**: latest snapshot por `(placement, metric)` con `snapshot_date` ≤
+  `to` y ≥ `from` (`campaign_actual_snapshots.value_accumulated` es running
+  total al cierre del día).
+- **Billing**: suma de `plan_billing_publishers.amount_real_usd` por
+  `(plan, publisher)` dentro de la ventana, **prorrateada** a cada placement
+  por `placement.amount_usd / Σ amount_usd de placements del publisher en el
+  plan`. Es la única manera honesta de bajar billing (publisher×mes) a nivel
+  placement.
+
+### Archivos
+- `db/queries/historical-report.ts`: `getHistoricalReport(filters)` (datos del
+  reporte) + `getReportFilterOptions(clientId)` (cascadas + catálogo de
+  métricas para los checkboxes del column picker).
+- `app/api/reports/historical.xlsx/route.ts`: route handler que llama la
+  misma query y arma el Excel con ExcelJS (mismo estilo que el export de
+  plan: banner accent, logo, freeze, `numFmt` por `unit` del catálogo).
+- `app/(app)/reportes/generador/page.tsx`: server component con form +
+  preview.
+- `components/report-generator-form.tsx`: client component URL-based (filtros
+  cascading + column picker).
+- `lib/historical-report-columns.ts`: IDs canónicos
+  (`IDENTITY_COL_IDS` / `MONEY_COL_IDS`), labels i18n y
+  `resolveReportColumns(selected, catalog, withData)` — usado por page y
+  route handler para que la lista de columnas sea idéntica en ambos lugares.
+
+---
+
 ## Patrones técnicos
+
+### Cartesian publishers × placements al agregar totales (footgun recurrente)
+Si una query hace `LEFT JOIN media_plan_publishers` **y** `LEFT JOIN
+media_plan_placements` (porque placements cuelga 1:N de publishers) en el
+mismo SELECT y suma `publisher.total_planned_usd`, el sum se infla por el
+factor "placements por publisher" del plan. min/max no se afectan porque son
+idempotentes.
+
+**Regla**: no sumar `total_planned_usd` en una query que joine placements.
+Sumarlo en una query separada (sólo contra `media_plan_publishers`) y
+mergear en JS. El período se calcula en su propia query (sí joineando
+placements, pero sin sumas).
+
+Ejemplos de queries que ya siguen el patrón: `db/queries/project-detail.ts`,
+`app/(app)/planes/page.tsx`, `db/queries/dashboard.ts:getPlansSummaryForProjects`,
+`app/actions/plans.ts:1147` (con su `sum(distinct ... * 0 + ...)` que era el
+workaround histórico). Si volves a tocar alguna query que agrega billings
+y/o placements: verificá no caer en esto. Hubo 13 planes mostrando totales
+hasta 11× inflados antes del fix (PR #75).
 
 ### DB lazy con Proxy
 [db/index.ts](db/index.ts) usa un `Proxy` para diferir la creación del
@@ -787,7 +884,10 @@ Idempotente: limpia las tablas antes de insertar.
   — ver "Auth" arriba) y RLS cierra la REST API pública de Supabase. Falta el
   modelo de roles (Account Manager, Media Planner, Finance, Viewer): hoy todo
   usuario logueado del dominio tiene acceso total dentro de la app.
-- **Reportes**: `/reportes` son specs sin implementar.
+- **Reportes**: la sección `/reportes` tiene tres herramientas funcionando:
+  Reporting Calendar (`/reportes/calendario`), Simulador (`/reportes/simulador`)
+  y Generador de reportes históricos (`/reportes/generador`, ver sección
+  dedicada arriba). Ya no quedan placeholders.
 - **Admin de clientes**: `/configuracion/clientes` ya existe (CRUD básico
   con idioma operativo). `/configuracion/usuarios` sigue siendo placeholder
   ("próximamente").
