@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClock, FlaskConical } from "lucide-react";
+import { CalendarClock, FileSpreadsheet, FlaskConical } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
 
 export default function ReportesPage() {
@@ -9,7 +9,7 @@ export default function ReportesPage() {
       title="Insights operativos"
       subtitle="Herramientas que consolidan la data acumulada de planes y campaign tracker para soportar nuevas planificaciones y análisis de performance."
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <Link
           href="/reportes/calendario"
           className="block rounded-lg border border-line bg-white dark:bg-paper-2 p-5 hover:border-accent transition-colors group"
@@ -49,6 +49,32 @@ export default function ReportesPage() {
                 <em>publisher × mercado × cost method</em>, builder de
                 escenarios con autocompletado desde el histórico y comparativa
                 lado a lado para evaluar distintos niveles de inversión.
+              </p>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href="/reportes/generador"
+          className="block rounded-lg border border-line bg-white dark:bg-paper-2 p-5 hover:border-accent transition-colors group"
+        >
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0">
+              <FileSpreadsheet
+                size={16}
+                strokeWidth={2}
+                className="text-accent"
+              />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-medium text-ink group-hover:text-accent transition-colors">
+                Generador de reportes
+              </h3>
+              <p className="text-xs text-muted mt-1 leading-relaxed">
+                Armá un Excel con los datos históricos ya cargados (billing +
+                tracker). Filtrá por cliente, budget origin, proyecto, plan,
+                placement y rango de fechas. El preview en pantalla muestra
+                exactamente lo que se descarga.
               </p>
             </div>
           </div>
