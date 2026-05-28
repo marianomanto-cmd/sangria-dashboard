@@ -1767,8 +1767,14 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
 | Agregar/cambiar pares rate↔delivery del editor | `DIRECT_METRIC_RATES` en `lib/cost-methods.ts` + nueva calculated metric en `scripts/seed.ts` con fórmula `amount / <delivery>` |
 | Editor de métricas del placement       | `MetricsEditor` y `PrincipalPairEditor` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx` |
-| Cambiar la card de estimación de facturación | `components/billing-estimate-card.tsx` (UI) + `getBillingEstimate` en `db/queries/dashboard.ts` (datos) |
+| Cambiar la card de estimación de facturación | `components/billing-estimate-card.tsx` (UI) + `getBillingEstimate` en `db/queries/dashboard.ts` (datos). **Vive en** `/billing-tracker?tab=estimates` (tab Estimates). |
 | Agregar otra dimensión al desglose de la estimación | Extender el `ProjectAgg` interno de `getBillingEstimate` con el nuevo agregado, propagar a `MonthlyBillingEstimate`, y agregar columna en `EstimateMonthCard` |
+| Tocar el generador de reportes históricos | `app/(app)/reportes/generador/page.tsx` (UI/preview), `components/report-generator-form.tsx` (filtros + column picker), `db/queries/historical-report.ts` (`getHistoricalReport` + `getReportFilterOptions`), `app/api/reports/historical.xlsx/route.ts` (Excel). Page y Excel comparten `resolveReportColumns` de `lib/historical-report-columns.ts` para que preview = archivo. |
+| Cambiar qué columnas se ofrecen en el generador | `lib/historical-report-columns.ts` — `IDENTITY_COL_IDS` y `MONEY_COL_IDS` definen las columnas fijas; las métricas vienen del catálogo del cliente vía `getReportFilterOptions`. URL param `?cols=...` (comma-separated). |
+| Tocar las tabs del billing-tracker | `app/(app)/billing-tracker/page.tsx` — la página lee `?tab=tracker|estimates` (default `tracker`) y server-rendera lo correspondiente. El nav está inline (`TabsNav`), URL-based con `<Link>`. |
+| Tocar el preview tipo Excel del editor del plan | `ExcelPreview` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`. Read-only, colapsable; usa los mismos helpers que el export (`resolveMetricColumns`, `placementMetricValue`, `sumDirectMetrics` de `lib/plan-metrics.ts`). |
+| Tocar el formato US / fórmulas estilo Excel de los inputs | `lib/format.ts` — `formatIntInput`, `formatAmountInput`, `parseNumberInput`, `evalNumberInput` (con un mini parser de descenso recursivo, NO usa `eval()`). Wireado en `NumberInput`, `RateInput`, `DeliveryInput`, `RatePctInput` del editor del plan y `NumInput` del billing. |
+| Cambiar el link al PPT del reporte | Schema: `project_reports.report_ppt_url`. Acción: `setReportPptUrl` en `app/actions/reports.ts`. UI: `LinkForm` en `components/reporting-calendar-client.tsx` (modal). Aparece en cada fila de la lista de Reportes Enviados. |
 
 ---
 
