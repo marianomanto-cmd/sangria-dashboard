@@ -1039,6 +1039,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+94439ae  Fix: /planes y dashboard inflaban total media por cartesian publishers × placements (#75)
+ff08c0d  docs: registrar PR #73 en Commits recientes (#74)
 656e77e  Billing del plan: management fee se autoprorratea por consumo (#73)
 3a8cbe4  docs: registrar PR #71 en Commits recientes (#72)
 eb889eb  Editor: tarifa/delivery rate-anchored al cambiar el monto (#71)
