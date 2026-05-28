@@ -9,42 +9,12 @@ import {
   mediaPlans,
   projects,
 } from "@/db/schema";
-import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { BudgetOriginSelector } from "@/components/budget-origin-selector";
 import { PageShell } from "@/components/page-shell";
 import { PlansTableClient } from "@/components/plans-table-client";
 import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
-import { getBillingEstimate } from "@/db/queries/dashboard";
-import { formatUsdCompact } from "@/lib/format";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { DEFAULT_LANGUAGE } from "@/lib/i18n";
-
-function nextMonths(count: number): string[] {
-  const out: string[] = [];
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth() + 1;
-  for (let i = 0; i < count; i++) {
-    out.push(`${y}-${String(m).padStart(2, "0")}`);
-    m += 1;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-  }
-  return out;
-}
-
-function previousMonth(): string {
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth();
-  if (m === 0) {
-    y -= 1;
-    m = 12;
-  }
-  return `${y}-${String(m).padStart(2, "0")}`;
-}
 
 type Props = {
   searchParams: Promise<{ status?: string; origin?: string; client?: string }>;
@@ -137,20 +107,6 @@ export default async function PlanesPage({ searchParams }: Props) {
     periodEnd: periodsByPlan.get(p.id)?.end ?? null,
   }));
 
-  // Estimación cross-planes con los mismos filtros aplicados (origen +
-  // cliente). El filtro de status del listado NO afecta la estimación —
-  // ésta siempre considera approved + ready_to_send, sin importar lo que
-  // el usuario haya elegido en el chip de filtro de la tabla.
-  const months = nextMonths(2);
-  const prevMonth = previousMonth();
-  const allEstimates = await getBillingEstimate({
-    months: [prevMonth, ...months],
-    budgetOriginId: validOrigin,
-    clientId,
-  });
-  const previousEstimate = allEstimates.find((e) => e.month === prevMonth) ?? null;
-  const estimates = allEstimates.filter((e) => e.month !== prevMonth);
-
   const counts = {
     draft: allPlans.filter((p) => p.status === "draft").length,
     ready_to_send: allPlans.filter((p) => p.status === "ready_to_send").length,
@@ -226,12 +182,6 @@ export default async function PlanesPage({ searchParams }: Props) {
       ) : (
         <PlansTableClient plans={allPlans} lang={lang} />
       )}
-
-      <BillingEstimateCard
-        estimates={estimates}
-        previousMonth={previousEstimate}
-        lang={lang}
-      />
     </PageShell>
   );
 }
@@ -277,5 +227,3 @@ function FilterChoice({
     </Link>
   );
 }
-
-void formatUsdCompact;

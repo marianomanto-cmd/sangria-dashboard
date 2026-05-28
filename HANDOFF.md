@@ -2,6 +2,24 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Billing Tracker: tabs "Tracker" + "Estimates"
+
+- Movimos las cards de **Billing Estimate** de `/planes` a `/billing-tracker`.
+  La sección ahora tiene **dos pestañas URL-based** (default `tracker`,
+  `?tab=estimates` para el otro):
+  - **Tracker**: lo que tenía antes (proyectos → planes → facturas emitidas,
+    con filtros project/from/to via `BillingTrackerFilters`).
+  - **Estimates**: el `BillingEstimateCard` con el mes previo + próximos 2,
+    filtrado por `?client=` global.
+- Tabs renderizadas server-side con `<Link>` (mismo patrón que los chips de
+  filtros del proyecto) — preservan estado al refrescar y son shareables.
+  Estilo `border-b-2 -mb-px` con `border-accent` activo (mismo patrón que
+  `components/simulator/simulator-client.tsx`).
+- Se borró de `/planes/page.tsx` la lógica de `nextMonths`/`previousMonth`,
+  el import de `BillingEstimateCard`/`getBillingEstimate` y el render. La
+  página queda focused en el listado + filtros.
+- **Sin cambios de schema** → no requiere acciones en prod. Es puro UI.
+
 ### Cambios de la sesión 27/may/2026 — Fix bug: /planes inflaba el total media (cartesian publishers × placements)
 
 - Bug reportado por el usuario: un plan de 780K (real ~702K) en el listado
