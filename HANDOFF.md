@@ -1018,6 +1018,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+656e77e  Billing del plan: management fee se autoprorratea por consumo (#73)
+3a8cbe4  docs: registrar PR #71 en Commits recientes (#72)
 eb889eb  Editor: tarifa/delivery rate-anchored al cambiar el monto (#71)
 a4f16d8  docs: registrar PR #69 en Commits recientes (#70)
 06a217d  Reportes enviados: link opcional al PPT final (#69) — REQUIERE npm run db:push
