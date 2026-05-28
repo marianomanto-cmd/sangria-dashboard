@@ -322,7 +322,17 @@ export function BillingMonthEditor({
                     <td className="px-5 py-2 text-xs font-mono text-muted uppercase">
                       {f.feeType}
                     </td>
-                    <td className="px-5 py-2 text-ink">{f.feeName}</td>
+                    <td className="px-5 py-2 text-ink">
+                      {f.feeName}
+                      {f.feeType === "management" && (
+                        <span
+                          className="ml-2 text-[10px] uppercase tracking-[0.06em] text-muted font-medium"
+                          title="Se autoprorratea con (gasto del mes / total media del plan) × total fee al cambiar los consumos. Editá a mano para sobreescribir."
+                        >
+                          auto
+                        </span>
+                      )}
+                    </td>
                     <td className="px-5 py-2 text-right font-mono text-ink-2">
                       {formatUsd(f.totalAmountUsd)}
                     </td>

@@ -240,6 +240,15 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - Equivalente a la fórmula de Mariano: `MF = (TM/(1−rate%)) − TM`.
 - Otros tipos de fee (`setup`, `reporting`, `custom`) tienen monto manual,
   `rate_pct` queda `null`.
+- **Auto-prorrateo en el billing mensual**: `setPublisherConsumption` recalcula
+  `plan_billing_fees.amount_imputed_usd` para todos los management fees del
+  plan después de actualizar el consumo de un publisher
+  (`autoRecomputeMgmtFees` en `app/actions/plan-billing.ts`). Fórmula:
+  `(gasto billable del mes / total media del plan) × total del fee`, clampeado
+  por el remanente (`total − ya_imputado_en_otros_meses`). La analista puede
+  sobreescribir a mano vía `setFeeImputation`, pero la próxima edición de un
+  publisher pisa el override. La fila del fee en la UI muestra el badge `auto`
+  en el editor de billing del plan.
 
 ### Cost method principal por placement
 - `media_plan_placements.cost_method` (dCPV, dCPC, dCPM, etc.) marca la

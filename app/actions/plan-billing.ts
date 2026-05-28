@@ -142,6 +142,95 @@ export async function ensureBillingForMonth(input: {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Auto-prorrateo del management fee del mes.
+//
+// Modelo: cuando la analista carga consumos por publisher, el management fee
+// del mes se autopobla como (gasto del mes / total media del plan) × total del
+// fee. La analista puede sobreescribir a mano vía setFeeImputation; el cambio
+// queda pisado por la próxima edición de un publisher (modelo más simple, sin
+// flag de "manual override"). El usuario ajusta a mano al FINAL si necesita.
+//
+// El cap se respeta: si la proración cae por encima del remanente del fee
+// (total - imputado en otros meses), se clampea al remanente.
+// ════════════════════════════════════════════════════════════════════════════
+
+async function autoRecomputeMgmtFees(billingId: string, mediaPlanId: string) {
+  const mgmtFees = await db
+    .select({ id: mediaPlanFees.id, ratePct: mediaPlanFees.ratePct })
+    .from(mediaPlanFees)
+    .where(
+      and(
+        eq(mediaPlanFees.mediaPlanId, mediaPlanId),
+        eq(mediaPlanFees.feeType, "management"),
+      ),
+    );
+  if (mgmtFees.length === 0) return;
+
+  // Total media del plan: suma de los totalPlannedUsd de los bloques de
+  // publishers (mismo cálculo que el banner principal del editor de plan).
+  const [tmRow] = await db
+    .select({
+      total: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+    })
+    .from(mediaPlanPublishers)
+    .where(eq(mediaPlanPublishers.mediaPlanId, mediaPlanId));
+  const totalMedia = Number.parseFloat(tmRow.total);
+  if (!Number.isFinite(totalMedia) || totalMedia <= 0) return;
+
+  // Gasto del mes: suma de los consumos de publishers billable en este billing.
+  const [consumedRow] = await db
+    .select({
+      total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}) filter (where ${planBillingPublishers.isBillable}), 0)`,
+    })
+    .from(planBillingPublishers)
+    .where(eq(planBillingPublishers.planBillingId, billingId));
+  const monthlyConsumed = Number.parseFloat(consumedRow.total);
+
+  for (const f of mgmtFees) {
+    if (!f.ratePct) continue;
+    const ratePct = Number.parseFloat(f.ratePct);
+    if (!Number.isFinite(ratePct) || ratePct <= 0 || ratePct >= 100) continue;
+    // amount = TM × ratePct / (100 - ratePct) (idéntica a la fórmula del plan).
+    const feeTotal = (totalMedia * ratePct) / (100 - ratePct);
+
+    // Ya imputado en OTROS meses (excluyendo este billing).
+    const [otherRow] = await db
+      .select({
+        total: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
+      })
+      .from(planBillingFees)
+      .where(
+        and(
+          eq(planBillingFees.mediaPlanFeeId, f.id),
+          sql`${planBillingFees.planBillingId} != ${billingId}`,
+        ),
+      );
+    const otherImputed = Number.parseFloat(otherRow.total);
+    const remaining = Math.max(0, feeTotal - otherImputed);
+
+    // Proración + cap por remanente.
+    let suggested = (monthlyConsumed / totalMedia) * feeTotal;
+    suggested = Math.max(0, Math.min(suggested, remaining));
+    // Redondeo a 2 decimales (mismo formato numeric(14,2) que el resto).
+    const finalAmount = Math.round(suggested * 100) / 100;
+
+    // Upsert: ensureBillingForMonth pre-crea la fila en 0; usamos
+    // onConflictDoUpdate por las dudas (idempotente si la fila no existe).
+    await db
+      .insert(planBillingFees)
+      .values({
+        planBillingId: billingId,
+        mediaPlanFeeId: f.id,
+        amountImputedUsd: finalAmount.toFixed(2),
+      })
+      .onConflictDoUpdate({
+        target: [planBillingFees.planBillingId, planBillingFees.mediaPlanFeeId],
+        set: { amountImputedUsd: finalAmount.toFixed(2) },
+      });
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Recalcular totales del billing a partir de sus sublines
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -291,6 +380,11 @@ export async function setPublisherConsumption(input: {
     });
   }
 
+  // Auto-prorrateo del management fee del mes (modelo gasto/total media ×
+  // total fee, clampeado por remanente). La analista puede sobreescribir a
+  // mano después con setFeeImputation; un nuevo cambio de publisher vuelve a
+  // pisar el override.
+  await autoRecomputeMgmtFees(input.billingId, billing.mediaPlanId);
   await recalcBillingTotals(input.billingId);
   return { ok: true };
 }
