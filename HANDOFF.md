@@ -1165,6 +1165,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+9a19bce  docs: barrido completo README + HANDOFF para reflejar la sesión 27/may (#87)
+df41fbf  docs: registrar PR #85 en Commits recientes (#86)
 7010d43  Generador de reportes: column picker (elegir columnas a mostrar/descargar) (#85)
 41cc6bc  docs: registrar PR #83 en Commits recientes (#84)
 e2cb0fa  Fix client picker en /reportes/generador + sacar BillingEstimateCard de proyectos (#83)
