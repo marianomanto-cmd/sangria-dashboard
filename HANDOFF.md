@@ -1057,6 +1057,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+0aeee2c  Billing Tracker: tabs "Tracker" + "Estimates" (movido desde /planes) (#77)
+e85df72  docs: registrar PR #75 en Commits recientes (#76)
 94439ae  Fix: /planes y dashboard inflaban total media por cartesian publishers × placements (#75)
 ff08c0d  docs: registrar PR #73 en Commits recientes (#74)
 656e77e  Billing del plan: management fee se autoprorratea por consumo (#73)
