@@ -2,8 +2,18 @@
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
-import { X } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import type { ReportFilterOptions } from "@/db/queries/historical-report";
+import {
+  IDENTITY_COL_IDS,
+  MONEY_COL_IDS,
+  identityLabel,
+  moneyLabel,
+  parseColsParam,
+  serializeColsParam,
+  type IdentityColId,
+  type MoneyColId,
+} from "@/lib/historical-report-columns";
 import type { Language } from "@/lib/i18n";
 
 type Current = {
@@ -13,6 +23,7 @@ type Current = {
   placement: string | null;
   from: string | null;
   to: string | null;
+  cols: string | null;
 };
 
 export function ReportGeneratorForm({
@@ -30,9 +41,6 @@ export function ReportGeneratorForm({
   const pathname = usePathname();
   const sp = useSearchParams();
 
-  // Cascade: si hay project seleccionado, los plans se filtran a ese proyecto;
-  // si hay plan seleccionado, los placements se filtran a ese plan. Filtramos
-  // client-side a partir de la lista completa (chica para Sangria-scale).
   const filteredProjects = useMemo(
     () =>
       current.origin
@@ -55,6 +63,18 @@ export function ReportGeneratorForm({
     [options.placements, current.plan],
   );
 
+  // Selección de columnas: null = default (todas). El picker materializa la
+  // selección al primer toggle: arranca con todas las columnas habituales
+  // marcadas; si el usuario las modifica, escribe `cols` en la URL.
+  const colsSelected = useMemo(() => parseColsParam(current.cols), [
+    current.cols,
+  ]);
+
+  // Para el estado visual de los checkboxes: si no hay `cols` en URL, todo
+  // está chequeado. Si sí hay, solo lo que esté en el set.
+  const isColChecked = (id: string): boolean =>
+    colsSelected ? colsSelected.has(id) : true;
+
   const updateParams = (
     updates: Partial<{
       origin: string;
@@ -63,6 +83,7 @@ export function ReportGeneratorForm({
       placement: string;
       from: string;
       to: string;
+      cols: string;
     }>,
     cascadeReset?: Array<"project" | "plan" | "placement">,
   ) => {
@@ -71,17 +92,30 @@ export function ReportGeneratorForm({
       if (v) next.set(k, v);
       else next.delete(k);
     }
-    // Cuando cambia un filtro padre, limpiamos los hijos para no quedarnos
-    // con un placement de un plan que ya no está en scope.
-    if (cascadeReset)
-      for (const key of cascadeReset) next.delete(key);
+    if (cascadeReset) for (const key of cascadeReset) next.delete(key);
     const qs = next.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
   };
 
+  const toggleCol = (id: string) => {
+    // Materializa la selección al primer toggle: si todavía no hay `cols`
+    // en la URL, arrancamos con el set completo (default), después destildamos
+    // o tildamos según corresponda.
+    const allIds = [
+      ...IDENTITY_COL_IDS,
+      ...MONEY_COL_IDS,
+      ...options.metrics.map((m) => m.slug),
+    ];
+    const base = colsSelected ?? new Set<string>(allIds);
+    if (base.has(id)) base.delete(id);
+    else base.add(id);
+    updateParams({ cols: serializeColsParam(base) });
+  };
+
+  const resetCols = () => updateParams({ cols: "" });
+
   const clearAll = () => {
     const next = new URLSearchParams();
-    // Preservar el cliente del topbar.
     const clientSlug = sp?.get("client");
     if (clientSlug) next.set("client", clientSlug);
     const qs = next.toString();
@@ -94,17 +128,19 @@ export function ReportGeneratorForm({
     current.plan ||
     current.placement ||
     current.from ||
-    current.to;
+    current.to ||
+    current.cols;
 
   return (
-    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 p-4 mb-5">
+    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 p-4 mb-5 space-y-4">
       {!hasClient && (
-        <p className="text-[11px] text-warn mb-3">
+        <p className="text-[11px] text-warn">
           {lang === "es"
             ? "Elegí un cliente en el filtro del topbar para habilitar los demás filtros y el preview."
             : "Pick a client in the topbar filter to enable the rest of the filters and the preview."}
         </p>
       )}
+
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <Field label="Budget Origin">
           <Select
@@ -188,17 +224,118 @@ export function ReportGeneratorForm({
         </Field>
       </div>
 
+      {/* Column picker (collapsible) */}
+      <details className="border-t border-line-soft pt-3">
+        <summary className="cursor-pointer text-sm font-medium text-ink-2 hover:text-ink inline-flex items-center gap-1.5 list-none">
+          <ChevronDown
+            size={14}
+            strokeWidth={2}
+            className="transition-transform group-open:rotate-180"
+          />
+          {lang === "es" ? "Columnas a mostrar" : "Columns to show"}
+          <span className="text-[11px] text-muted font-normal ml-1">
+            {colsSelected
+              ? lang === "es"
+                ? `(${colsSelected.size} seleccionadas)`
+                : `(${colsSelected.size} selected)`
+              : lang === "es"
+                ? "(todas)"
+                : "(all)"}
+          </span>
+        </summary>
+        <div className="mt-3 space-y-3">
+          <ColumnGroup
+            title={lang === "es" ? "Identidad" : "Identity"}
+            items={IDENTITY_COL_IDS.map((id) => ({
+              id: id as IdentityColId,
+              label: identityLabel(id, lang),
+            }))}
+            isChecked={isColChecked}
+            onToggle={toggleCol}
+          />
+          <ColumnGroup
+            title={lang === "es" ? "Monto" : "Money"}
+            items={MONEY_COL_IDS.map((id) => ({
+              id: id as MoneyColId,
+              label: moneyLabel(id, lang),
+            }))}
+            isChecked={isColChecked}
+            onToggle={toggleCol}
+          />
+          {options.metrics.length > 0 && (
+            <ColumnGroup
+              title={lang === "es" ? "Métricas" : "Metrics"}
+              items={options.metrics.map((m) => ({
+                id: m.slug,
+                label: m.unit ? `${m.name} (${m.unit})` : m.name,
+              }))}
+              isChecked={isColChecked}
+              onToggle={toggleCol}
+            />
+          )}
+          {colsSelected != null && (
+            <button
+              type="button"
+              onClick={resetCols}
+              className="text-[11px] text-muted hover:text-ink"
+            >
+              {lang === "es"
+                ? "Reset (mostrar todas las columnas)"
+                : "Reset (show all columns)"}
+            </button>
+          )}
+        </div>
+      </details>
+
       {anyFilter && (
-        <button
-          type="button"
-          onClick={clearAll}
-          className="mt-3 inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
-        >
-          <X size={12} strokeWidth={2.5} />
-          {lang === "es" ? "Limpiar filtros" : "Clear filters"}
-        </button>
+        <div className="pt-2 border-t border-line-soft">
+          <button
+            type="button"
+            onClick={clearAll}
+            className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
+          >
+            <X size={12} strokeWidth={2.5} />
+            {lang === "es" ? "Limpiar todo" : "Clear all"}
+          </button>
+        </div>
       )}
     </section>
+  );
+}
+
+function ColumnGroup({
+  title,
+  items,
+  isChecked,
+  onToggle,
+}: {
+  title: string;
+  items: { id: string; label: string }[];
+  isChecked: (id: string) => boolean;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="text-[10px] uppercase tracking-[0.08em] text-muted font-medium mb-1.5">
+        {title}
+      </legend>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {items.map((it) => (
+          <label
+            key={it.id}
+            className="inline-flex items-center gap-1.5 text-xs text-ink-2 cursor-pointer hover:text-ink"
+          >
+            <input
+              type="checkbox"
+              checked={isChecked(it.id)}
+              onChange={() => onToggle(it.id)}
+              className="rounded border-line text-accent focus:ring-accent"
+            />
+            {it.label}
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 

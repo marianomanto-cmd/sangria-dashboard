@@ -2,14 +2,21 @@ import ExcelJS from "exceljs";
 import { getBrandLogo } from "@/lib/brand-logo";
 import {
   getHistoricalReport,
+  getReportFilterOptions,
   type HistoricalReportFilters,
 } from "@/db/queries/historical-report";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
+import {
+  identityLabel,
+  moneyLabel,
+  parseColsParam,
+  resolveReportColumns,
+  type IdentityColId,
+} from "@/lib/historical-report-columns";
 import { DEFAULT_LANGUAGE, formatDate, type Language, t } from "@/lib/i18n";
 
 // Paleta de marca (idéntica al export de plan).
 const ACCENT = "FF7A1F3D";
-const ACCENT_SOFT = "FFF5E6EC";
 const WHITE = "FFFFFFFF";
 const BORDER = "FFD6D3D1";
 const MUTED = "FF78716C";
@@ -23,10 +30,53 @@ function metricNumFmt(unit: string | null): string {
   return "#,##0";
 }
 
+// Ancho aproximado para cada columna de identidad (chars en Excel).
+const IDENTITY_WIDTHS: Record<IdentityColId, number> = {
+  client: 22,
+  project: 28,
+  budgetOrigin: 18,
+  plan: 24,
+  publisher: 20,
+  placement: 32,
+  market: 14,
+  costMethod: 12,
+  dates: 22,
+  audience: 36,
+};
+
+function identityCellValue(
+  id: IdentityColId,
+  r: Awaited<ReturnType<typeof getHistoricalReport>>["rows"][number],
+  lang: Language,
+): string {
+  switch (id) {
+    case "client":
+      return r.clientName;
+    case "project":
+      return `${r.projectName} · ${r.projectCode}`;
+    case "budgetOrigin":
+      return r.budgetOriginName;
+    case "plan":
+      return r.planName;
+    case "publisher":
+      return r.publisherName;
+    case "placement":
+      return r.placementName;
+    case "market":
+      return r.marketName ?? "";
+    case "costMethod":
+      return r.costMethod ?? "";
+    case "dates":
+      if (!r.startDate && !r.endDate) return "";
+      return `${formatDate(r.startDate, lang)} → ${formatDate(r.endDate, lang)}`;
+    case "audience":
+      return r.audience ?? "";
+  }
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const sp = Object.fromEntries(url.searchParams);
-  // El filtro de cliente respeta el global (?client=slug). Resolvemos a id.
   const client = await resolveClientFromSearchParams(sp);
   const lang: Language = client?.language ?? DEFAULT_LANGUAGE;
 
@@ -40,7 +90,17 @@ export async function GET(req: Request) {
     toMonth: url.searchParams.get("to") || null,
   };
 
-  const { rows, metricColumns } = await getHistoricalReport(filters);
+  const [options, report] = await Promise.all([
+    getReportFilterOptions(client?.id ?? null),
+    getHistoricalReport(filters),
+  ]);
+
+  const selectedCols = parseColsParam(url.searchParams.get("cols"));
+  const cols = resolveReportColumns(
+    selectedCols,
+    options.metrics,
+    report.metricColumns,
+  );
 
   // ── Workbook ────────────────────────────────────────────────────────────
   const wb = new ExcelJS.Workbook();
@@ -50,43 +110,17 @@ export async function GET(req: Request) {
   const sheetTitle = lang === "es" ? "Reporte histórico" : "Historical report";
   const ws = wb.addWorksheet(sheetTitle);
 
-  // Columnas base + métricas dinámicas.
-  const baseHeaders = [
-    lang === "es" ? "Cliente" : "Client",
-    lang === "es" ? "Proyecto" : "Project",
-    "Code",
-    "Budget Origin",
-    "Plan",
-    "Publisher",
-    "Placement",
-    lang === "es" ? "Mercado" : "Market",
-    lang === "es" ? "Cost method" : "Cost method",
-    lang === "es" ? "Inicio" : "Start",
-    lang === "es" ? "Fin" : "End",
-    lang === "es" ? "Audiencia" : "Audience",
-    lang === "es" ? "Planeado (USD)" : "Planned (USD)",
-    lang === "es" ? "Facturado share (USD)" : "Billed share (USD)",
+  const headers: string[] = [
+    ...cols.identity.map((id) => identityLabel(id, lang)),
+    ...cols.money.map((id) => moneyLabel(id, lang)),
+    ...cols.metrics.map((m) => m.name),
   ];
-  const metricHeaders = metricColumns.map((m) => m.name);
-  const allHeaders = [...baseHeaders, ...metricHeaders];
-  const totalCols = allHeaders.length;
+  const totalCols = headers.length;
 
   ws.columns = [
-    { width: 22 }, // cliente
-    { width: 28 }, // proyecto
-    { width: 16 }, // code
-    { width: 18 }, // budget origin
-    { width: 24 }, // plan
-    { width: 20 }, // publisher
-    { width: 32 }, // placement
-    { width: 14 }, // mercado
-    { width: 12 }, // cost method
-    { width: 12 }, // start
-    { width: 12 }, // end
-    { width: 36 }, // audience
-    { width: 16 }, // planeado
-    { width: 16 }, // billed
-    ...metricColumns.map(() => ({ width: 14 })),
+    ...cols.identity.map((id) => ({ width: IDENTITY_WIDTHS[id] })),
+    ...cols.money.map(() => ({ width: 18 })),
+    ...cols.metrics.map(() => ({ width: 14 })),
   ];
 
   // ── Banner ──────────────────────────────────────────────────────────────
@@ -102,10 +136,9 @@ export async function GET(req: Request) {
     fgColor: { argb: ACCENT },
   };
   titleRow.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
-  ws.mergeCells(1, 1, 1, totalCols);
+  if (totalCols >= 2) ws.mergeCells(1, 1, 1, totalCols);
   titleRow.height = 26;
 
-  // Header con filtros aplicados.
   const meta: [string, string][] = [
     [
       lang === "es" ? "Cliente" : "Client",
@@ -119,10 +152,7 @@ export async function GET(req: Request) {
           ? "Todo"
           : "All",
     ],
-    [
-      lang === "es" ? "Filas" : "Rows",
-      String(rows.length),
-    ],
+    [lang === "es" ? "Filas" : "Rows", String(report.rows.length)],
     [
       t("common.generated", lang),
       formatDate(new Date().toISOString().slice(0, 10), lang),
@@ -140,11 +170,10 @@ export async function GET(req: Request) {
     r.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
     r.getCell(2).value = value;
     r.getCell(2).font = { bold: true };
-    ws.mergeCells(i + 2, 2, i + 2, totalCols);
+    if (totalCols >= 2) ws.mergeCells(i + 2, 2, i + 2, totalCols);
     r.height = 18;
   });
 
-  // Logo arriba a la derecha (mismo patrón que export de plan).
   const logo = getBrandLogo();
   if (logo) {
     const imageId = wb.addImage({
@@ -173,7 +202,7 @@ export async function GET(req: Request) {
 
   // ── Header de la tabla ──────────────────────────────────────────────────
   const hdr = ws.getRow(tableHeaderRow);
-  allHeaders.forEach((label, i) => {
+  headers.forEach((label, i) => {
     const c = hdr.getCell(i + 1);
     c.value = label;
     c.font = { bold: true, color: { argb: WHITE } };
@@ -189,52 +218,43 @@ export async function GET(req: Request) {
 
   // ── Filas ───────────────────────────────────────────────────────────────
   let cur = tableHeaderRow + 1;
-  for (const r of rows) {
+  for (const r of report.rows) {
     const row = ws.getRow(cur);
     let c = 1;
-    row.getCell(c++).value = r.clientName;
-    row.getCell(c++).value = r.projectName;
-    row.getCell(c++).value = r.projectCode;
-    row.getCell(c++).value = r.budgetOriginName;
-    row.getCell(c++).value = r.planName;
-    row.getCell(c++).value = r.publisherName;
-    row.getCell(c++).value = r.placementName;
-    row.getCell(c++).value = r.marketName ?? "";
-    row.getCell(c++).value = r.costMethod ?? "";
-    row.getCell(c++).value = r.startDate ?? "";
-    row.getCell(c++).value = r.endDate ?? "";
-    row.getCell(c).value = r.audience ?? "";
-    row.getCell(c).alignment = { wrapText: true, vertical: "top" };
-    c++;
-    const plannedCell = row.getCell(c++);
-    plannedCell.value = r.plannedUsd;
-    plannedCell.numFmt = '"$"#,##0.00';
-    const billedCell = row.getCell(c++);
-    billedCell.value = r.billedShareUsd;
-    billedCell.numFmt = '"$"#,##0.00';
-    for (const mc of metricColumns) {
+    for (const id of cols.identity) {
       const cell = row.getCell(c++);
-      const v = r.trackedMetrics[mc.slug];
+      cell.value = identityCellValue(id, r, lang);
+      if (id === "audience" || id === "project") {
+        cell.alignment = { wrapText: true, vertical: "top" };
+      }
+    }
+    for (const id of cols.money) {
+      const cell = row.getCell(c++);
+      cell.value = id === "planned" ? r.plannedUsd : r.billedShareUsd;
+      cell.numFmt = '"$"#,##0.00';
+    }
+    for (const m of cols.metrics) {
+      const cell = row.getCell(c++);
+      const v = r.trackedMetrics[m.slug];
       if (v != null && Number.isFinite(v)) {
         cell.value = v;
-        cell.numFmt = metricNumFmt(mc.unit);
+        cell.numFmt = metricNumFmt(m.unit);
       }
     }
     for (let i = 1; i <= totalCols; i++) row.getCell(i).border = allBorders;
     cur++;
   }
 
-  if (rows.length === 0) {
+  if (report.rows.length === 0) {
     const empty = ws.getRow(cur);
     empty.getCell(1).value =
       lang === "es"
         ? "Sin datos históricos para los filtros aplicados"
         : "No historical data for the applied filters";
     empty.getCell(1).font = { italic: true, color: { argb: MUTED } };
-    ws.mergeCells(cur, 1, cur, totalCols);
+    if (totalCols >= 2) ws.mergeCells(cur, 1, cur, totalCols);
   }
 
-  // ── Output ──────────────────────────────────────────────────────────────
   const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
   const stamp = new Date().toISOString().slice(0, 10);
   const filename =
@@ -242,10 +262,6 @@ export async function GET(req: Request) {
       /[^A-Za-z0-9._-]+/g,
       "_",
     );
-
-  // Silenciar warning de constante no usada en Excel sin filas (fill ACCENT_SOFT
-  // se podría usar para subtotales en próxima iteración).
-  void ACCENT_SOFT;
 
   return new Response(buf, {
     status: 200,
