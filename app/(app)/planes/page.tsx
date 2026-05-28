@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -66,15 +66,17 @@ export default async function PlanesPage({ searchParams }: Props) {
   if (clientId) conds.push(eq(projects.clientId, clientId));
   const where = conds.length === 1 ? conds[0] : and(...conds);
 
+  // Importante: el `total media` y el `period` se calculan en queries
+  // SEPARADAS porque `media_plan_placements` cuelga 1:N de
+  // `media_plan_publishers`. Joinear ambos en una sola query con `sum` infla
+  // el total publisher × placements (cartesian). Mismo patrón que
+  // `db/queries/project-detail.ts` y `plans.ts:1147`.
   const baseQuery = db
     .select({
       id: mediaPlans.id,
       name: mediaPlans.name,
       status: mediaPlans.status,
       currentVersion: mediaPlans.currentVersion,
-      // periodStart/End derivados de los placements del plan
-      periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
-      periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
       createdAt: mediaPlans.createdAt,
       projectId: projects.id,
       projectCode: projects.code,
@@ -82,24 +84,58 @@ export default async function PlanesPage({ searchParams }: Props) {
       clientName: clients.name,
       clientSlug: clients.slug,
       budgetOriginName: budgetOrigins.name,
-      totalMediaUsd: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
     })
     .from(mediaPlans)
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
-    .leftJoin(
-      mediaPlanPublishers,
-      eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
-    )
-    .leftJoin(
-      mediaPlanPlacements,
-      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
-    )
-    .groupBy(mediaPlans.id, projects.id, clients.id, budgetOrigins.id)
     .orderBy(asc(mediaPlans.name));
 
-  const allPlans = where ? await baseQuery.where(where) : await baseQuery;
+  const basePlans = where ? await baseQuery.where(where) : await baseQuery;
+
+  // Total media + período por plan, cada uno en su propia query.
+  const totalsByPlan = new Map<string, number>();
+  const periodsByPlan = new Map<string, { start: string | null; end: string | null }>();
+  if (basePlans.length > 0) {
+    const planIds = basePlans.map((p) => p.id);
+    const [totals, periods] = await Promise.all([
+      db
+        .select({
+          mediaPlanId: mediaPlanPublishers.mediaPlanId,
+          total: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+        })
+        .from(mediaPlanPublishers)
+        .where(inArray(mediaPlanPublishers.mediaPlanId, planIds))
+        .groupBy(mediaPlanPublishers.mediaPlanId),
+      db
+        .select({
+          mediaPlanId: mediaPlanPublishers.mediaPlanId,
+          periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
+          periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
+        })
+        .from(mediaPlanPlacements)
+        .innerJoin(
+          mediaPlanPublishers,
+          eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+        )
+        .where(inArray(mediaPlanPublishers.mediaPlanId, planIds))
+        .groupBy(mediaPlanPublishers.mediaPlanId),
+    ]);
+    for (const t of totals)
+      totalsByPlan.set(t.mediaPlanId, Number.parseFloat(t.total));
+    for (const p of periods)
+      periodsByPlan.set(p.mediaPlanId, {
+        start: p.periodStart,
+        end: p.periodEnd,
+      });
+  }
+
+  const allPlans = basePlans.map((p) => ({
+    ...p,
+    totalMediaUsd: (totalsByPlan.get(p.id) ?? 0).toFixed(2),
+    periodStart: periodsByPlan.get(p.id)?.start ?? null,
+    periodEnd: periodsByPlan.get(p.id)?.end ?? null,
+  }));
 
   // Estimación cross-planes con los mismos filtros aplicados (origen +
   // cliente). El filtro de status del listado NO afecta la estimación —

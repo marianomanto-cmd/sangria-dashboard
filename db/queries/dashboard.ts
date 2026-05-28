@@ -290,7 +290,12 @@ async function getPlansSummaryForProjects(
 ): Promise<Map<string, DashboardPlanSummary[]>> {
   if (projectIds.length === 0) return new Map();
 
-  const planRows = await db
+  // Importante: el total media y el período se calculan en queries SEPARADAS
+  // porque `media_plan_placements` cuelga 1:N de `media_plan_publishers`.
+  // Joinear ambos y sumar publisher.totalPlannedUsd en la misma query infla
+  // el total por el factor "placements promedio por publisher" (cartesian).
+  // Mismo patrón que `db/queries/project-detail.ts` y `plans.ts:1147`.
+  const baseRows = await db
     .select({
       id: mediaPlans.id,
       projectId: mediaPlans.projectId,
@@ -298,25 +303,48 @@ async function getPlansSummaryForProjects(
       status: mediaPlans.status,
       currentVersion: mediaPlans.currentVersion,
       createdAt: mediaPlans.createdAt,
-      totalMediaUsd: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
-      periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
-      periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
     })
     .from(mediaPlans)
-    .leftJoin(
-      mediaPlanPublishers,
-      eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
-    )
-    .leftJoin(
-      mediaPlanPlacements,
-      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
-    )
     .where(and(inArray(mediaPlans.projectId, projectIds), isNull(mediaPlans.deletedAt)))
-    .groupBy(mediaPlans.id)
     .orderBy(asc(mediaPlans.createdAt));
 
-  if (planRows.length === 0) return new Map();
-  const planIds = planRows.map((p) => p.id);
+  if (baseRows.length === 0) return new Map();
+  const planIds = baseRows.map((p) => p.id);
+
+  const [totals, periods] = await Promise.all([
+    db
+      .select({
+        planId: mediaPlanPublishers.mediaPlanId,
+        total: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+      })
+      .from(mediaPlanPublishers)
+      .where(inArray(mediaPlanPublishers.mediaPlanId, planIds))
+      .groupBy(mediaPlanPublishers.mediaPlanId),
+    db
+      .select({
+        planId: mediaPlanPublishers.mediaPlanId,
+        periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
+        periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
+      })
+      .from(mediaPlanPlacements)
+      .innerJoin(
+        mediaPlanPublishers,
+        eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+      )
+      .where(inArray(mediaPlanPublishers.mediaPlanId, planIds))
+      .groupBy(mediaPlanPublishers.mediaPlanId),
+  ]);
+  const totalByPlan = new Map(totals.map((t) => [t.planId, t.total]));
+  const periodByPlan = new Map(
+    periods.map((p) => [p.planId, { start: p.periodStart, end: p.periodEnd }]),
+  );
+
+  const planRows = baseRows.map((p) => ({
+    ...p,
+    totalMediaUsd: totalByPlan.get(p.id) ?? "0",
+    periodStart: periodByPlan.get(p.id)?.start ?? null,
+    periodEnd: periodByPlan.get(p.id)?.end ?? null,
+  }));
 
   const [
     feeData,
