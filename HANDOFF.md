@@ -1137,6 +1137,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+e2cb0fa  Fix client picker en /reportes/generador + sacar BillingEstimateCard de proyectos (#83)
+125dda4  docs: registrar PR #81 en Commits recientes (#82)
 b2cb11c  Generador de reportes históricos (Excel) con preview en vivo (#81)
 777027a  docs: registrar PR #79 en Commits recientes (#80)
 1efe5fe  /planes: KPI strip, density toggle, sort, agrupado, columna consumido (#79)
