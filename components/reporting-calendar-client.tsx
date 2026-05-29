@@ -2,8 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { ExternalLink, Link2, Pencil, Search } from "lucide-react";
+import { ExternalLink, Link2, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
+  createManualReport,
+  deleteManualReport,
   markReportDelivered,
   setReportDeliveryDate,
   setReportPptUrl,
@@ -12,34 +14,58 @@ import { ReportingGantt } from "@/components/reporting-gantt";
 import type { CalendarReport, SentReport } from "@/db/queries/reports";
 import { formatDate, type Language } from "@/lib/i18n";
 
+type ReportKind = CalendarReport["kind"];
+
 type DialogState =
   | { kind: "closed" }
-  | { kind: "assign"; reportId: string; currentDate: string | null; projectName: string }
-  | { kind: "confirmDelivered"; reportId: string; projectName: string };
+  | {
+      kind: "assign";
+      reportId: string;
+      reportKind: ReportKind;
+      currentDate: string | null;
+      title: string;
+    }
+  | {
+      kind: "confirmDelivered";
+      reportId: string;
+      reportKind: ReportKind;
+      title: string;
+    }
+  | { kind: "createManual" }
+  | {
+      kind: "confirmDeleteManual";
+      reportId: string;
+      title: string;
+    };
 
 export function ReportingCalendarClient({
   pending,
   inProgress,
   sent,
   lang,
+  currentClient,
 }: {
   pending: CalendarReport[];
   inProgress: CalendarReport[];
   sent: SentReport[];
   lang: Language;
+  currentClient: { id: string; name: string } | null;
 }) {
   const [dialog, setDialog] = useState<DialogState>({ kind: "closed" });
   const [pendingAction, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [budgetOrigin, setBudgetOrigin] = useState<string>("");
 
-  // Budget origins presentes en cualquiera de las tres secciones, para el
-  // filtro. El filtro aplica a pendientes + Gantt + enviados.
+  // Solo se cuentan budget origins reales (project_reports los tienen;
+  // manual_reports vienen con null y no entran al filtro).
   const budgetOrigins = useMemo(() => {
     const set = new Set<string>();
-    for (const r of pending) set.add(r.budgetOriginName);
-    for (const r of inProgress) set.add(r.budgetOriginName);
-    for (const r of sent) set.add(r.budgetOriginName);
+    for (const r of pending)
+      if (r.budgetOriginName) set.add(r.budgetOriginName);
+    for (const r of inProgress)
+      if (r.budgetOriginName) set.add(r.budgetOriginName);
+    for (const r of sent)
+      if (r.budgetOriginName) set.add(r.budgetOriginName);
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [pending, inProgress, sent]);
 
@@ -50,6 +76,7 @@ export function ReportingCalendarClient({
         : pending,
     [pending, budgetOrigin],
   );
+  // Al filtrar por origen, los manuales (sin origen) se excluyen.
   const fInProgress = useMemo(
     () =>
       budgetOrigin
@@ -67,16 +94,31 @@ export function ReportingCalendarClient({
 
   const openAssign = (
     reportId: string,
+    reportKind: ReportKind,
     currentDate: string | null,
-    projectName: string,
+    title: string,
   ) => {
     setError(null);
-    setDialog({ kind: "assign", reportId, currentDate, projectName });
+    setDialog({ kind: "assign", reportId, reportKind, currentDate, title });
   };
 
-  const openMarkDelivered = (reportId: string, projectName: string) => {
+  const openMarkDelivered = (
+    reportId: string,
+    reportKind: ReportKind,
+    title: string,
+  ) => {
     setError(null);
-    setDialog({ kind: "confirmDelivered", reportId, projectName });
+    setDialog({ kind: "confirmDelivered", reportId, reportKind, title });
+  };
+
+  const openCreateManual = () => {
+    setError(null);
+    setDialog({ kind: "createManual" });
+  };
+
+  const openConfirmDeleteManual = (reportId: string, title: string) => {
+    setError(null);
+    setDialog({ kind: "confirmDeleteManual", reportId, title });
   };
 
   const close = () => setDialog({ kind: "closed" });
@@ -87,13 +129,11 @@ export function ReportingCalendarClient({
     startTransition(async () => {
       const res = await setReportDeliveryDate({
         reportId: dialog.reportId,
+        kind: dialog.reportKind,
         deliveryDate: date,
       });
-      if (!res.ok) {
-        setError(res.error);
-      } else {
-        close();
-      }
+      if (!res.ok) setError(res.error);
+      else close();
     });
   };
 
@@ -101,40 +141,97 @@ export function ReportingCalendarClient({
     if (dialog.kind !== "confirmDelivered") return;
     setError(null);
     startTransition(async () => {
-      const res = await markReportDelivered({ reportId: dialog.reportId });
-      if (!res.ok) {
-        setError(res.error);
-      } else {
-        close();
-      }
+      const res = await markReportDelivered({
+        reportId: dialog.reportId,
+        kind: dialog.reportKind,
+      });
+      if (!res.ok) setError(res.error);
+      else close();
+    });
+  };
+
+  const submitCreateManual = (input: {
+    name: string;
+    description: string;
+    deliveryDate: string;
+  }) => {
+    if (dialog.kind !== "createManual") return;
+    if (!currentClient) {
+      setError(
+        lang === "es"
+          ? "Elegí un cliente en el topbar antes de crear un reporte manual."
+          : "Pick a client in the topbar before creating a manual report.",
+      );
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const res = await createManualReport({
+        clientId: currentClient.id,
+        name: input.name,
+        description: input.description || null,
+        deliveryDate: input.deliveryDate,
+      });
+      if (!res.ok) setError(res.error);
+      else close();
+    });
+  };
+
+  const submitDeleteManual = () => {
+    if (dialog.kind !== "confirmDeleteManual") return;
+    setError(null);
+    startTransition(async () => {
+      const res = await deleteManualReport({ reportId: dialog.reportId });
+      if (!res.ok) setError(res.error);
+      else close();
     });
   };
 
   return (
     <>
-      {budgetOrigins.length > 1 && (
-        <div className="mb-5 flex items-center gap-2">
-          <label
-            htmlFor="bo-filter"
-            className="text-[10px] uppercase tracking-[0.08em] text-muted font-medium"
-          >
-            Budget Origin
-          </label>
-          <select
-            id="bo-filter"
-            value={budgetOrigin}
-            onChange={(e) => setBudgetOrigin(e.target.value)}
-            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-          >
-            <option value="">{lang === "es" ? "Todos" : "All"}</option>
-            {budgetOrigins.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        {budgetOrigins.length > 1 ? (
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="bo-filter"
+              className="text-[10px] uppercase tracking-[0.08em] text-muted font-medium"
+            >
+              Budget Origin
+            </label>
+            <select
+              id="bo-filter"
+              value={budgetOrigin}
+              onChange={(e) => setBudgetOrigin(e.target.value)}
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              <option value="">{lang === "es" ? "Todos" : "All"}</option>
+              {budgetOrigins.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div />
+        )}
+        <button
+          type="button"
+          onClick={openCreateManual}
+          disabled={!currentClient}
+          title={
+            currentClient
+              ? undefined
+              : lang === "es"
+                ? "Elegí un cliente en el topbar"
+                : "Pick a client in the topbar"
+          }
+          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50 transition-colors"
+        >
+          <Plus size={14} strokeWidth={2.5} />
+          {lang === "es" ? "Crear reporte" : "Create report"}
+        </button>
+      </div>
 
       <section className="mb-8">
         <header className="mb-3 flex items-baseline justify-between">
@@ -175,33 +272,45 @@ export function ReportingCalendarClient({
                 </tr>
               </thead>
               <tbody>
-                {pending.map((r) => (
+                {fPending.map((r) => (
                   <tr
                     key={r.reportId}
                     className="border-t border-line-soft hover:bg-paper-2 transition-colors"
                   >
                     <td className="px-4 py-2.5">
-                      <Link
-                        href={`/proyectos/${r.projectCode}`}
-                        className="font-medium text-ink hover:text-accent"
-                      >
-                        {r.projectName}
-                      </Link>
-                      <p className="text-[11px] text-muted font-mono">
-                        {r.projectCode}
-                      </p>
+                      {r.projectCode ? (
+                        <Link
+                          href={`/proyectos/${r.projectCode}`}
+                          className="font-medium text-ink hover:text-accent"
+                        >
+                          {r.projectName}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-ink">
+                          {r.projectName}
+                        </span>
+                      )}
+                      {r.projectCode && (
+                        <p className="text-[11px] text-muted font-mono">
+                          {r.projectCode}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-2.5">{r.clientName}</td>
                     <td className="px-4 py-2.5 text-muted">
-                      {r.budgetOriginName}
+                      {r.budgetOriginName ?? "—"}
                     </td>
                     <td className="px-4 py-2.5 text-muted font-mono">
-                      {formatDate(r.closedAt.slice(0, 10), lang)}
+                      {r.closedAt
+                        ? formatDate(r.closedAt.slice(0, 10), lang)
+                        : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       <button
                         type="button"
-                        onClick={() => openAssign(r.reportId, null, r.projectName)}
+                        onClick={() =>
+                          openAssign(r.reportId, r.kind, null, r.projectName)
+                        }
                         className="inline-flex items-center rounded-md bg-ink text-white px-3 py-1 text-xs font-medium hover:bg-ink-2 transition-colors"
                       >
                         {lang === "es" ? "Asignar fecha" : "Assign date"}
@@ -234,11 +343,18 @@ export function ReportingCalendarClient({
           lang={lang}
           onAssignDate={(reportId, current) => {
             const r = fInProgress.find((x) => x.reportId === reportId);
-            openAssign(reportId, current, r?.projectName ?? "");
+            if (!r) return;
+            openAssign(reportId, r.kind, current, r.projectName);
           }}
           onMarkDelivered={(reportId) => {
             const r = fInProgress.find((x) => x.reportId === reportId);
-            openMarkDelivered(reportId, r?.projectName ?? "");
+            if (!r) return;
+            openMarkDelivered(reportId, r.kind, r.projectName);
+          }}
+          onDeleteManual={(reportId) => {
+            const r = fInProgress.find((x) => x.reportId === reportId);
+            if (!r) return;
+            openConfirmDeleteManual(reportId, r.projectName);
           }}
         />
       </section>
@@ -249,7 +365,7 @@ export function ReportingCalendarClient({
       {dialog.kind === "assign" && (
         <Modal onClose={close}>
           <AssignDateForm
-            projectName={dialog.projectName}
+            title={dialog.title}
             initialDate={dialog.currentDate}
             lang={lang}
             pending={pendingAction}
@@ -270,17 +386,29 @@ export function ReportingCalendarClient({
                 : "Mark the report as delivered?"}
             </h3>
             <p className="text-sm text-muted">
-              {lang === "es" ? (
+              {dialog.reportKind === "project" ? (
+                lang === "es" ? (
+                  <>
+                    El proyecto <strong>{dialog.title}</strong> va a pasar a
+                    estado <em>reportado</em> y desaparecer del calendario. La
+                    acción queda en el log de auditoría.
+                  </>
+                ) : (
+                  <>
+                    Project <strong>{dialog.title}</strong> will move to{" "}
+                    <em>reported</em> status and leave the calendar. The action
+                    is recorded in the audit log.
+                  </>
+                )
+              ) : lang === "es" ? (
                 <>
-                  El proyecto <strong>{dialog.projectName}</strong> va a pasar a
-                  estado <em>reportado</em> y desaparecer del calendario. La
-                  acción queda en el log de auditoría.
+                  El reporte <strong>{dialog.title}</strong> va a marcarse como
+                  entregado y pasar a la lista de enviados.
                 </>
               ) : (
                 <>
-                  Project <strong>{dialog.projectName}</strong> will move to
-                  <em> reported </em>status and leave the calendar. The action
-                  is recorded in the audit log.
+                  Report <strong>{dialog.title}</strong> will be marked as
+                  delivered and move to the sent list.
                 </>
               )}
             </p>
@@ -312,13 +440,72 @@ export function ReportingCalendarClient({
           </div>
         </Modal>
       )}
+
+      {/* Dialog: crear reporte manual */}
+      {dialog.kind === "createManual" && currentClient && (
+        <Modal onClose={close}>
+          <CreateManualReportForm
+            clientName={currentClient.name}
+            lang={lang}
+            pending={pendingAction}
+            error={error}
+            onCancel={close}
+            onSubmit={submitCreateManual}
+          />
+        </Modal>
+      )}
+
+      {/* Dialog: confirmar eliminación de reporte manual */}
+      {dialog.kind === "confirmDeleteManual" && (
+        <Modal onClose={close}>
+          <div className="space-y-3">
+            <h3 className="text-base font-semibold">
+              {lang === "es"
+                ? "¿Eliminar este reporte manual?"
+                : "Delete this manual report?"}
+            </h3>
+            <p className="text-sm text-muted">
+              <strong>{dialog.title}</strong>
+              {lang === "es"
+                ? " — esta acción no se puede deshacer. Si ya fue entregado, se borra también del histórico."
+                : " — this can't be undone. If it was already delivered, it's removed from history too."}
+            </p>
+            {error && <p className="text-xs text-danger">{error}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={close}
+                disabled={pendingAction}
+                className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm hover:bg-paper-2 disabled:opacity-50"
+              >
+                {lang === "es" ? "Cancelar" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                onClick={submitDeleteManual}
+                disabled={pendingAction}
+                className="rounded-md bg-danger text-white px-3 py-1.5 text-sm font-medium hover:bg-danger/90 disabled:opacity-50"
+              >
+                {pendingAction
+                  ? lang === "es"
+                    ? "Eliminando…"
+                    : "Deleting…"
+                  : lang === "es"
+                    ? "Eliminar"
+                    : "Delete"}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
   );
 }
 
 type LinkEditing = {
   reportId: string;
-  projectName: string;
+  reportKind: ReportKind;
+  title: string;
   current: string | null;
 };
 
@@ -338,7 +525,8 @@ function SentReportsSection({
     setLinkError(null);
     setLinkEditing({
       reportId: r.reportId,
-      projectName: r.projectName,
+      reportKind: r.kind,
+      title: r.projectName,
       current: r.reportPptUrl,
     });
   };
@@ -350,7 +538,11 @@ function SentReportsSection({
     if (!linkEditing) return;
     setLinkError(null);
     startLinkTransition(async () => {
-      const res = await setReportPptUrl({ reportId: linkEditing.reportId, url });
+      const res = await setReportPptUrl({
+        reportId: linkEditing.reportId,
+        kind: linkEditing.reportKind,
+        url,
+      });
       if (!res.ok) setLinkError(res.error);
       else closeLink();
     });
@@ -362,7 +554,8 @@ function SentReportsSection({
     return sent.filter((r) => {
       const haystack = [
         r.projectName,
-        r.projectCode,
+        r.projectCode ?? "",
+        r.description ?? "",
         ...r.planNames,
       ]
         .join(" ")
@@ -397,8 +590,8 @@ function SentReportsSection({
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
             lang === "es"
-              ? "Filtrar por proyecto o campaña…"
-              : "Filter by project or campaign…"
+              ? "Filtrar por proyecto, campaña o nombre…"
+              : "Filter by project, campaign or name…"
           }
           className="w-full rounded-md border border-line bg-white dark:bg-paper-2 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
         />
@@ -422,7 +615,7 @@ function SentReportsSection({
             <thead className="bg-paper-2 border-b border-line">
               <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
                 <th className="px-4 py-2.5">
-                  {lang === "es" ? "Proyecto" : "Project"}
+                  {lang === "es" ? "Reporte" : "Report"}
                 </th>
                 <th className="px-4 py-2.5">
                   {lang === "es" ? "Cliente" : "Client"}
@@ -448,15 +641,31 @@ function SentReportsSection({
                   className="border-t border-line-soft hover:bg-paper-2 transition-colors"
                 >
                   <td className="px-4 py-2.5">
-                    <Link
-                      href={`/proyectos/${r.projectCode}`}
-                      className="font-medium text-ink hover:text-accent"
-                    >
-                      {r.projectName}
-                    </Link>
-                    <p className="text-[11px] text-muted font-mono">
-                      {r.projectCode}
-                    </p>
+                    {r.projectCode ? (
+                      <Link
+                        href={`/proyectos/${r.projectCode}`}
+                        className="font-medium text-ink hover:text-accent"
+                      >
+                        {r.projectName}
+                      </Link>
+                    ) : (
+                      <span className="font-medium text-ink inline-flex items-center gap-2">
+                        {r.projectName}
+                        <span className="text-[9px] uppercase tracking-[0.08em] font-semibold text-muted bg-paper-2 border border-line rounded px-1.5 py-0.5">
+                          manual
+                        </span>
+                      </span>
+                    )}
+                    {r.projectCode && (
+                      <p className="text-[11px] text-muted font-mono">
+                        {r.projectCode}
+                      </p>
+                    )}
+                    {r.description && (
+                      <p className="text-[11px] text-muted line-clamp-1 mt-0.5">
+                        {r.description}
+                      </p>
+                    )}
                   </td>
                   <td className="px-4 py-2.5">{r.clientName}</td>
                   <td className="px-4 py-2.5 text-muted">
@@ -510,7 +719,7 @@ function SentReportsSection({
       {linkEditing && (
         <Modal onClose={closeLink}>
           <LinkForm
-            projectName={linkEditing.projectName}
+            title={linkEditing.title}
             initialUrl={linkEditing.current}
             lang={lang}
             pending={linkPending}
@@ -524,8 +733,125 @@ function SentReportsSection({
   );
 }
 
+function CreateManualReportForm({
+  clientName,
+  lang,
+  pending,
+  error,
+  onCancel,
+  onSubmit,
+}: {
+  clientName: string;
+  lang: Language;
+  pending: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onSubmit: (input: {
+    name: string;
+    description: string;
+    deliveryDate: string;
+  }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState<string>(defaultDate());
+
+  const canSubmit = name.trim().length > 0 && !!deliveryDate;
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!canSubmit) return;
+        onSubmit({ name: name.trim(), description: description.trim(), deliveryDate });
+      }}
+    >
+      <h3 className="text-base font-semibold">
+        {lang === "es" ? "Crear reporte manual" : "Create manual report"}
+      </h3>
+      <p className="text-sm text-muted">{clientName}</p>
+
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+          {lang === "es" ? "Nombre" : "Name"}
+        </span>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoFocus
+          required
+          placeholder={
+            lang === "es"
+              ? "Ej.: Recap Q2 — Always-On Performance"
+              : "e.g.: Q2 Recap — Always-On Performance"
+          }
+          className="mt-1 block w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+          {lang === "es" ? "Descripción" : "Description"}
+        </span>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          placeholder={
+            lang === "es"
+              ? "Contexto del reporte (opcional)…"
+              : "Report context (optional)…"
+          }
+          className="mt-1 block w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+      </label>
+
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+          {lang === "es" ? "Fecha de entrega" : "Delivery date"}
+        </span>
+        <input
+          type="date"
+          value={deliveryDate}
+          onChange={(e) => setDeliveryDate(e.target.value)}
+          required
+          className="mt-1 block w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+      </label>
+
+      {error && <p className="text-xs text-danger">{error}</p>}
+
+      <div className="flex justify-end gap-2 pt-1">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={pending}
+          className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm hover:bg-paper-2 disabled:opacity-50"
+        >
+          {lang === "es" ? "Cancelar" : "Cancel"}
+        </button>
+        <button
+          type="submit"
+          disabled={pending || !canSubmit}
+          className="rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
+        >
+          {pending
+            ? lang === "es"
+              ? "Creando…"
+              : "Creating…"
+            : lang === "es"
+              ? "Crear"
+              : "Create"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function LinkForm({
-  projectName,
+  title,
   initialUrl,
   lang,
   pending,
@@ -533,7 +859,7 @@ function LinkForm({
   onCancel,
   onSubmit,
 }: {
-  projectName: string;
+  title: string;
   initialUrl: string | null;
   lang: Language;
   pending: boolean;
@@ -554,7 +880,7 @@ function LinkForm({
       <h3 className="text-base font-semibold">
         {lang === "es" ? "Link al reporte (PPT)" : "Report link (PPT)"}
       </h3>
-      <p className="text-sm text-muted">{projectName}</p>
+      <p className="text-sm text-muted">{title}</p>
       <label className="block">
         <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
           {lang === "es" ? "URL del PPT (Drive)" : "PPT URL (Drive)"}
@@ -612,7 +938,7 @@ function LinkForm({
 }
 
 function AssignDateForm({
-  projectName,
+  title,
   initialDate,
   lang,
   pending,
@@ -620,7 +946,7 @@ function AssignDateForm({
   onCancel,
   onSubmit,
 }: {
-  projectName: string;
+  title: string;
   initialDate: string | null;
   lang: Language;
   pending: boolean;
@@ -648,9 +974,7 @@ function AssignDateForm({
             ? "Asignar fecha de entrega"
             : "Assign delivery date"}
       </h3>
-      <p className="text-sm text-muted">
-        {projectName}
-      </p>
+      <p className="text-sm text-muted">{title}</p>
       <label className="block">
         <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
           {lang === "es" ? "Fecha de entrega" : "Delivery date"}
@@ -725,3 +1049,7 @@ function defaultDate(): string {
   d.setDate(d.getDate() + 14);
   return d.toISOString().slice(0, 10);
 }
+
+// Silenciar warning si Trash2 quedara sin uso (lo deja para futuro icon
+// dentro del Gantt para reportes manuales).
+void Trash2;

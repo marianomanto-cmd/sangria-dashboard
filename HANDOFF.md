@@ -2,6 +2,40 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 27/may/2026 — Reporting Calendar: reportes manuales
+
+> **ACCIÓN REQUERIDA EN PROD**: este cambio agrega la tabla `manual_reports`.
+> Hay que correr **`npm run db:push`** después del deploy (o pegar el SQL de
+> abajo en el SQL Editor de Supabase). Es aditivo, sin backfill. Después
+> aplicá `db/rls.sql` (también actualizado) para habilitar RLS en la tabla
+> nueva.
+
+- Botón **"Crear reporte"** en `/reportes/calendario` (esquina sup. derecha,
+  al lado del filtro de Budget Origin). Abre un modal con **nombre,
+  descripción, fecha de entrega**. Requiere que haya un cliente seleccionado
+  en el filtro global del topbar — sino el botón queda deshabilitado.
+- El reporte manual aparece en el Gantt como cualquiera de los otros, con
+  badge "manual" y la descripción opcional inline. Se puede editar fecha,
+  marcar entregado, asignar link al PPT y **eliminar** (los project_reports
+  no se pueden eliminar — los maneja el lifecycle del proyecto).
+- Cuando se marca como entregado, va a la lista de "Reportes enviados"
+  debajo del Gantt. Soporta link al PPT igual que los project_reports.
+- Schema: nueva tabla `manual_reports` (id, client_id FK, name, description,
+  delivery_date, delivery_date_assigned_at, delivered_at, report_ppt_url,
+  notes, created_at, updated_at) + dos índices (pending por
+  delivered_at+delivery_date, y client_id).
+- Tipos `CalendarReport` y `SentReport` ahora tienen un discriminador
+  `kind: "project" | "manual"` + `description` (solo manual) +
+  `projectId`/`projectCode`/`closedAt`/`budgetOriginName` nullable (null para
+  manual).
+- Actions actualizadas en `app/actions/reports.ts`:
+  `setReportDeliveryDate`, `markReportDelivered` y `setReportPptUrl` ahora
+  reciben `kind` y rutean a la tabla correspondiente. Nuevas:
+  `createManualReport` y `deleteManualReport`.
+- Pendings (`db/queries/pendings.ts`): `PendingReport.projectCode` pasa a
+  `string | null` para que los manuales también caigan en el tablero del
+  dashboard. La UI ya usa `projectName`/`clientName`, no necesitaba cambios.
+
 ### Cambios de la sesión 27/may/2026 — Generador de reportes: column picker
 
 - Agregado al form de `/reportes/generador` un **column picker** (collapsible)

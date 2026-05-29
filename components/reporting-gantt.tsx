@@ -45,11 +45,13 @@ export function ReportingGantt({
   lang,
   onAssignDate,
   onMarkDelivered,
+  onDeleteManual,
 }: {
   reports: CalendarReport[];
   lang: Language;
   onAssignDate: (reportId: string, current: string | null) => void;
   onMarkDelivered: (reportId: string) => void;
+  onDeleteManual?: (reportId: string) => void;
 }) {
   // Ventana fija basada en "hoy" del cliente. Se calcula en render (client),
   // así si el usuario deja la pestaña abierta varios días y recarga, se
@@ -254,6 +256,11 @@ export function ReportingGantt({
             dayTicks={dayTicks}
             onAssignDate={() => onAssignDate(r.reportId, r.deliveryDate)}
             onMarkDelivered={() => onMarkDelivered(r.reportId)}
+            onDeleteManual={
+              r.kind === "manual" && onDeleteManual
+                ? () => onDeleteManual(r.reportId)
+                : undefined
+            }
           />
         ))}
       </div>
@@ -319,6 +326,7 @@ function GanttRow({
   dayTicks,
   onAssignDate,
   onMarkDelivered,
+  onDeleteManual,
 }: {
   report: CalendarReport;
   lang: Language;
@@ -335,8 +343,14 @@ function GanttRow({
   }[];
   onAssignDate: () => void;
   onMarkDelivered: () => void;
+  onDeleteManual?: () => void;
 }) {
-  const closedAtDay = startOfDay(new Date(report.closedAt));
+  // Para project: closedAt = momento en que pasó a 'closed'.
+  // Para manual: closedAt = createdAt (cuando se creó). El marker gris en el
+  // Gantt representa el "inicio" del trabajo en ambos casos.
+  const closedAtDay = report.closedAt
+    ? startOfDay(new Date(report.closedAt))
+    : null;
   const assignedAtDay = report.deliveryDateAssignedAt
     ? startOfDay(new Date(report.deliveryDateAssignedAt))
     : null;
@@ -344,13 +358,14 @@ function GanttRow({
     ? parseISODate(report.deliveryDate)
     : null;
 
-  const closedOffset = daysBetween(windowStart, closedAtDay);
+  const closedOffset =
+    closedAtDay !== null ? daysBetween(windowStart, closedAtDay) : null;
   const assignedOffset =
     assignedAtDay !== null ? daysBetween(windowStart, assignedAtDay) : null;
   const deliveryOffset =
     deliveryDay !== null ? daysBetween(windowStart, deliveryDay) : null;
 
-  const closedPos = clampToWindow(closedOffset);
+  const closedPos = closedOffset !== null ? clampToWindow(closedOffset) : null;
   const assignedPos =
     assignedOffset !== null ? clampToWindow(assignedOffset) : null;
   const deliveryPos =
@@ -358,6 +373,7 @@ function GanttRow({
 
   // El query ya filtra deliveredAt IS NULL, así que basta con comparar fechas.
   const isLate = deliveryDay !== null && today > deliveryDay;
+  const isManual = report.kind === "manual";
 
   return (
     <div
@@ -367,13 +383,27 @@ function GanttRow({
       {/* Label column */}
       <div className="min-w-0 py-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
-          <Link
-            href={`/proyectos/${report.projectCode}`}
-            className="text-sm font-medium text-ink hover:text-accent truncate"
-            title={report.projectName}
-          >
-            {report.projectName}
-          </Link>
+          {report.projectCode ? (
+            <Link
+              href={`/proyectos/${report.projectCode}`}
+              className="text-sm font-medium text-ink hover:text-accent truncate"
+              title={report.projectName}
+            >
+              {report.projectName}
+            </Link>
+          ) : (
+            <span
+              className="text-sm font-medium text-ink truncate"
+              title={report.projectName}
+            >
+              {report.projectName}
+            </span>
+          )}
+          {isManual && (
+            <span className="text-[9px] uppercase tracking-[0.08em] font-semibold text-muted bg-paper-2 border border-line rounded px-1.5 py-0.5 shrink-0">
+              manual
+            </span>
+          )}
           {isLate && (
             <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-[0.06em] text-danger">
               {lang === "es" ? "atrasado" : "late"}
@@ -382,19 +412,38 @@ function GanttRow({
         </div>
         <p className="text-[11px] text-muted truncate">
           {report.clientName}
-          <span className="text-line"> · </span>
-          <span className="font-mono">{report.projectCode}</span>
+          {report.projectCode && (
+            <>
+              <span className="text-line"> · </span>
+              <span className="font-mono">{report.projectCode}</span>
+            </>
+          )}
+          {isManual && report.description && (
+            <>
+              <span className="text-line"> · </span>
+              <span className="italic">{report.description}</span>
+            </>
+          )}
         </p>
         <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-[10px] text-muted">
-          <span>
-            {lang === "es" ? "Cierre" : "Closed"}: {formatDate(report.closedAt.slice(0, 10), lang)}
-          </span>
+          {report.closedAt && (
+            <span>
+              {isManual
+                ? lang === "es"
+                  ? "Creado"
+                  : "Created"
+                : lang === "es"
+                  ? "Cierre"
+                  : "Closed"}
+              : {formatDate(report.closedAt.slice(0, 10), lang)}
+            </span>
+          )}
           <span>
             {lang === "es" ? "Entrega" : "Delivery"}:{" "}
             {report.deliveryDate ? formatDate(report.deliveryDate, lang) : "—"}
           </span>
         </div>
-        <div className="flex gap-1.5 mt-1">
+        <div className="flex gap-1.5 mt-1 items-center">
           <button
             type="button"
             onClick={onAssignDate}
@@ -410,6 +459,18 @@ function GanttRow({
           >
             {lang === "es" ? "Entregado" : "Delivered"}
           </button>
+          {onDeleteManual && (
+            <>
+              <span className="text-line">·</span>
+              <button
+                type="button"
+                onClick={onDeleteManual}
+                className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted hover:text-danger underline-offset-2 hover:underline"
+              >
+                {lang === "es" ? "Eliminar" : "Delete"}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -482,13 +543,23 @@ function GanttRow({
           />
         )}
 
-        {/* closed marker */}
-        <Marker
-          pos={closedPos}
-          shape="circle"
-          color={COLOR_CLOSED}
-          title={`${lang === "es" ? "Cierre" : "Closed"}: ${formatDate(report.closedAt.slice(0, 10), lang)}`}
-        />
+        {/* closed marker (proyectos = closed_at; manual = created_at) */}
+        {closedPos && report.closedAt && (
+          <Marker
+            pos={closedPos}
+            shape="circle"
+            color={COLOR_CLOSED}
+            title={`${
+              isManual
+                ? lang === "es"
+                  ? "Creado"
+                  : "Created"
+                : lang === "es"
+                  ? "Cierre"
+                  : "Closed"
+            }: ${formatDate(report.closedAt.slice(0, 10), lang)}`}
+          />
+        )}
 
         {/* assigned marker */}
         {assignedPos && (

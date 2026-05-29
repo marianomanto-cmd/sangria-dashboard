@@ -42,6 +42,7 @@ alter table public.plan_billings               enable row level security;
 alter table public.plan_billing_publishers     enable row level security;
 alter table public.plan_billing_fees           enable row level security;
 alter table public.project_reports             enable row level security;
+alter table public.manual_reports               enable row level security;
 alter table public.campaign_placement_actuals  enable row level security;
 alter table public.campaign_actual_snapshots   enable row level security;
 alter table public.simulator_scenarios         enable row level security;
