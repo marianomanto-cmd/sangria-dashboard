@@ -52,7 +52,8 @@ export type PendingTracking = {
 
 export type PendingReport = {
   reportId: string;
-  projectCode: string;
+  // Null para reportes manuales (no atados a un proyecto).
+  projectCode: string | null;
   projectName: string;
   clientName: string;
   deliveryDate: string; // YYYY-MM-DD

@@ -546,6 +546,47 @@ export const projectReports = pgTable(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// Reportes manuales — items "free-form" del reporting calendar que no
+// dependen del lifecycle de un proyecto. Sirven para entregas ad-hoc tipo
+// recaps trimestrales, presentaciones de oportunidad, etc. La analista los
+// crea desde un modal en /reportes/calendario con name + description +
+// delivery_date; aparecen en el Gantt y en la lista de enviados igual que
+// los project_reports.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const manualReports = pgTable(
+  "manual_reports",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    deliveryDate: date("delivery_date").notNull(),
+    deliveryDateAssignedAt: timestamp("delivery_date_assigned_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+    deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+    // Mismo concepto que project_reports.report_ppt_url — link al PPT final.
+    reportPptUrl: text("report_ppt_url"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_manual_reports_pending").on(t.deliveredAt, t.deliveryDate),
+    index("idx_manual_reports_client").on(t.clientId),
+  ],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // Campaign Tracker — valores reales acumulados que carga la trafficker por
 // placement y métrica. NO es time-series: hay un solo row por (placement,
 // metric_key) y el valor se reemplaza en cada edición (autosave). El

@@ -33,6 +33,9 @@ export default async function ReportingCalendarPage({ searchParams }: Props) {
         inProgress={data.inProgress}
         sent={sent}
         lang={lang}
+        currentClient={
+          client ? { id: client.id, name: client.name } : null
+        }
       />
     </PageShell>
   );

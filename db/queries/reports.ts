@@ -3,6 +3,7 @@ import { db } from "@/db";
 import {
   budgetOrigins,
   clients,
+  manualReports,
   mediaPlans,
   projects,
   projectReports,
@@ -19,23 +20,36 @@ import {
 //     Son los que aparecen como filas del Gantt.
 //
 // Notas:
-//   • Los reports con delivered_at != null no aparecen acá: el proyecto pasó
-//     a 'reportado' y el calendario sólo muestra los "abiertos".
+//   • Los reports con delivered_at != null no aparecen acá (van a la lista
+//     de enviados via getSentReports).
 //   • El filtro opcional por clientId respeta `?client=slug` del topbar.
+//   • Hay dos fuentes de reportes:
+//       - project_reports (auto-creados al pasar proyecto a 'closed')
+//       - manual_reports (creados ad-hoc por la analista desde el calendario)
+//     Ambos se mergean en una sola lista. La discriminación va en el field
+//     `kind` para que la UI sepa qué acciones llamar y qué links mostrar.
 // ════════════════════════════════════════════════════════════════════════════
 
 export type CalendarReport = {
   reportId: string;
-  projectId: string;
-  projectCode: string;
+  // Discriminador: "project" → proyecto closed con report auto;
+  //                "manual"  → reporte ad-hoc creado por la analista.
+  kind: "project" | "manual";
+  // Display: project.name para project / manual.name para manual.
   projectName: string;
+  // Solo manual: descripción libre (puede ser null).
+  description: string | null;
+  // Solo project (null para manual):
+  projectId: string | null;
+  projectCode: string | null;
+  closedAt: string | null;
+  budgetOriginName: string | null;
+  // Comunes:
   clientId: string;
   clientName: string;
   clientSlug: string;
-  budgetOriginName: string;
-  closedAt: string;                       // ISO timestamp
-  deliveryDate: string | null;            // YYYY-MM-DD
-  deliveryDateAssignedAt: string | null;  // ISO timestamp
+  deliveryDate: string | null;
+  deliveryDateAssignedAt: string | null;
 };
 
 export type ReportingCalendarData = {
@@ -46,49 +60,71 @@ export type ReportingCalendarData = {
 export async function getReportingCalendar(
   clientId?: string | null,
 ): Promise<ReportingCalendarData> {
-  // Sólo proyectos 'closed' aparecen acá. Los 'reportado' ya tienen el
-  // reporte entregado.
-  const conds = [
+  const projConds = [
     eq(projects.status, "closed"),
     isNull(projectReports.deliveredAt),
   ];
-  if (clientId) conds.push(eq(projects.clientId, clientId));
+  if (clientId) projConds.push(eq(projects.clientId, clientId));
 
-  const rows = await db
-    .select({
-      reportId: projectReports.id,
-      projectId: projects.id,
-      projectCode: projects.code,
-      projectName: projects.name,
-      clientId: clients.id,
-      clientName: clients.name,
-      clientSlug: clients.slug,
-      budgetOriginName: budgetOrigins.name,
-      closedAt: projectReports.closedAt,
-      deliveryDate: projectReports.deliveryDate,
-      deliveryDateAssignedAt: projectReports.deliveryDateAssignedAt,
-    })
-    .from(projectReports)
-    .innerJoin(projects, eq(projectReports.projectId, projects.id))
-    .innerJoin(clients, eq(projects.clientId, clients.id))
-    .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
-    .where(and(...conds))
-    .orderBy(asc(projectReports.closedAt));
+  const manualConds = [isNull(manualReports.deliveredAt)];
+  if (clientId) manualConds.push(eq(manualReports.clientId, clientId));
+
+  const [projRows, manualRows] = await Promise.all([
+    db
+      .select({
+        reportId: projectReports.id,
+        projectId: projects.id,
+        projectCode: projects.code,
+        projectName: projects.name,
+        clientId: clients.id,
+        clientName: clients.name,
+        clientSlug: clients.slug,
+        budgetOriginName: budgetOrigins.name,
+        closedAt: projectReports.closedAt,
+        deliveryDate: projectReports.deliveryDate,
+        deliveryDateAssignedAt: projectReports.deliveryDateAssignedAt,
+      })
+      .from(projectReports)
+      .innerJoin(projects, eq(projectReports.projectId, projects.id))
+      .innerJoin(clients, eq(projects.clientId, clients.id))
+      .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
+      .where(and(...projConds))
+      .orderBy(asc(projectReports.closedAt)),
+    db
+      .select({
+        reportId: manualReports.id,
+        name: manualReports.name,
+        description: manualReports.description,
+        clientId: clients.id,
+        clientName: clients.name,
+        clientSlug: clients.slug,
+        deliveryDate: manualReports.deliveryDate,
+        deliveryDateAssignedAt: manualReports.deliveryDateAssignedAt,
+        createdAt: manualReports.createdAt,
+      })
+      .from(manualReports)
+      .innerJoin(clients, eq(clients.id, manualReports.clientId))
+      .where(and(...manualConds))
+      .orderBy(asc(manualReports.createdAt)),
+  ]);
 
   const pending: CalendarReport[] = [];
   const inProgress: CalendarReport[] = [];
 
-  for (const r of rows) {
+  for (const r of projRows) {
     const row: CalendarReport = {
       reportId: r.reportId,
+      kind: "project",
+      projectName: r.projectName,
+      description: null,
       projectId: r.projectId,
       projectCode: r.projectCode,
-      projectName: r.projectName,
+      closedAt:
+        r.closedAt instanceof Date ? r.closedAt.toISOString() : String(r.closedAt),
+      budgetOriginName: r.budgetOriginName,
       clientId: r.clientId,
       clientName: r.clientName,
       clientSlug: r.clientSlug,
-      budgetOriginName: r.budgetOriginName,
-      closedAt: r.closedAt instanceof Date ? r.closedAt.toISOString() : String(r.closedAt),
       deliveryDate: r.deliveryDate,
       deliveryDateAssignedAt:
         r.deliveryDateAssignedAt instanceof Date
@@ -101,8 +137,34 @@ export async function getReportingCalendar(
     else pending.push(row);
   }
 
+  for (const r of manualRows) {
+    // Los manuales SIEMPRE tienen delivery_date (es required en el schema),
+    // así que van directo a inProgress. Nunca caen en `pending`.
+    inProgress.push({
+      reportId: r.reportId,
+      kind: "manual",
+      projectName: r.name,
+      description: r.description,
+      projectId: null,
+      projectCode: null,
+      closedAt:
+        r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+      budgetOriginName: null,
+      clientId: r.clientId,
+      clientName: r.clientName,
+      clientSlug: r.clientSlug,
+      deliveryDate: r.deliveryDate,
+      deliveryDateAssignedAt:
+        r.deliveryDateAssignedAt instanceof Date
+          ? r.deliveryDateAssignedAt.toISOString()
+          : String(r.deliveryDateAssignedAt),
+    });
+  }
+
   // Gantt sort: por delivery_date asc; los más próximos arriba.
-  inProgress.sort((a, b) => (a.deliveryDate ?? "").localeCompare(b.deliveryDate ?? ""));
+  inProgress.sort((a, b) =>
+    (a.deliveryDate ?? "").localeCompare(b.deliveryDate ?? ""),
+  );
 
   return { pending, inProgress };
 }
@@ -120,109 +182,176 @@ export async function getClosedProjectsWithoutReport(): Promise<
   return rows;
 }
 
-// Cuenta total de reports en el calendario (para badge del sidebar opcional).
+// Cuenta total de reports en el calendario (project + manual no entregados).
 export async function getOpenReportsCount(
   clientId?: string | null,
 ): Promise<number> {
-  const conds = [
+  const projConds = [
     eq(projects.status, "closed"),
     isNull(projectReports.deliveredAt),
   ];
-  if (clientId) conds.push(eq(projects.clientId, clientId));
+  if (clientId) projConds.push(eq(projects.clientId, clientId));
 
-  const rows = await db
-    .select({ id: projectReports.id })
-    .from(projectReports)
-    .innerJoin(projects, eq(projectReports.projectId, projects.id))
-    .where(and(...conds));
-  return rows.length;
+  const manualConds = [isNull(manualReports.deliveredAt)];
+  if (clientId) manualConds.push(eq(manualReports.clientId, clientId));
+
+  const [projRows, manualRows] = await Promise.all([
+    db
+      .select({ id: projectReports.id })
+      .from(projectReports)
+      .innerJoin(projects, eq(projectReports.projectId, projects.id))
+      .where(and(...projConds)),
+    db
+      .select({ id: manualReports.id })
+      .from(manualReports)
+      .where(and(...manualConds)),
+  ]);
+  return projRows.length + manualRows.length;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Reportes enviados: los que ya tienen delivered_at (proyecto = 'reportado').
-// Se listan en la página /reportes/calendario debajo del Gantt, con filtro de
-// texto libre por proyecto o campaña.
-//
-// Trae además los nombres de las campañas (media_plans) de cada proyecto para
-// que el filtro de texto pueda matchear por campaña, no sólo por proyecto.
+// Reportes enviados: los que ya tienen delivered_at. Combina project + manual.
+// Se listan en /reportes/calendario debajo del Gantt, con filtro de texto
+// libre por proyecto / campaña / nombre de reporte manual.
 // ════════════════════════════════════════════════════════════════════════════
 
 export type SentReport = {
   reportId: string;
-  projectId: string;
-  projectCode: string;
-  projectName: string;
+  kind: "project" | "manual";
+  projectName: string;            // display name: project.name o manual.name
+  description: string | null;     // solo manual
+  projectId: string | null;       // null para manual
+  projectCode: string | null;     // null para manual
   clientId: string;
   clientName: string;
   clientSlug: string;
-  budgetOriginName: string;
-  closedAt: string;             // ISO timestamp
-  deliveryDate: string | null;  // YYYY-MM-DD — fecha objetivo comprometida
-  deliveredAt: string;          // ISO timestamp — fecha real de envío
-  reportPptUrl: string | null;  // link al PPT final (Drive), opcional
-  planNames: string[];          // nombres de campañas/planes del proyecto
+  budgetOriginName: string | null;  // null para manual
+  closedAt: string;
+  deliveryDate: string | null;
+  deliveredAt: string;
+  reportPptUrl: string | null;
+  planNames: string[];            // solo para project (vacío para manual)
 };
 
 export async function getSentReports(
   clientId?: string | null,
 ): Promise<SentReport[]> {
-  const conds = [isNotNull(projectReports.deliveredAt)];
-  if (clientId) conds.push(eq(projects.clientId, clientId));
+  const projConds = [isNotNull(projectReports.deliveredAt)];
+  if (clientId) projConds.push(eq(projects.clientId, clientId));
 
-  const rows = await db
-    .select({
-      reportId: projectReports.id,
-      projectId: projects.id,
-      projectCode: projects.code,
-      projectName: projects.name,
-      clientId: clients.id,
-      clientName: clients.name,
-      clientSlug: clients.slug,
-      budgetOriginName: budgetOrigins.name,
-      closedAt: projectReports.closedAt,
-      deliveryDate: projectReports.deliveryDate,
-      deliveredAt: projectReports.deliveredAt,
-      reportPptUrl: projectReports.reportPptUrl,
-    })
-    .from(projectReports)
-    .innerJoin(projects, eq(projectReports.projectId, projects.id))
-    .innerJoin(clients, eq(projects.clientId, clients.id))
-    .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
-    .where(and(...conds))
-    .orderBy(desc(projectReports.deliveredAt));
+  const manualConds = [isNotNull(manualReports.deliveredAt)];
+  if (clientId) manualConds.push(eq(manualReports.clientId, clientId));
 
-  if (rows.length === 0) return [];
+  const [projRows, manualRows] = await Promise.all([
+    db
+      .select({
+        reportId: projectReports.id,
+        projectId: projects.id,
+        projectCode: projects.code,
+        projectName: projects.name,
+        clientId: clients.id,
+        clientName: clients.name,
+        clientSlug: clients.slug,
+        budgetOriginName: budgetOrigins.name,
+        closedAt: projectReports.closedAt,
+        deliveryDate: projectReports.deliveryDate,
+        deliveredAt: projectReports.deliveredAt,
+        reportPptUrl: projectReports.reportPptUrl,
+      })
+      .from(projectReports)
+      .innerJoin(projects, eq(projectReports.projectId, projects.id))
+      .innerJoin(clients, eq(projects.clientId, clients.id))
+      .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
+      .where(and(...projConds))
+      .orderBy(desc(projectReports.deliveredAt)),
+    db
+      .select({
+        reportId: manualReports.id,
+        name: manualReports.name,
+        description: manualReports.description,
+        clientId: clients.id,
+        clientName: clients.name,
+        clientSlug: clients.slug,
+        createdAt: manualReports.createdAt,
+        deliveryDate: manualReports.deliveryDate,
+        deliveredAt: manualReports.deliveredAt,
+        reportPptUrl: manualReports.reportPptUrl,
+      })
+      .from(manualReports)
+      .innerJoin(clients, eq(clients.id, manualReports.clientId))
+      .where(and(...manualConds))
+      .orderBy(desc(manualReports.deliveredAt)),
+  ]);
 
-  // Nombres de campañas (planes) por proyecto para el filtro de texto.
-  const projectIds = [...new Set(rows.map((r) => r.projectId))];
-  const planRows = await db
-    .select({ projectId: mediaPlans.projectId, name: mediaPlans.name })
-    .from(mediaPlans)
-    .where(and(inArray(mediaPlans.projectId, projectIds), isNull(mediaPlans.deletedAt)));
-
+  // Plan names para project rows (filtro de texto).
+  const projectIds = [...new Set(projRows.map((r) => r.projectId))];
   const plansByProject = new Map<string, string[]>();
-  for (const p of planRows) {
-    const arr = plansByProject.get(p.projectId) ?? [];
-    arr.push(p.name);
-    plansByProject.set(p.projectId, arr);
+  if (projectIds.length > 0) {
+    const planRows = await db
+      .select({ projectId: mediaPlans.projectId, name: mediaPlans.name })
+      .from(mediaPlans)
+      .where(
+        and(inArray(mediaPlans.projectId, projectIds), isNull(mediaPlans.deletedAt)),
+      );
+    for (const p of planRows) {
+      const arr = plansByProject.get(p.projectId) ?? [];
+      arr.push(p.name);
+      plansByProject.set(p.projectId, arr);
+    }
   }
 
-  return rows.map((r) => ({
-    reportId: r.reportId,
-    projectId: r.projectId,
-    projectCode: r.projectCode,
-    projectName: r.projectName,
-    clientId: r.clientId,
-    clientName: r.clientName,
-    clientSlug: r.clientSlug,
-    budgetOriginName: r.budgetOriginName,
-    closedAt: r.closedAt instanceof Date ? r.closedAt.toISOString() : String(r.closedAt),
-    deliveryDate: r.deliveryDate,
-    deliveredAt:
-      r.deliveredAt instanceof Date
-        ? r.deliveredAt.toISOString()
-        : String(r.deliveredAt),
-    reportPptUrl: r.reportPptUrl,
-    planNames: plansByProject.get(r.projectId) ?? [],
-  }));
+  const out: SentReport[] = [];
+
+  for (const r of projRows) {
+    out.push({
+      reportId: r.reportId,
+      kind: "project",
+      projectName: r.projectName,
+      description: null,
+      projectId: r.projectId,
+      projectCode: r.projectCode,
+      clientId: r.clientId,
+      clientName: r.clientName,
+      clientSlug: r.clientSlug,
+      budgetOriginName: r.budgetOriginName,
+      closedAt:
+        r.closedAt instanceof Date ? r.closedAt.toISOString() : String(r.closedAt),
+      deliveryDate: r.deliveryDate,
+      deliveredAt:
+        r.deliveredAt instanceof Date
+          ? r.deliveredAt.toISOString()
+          : String(r.deliveredAt),
+      reportPptUrl: r.reportPptUrl,
+      planNames: plansByProject.get(r.projectId) ?? [],
+    });
+  }
+
+  for (const r of manualRows) {
+    out.push({
+      reportId: r.reportId,
+      kind: "manual",
+      projectName: r.name,
+      description: r.description,
+      projectId: null,
+      projectCode: null,
+      clientId: r.clientId,
+      clientName: r.clientName,
+      clientSlug: r.clientSlug,
+      budgetOriginName: null,
+      closedAt:
+        r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+      deliveryDate: r.deliveryDate,
+      deliveredAt:
+        r.deliveredAt instanceof Date
+          ? r.deliveredAt.toISOString()
+          : String(r.deliveredAt),
+      reportPptUrl: r.reportPptUrl,
+      planNames: [],
+    });
+  }
+
+  // Re-sort por deliveredAt desc (cada fuente venía ordenada, pero el merge
+  // no preserva el orden).
+  out.sort((a, b) => b.deliveredAt.localeCompare(a.deliveredAt));
+  return out;
 }
