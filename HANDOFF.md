@@ -1199,6 +1199,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+3a16318  Reporting Calendar: reportes manuales (#89) — REQUIERE npm run db:push
+b16dd0c  docs: registrar PR #87 en Commits recientes (#88)
 9a19bce  docs: barrido completo README + HANDOFF para reflejar la sesión 27/may (#87)
 df41fbf  docs: registrar PR #85 en Commits recientes (#86)
 7010d43  Generador de reportes: column picker (elegir columnas a mostrar/descargar) (#85)
