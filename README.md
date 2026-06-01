@@ -240,6 +240,24 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - Cada plan tiene su propio lifecycle: `draft` → `ready_to_send` → `approved` → `archived`.
 - Los planes pueden solapar fechas y estar todos `approved` al mismo tiempo.
 
+### Aprobar, editar (nueva versión) y descartar el borrador
+- Aprobar (`ready_to_send` → `approved`) guarda un **snapshot inmutable** en
+  `media_plan_snapshots` (`version_number = current_version`, que se incrementa)
+  con el estado completo del plan: publishers + placements + fees + nombre +
+  notas. Ver `transitionPlanStatus` / `capturePlanSnapshot` en
+  `app/actions/plans.ts`.
+- "Editar (nueva versión)" vuelve el plan `approved` → `draft` para trabajar la
+  v(N+1) sin tocar el snapshot aprobado (`current_version` no cambia hasta la
+  próxima aprobación).
+- Si el planner se arrepiente, **"Descartar borrador"** (botón visible en el
+  editor solo en un `draft` con `current_version > 0`) tira todos los cambios y
+  restaura el plan al snapshot de la versión aprobada vigente, dejándolo de
+  nuevo en `approved`. Lo hace `revertPlanToApprovedSnapshot` en
+  `app/actions/plans.ts`: restore **en transacción** (borra el contenido del
+  draft y reinserta el del snapshot, mapeando old→new ids), restaura nombre +
+  notas y vuelve a `approved`. Pre-chequea colisión de nombre con el partial
+  unique index si el draft había renombrado el plan. Es irreversible.
+
 ### Lifecycle del proyecto
 - Estados: `planning` → `active` → `paused` → `closed` → **`reportado`**.
 - `reportado` es el estado terminal: el proyecto cerró sus campañas Y se

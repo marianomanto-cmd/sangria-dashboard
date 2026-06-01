@@ -24,6 +24,7 @@ import {
   removeFee,
   removePlacement,
   removePublisherFromPlan,
+  revertPlanToApprovedSnapshot,
   transitionPlanStatus,
   updateFee,
   updatePlacement,
@@ -150,6 +151,22 @@ export function PlanEditor({
     });
   };
 
+  // Solo aplica a un draft que viene de una versión aprobada (currentVersion > 0):
+  // descarta los cambios y restaura el plan al snapshot aprobado vigente.
+  const onDiscardDraft = () => {
+    if (
+      !confirm(
+        `¿Descartar el borrador y volver al plan aprobado (v${detail.plan.currentVersion})?\n\nSe pierden todos los cambios hechos desde la última aprobación. Esta acción no se puede deshacer.`,
+      )
+    )
+      return;
+    startTransition(async () => {
+      const r = await revertPlanToApprovedSnapshot({ planId: detail.plan.id });
+      if (!r.ok) alert(r.error);
+      refresh();
+    });
+  };
+
   const onApprove = () => {
     if (!confirm(`¿Aprobar el plan ${detail.plan.name} (v${detail.plan.currentVersion + 1})?\n\nEsto crea un snapshot inmutable y bloquea ediciones futuras hasta que vuelvas al draft.`)) return;
     startTransition(async () => {
@@ -257,14 +274,27 @@ export function PlanEditor({
             Billing del plan
           </Link>
           {detail.plan.status === "draft" && (
-            <button
-              type="button"
-              onClick={onMarkReady}
-              disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
-            >
-              Marcar listo para enviar
-            </button>
+            <>
+              {detail.plan.currentVersion > 0 && (
+                <button
+                  type="button"
+                  onClick={onDiscardDraft}
+                  disabled={pending}
+                  className="text-sm text-muted hover:text-danger px-3 py-1.5 disabled:opacity-50"
+                  title={`Descartar los cambios y volver al plan aprobado (v${detail.plan.currentVersion})`}
+                >
+                  Descartar borrador
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onMarkReady}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
+              >
+                Marcar listo para enviar
+              </button>
+            </>
           )}
           {detail.plan.status === "ready_to_send" && (
             <>

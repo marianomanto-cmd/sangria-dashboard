@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
@@ -508,6 +508,195 @@ async function capturePlanSnapshot(planId: string) {
     .where(eq(mediaPlanFees.mediaPlanId, planId));
 
   return { plan, publishers: pubs, placements, fees };
+}
+
+// Forma del JSON que guarda capturePlanSnapshot (lo que persistimos en
+// media_plan_snapshots.snapshot_json). Numéricos / fechas vienen como string
+// desde el JSONB — los reinsertamos tal cual, igual que duplicatePlan.
+type CapturedSnapshot = {
+  plan: typeof mediaPlans.$inferSelect;
+  publishers: (typeof mediaPlanPublishers.$inferSelect)[];
+  placements: (typeof mediaPlanPlacements.$inferSelect)[];
+  fees: (typeof mediaPlanFees.$inferSelect)[];
+};
+
+// Descarta el borrador (draft) de la versión siguiente y vuelve al plan
+// aprobado vigente. Es la contraparte de "Editar (nueva versión)" (que pasa
+// approved → draft de v(N+1)): si el planner abrió un draft sobre un MP ya
+// firmado y se arrepiente, esto tira TODOS los cambios del draft y restaura el
+// plan al snapshot de la última versión aprobada (version = currentVersion),
+// dejándolo de nuevo en 'approved'. Sólo aplica a un draft con
+// currentVersion > 0 (tiene un snapshot al cual volver). Irreversible.
+export async function revertPlanToApprovedSnapshot(input: {
+  planId: string;
+}): Promise<Result> {
+  if (!input.planId) return { ok: false, error: "Falta plan_id" };
+
+  const [plan] = await db
+    .select()
+    .from(mediaPlans)
+    .where(eq(mediaPlans.id, input.planId))
+    .limit(1);
+  if (!plan) return { ok: false, error: "Plan no encontrado" };
+  if (plan.deletedAt) return { ok: false, error: "El plan está en la papelera" };
+  if (plan.status !== "draft" || plan.currentVersion < 1) {
+    return {
+      ok: false,
+      error:
+        "Solo se puede descartar un borrador que viene de una versión aprobada. Este plan no tiene una versión aprobada a la cual volver.",
+    };
+  }
+
+  // Snapshot de la versión aprobada vigente (= currentVersion).
+  const [snap] = await db
+    .select()
+    .from(mediaPlanSnapshots)
+    .where(
+      and(
+        eq(mediaPlanSnapshots.mediaPlanId, input.planId),
+        eq(mediaPlanSnapshots.versionNumber, plan.currentVersion),
+      ),
+    )
+    .limit(1);
+  if (!snap) {
+    return {
+      ok: false,
+      error: `No se encontró el snapshot de la versión aprobada (v${plan.currentVersion}).`,
+    };
+  }
+
+  const data = snap.snapshotJson as CapturedSnapshot;
+  if (!data || !data.plan) {
+    return {
+      ok: false,
+      error: "El snapshot de la versión aprobada está vacío o corrupto.",
+    };
+  }
+
+  // Si el draft renombró el plan y otro plan VIVO del proyecto ya tomó el
+  // nombre aprobado, restaurarlo violaría el partial unique index
+  // (project_id, name) WHERE deleted_at IS NULL. Pre-chequeamos para devolver
+  // un error legible en vez de reventar la transacción.
+  if (data.plan.name !== plan.name) {
+    const [clash] = await db
+      .select({ id: mediaPlans.id })
+      .from(mediaPlans)
+      .where(
+        and(
+          eq(mediaPlans.projectId, plan.projectId),
+          eq(mediaPlans.name, data.plan.name),
+          isNull(mediaPlans.deletedAt),
+          ne(mediaPlans.id, input.planId),
+        ),
+      )
+      .limit(1);
+    if (clash) {
+      return {
+        ok: false,
+        error: `No se puede volver al plan aprobado: ya hay otro plan activo llamado "${data.plan.name}" en el proyecto. Renombralo e intentá de nuevo.`,
+      };
+    }
+  }
+
+  // Restaurar es destructivo (borra el contenido del draft y reescribe el del
+  // snapshot): lo hacemos en una transacción para no dejar el plan a medias si
+  // algo falla.
+  await db.transaction(async (tx) => {
+    // El delete de publishers cascadea a sus placements (FK onDelete cascade).
+    await tx
+      .delete(mediaPlanPublishers)
+      .where(eq(mediaPlanPublishers.mediaPlanId, input.planId));
+    await tx
+      .delete(mediaPlanFees)
+      .where(eq(mediaPlanFees.mediaPlanId, input.planId));
+
+    // Reinsertar publishers del snapshot (old id → new id para los placements).
+    const idMap = new Map<string, string>();
+    for (const pub of data.publishers ?? []) {
+      const [newPub] = await tx
+        .insert(mediaPlanPublishers)
+        .values({
+          mediaPlanId: input.planId,
+          publisherId: pub.publisherId,
+          totalPlannedUsd: pub.totalPlannedUsd,
+          agencyPaysOverride: pub.agencyPaysOverride,
+          sortOrder: pub.sortOrder,
+        })
+        .returning();
+      idMap.set(pub.id, newPub.id);
+    }
+
+    const placements = data.placements ?? [];
+    if (placements.length > 0) {
+      await tx.insert(mediaPlanPlacements).values(
+        placements.map((p) => ({
+          mediaPlanPublisherId: idMap.get(p.mediaPlanPublisherId)!,
+          placementName: p.placementName,
+          marketId: p.marketId,
+          audience: p.audience,
+          amountUsd: p.amountUsd,
+          costMethod: p.costMethod,
+          startDate: p.startDate,
+          endDate: p.endDate,
+          metricsJson: p.metricsJson ?? {},
+          notesMd: p.notesMd,
+          sortOrder: p.sortOrder,
+        })),
+      );
+    }
+
+    const fees = data.fees ?? [];
+    if (fees.length > 0) {
+      await tx.insert(mediaPlanFees).values(
+        fees.map((f) => ({
+          mediaPlanId: input.planId,
+          feeType: f.feeType,
+          name: f.name,
+          ratePct: f.ratePct,
+          amountUsd: f.amountUsd,
+          notes: f.notes,
+          sortOrder: f.sortOrder,
+        })),
+      );
+    }
+
+    // Restaurar metadata (nombre + notas) y volver a 'approved'. currentVersion
+    // no cambia: seguimos en la versión aprobada vigente.
+    await tx
+      .update(mediaPlans)
+      .set({
+        name: data.plan.name,
+        notesMd: data.plan.notesMd,
+        status: "approved",
+      })
+      .where(eq(mediaPlans.id, input.planId));
+  });
+
+  await recordAudit({
+    entityType: "media_plan",
+    entityId: input.planId,
+    action: "update",
+    beforeJson: plan,
+    afterJson: {
+      ...plan,
+      name: data.plan.name,
+      notesMd: data.plan.notesMd,
+      status: "approved",
+      revertedToVersion: plan.currentVersion,
+    },
+  });
+
+  const [proj] = await db
+    .select({ code: projects.code })
+    .from(projects)
+    .where(eq(projects.id, plan.projectId))
+    .limit(1);
+  if (proj) {
+    revalidatePath(`/proyectos/${proj.code}`);
+    revalidatePath(`/proyectos/${proj.code}/planes/${input.planId}`);
+  }
+
+  return { ok: true };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
