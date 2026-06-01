@@ -2,6 +2,26 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — Cosmético: badge de estado de plan unificado
+
+- **Bug visible**: el mismo estado `ready_to_send` se mostraba como
+  **"ready to send"** en el editor y el detalle de proyecto, pero como
+  **"ready"** en las tablas de Planes y Proyectos. El mapa de estilos del badge
+  vivía duplicado en 4 archivos y el label había driftado.
+- Nuevo componente **`components/plan-status-badge.tsx`** (`PlanStatusBadge`):
+  fuente de verdad única del label + color + dot del estado de un plan. Espejo
+  de `StatusBadge` (estados de proyecto). Prop `size`: `md` (default, headers +
+  tabla de planes) y `sm` (filas compactas del breakdown de proyectos).
+- Reemplazados los 4 mapas locales (`editor.tsx`,
+  `proyectos/[code]/page.tsx`, `projects-table-expandable.tsx`,
+  `plans-table-client.tsx`) por el componente. Neto −86 líneas. El badge del
+  card de proyecto pasa de `text-[10px]` a `text-[11px]` (diferencia de 1px,
+  más consistente con el resto).
+- Limpieza de **código muerto cosmético**: ternarios con ambas ramas idénticas
+  en `kpi-card.tsx` (`labelColor`/`hintColor` siempre `text-muted`) y en
+  `planes/page.tsx` (hint de la KPI "Vigentes", `lang === "es" ? X : X`).
+- Sin cambios de schema ni de comportamiento. **No requiere acción en prod.**
+
 ### Cambios de la sesión 01/jun/2026 — Editor: descartar borrador y volver al plan aprobado
 
 - Al editar un plan que viene de una versión aprobada (el botón "Editar (nueva
@@ -1812,6 +1832,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Ajustar la ventana del Gantt o los símbolos | `components/reporting-gantt.tsx`. Constants `WINDOW_BEFORE_DAYS`, `WINDOW_AFTER_DAYS`, colores `COLOR_*`. |
 | Cambiar el flow closed → reportado | `app/actions/reports.ts` `markReportDelivered` (delivered_at + project.status='reportado' + audit log). |
 | Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |
+| Cambiar el label/color del badge de estado de un PLAN | `components/plan-status-badge.tsx` (`PlanStatusBadge`) — fuente única usada por el editor, el detalle de proyecto y las tablas de Planes/Proyectos. Prop `size` `md`/`sm`. NO duplicar el mapa de estilos en cada vista. |
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
 | Descartar un borrador y volver al plan aprobado | Botón "Descartar borrador" en `editor.tsx` (header, solo en `draft` con `currentVersion > 0`) + `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`. Restaura publishers/placements/fees/nombre/notas desde el snapshot `version = currentVersion` (en transacción) y deja el plan en `approved`. Contraparte de "Editar (nueva versión)". |

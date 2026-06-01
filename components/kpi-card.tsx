@@ -16,22 +16,18 @@ export function KpiCard({ label, value, hint, variant = "default" }: KpiCardProp
     empty: "bg-paper-2 border-line border-dashed",
   }[variant];
 
-  const labelColor = variant === "ink" ? "text-muted" : "text-muted";
   const valueColor =
     variant === "empty"
       ? "text-line"
       : variant === "ink"
         ? "text-paper"
         : "text-ink";
-  const hintColor = variant === "ink" ? "text-muted" : "text-muted";
 
   return (
     <div
       className={`rounded-lg border p-5 transition-all duration-200 ease-out ${surface}`}
     >
-      <p
-        className={`text-[11px] font-medium uppercase tracking-[0.08em] ${labelColor}`}
-      >
+      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
         {label}
       </p>
       <p
@@ -39,7 +35,7 @@ export function KpiCard({ label, value, hint, variant = "default" }: KpiCardProp
       >
         {value}
       </p>
-      {hint && <p className={`text-xs mt-2 ${hintColor}`}>{hint}</p>}
+      {hint && <p className="text-xs mt-2 text-muted">{hint}</p>}
     </div>
   );
 }

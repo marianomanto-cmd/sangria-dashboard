@@ -197,11 +197,7 @@ export default async function PlanesPage({ searchParams }: Props) {
           <KpiCard
             label={lang === "es" ? "Vigentes" : "Active"}
             value={`${kpiActive}`}
-            hint={
-              lang === "es"
-                ? `${counts.approved} approved · ${counts.ready_to_send} ready`
-                : `${counts.approved} approved · ${counts.ready_to_send} ready`
-            }
+            hint={`${counts.approved} approved · ${counts.ready_to_send} ready`}
           />
           <KpiCard
             label="Draft"

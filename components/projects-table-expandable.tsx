@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ChevronRight, Search } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
+import { PlanStatusBadge } from "@/components/plan-status-badge";
 import type {
   DashboardPlanSummary,
   DashboardProjectRow,
@@ -12,16 +13,6 @@ import type {
 } from "@/db/queries/dashboard";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 import { formatDate, type Language } from "@/lib/i18n";
-
-const PLAN_STATUS_STYLE: Record<
-  string,
-  { label: string; cls: string; dot: string }
-> = {
-  draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-  ready_to_send: { label: "ready", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-  approved: { label: "approved", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  archived: { label: "archived", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-};
 
 type Props = {
   rows: DashboardProjectRow[];
@@ -312,7 +303,6 @@ function PlansSubTable({
           </thead>
           <tbody>
             {plans.map((p) => {
-              const style = PLAN_STATUS_STYLE[p.status] ?? PLAN_STATUS_STYLE.draft;
               const isOpen = expandedPlans.has(p.id);
               const hasBreakdown =
                 p.publisherBreakdown.length > 0 || p.feeBreakdown.length > 0;
@@ -323,7 +313,6 @@ function PlansSubTable({
                   isOpen={isOpen}
                   hasBreakdown={hasBreakdown}
                   onToggle={() => togglePlan(p.id)}
-                  style={style}
                   projectCode={projectCode}
                   lang={lang}
                 />
@@ -341,7 +330,6 @@ function PlanWithBreakdown({
   isOpen,
   hasBreakdown,
   onToggle,
-  style,
   projectCode,
   lang,
 }: {
@@ -349,7 +337,6 @@ function PlanWithBreakdown({
   isOpen: boolean;
   hasBreakdown: boolean;
   onToggle: () => void;
-  style: { label: string; cls: string; dot: string };
   projectCode: string;
   lang: Language;
 }) {
@@ -392,14 +379,7 @@ function PlanWithBreakdown({
           )}
         </td>
         <td className="px-3 py-1.5">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 text-[10px] font-medium ${style.cls}`}
-          >
-            <span
-              className={`inline-block h-1 w-1 rounded-full ${style.dot}`}
-            />
-            {style.label}
-          </span>
+          <PlanStatusBadge status={plan.status} size="sm" />
         </td>
         <td className="px-3 py-1.5 font-mono text-[11px] text-ink-2">
           {formatDate(plan.periodStart, lang)}
