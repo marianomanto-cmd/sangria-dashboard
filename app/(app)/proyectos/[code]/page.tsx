@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { budgetOrigins } from "@/db/schema";
 import { ProjectStatusChanger } from "@/components/project-status-changer";
 import { StatusBadge } from "@/components/status-badge";
+import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
 import { ProjectEditPanel } from "./edit-panel";
 import { DeletePlanButton } from "@/components/delete-plan-button";
@@ -17,32 +18,6 @@ import {
 } from "@/lib/i18n";
 
 type Props = { params: Promise<{ code: string }> };
-
-const PLAN_STATUS_STYLE: Record<
-  string,
-  { label: string; cls: string; dot: string }
-> = {
-  draft: {
-    label: "draft",
-    cls: "bg-paper-2 text-muted border-line",
-    dot: "bg-muted",
-  },
-  ready_to_send: {
-    label: "ready to send",
-    cls: "bg-warn-soft text-warn border-warn-soft",
-    dot: "bg-warn",
-  },
-  approved: {
-    label: "approved",
-    cls: "bg-success-soft text-success border-success-soft",
-    dot: "bg-success",
-  },
-  archived: {
-    label: "archived",
-    cls: "bg-paper-2 text-muted border-line",
-    dot: "bg-muted",
-  },
-};
 
 export default async function ProjectDetailPage({ params }: Props) {
   const { code } = await params;
@@ -241,7 +216,6 @@ function PlanCard({
   clientName: string;
   lang: Language;
 }) {
-  const style = PLAN_STATUS_STYLE[plan.status] ?? PLAN_STATUS_STYLE.draft;
   const consumption =
     plan.totalMediaUsd > 0
       ? (plan.spentRealUsd / plan.totalMediaUsd) * 100
@@ -262,14 +236,7 @@ function PlanCard({
           <div className="min-w-0 flex-1 pr-6">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-semibold text-ink truncate">{plan.name}</h3>
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[10px] font-medium ${style.cls}`}
-              >
-                <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`}
-                />
-                {style.label}
-              </span>
+              <PlanStatusBadge status={plan.status} />
               {plan.currentVersion > 0 && (
                 <span className="font-mono text-[10px] text-muted">
                   v{plan.currentVersion}

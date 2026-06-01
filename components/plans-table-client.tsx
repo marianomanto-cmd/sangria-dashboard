@@ -14,13 +14,7 @@ import {
 } from "lucide-react";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { formatDate, type Language } from "@/lib/i18n";
-
-const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> = {
-  draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-  ready_to_send: { label: "ready", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-  approved: { label: "approved", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  archived: { label: "archived", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-};
+import { PlanStatusBadge } from "@/components/plan-status-badge";
 
 export type PlanRow = {
   id: string;
@@ -546,7 +540,6 @@ function PlanRowCells({
   lang: Language;
   hideProject?: boolean;
 }) {
-  const style = STATUS_STYLE[p.status] ?? STATUS_STYLE.draft;
   const total = Number.parseFloat(p.totalMediaUsd);
   const spent = Number.parseFloat(p.spentMediaUsd);
   const pct = total > 0 ? Math.max(0, Math.min(100, (spent / total) * 100)) : 0;
@@ -592,12 +585,7 @@ function PlanRowCells({
         <td className={`${cellPad} text-ink-2`}>{p.budgetOriginName}</td>
       )}
       <td className={cellPad}>
-        <span
-          className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${style.cls}`}
-        >
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`} />
-          {style.label}
-        </span>
+        <PlanStatusBadge status={p.status} />
       </td>
       <td className={`${cellPad} font-mono text-[11px] text-ink-2`}>
         {formatDate(p.periodStart, lang)}

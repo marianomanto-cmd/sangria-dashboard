@@ -31,6 +31,7 @@ import {
   updatePlanMetadata,
   updatePlanPublisher,
 } from "@/app/actions/plans";
+import { PlanStatusBadge } from "@/components/plan-status-badge";
 import type {
   PlanDetail,
   PlanFee,
@@ -81,13 +82,6 @@ type UpdatePlacementPartial = Omit<
   "placementId"
 >;
 type StartTransition = ReturnType<typeof useTransition>[1];
-
-const STATUS_STYLE: Record<string, { label: string; cls: string; dot: string }> = {
-  draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-  ready_to_send: { label: "ready to send", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-  approved: { label: "approved", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  archived: { label: "archived", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-};
 
 export function PlanEditor({
   detail,
@@ -206,8 +200,6 @@ export function PlanEditor({
     });
   };
 
-  const status = STATUS_STYLE[detail.plan.status] ?? STATUS_STYLE.draft;
-
   return (
     <div className={`space-y-5 ${pending ? "opacity-90" : ""}`}>
       {/* Header */}
@@ -232,12 +224,7 @@ export function PlanEditor({
                 {detail.plan.name}
               </h1>
             )}
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${status.cls}`}
-            >
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${status.dot}`} />
-              {status.label}
-            </span>
+            <PlanStatusBadge status={detail.plan.status} />
             {detail.plan.currentVersion > 0 && (
               <span className="font-mono text-xs text-muted">
                 v{detail.plan.currentVersion}
