@@ -2,6 +2,28 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — Editor: descartar borrador y volver al plan aprobado
+
+- Al editar un plan que viene de una versión aprobada (el botón "Editar (nueva
+  versión)" pasa `approved` → `draft`), el editor ahora muestra un botón
+  **"Descartar borrador"** junto a "Marcar listo para enviar". Aparece **solo
+  cuando `currentVersion > 0`** (hay un snapshot aprobado al cual volver). Tira
+  todos los cambios del borrador y restaura el plan al **snapshot de la versión
+  aprobada vigente** (`version_number = currentVersion`), dejándolo de nuevo en
+  `approved`.
+- Nueva action `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`:
+  restaura **en transacción** — borra publishers/placements/fees del draft (los
+  placements cascadean) y reinserta los del snapshot mapeando old→new ids —,
+  restaura nombre + notas y vuelve a `approved`. `currentVersion` no cambia.
+  Pre-chequea colisión de nombre contra el partial unique index
+  `(project_id, name) WHERE deleted_at IS NULL` si el draft había renombrado el
+  plan, devolviendo un error legible. Irreversible: los cambios del draft se
+  pierden.
+- UI en `editor.tsx`: handler `onDiscardDraft` con un `confirm` que aclara la
+  versión a la que se vuelve. Reusa los snapshots ya cargados por
+  `getPlanDetail`.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 27/may/2026 — Reporting Calendar: reportes manuales
 
 > **ACCIÓN REQUERIDA EN PROD**: este cambio agrega la tabla `manual_reports`.
@@ -1788,6 +1810,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
+| Descartar un borrador y volver al plan aprobado | Botón "Descartar borrador" en `editor.tsx` (header, solo en `draft` con `currentVersion > 0`) + `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`. Restaura publishers/placements/fees/nombre/notas desde el snapshot `version = currentVersion` (en transacción) y deja el plan en `approved`. Contraparte de "Editar (nueva versión)". |
 | Cambiar el render del log de auditoría / papelera | `app/(app)/auditoria/page.tsx` (log), `app/(app)/auditoria/papelera/page.tsx` (papelera). Sustantivos / verbos / labels de timestamp en `lib/audit-format.ts` — agregar nuevos entityType acá. |
 | Tocar la auth (login con Google, dominio permitido, sign-out) | `lib/supabase/{server,client,middleware}.ts` (cliente Supabase), `lib/auth.ts` (`getCurrentUser`), `proxy.ts` (route protection — Next.js 16 reemplaza middleware.ts), `app/login/`, `app/auth/{callback,signout}/`. El dominio `@sangria.agency` está hardcodeado en `proxy.ts` y `callback/route.ts` — cambiarlo en ambos. |
 | Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
