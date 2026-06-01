@@ -1515,6 +1515,9 @@ domingos en cada track + en el header del eje. Leyenda con entrada
   - Edición inline de publishers, placements, fees.
   - Lifecycle draft → ready_to_send → approved → archived (con snapshot al
     aprobar).
+  - Descartar un borrador de versión y volver al plan aprobado vigente
+    (botón "Descartar borrador", solo en `draft` con `currentVersion > 0`;
+    restaura desde el snapshot via `revertPlanToApprovedSnapshot`).
   - Edición bidireccional rate↔delivery según cost method principal.
   - Management fee como % editable.
   - **Botones de descarga Excel y PDF** del plan.
