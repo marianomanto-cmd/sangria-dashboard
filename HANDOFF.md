@@ -1221,6 +1221,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+1b44492  Editor: descartar borrador y volver al plan aprobado (#91)
 3a16318  Reporting Calendar: reportes manuales (#89) — REQUIERE npm run db:push
 b16dd0c  docs: registrar PR #87 en Commits recientes (#88)
 9a19bce  docs: barrido completo README + HANDOFF para reflejar la sesión 27/may (#87)
