@@ -11,6 +11,7 @@ import {
   transitionBillingStatus,
 } from "@/app/actions/plan-billing";
 import type { planBillings as planBillingsTable } from "@/db/schema";
+import { Button } from "@/components/button";
 import {
   evalNumberInput,
   formatAmountInput,
@@ -81,14 +82,9 @@ export function BillingMonthEditor({
           Crear el billing draft del mes con todos los publishers + fees del
           plan pre-cargados en cero.
         </p>
-        <button
-          type="button"
-          onClick={handleCreate}
-          disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
-        >
+        <Button onClick={handleCreate} disabled={pending}>
           {pending ? "Creando…" : `Crear draft para ${month}`}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -459,14 +455,9 @@ function BillingStatusActions({
           >
             Volver a borrador
           </button>
-          <button
-            type="button"
-            onClick={onReportar}
-            disabled={pending}
-            className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
-          >
+          <Button size="sm" onClick={onReportar} disabled={pending}>
             Reportar (PDF)
-          </button>
+          </Button>
         </>
       )}
       {status === "sent" && (
@@ -498,14 +489,13 @@ function BillingStatusActions({
               }}
             />
           ) : (
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={() => setShowInvoiceInput(true)}
               disabled={pending}
-              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
             >
               Cargar número de factura
-            </button>
+            </Button>
           )}
         </>
       )}
@@ -616,13 +606,9 @@ function InvoiceInput({
         disabled={pending}
         className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-xs w-36 focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50"
       />
-      <button
-        type="submit"
-        disabled={pending || !value.trim()}
-        className="rounded-md bg-ink text-white px-2.5 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
-      >
+      <Button type="submit" size="sm" disabled={pending || !value.trim()}>
         Guardar
-      </button>
+      </Button>
       <button
         type="button"
         onClick={onCancel}

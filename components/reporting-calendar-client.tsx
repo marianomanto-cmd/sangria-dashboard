@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { ExternalLink, Link2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { Button, buttonVariants } from "@/components/button";
 import {
   createManualReport,
   deleteManualReport,
@@ -215,8 +216,7 @@ export function ReportingCalendarClient({
         ) : (
           <div />
         )}
-        <button
-          type="button"
+        <Button
           onClick={openCreateManual}
           disabled={!currentClient}
           title={
@@ -226,11 +226,10 @@ export function ReportingCalendarClient({
                 ? "Elegí un cliente en el topbar"
                 : "Pick a client in the topbar"
           }
-          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50 transition-colors"
         >
           <Plus size={14} strokeWidth={2.5} />
           {lang === "es" ? "Crear reporte" : "Create report"}
-        </button>
+        </Button>
       </div>
 
       <section className="mb-8">
@@ -306,15 +305,14 @@ export function ReportingCalendarClient({
                         : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      <button
-                        type="button"
+                      <Button
+                        size="xs"
                         onClick={() =>
                           openAssign(r.reportId, r.kind, null, r.projectName)
                         }
-                        className="inline-flex items-center rounded-md bg-ink text-white px-3 py-1 text-xs font-medium hover:bg-ink-2 transition-colors"
                       >
                         {lang === "es" ? "Asignar fecha" : "Assign date"}
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -835,7 +833,7 @@ function CreateManualReportForm({
         <button
           type="submit"
           disabled={pending || !canSubmit}
-          className="rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
+          className={buttonVariants({ size: "md" })}
         >
           {pending
             ? lang === "es"
@@ -922,7 +920,7 @@ function LinkForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
+          className={buttonVariants({ size: "md" })}
         >
           {pending
             ? lang === "es"
@@ -1005,7 +1003,7 @@ function AssignDateForm({
         <button
           type="submit"
           disabled={pending || !value}
-          className="rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
+          className={buttonVariants({ size: "md" })}
         >
           {pending
             ? lang === "es"

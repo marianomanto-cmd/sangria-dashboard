@@ -2,6 +2,26 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — Cosmético: primitivo Button + usuario real en el sidebar
+
+- **Primitivo `Button`** (`components/button.tsx`): el botón primario `bg-ink`
+  estaba inline, repetido en ~13 archivos, y driftaba en padding/tamaño/estados.
+  Ahora hay una fuente única, estilo shadcn:
+  - `Button` para `<button>`; `buttonVariants()` devuelve el className para
+    reusar el mismo look en `<Link>`/`<a>`.
+  - Variantes `primary` (default) / `secondary` / `ghost` / `danger`; tamaños
+    `xs` / `sm` / `md` (default) / `lg`.
+  - Migrados ~26 botones primarios en 12 archivos (proyectos, planes, editor,
+    billing, reportes, config de clientes, tracker, calendario). El focus ring
+    sigue saliendo del `*:focus-visible` global. **Excluido a propósito**: el
+    toggle segmentado de `campaign-tracker/page.tsx` (no es un CTA).
+- **Usuario real en el sidebar**: el footer mostraba `"Mariano Manto / admin"`
+  hardcodeado. Ahora el layout (`app/(app)/layout.tsx`) lee `getCurrentUser()`
+  **una sola vez** y se lo pasa a `Sidebar` (footer: avatar de Google o
+  iniciales + nombre + email) y a `Topbar` (que antes lo leía por su cuenta —
+  se eliminó esa 2ª llamada redundante).
+- Sin cambios de schema ni de comportamiento. **No requiere acción en prod.**
+
 ### Cambios de la sesión 01/jun/2026 — Cosmético: badge de estado de plan unificado
 
 - **Bug visible**: el mismo estado `ready_to_send` se mostraba como
@@ -1834,6 +1854,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el flow closed → reportado | `app/actions/reports.ts` `markReportDelivered` (delivered_at + project.status='reportado' + audit log). |
 | Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |
 | Cambiar el label/color del badge de estado de un PLAN | `components/plan-status-badge.tsx` (`PlanStatusBadge`) — fuente única usada por el editor, el detalle de proyecto y las tablas de Planes/Proyectos. Prop `size` `md`/`sm`. NO duplicar el mapa de estilos en cada vista. |
+| Cambiar el look de un botón / agregar variante o tamaño | `components/button.tsx` — `Button` (para `<button>`) + `buttonVariants()` (className para `<Link>`/`<a>`). Variantes primary/secondary/ghost/danger, tamaños xs/sm/md/lg. NO volver a escribir `bg-ink text-white …` inline; usar el primitivo. |
+| Mostrar / cambiar el usuario logueado en la chrome | `app/(app)/layout.tsx` lee `getCurrentUser()` una vez y lo pasa a `components/sidebar.tsx` (footer) y `components/topbar.tsx` (avatar + menú `TopbarUser`). |
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
 | Descartar un borrador y volver al plan aprobado | Botón "Descartar borrador" en `editor.tsx` (header, solo en `draft` con `currentVersion > 0`) + `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`. Restaura publishers/placements/fees/nombre/notas desde el snapshot `version = currentVersion` (en transacción) y deja el plan en `approved`. Contraparte de "Editar (nueva versión)". |

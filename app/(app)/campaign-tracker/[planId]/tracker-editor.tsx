@@ -8,6 +8,7 @@ import {
   setPlacementActual,
 } from "@/app/actions/campaign-tracker";
 import { GoalBar, PaceBadge } from "@/components/campaign-tracker-bits";
+import { Button } from "@/components/button";
 import type { TrackerPublisherGroup } from "@/db/queries/campaign-tracker";
 import {
   buildMetricRows,
@@ -392,15 +393,14 @@ export function CampaignTrackerEditor({
             >
               {compareMode ? "Ocultar comparación" : "Comparar con última carga"}
             </button>
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={handleClose}
               disabled={closing}
               title="Guarda un snapshot del estado actual en el histórico (para Reportes). No bloquea la edición."
-              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
             >
               {closing ? "Cerrando…" : "Cerrar carga del día"}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

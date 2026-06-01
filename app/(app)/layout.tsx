@@ -1,19 +1,24 @@
 import { Sidebar } from "@/components/sidebar";
 import { Topbar } from "@/components/topbar";
+import { getCurrentUser } from "@/lib/auth";
 
 // La app entera es data-driven: ninguna página debería pre-renderizarse en
 // build-time. Forzar dinámica también evita que el build de Vercel intente
 // conectarse a la DB durante la fase "Generating static pages".
 export const dynamic = "force-dynamic";
 
-export default function AppLayout({
+export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Una sola lectura del user logueado para toda la chrome: la comparten el
+  // sidebar (footer) y el topbar (avatar + menú).
+  const user = await getCurrentUser();
+
   return (
     <div className="flex flex-1 min-h-screen">
-      <Sidebar />
+      <Sidebar user={user} />
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar />
+        <Topbar user={user} />
         <div className="flex-1 flex flex-col">{children}</div>
       </div>
     </div>

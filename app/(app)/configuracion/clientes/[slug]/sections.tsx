@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
+import { Button, buttonVariants } from "@/components/button";
 import {
   createMarket,
   deleteMarket,
@@ -156,7 +157,7 @@ function PublishersSection({
         <button
           type="button"
           onClick={() => setShowAdd((s) => !s)}
-          className="inline-flex items-center gap-1 rounded-md bg-ink text-white px-2.5 py-1 text-xs font-medium hover:bg-ink-2"
+          className={buttonVariants({ size: "xs" })}
         >
           <Plus size={12} />
           Nuevo publisher
@@ -198,14 +199,9 @@ function PublishersSection({
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCreate}
-              disabled={pending}
-              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
-            >
+            <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
-            </button>
+            </Button>
             <button
               type="button"
               onClick={() => {
@@ -386,7 +382,7 @@ function MetricsSection({
         <button
           type="button"
           onClick={() => setShowAdd((s) => !s)}
-          className="inline-flex items-center gap-1 rounded-md bg-ink text-white px-2.5 py-1 text-xs font-medium hover:bg-ink-2"
+          className={buttonVariants({ size: "xs" })}
         >
           <Plus size={12} />
           Nueva métrica
@@ -443,14 +439,9 @@ function MetricsSection({
           )}
           {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCreate}
-              disabled={pending}
-              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
-            >
+            <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
-            </button>
+            </Button>
             <button
               type="button"
               onClick={() => {
@@ -616,7 +607,7 @@ function MarketsSection({
         <button
           type="button"
           onClick={() => setShowAdd((s) => !s)}
-          className="inline-flex items-center gap-1 rounded-md bg-ink text-white px-2.5 py-1 text-xs font-medium hover:bg-ink-2"
+          className={buttonVariants({ size: "xs" })}
         >
           <Plus size={12} />
           Nuevo mercado
@@ -647,14 +638,9 @@ function MarketsSection({
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCreate}
-              disabled={pending}
-              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
-            >
+            <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
-            </button>
+            </Button>
             <button
               type="button"
               onClick={() => {
@@ -859,7 +845,7 @@ function BudgetOriginsSection({
         <button
           type="button"
           onClick={() => setShowAdd((s) => !s)}
-          className="inline-flex items-center gap-1 rounded-md bg-ink text-white px-2.5 py-1 text-xs font-medium hover:bg-ink-2"
+          className={buttonVariants({ size: "xs" })}
         >
           <Plus size={12} />
           Nuevo budget origin
@@ -887,14 +873,9 @@ function BudgetOriginsSection({
           </div>
           {error && <p className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onCreate}
-              disabled={pending}
-              className="rounded-md bg-ink text-white px-3 py-1.5 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
-            >
+            <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
-            </button>
+            </Button>
             <button
               type="button"
               onClick={() => {

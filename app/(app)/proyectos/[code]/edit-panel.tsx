@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Pencil, Trash2 } from "lucide-react";
 import { deleteProject, updateProject } from "@/app/actions/projects";
+import { Button } from "@/components/button";
 
 type Origin = { id: string; name: string };
 
@@ -175,14 +176,9 @@ export function ProjectEditPanel({
 
       <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-4">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-4 py-2 text-sm font-medium hover:bg-ink-2 transition-colors disabled:opacity-50"
-          >
+          <Button size="lg" onClick={onSave} disabled={pending}>
             {pending ? "Guardando…" : "Guardar cambios"}
-          </button>
+          </Button>
           <button
             type="button"
             onClick={() => {

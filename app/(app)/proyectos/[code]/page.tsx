@@ -10,6 +10,7 @@ import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
 import { ProjectEditPanel } from "./edit-panel";
 import { DeletePlanButton } from "@/components/delete-plan-button";
+import { buttonVariants } from "@/components/button";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 import {
   DEFAULT_LANGUAGE,
@@ -76,7 +77,7 @@ export default async function ProjectDetailPage({ params }: Props) {
         </div>
         <Link
           href={`/proyectos/${project.code}/planes/nuevo`}
-          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 transition-colors"
+          className={buttonVariants({ size: "md" })}
         >
           <Plus size={14} strokeWidth={2.5} />
           {lang === "es" ? "Nuevo plan" : "New plan"}
@@ -182,7 +183,7 @@ export default async function ProjectDetailPage({ params }: Props) {
             </p>
             <Link
               href={`/proyectos/${project.code}/planes/nuevo`}
-              className="inline-flex items-center gap-1.5 mt-4 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2"
+              className={buttonVariants({ size: "md", className: "mt-4" })}
             >
               <Plus size={14} strokeWidth={2.5} />
               {lang === "es" ? "Crear primer plan" : "Create first plan"}

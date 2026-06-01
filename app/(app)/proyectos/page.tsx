@@ -3,6 +3,7 @@ import { Plus } from "lucide-react";
 import { BudgetOriginSelector } from "@/components/budget-origin-selector";
 import { ProjectsTableExpandable } from "@/components/projects-table-expandable";
 import { PageShell } from "@/components/page-shell";
+import { buttonVariants } from "@/components/button";
 import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { getDashboardProjects } from "@/db/queries/dashboard";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
@@ -57,7 +58,7 @@ export default async function ProyectosPage({ searchParams }: Props) {
       actions={
         <Link
           href="/proyectos/nuevo"
-          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 transition-colors"
+          className={buttonVariants({ size: "md" })}
         >
           <Plus size={14} strokeWidth={2.5} />
           {lang === "es" ? "Nuevo proyecto" : "New project"}
