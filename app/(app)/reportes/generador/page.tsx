@@ -1,5 +1,6 @@
 import { Download } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
+import { buttonVariants } from "@/components/button";
 import { ReportGeneratorForm } from "@/components/report-generator-form";
 import {
   getHistoricalReport,
@@ -102,11 +103,11 @@ export default async function ReportGeneratorPage({ searchParams }: Props) {
       actions={
         <a
           href={downloadHref}
-          className={`inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 transition-colors ${
-            report.rows.length === 0
-              ? "opacity-50 pointer-events-none"
-              : ""
-          }`}
+          className={buttonVariants({
+            size: "md",
+            className:
+              report.rows.length === 0 ? "opacity-50 pointer-events-none" : "",
+          })}
           aria-disabled={report.rows.length === 0}
         >
           <Download size={14} strokeWidth={2} />

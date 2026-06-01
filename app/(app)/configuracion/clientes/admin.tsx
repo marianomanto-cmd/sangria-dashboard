@@ -8,6 +8,7 @@ import {
   createClient as createClientAction,
   updateClient,
 } from "@/app/actions/clients";
+import { Button } from "@/components/button";
 import type { clients as clientsTable } from "@/db/schema";
 import type { Language } from "@/lib/i18n";
 
@@ -215,13 +216,9 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
-                onClick={onCreate}
-                className="rounded-md bg-ink text-white px-3 py-1 text-xs font-medium hover:bg-ink-2"
-              >
+              <Button size="xs" onClick={onCreate}>
                 Crear
-              </button>
+              </Button>
               <button
                 type="button"
                 onClick={() => {

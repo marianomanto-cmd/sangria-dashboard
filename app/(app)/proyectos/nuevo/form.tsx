@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { createProject } from "@/app/actions/projects";
+import { Button } from "@/components/button";
 
 export function NewProjectForm({
   clients,
@@ -148,13 +149,13 @@ export function NewProjectForm({
       )}
 
       <div className="flex items-center gap-3 border-t border-line-soft pt-4">
-        <button
+        <Button
           type="submit"
+          size="lg"
           disabled={submitting || !name.trim() || !budgetOriginId}
-          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-4 py-2 text-sm font-medium hover:bg-ink-2 transition-colors disabled:opacity-50"
         >
           {submitting ? "Creando…" : "Crear proyecto"}
-        </button>
+        </Button>
         <button
           type="button"
           onClick={() => router.push("/proyectos")}

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { createPlan, duplicatePlan } from "@/app/actions/plans";
 import type { SourcePlanOption } from "@/app/actions/plans";
 import { formatUsd } from "@/lib/format";
+import { Button } from "@/components/button";
 
 const PRESETS = ["Awareness", "Consideration", "Performance", "Brand", "Promo"];
 
@@ -179,14 +180,14 @@ export function NewPlanForm({
       )}
 
       <div className="flex items-center gap-3">
-        <button
+        <Button
           type="submit"
+          size="lg"
           disabled={
             submitting ||
             !name.trim() ||
             (mode === "duplicate" && !sourcePlanId)
           }
-          className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-4 py-2 text-sm font-medium hover:bg-ink-2 transition-colors disabled:opacity-50"
         >
           {submitting
             ? mode === "duplicate"
@@ -195,7 +196,7 @@ export function NewPlanForm({
             : mode === "duplicate"
               ? "Duplicar y empezar a editar"
               : "Crear y empezar a editar"}
-        </button>
+        </Button>
         <button
           type="button"
           onClick={() => router.push(`/proyectos/${projectCode}`)}

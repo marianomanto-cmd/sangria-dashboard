@@ -32,6 +32,7 @@ import {
   updatePlanPublisher,
 } from "@/app/actions/plans";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
+import { Button } from "@/components/button";
 import type {
   PlanDetail,
   PlanFee,
@@ -273,14 +274,9 @@ export function PlanEditor({
                   Descartar borrador
                 </button>
               )}
-              <button
-                type="button"
-                onClick={onMarkReady}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
-              >
+              <Button onClick={onMarkReady} disabled={pending}>
                 Marcar listo para enviar
-              </button>
+              </Button>
             </>
           )}
           {detail.plan.status === "ready_to_send" && (
