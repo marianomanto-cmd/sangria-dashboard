@@ -1276,6 +1276,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+e152dfc  Fix: un billing en draft no saca el mes del tablero de pendientes (#98)
 5379c4e  Cosmético: primitivo Button + usuario real en el sidebar (#96)
 20e1a1c  Cosmético: unificar el badge de estado de plan + limpiar código muerto (#94)
 1b44492  Editor: descartar borrador y volver al plan aprobado (#91)
