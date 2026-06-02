@@ -41,10 +41,16 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Claude Code session settings
-.claude/
+# Claude Code session settings (ignorar todo MENOS los skills versionados, que
+# se cargan en las sesiones de Claude Code on the web).
+.claude/*
+!.claude/skills/
 
 # OS / editor
 Thumbs.db
 .idea/
 *.swp
+
+# Python cache dentro de skills versionados
+.claude/skills/**/__pycache__/
+*.pyc

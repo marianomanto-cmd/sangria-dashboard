@@ -2,6 +2,23 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — Skills de Claude Code versionados (ui-ux-pro-max + context7)
+
+- Se agregaron skills de Claude Code al repo en **`.claude/skills/`** para que
+  estén disponibles en las **sesiones de Claude Code on the web** (que solo
+  cargan skills bundled + los commiteados en el repo; no heredan los locales).
+  - **`ui-ux-pro-max`**: design intelligence (estilos, paletas, tipografías,
+    99 guías UX, charts). Trae `scripts/*.py` (BM25 search) + `data/*.csv`.
+    Uso: `python3 .claude/skills/ui-ux-pro-max/scripts/search.py "<query>"
+    --domain <style|color|chart|ux|typography|...>`. Fuente:
+    github.com/nextlevelbuilder/ui-ux-pro-max-skill.
+  - **`context7`**: docs de librerías al día vía la API pública de Context7
+    (curl, sin API key). Fuente: github.com/intellectronica/agent-skills.
+- `.gitignore`: se cambió `.claude/` → `.claude/*` + `!.claude/skills/` para
+  versionar solo los skills (el resto de `.claude/` sigue ignorado). El
+  `__pycache__` de los scripts queda ignorado.
+- **No es código de la app** (no afecta el build de Vercel); es tooling de dev.
+
 ### Cambios de la sesión 01/jun/2026 — Aprobar planes restringido a una allowlist
 
 - Aprobar un plan (ready_to_send → approved) ahora está limitado a
@@ -1891,6 +1908,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el look de un botón / agregar variante o tamaño | `components/button.tsx` — `Button` (para `<button>`) + `buttonVariants()` (className para `<Link>`/`<a>`). Variantes primary/secondary/ghost/danger, tamaños xs/sm/md/lg. NO volver a escribir `bg-ink text-white …` inline; usar el primitivo. |
 | Mostrar / cambiar el usuario logueado en la chrome | `app/(app)/layout.tsx` lee `getCurrentUser()` una vez y lo pasa a `components/sidebar.tsx` (footer) y `components/topbar.tsx` (avatar + menú `TopbarUser`). |
 | Cambiar quién puede aprobar planes | `lib/permissions.ts` (`PLAN_APPROVER_EMAILS` + `canApprovePlans`). Chequeo real en `transitionPlanStatus` (`app/actions/plans.ts`, branch `to === "approved"`); el botón se esconde vía prop `canApprove` que `…/planes/[planId]/page.tsx` pasa al `PlanEditor`. |
+| Agregar/editar skills de Claude Code (web) | `.claude/skills/` (versionado; el resto de `.claude/` está gitignored). Hoy: `ui-ux-pro-max` (scripts BM25 + data CSV) y `context7` (docs via API). Para sumar otro, copiar su carpeta `SKILL.md` ahí y commitear. Se cargan en la PRÓXIMA sesión web, no en la que se agregan. |
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
 | Descartar un borrador y volver al plan aprobado | Botón "Descartar borrador" en `editor.tsx` (header, solo en `draft` con `currentVersion > 0`) + `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`. Restaura publishers/placements/fees/nombre/notas desde el snapshot `version = currentVersion` (en transacción) y deja el plan en `approved`. Contraparte de "Editar (nueva versión)". |
