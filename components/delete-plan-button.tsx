@@ -67,7 +67,7 @@ export function DeletePlanButton({
               to the Trash and removed from the project. Nothing is lost — you
               can restore it later from Settings → Plan trash.
             </p>
-            {error && <p className="text-xs text-danger">{error}</p>}
+            {error && <p role="alert" className="text-xs text-danger">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"

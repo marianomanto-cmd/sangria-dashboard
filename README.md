@@ -740,6 +740,28 @@ datos históricos cargados (billing + campaign tracker), filtrando por scope.
 
 ## Patrones técnicos
 
+### Feedback, confirmación, carga y errores de UI (no usar nativos)
+- **Feedback** (éxito/error): `useToast()` de `components/toast.tsx`
+  (`toast.success/error/info`). NO usar `alert()`.
+- **Confirmación** de acciones destructivas/irreversibles: `useConfirm()` de
+  `components/confirm-dialog.tsx` — `await confirm({ title, body, danger })`
+  (modal accesible con focus-trap/Escape/backdrop). NO usar `confirm()`.
+- Ambos providers se montan en `components/app-providers.tsx` (en el layout).
+- **Carga**: `app/(app)/loading.tsx` usa `PageSkeleton`
+  (`components/skeleton.tsx`) como fallback de navegación; la chrome persiste.
+- **Errores**: `app/(app)/error.tsx` (boundary recuperable con retry) y
+  `app/(app)/not-found.tsx` (404 con `EmptyState`).
+- **Errores de formulario**: el contenedor del mensaje lleva `role="alert"`
+  para que se anuncie.
+
+### Responsive: sidebar drawer en mobile
+- En `< lg` el sidebar (`components/sidebar.tsx`) es un drawer deslizable
+  controlado por `components/mobile-nav.tsx` (`MobileNavProvider` +
+  `MobileNavToggle` en el topbar); en `≥ lg` es sticky/colapsable como siempre.
+- Tablas anchas: envolver en un contenedor `overflow-x-auto` (+ `min-w-[...]`
+  en la `<table>`) para que scrolleen en vez de aplastarse (ver
+  `projects-table-expandable` y la lista de `plans-table-client`).
+
 ### Cartesian publishers × placements al agregar totales (footgun recurrente)
 Si una query hace `LEFT JOIN media_plan_publishers` **y** `LEFT JOIN
 media_plan_placements` (porque placements cuelga 1:N de publishers) en el

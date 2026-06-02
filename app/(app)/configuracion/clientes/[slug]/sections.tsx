@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/button";
+import { useToast } from "@/components/toast";
+import { useConfirm } from "@/components/confirm-dialog";
 import {
   createMarket,
   deleteMarket,
@@ -101,6 +103,8 @@ function PublishersSection({
   rows: PublisherRow[];
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
   const [draft, setDraft] = useState({ name: "", slug: "", agencyPays: true });
@@ -136,16 +140,16 @@ function PublishersSection({
   ) => {
     startTransition(async () => {
       const r = await updatePublisher({ id, clientSlug, ...partial });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
 
-  const onDelete = (id: string, name: string) => {
-    if (!confirm(`¿Eliminar el publisher "${name}"?`)) return;
+  const onDelete = async (id: string, name: string) => {
+    if (!(await confirm({ title: `¿Eliminar el publisher "${name}"?`, confirmLabel: "Eliminar", danger: true }))) return;
     startTransition(async () => {
       const r = await deletePublisher({ id, clientSlug });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -197,7 +201,7 @@ function PublishersSection({
               <option value="client">Cliente paga directo</option>
             </select>
           </div>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
@@ -318,6 +322,8 @@ function MetricsSection({
   rows: Metric[];
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
   const [draft, setDraft] = useState<{
@@ -361,16 +367,16 @@ function MetricsSection({
   ) => {
     startTransition(async () => {
       const r = await updateMetric({ id, clientSlug, ...partial });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
 
-  const onDelete = (id: string, name: string) => {
-    if (!confirm(`¿Eliminar la métrica "${name}"?`)) return;
+  const onDelete = async (id: string, name: string) => {
+    if (!(await confirm({ title: `¿Eliminar la métrica "${name}"?`, confirmLabel: "Eliminar", danger: true }))) return;
     startTransition(async () => {
       const r = await deleteMetric({ id, clientSlug });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -437,7 +443,7 @@ function MetricsSection({
               className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-xs font-mono"
             />
           )}
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
@@ -555,6 +561,8 @@ function MarketsSection({
   rows: Market[];
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
   const [draft, setDraft] = useState({ name: "", slug: "" });
@@ -586,16 +594,16 @@ function MarketsSection({
   const onUpdate = (id: string, partial: { name?: string; enabled?: boolean }) => {
     startTransition(async () => {
       const r = await updateMarket({ id, clientSlug, ...partial });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
 
-  const onDelete = (id: string, name: string) => {
-    if (!confirm(`¿Eliminar el mercado "${name}"?`)) return;
+  const onDelete = async (id: string, name: string) => {
+    if (!(await confirm({ title: `¿Eliminar el mercado "${name}"?`, confirmLabel: "Eliminar", danger: true }))) return;
     startTransition(async () => {
       const r = await deleteMarket({ id, clientSlug });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -636,7 +644,7 @@ function MarketsSection({
               className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
             />
           </div>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
@@ -790,6 +798,8 @@ function BudgetOriginsSection({
   rows: BudgetOrigin[];
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
   const [draft, setDraft] = useState({ name: "", colorHex: "" });
@@ -824,16 +834,16 @@ function BudgetOriginsSection({
   ) => {
     startTransition(async () => {
       const r = await updateBudgetOrigin({ id, clientSlug, ...partial });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
 
-  const onDelete = (id: string, name: string) => {
-    if (!confirm(`¿Eliminar el budget origin "${name}"?`)) return;
+  const onDelete = async (id: string, name: string) => {
+    if (!(await confirm({ title: `¿Eliminar el budget origin "${name}"?`, confirmLabel: "Eliminar", danger: true }))) return;
     startTransition(async () => {
       const r = await deleteBudgetOrigin({ id, clientSlug });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -871,7 +881,7 @@ function BudgetOriginsSection({
               disabled={pending}
             />
           </div>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear

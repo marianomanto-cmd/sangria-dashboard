@@ -9,6 +9,7 @@ import {
   updateClient,
 } from "@/app/actions/clients";
 import { Button } from "@/components/button";
+import { useToast } from "@/components/toast";
 import type { clients as clientsTable } from "@/db/schema";
 import type { Language } from "@/lib/i18n";
 
@@ -28,6 +29,7 @@ const STATUS_OPTIONS: Array<{ value: ClientStatus; label: string }> = [
 
 export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
   const router = useRouter();
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
   const [showAddForm, setShowAddForm] = useState(false);
   const [draft, setDraft] = useState({
@@ -65,7 +67,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
   ) => {
     startTransition(async () => {
       const r = await updateClient({ ...partial, id });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       refresh();
     });
   };
@@ -230,7 +232,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
               >
                 Cancelar
               </button>
-              {error && <span className="text-xs text-danger">{error}</span>}
+              {error && <span role="alert" className="text-xs text-danger">{error}</span>}
             </div>
           )}
         </div>

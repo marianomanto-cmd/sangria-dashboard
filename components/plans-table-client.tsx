@@ -313,8 +313,8 @@ function FlatTable({
   onSort: (col: SortCol) => void;
 }) {
   return (
-    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-      <table className={`w-full ${compact ? "text-xs" : "text-sm"}`}>
+    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-x-auto">
+      <table className={`w-full min-w-[720px] ${compact ? "text-xs" : "text-sm"}`}>
         <thead className="bg-paper">
           <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
             <SortableTh col="name" sort={sort} onSort={onSort} label="Plan" compact={compact} />

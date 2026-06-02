@@ -12,6 +12,8 @@ import {
 } from "@/app/actions/plan-billing";
 import type { planBillings as planBillingsTable } from "@/db/schema";
 import { Button } from "@/components/button";
+import { useToast } from "@/components/toast";
+import { useConfirm } from "@/components/confirm-dialog";
 import {
   evalNumberInput,
   formatAmountInput,
@@ -59,6 +61,8 @@ export function BillingMonthEditor({
   feeLines: FeeLine[];
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
 
   if (!billing) {
@@ -67,7 +71,7 @@ export function BillingMonthEditor({
       startTransition(async () => {
         const r = await ensureBillingForMonth({ planId, month });
         if (!r.ok) {
-          alert(r.error);
+          toast.error(r.error);
           return;
         }
         router.refresh();
@@ -103,7 +107,7 @@ export function BillingMonthEditor({
         isBillable: partial.isBillable,
         notes: partial.notes,
       });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -116,7 +120,7 @@ export function BillingMonthEditor({
         amountImputedUsd: amount,
         notes,
       });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -124,7 +128,7 @@ export function BillingMonthEditor({
   const onTransition = (to: "draft" | "ready" | "sent" | "paid" | "invoiced") => {
     startTransition(async () => {
       const r = await transitionBillingStatus({ billingId: billing.id, to });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -132,12 +136,19 @@ export function BillingMonthEditor({
   // "Reportar" = transición ready → sent + descarga del PDF de finanzas.
   // El PDF se abre en una nueva pestaña ANTES de la transición para evitar
   // pop-up blockers; si la transición falla la descarga ya está en curso.
-  const onReportar = () => {
-    if (!confirm(`¿Reportar el billing de ${month}? Se descarga el PDF para finanzas y el estado pasa a "reportado".`)) return;
+  const onReportar = async () => {
+    if (
+      !(await confirm({
+        title: `¿Reportar el billing de ${month}?`,
+        body: 'Se descarga el PDF para finanzas y el estado pasa a "reportado".',
+        confirmLabel: "Reportar",
+      }))
+    )
+      return;
     window.open(`/api/billings/${billing.id}/report.pdf`, "_blank");
     startTransition(async () => {
       const r = await transitionBillingStatus({ billingId: billing.id, to: "sent" });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -145,7 +156,7 @@ export function BillingMonthEditor({
   const onFacturar = (invoiceNumber: string) => {
     startTransition(async () => {
       const r = await markBillingInvoiced({ billingId: billing.id, invoiceNumber });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       router.refresh();
     });
   };
@@ -632,6 +643,7 @@ function NumInput({
   disabled: boolean;
   max?: number;
 }) {
+  const toast = useToast();
   const overCap = max !== undefined && value > max + 0.01;
   const display = value > 0 ? formatAmountInput(value) : "";
   return (
@@ -669,7 +681,7 @@ function NumInput({
         }
         if (max !== undefined && v > max + 0.01) {
           // Hard cap: avisamos y clampeamos al máximo permitido.
-          alert(
+          toast.error(
             `Excede el plan: máximo facturable este mes es $${max.toFixed(2)}. Se ajusta el valor.`,
           );
           v = Math.max(0, max);

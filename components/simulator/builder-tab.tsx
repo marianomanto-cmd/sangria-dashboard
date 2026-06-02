@@ -14,6 +14,7 @@ import type {
   SimulatorCatalogs,
 } from "@/db/queries/simulator";
 import { formatUsd } from "@/lib/format";
+import { useConfirm } from "@/components/confirm-dialog";
 import type { BenchmarkRow, ScenarioRow } from "@/lib/simulator-types";
 import {
   MODES,
@@ -56,12 +57,21 @@ export function BuilderTab({
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [promoteOpen, setPromoteOpen] = useState(false);
+  const confirm = useConfirm();
+
+  const confirmDiscard = () =>
+    confirm({
+      title: "Hay cambios sin guardar",
+      body: "Si continuás, se descartan los cambios del escenario actual.",
+      confirmLabel: "Descartar",
+      danger: true,
+    });
 
   const totals = aggregateTotals(editing.rows, benchmarks);
 
   // Cargar un escenario existente (read action).
-  const loadScenario = (id: string) => {
-    if (editing.dirty && !confirm("Hay cambios sin guardar. ¿Descartar?")) return;
+  const loadScenario = async (id: string) => {
+    if (editing.dirty && !(await confirmDiscard())) return;
     setError(null);
     startTransition(async () => {
       const sc = await fetchScenario(id);
@@ -84,8 +94,8 @@ export function BuilderTab({
     });
   };
 
-  const newBlank = () => {
-    if (editing.dirty && !confirm("Hay cambios sin guardar. ¿Descartar?")) return;
+  const newBlank = async () => {
+    if (editing.dirty && !(await confirmDiscard())) return;
     setError(null);
     setEditing({ ...BLANK, rows: [newRow()] });
   };
@@ -182,8 +192,8 @@ export function BuilderTab({
     });
   };
 
-  const remove = (id: string) => {
-    if (!confirm("¿Borrar escenario?")) return;
+  const remove = async (id: string) => {
+    if (!(await confirm({ title: "¿Borrar escenario?", confirmLabel: "Borrar", danger: true }))) return;
     startTransition(async () => {
       const res = await deleteScenario({ id });
       if (!res.ok) {
