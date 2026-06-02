@@ -7,6 +7,8 @@ import {
   listPublishersForClient,
 } from "@/app/actions/plans";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/i18n";
+import { getCurrentUser } from "@/lib/auth";
+import { canApprovePlans } from "@/lib/permissions";
 import { PlanEditor } from "./editor";
 
 type Props = {
@@ -20,11 +22,13 @@ export default async function PlanDetailPage({ params }: Props) {
   if (detail.project.code !== code) notFound();
   const lang: Language = detail.client.language ?? DEFAULT_LANGUAGE;
 
-  const [allPublishers, allMarkets, allMetrics] = await Promise.all([
+  const [allPublishers, allMarkets, allMetrics, user] = await Promise.all([
     listPublishersForClient(detail.client.id),
     listMarketsForClient(detail.client.id),
     listMetricsForClient(detail.client.id),
+    getCurrentUser(),
   ]);
+  const canApprove = canApprovePlans(user?.email);
 
   return (
     <main className="px-8 py-10 max-w-[1800px] mx-auto w-full">
@@ -53,6 +57,7 @@ export default async function PlanDetailPage({ params }: Props) {
         allMarkets={allMarkets}
         allMetrics={allMetrics}
         lang={lang}
+        canApprove={canApprove}
       />
     </main>
   );

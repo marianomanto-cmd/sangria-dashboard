@@ -90,12 +90,17 @@ export function PlanEditor({
   allMarkets,
   allMetrics,
   lang = "en",
+  canApprove = false,
 }: {
   detail: PlanDetail;
   allPublishers: PublisherCatalog[];
   allMarkets: Market[];
   allMetrics: MetricCatalog[];
   lang?: Language;
+  // Si el usuario está en la allowlist de aprobadores (lib/permissions). El
+  // botón "Aprobar (firmado)" solo se muestra si es true; la barrera real está
+  // en la server action transitionPlanStatus.
+  canApprove?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -289,14 +294,23 @@ export function PlanEditor({
               >
                 Volver a draft
               </button>
-              <button
-                type="button"
-                onClick={onApprove}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"
-              >
-                Aprobar (firmado)
-              </button>
+              {canApprove ? (
+                <button
+                  type="button"
+                  onClick={onApprove}
+                  disabled={pending}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                >
+                  Aprobar (firmado)
+                </button>
+              ) : (
+                <span
+                  className="text-xs text-muted px-1"
+                  title="Solo mariano.mantovani@sangria.agency y herman.grabosky@sangria.agency pueden aprobar planes."
+                >
+                  Aprobación restringida
+                </span>
+              )}
             </>
           )}
           {detail.plan.status === "approved" && (

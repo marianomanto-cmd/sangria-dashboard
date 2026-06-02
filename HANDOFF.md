@@ -2,6 +2,22 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — Aprobar planes restringido a una allowlist
+
+- Aprobar un plan (ready_to_send → approved) ahora está limitado a
+  **mariano.mantovani@sangria.agency** y **herman.grabosky@sangria.agency**.
+- Allowlist + helper en **`lib/permissions.ts`** (`PLAN_APPROVER_EMAILS`,
+  `canApprovePlans(email)`, case-insensitive; sin imports server-only).
+- **Barrera real** (server-side): `transitionPlanStatus` en
+  `app/actions/plans.ts` chequea `canApprovePlans(getCurrentUser().email)` cuando
+  `to === "approved"` y devuelve error si no está autorizado.
+- **UI**: la page del plan (`…/[planId]/page.tsx`) pasa `canApprove` al
+  `PlanEditor`; el botón "Aprobar (firmado)" solo se muestra si es true; al
+  resto le aparece un "Aprobación restringida" (con tooltip de los emails).
+- Es el **primer permiso por rol** del sistema. Cuando se arme el modelo de
+  roles general, migrar esta allowlist. Sin cambios de schema; **no requiere
+  acción en prod**.
+
 ### Cambios de la sesión 01/jun/2026 — Fix: un billing en draft no debe sacar el mes del tablero
 
 - **Bug**: en el tablero de pendientes, abrir un billing de un mes cerrado y
@@ -1873,6 +1889,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el label/color del badge de estado de un PLAN | `components/plan-status-badge.tsx` (`PlanStatusBadge`) — fuente única usada por el editor, el detalle de proyecto y las tablas de Planes/Proyectos. Prop `size` `md`/`sm`. NO duplicar el mapa de estilos en cada vista. |
 | Cambiar el look de un botón / agregar variante o tamaño | `components/button.tsx` — `Button` (para `<button>`) + `buttonVariants()` (className para `<Link>`/`<a>`). Variantes primary/secondary/ghost/danger, tamaños xs/sm/md/lg. NO volver a escribir `bg-ink text-white …` inline; usar el primitivo. |
 | Mostrar / cambiar el usuario logueado en la chrome | `app/(app)/layout.tsx` lee `getCurrentUser()` una vez y lo pasa a `components/sidebar.tsx` (footer) y `components/topbar.tsx` (avatar + menú `TopbarUser`). |
+| Cambiar quién puede aprobar planes | `lib/permissions.ts` (`PLAN_APPROVER_EMAILS` + `canApprovePlans`). Chequeo real en `transitionPlanStatus` (`app/actions/plans.ts`, branch `to === "approved"`); el botón se esconde vía prop `canApprove` que `…/planes/[planId]/page.tsx` pasa al `PlanEditor`. |
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
 | Descartar un borrador y volver al plan aprobado | Botón "Descartar borrador" en `editor.tsx` (header, solo en `draft` con `currentVersion > 0`) + `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`. Restaura publishers/placements/fees/nombre/notas desde el snapshot `version = currentVersion` (en transacción) y deja el plan en `approved`. Contraparte de "Editar (nueva versión)". |
