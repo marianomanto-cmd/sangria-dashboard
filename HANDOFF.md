@@ -1292,6 +1292,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+4cc96da  Restringir la aprobación de planes a una allowlist de emails (#100)
 e152dfc  Fix: un billing en draft no saca el mes del tablero de pendientes (#98)
 5379c4e  Cosmético: primitivo Button + usuario real en el sidebar (#96)
 20e1a1c  Cosmético: unificar el badge de estado de plan + limpiar código muerto (#94)
