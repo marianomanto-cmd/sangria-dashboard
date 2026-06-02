@@ -1309,6 +1309,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+9139255  chore(skills): versionar ui-ux-pro-max + context7 en .claude/skills (#102)
 4cc96da  Restringir la aprobación de planes a una allowlist de emails (#100)
 e152dfc  Fix: un billing en draft no saca el mes del tablero de pendientes (#98)
 5379c4e  Cosmético: primitivo Button + usuario real en el sidebar (#96)
