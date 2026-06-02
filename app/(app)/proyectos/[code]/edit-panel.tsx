@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Pencil, Trash2 } from "lucide-react";
 import { deleteProject, updateProject } from "@/app/actions/projects";
 import { Button } from "@/components/button";
+import { useToast } from "@/components/toast";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Origin = { id: string; name: string };
 
@@ -26,6 +28,8 @@ export function ProjectEditPanel({
   budgetOrigins: Origin[];
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,23 +75,27 @@ export function ProjectEditPanel({
       return;
     }
     setOpen(false);
+    toast.success("Proyecto actualizado");
     router.refresh();
   };
 
   const onDelete = async () => {
     if (
-      !confirm(
-        "¿Eliminar este proyecto? Se borran TODOS sus planes, placements, " +
-          "fees, billings, snapshots y reportes asociados. Esta acción no se " +
-          "puede deshacer.",
-      )
+      !(await confirm({
+        title: "¿Eliminar este proyecto?",
+        body:
+          "Se borran TODOS sus planes, placements, fees, billings, snapshots y " +
+          "reportes asociados. Esta acción no se puede deshacer.",
+        confirmLabel: "Eliminar proyecto",
+        danger: true,
+      }))
     )
       return;
     setPending(true);
     const r = await deleteProject({ projectId });
     if (!r.ok) {
       setPending(false);
-      alert(r.error);
+      toast.error(r.error);
       return;
     }
     router.push("/proyectos");

@@ -4,21 +4,24 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RotateCcw } from "lucide-react";
 import { restorePlan } from "@/app/actions/plans";
+import { useToast } from "@/components/toast";
 
 // Restaura un plan desde la papelera. Texto en inglés (igual que el resto de
 // esta feature). Si hay colisión de nombre con un plan vivo, la action devuelve
 // un error y lo mostramos.
 export function RestorePlanButton({ planId }: { planId: string }) {
   const router = useRouter();
+  const toast = useToast();
   const [pending, startTransition] = useTransition();
 
   const onClick = () => {
     startTransition(async () => {
       const res = await restorePlan({ planId });
       if (!res.ok) {
-        alert(res.error);
+        toast.error(res.error);
         return;
       }
+      toast.success("Plan restaurado");
       router.refresh();
     });
   };

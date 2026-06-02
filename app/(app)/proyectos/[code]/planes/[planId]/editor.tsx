@@ -33,6 +33,8 @@ import {
 } from "@/app/actions/plans";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { Button } from "@/components/button";
+import { useToast } from "@/components/toast";
+import { useConfirm } from "@/components/confirm-dialog";
 import type {
   PlanDetail,
   PlanFee,
@@ -103,6 +105,8 @@ export function PlanEditor({
   canApprove?: boolean;
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const editable = detail.plan.status === "draft";
 
@@ -138,7 +142,8 @@ export function PlanEditor({
   const onMarkReady = () => {
     startTransition(async () => {
       const r = await transitionPlanStatus({ planId: detail.plan.id, to: "ready_to_send" });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Plan marcado como listo para enviar");
       refresh();
     });
   };
@@ -146,32 +151,44 @@ export function PlanEditor({
   const onBackToDraft = () => {
     startTransition(async () => {
       const r = await transitionPlanStatus({ planId: detail.plan.id, to: "draft" });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       refresh();
     });
   };
 
   // Solo aplica a un draft que viene de una versión aprobada (currentVersion > 0):
   // descarta los cambios y restaura el plan al snapshot aprobado vigente.
-  const onDiscardDraft = () => {
+  const onDiscardDraft = async () => {
     if (
-      !confirm(
-        `¿Descartar el borrador y volver al plan aprobado (v${detail.plan.currentVersion})?\n\nSe pierden todos los cambios hechos desde la última aprobación. Esta acción no se puede deshacer.`,
-      )
+      !(await confirm({
+        title: `¿Descartar el borrador y volver al plan aprobado (v${detail.plan.currentVersion})?`,
+        body: "Se pierden todos los cambios hechos desde la última aprobación. Esta acción no se puede deshacer.",
+        confirmLabel: "Descartar borrador",
+        danger: true,
+      }))
     )
       return;
     startTransition(async () => {
       const r = await revertPlanToApprovedSnapshot({ planId: detail.plan.id });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
+      else toast.success(`Borrador descartado · volviste a v${detail.plan.currentVersion}`);
       refresh();
     });
   };
 
-  const onApprove = () => {
-    if (!confirm(`¿Aprobar el plan ${detail.plan.name} (v${detail.plan.currentVersion + 1})?\n\nEsto crea un snapshot inmutable y bloquea ediciones futuras hasta que vuelvas al draft.`)) return;
+  const onApprove = async () => {
+    if (
+      !(await confirm({
+        title: `¿Aprobar el plan ${detail.plan.name} (v${detail.plan.currentVersion + 1})?`,
+        body: "Esto crea un snapshot inmutable y bloquea ediciones futuras hasta que vuelvas al draft.",
+        confirmLabel: "Aprobar",
+      }))
+    )
+      return;
     startTransition(async () => {
       const r = await transitionPlanStatus({ planId: detail.plan.id, to: "approved" });
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Plan aprobado");
       refresh();
     });
   };
@@ -696,6 +713,8 @@ function PublisherGroup({
   onChange: () => void;
   startTransition: StartTransition;
 }) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const balance = pub.totalPlannedUsd - pub.placementsTotalUsd;
   const balanced = Math.abs(balance) < 0.01;
 
@@ -727,8 +746,16 @@ function PublisherGroup({
     });
   };
 
-  const onRemovePub = () => {
-    if (!confirm(`¿Eliminar ${pub.publisherName} y todos sus ${pub.placements.length} placements?`)) return;
+  const onRemovePub = async () => {
+    if (
+      !(await confirm({
+        title: `¿Eliminar ${pub.publisherName}?`,
+        body: `Se eliminan también sus ${pub.placements.length} placement${pub.placements.length === 1 ? "" : "s"}.`,
+        confirmLabel: "Eliminar",
+        danger: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       await removePublisherFromPlan(pub.id);
       onChange();
@@ -738,7 +765,7 @@ function PublisherGroup({
   const onDuplicatePub = () => {
     startTransition(async () => {
       const r = await duplicatePlanPublisher(pub.id);
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       onChange();
     });
   };
@@ -897,6 +924,9 @@ function PlacementGridRow({
   onChange: () => void;
   startTransition: StartTransition;
 }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+
   const update = (partial: UpdatePlacementPartial) => {
     startTransition(async () => {
       await updatePlacement({ ...partial, placementId: placement.id });
@@ -904,8 +934,15 @@ function PlacementGridRow({
     });
   };
 
-  const onRemove = () => {
-    if (!confirm(`¿Eliminar el placement "${placement.placementName}"?`)) return;
+  const onRemove = async () => {
+    if (
+      !(await confirm({
+        title: `¿Eliminar el placement "${placement.placementName}"?`,
+        confirmLabel: "Eliminar",
+        danger: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       await removePlacement(placement.id);
       onChange();
@@ -915,7 +952,7 @@ function PlacementGridRow({
   const onDuplicate = () => {
     startTransition(async () => {
       const r = await duplicatePlacement(placement.id);
-      if (!r.ok) alert(r.error);
+      if (!r.ok) toast.error(r.error);
       onChange();
     });
   };
@@ -1833,6 +1870,8 @@ function FeeRow({
   onChange: () => void;
   startTransition: StartTransition;
 }) {
+  const confirm = useConfirm();
+
   const update = (
     partial: Omit<Parameters<typeof updateFee>[0], "feeId">,
   ) => {
@@ -1842,8 +1881,15 @@ function FeeRow({
     });
   };
 
-  const onRemove = () => {
-    if (!confirm(`¿Eliminar el fee "${fee.name}"?`)) return;
+  const onRemove = async () => {
+    if (
+      !(await confirm({
+        title: `¿Eliminar el fee "${fee.name}"?`,
+        confirmLabel: "Eliminar",
+        danger: true,
+      }))
+    )
+      return;
     startTransition(async () => {
       await removeFee(fee.id);
       onChange();

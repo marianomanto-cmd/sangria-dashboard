@@ -9,6 +9,8 @@ import {
 } from "@/app/actions/campaign-tracker";
 import { GoalBar, PaceBadge } from "@/components/campaign-tracker-bits";
 import { Button } from "@/components/button";
+import { useToast } from "@/components/toast";
+import { useConfirm } from "@/components/confirm-dialog";
 import type { TrackerPublisherGroup } from "@/db/queries/campaign-tracker";
 import {
   buildMetricRows,
@@ -58,6 +60,8 @@ export function CampaignTrackerEditor({
   lastCloseDate: string | null;
 }) {
   const router = useRouter();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   // Normalización (una vez): de la estructura del query a la del editor.
   const editorPublishers = useMemo<EditorPublisher[]>(
@@ -150,7 +154,7 @@ export function CampaignTrackerEditor({
           value,
         });
         if (!r.ok) {
-          alert(r.error);
+          toast.error(r.error);
           setSaveState("idle");
           return;
         }
@@ -160,17 +164,19 @@ export function CampaignTrackerEditor({
     timers.current.set(cellKey, t);
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (
-      !confirm(
-        "¿Cerrar la carga de hoy? Se guarda un snapshot del estado actual en el histórico para Reportes. Podés seguir editando y volver a cerrar.",
-      )
+      !(await confirm({
+        title: "¿Cerrar la carga de hoy?",
+        body: "Se guarda un snapshot del estado actual en el histórico para Reportes. Podés seguir editando y volver a cerrar.",
+        confirmLabel: "Cerrar carga",
+      }))
     )
       return;
     startClose(async () => {
       const r = await closeDailyLoad({ planId });
       if (!r.ok) {
-        alert(r.error);
+        toast.error(r.error);
         return;
       }
       setCloseFeedback(
