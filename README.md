@@ -436,7 +436,11 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   proyectos. Todo se deriva de columnas existentes (no hay flags nuevos):
   - **Billing reports a completar**: por cada plan `approved` (no borrado), los
     meses dentro del span de sus placements cuyo cierre ya pasó (`mes < mes
-    actual`) y que no tienen fila en `plan_billings`.
+    actual`) cuyo billing todavía no se terminó. Un mes cuenta como **terminado**
+    solo cuando tiene una fila en `plan_billings` en un estado más allá de
+    `draft` (ready/sent/invoiced/paid). Un billing en `draft` (abierto pero no
+    marcado "listo") **no** lo saca del tablero: el mes sigue pendiente hasta que
+    se marca `ready`.
   - **Tracking del día pendiente**: planes `approved` vigentes hoy (hoy dentro
     del período) cuyo `max(snapshot_date)` de `campaign_actual_snapshots` es
     anterior a hoy (o que nunca se trackearon).
