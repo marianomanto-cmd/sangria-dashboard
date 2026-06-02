@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   campaignActualSnapshots,
@@ -16,8 +16,11 @@ import { getReportingCalendar } from "@/db/queries/reports";
 // columnas existentes (no hay flags nuevos en el schema):
 //
 //   1. billings  — meses YA cerrados (mes < mes actual) de un plan aprobado
-//                  que todavía no tienen su billing report (no existe fila en
-//                  plan_billings para ese (plan, mes)).
+//                  cuyo billing report todavía no se terminó. "Terminado" =
+//                  existe una fila en plan_billings para ese (plan, mes) en un
+//                  estado más allá de 'draft' (ready/sent/invoiced/paid). Un
+//                  billing en 'draft' (abierto pero no marcado "listo") NO
+//                  cuenta: el mes sigue pendiente hasta que se marca listo.
 //   2. tracking  — campañas vigentes hoy (plan aprobado, hoy dentro del
 //                  período) cuyo último cierre de tracking es anterior a hoy
 //                  (o que nunca se trackearon).
@@ -216,10 +219,20 @@ async function getPendingBillings(
   if (planRows.length === 0) return [];
 
   const planIds = planRows.map((p) => p.planId);
+  // Solo cuentan como "ya facturado" los billings que dejaron el estado draft
+  // (ready/sent/invoiced/paid). Un draft es un billing abierto pero sin
+  // terminar: el mes debe seguir apareciendo como pendiente hasta marcarlo
+  // "listo" (ready). Sin este filtro, abrir un billing y dejarlo en draft lo
+  // borraba del tablero prematuramente.
   const billed = await db
     .select({ planId: planBillings.mediaPlanId, month: planBillings.month })
     .from(planBillings)
-    .where(inArray(planBillings.mediaPlanId, planIds));
+    .where(
+      and(
+        inArray(planBillings.mediaPlanId, planIds),
+        ne(planBillings.status, "draft"),
+      ),
+    );
 
   const billedKey = new Set(billed.map((b) => `${b.planId}:${b.month}`));
 

@@ -2,6 +2,21 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — Fix: un billing en draft no debe sacar el mes del tablero
+
+- **Bug**: en el tablero de pendientes, abrir un billing de un mes cerrado y
+  dejarlo en `draft` (sin terminar) lo borraba de "Billing reports a completar".
+  Debería seguir pendiente hasta marcarlo **`ready` ("listo")**.
+- Fix en `getPendingBillings` (`db/queries/pendings.ts`): el set de "meses ya
+  facturados" ahora solo cuenta filas de `plan_billings` con
+  `status != 'draft'` (ready/sent/invoiced/paid). Un `draft` ya no cuenta como
+  completado, así que el mes vuelve a aparecer hasta que se marca listo.
+- Sin cambios de schema. **No requiere acción en prod.**
+- **Pendiente (aparte, NO incluido)**: reportado que hay MPs que finalizan en
+  Junio y no aparecen en el Dashboard. El usuario confirmó que es un tema
+  distinto a este; queda para una próxima sesión (no es la categoría "Billings a
+  completar").
+
 ### Cambios de la sesión 01/jun/2026 — Cosmético: primitivo Button + usuario real en el sidebar
 
 - **Primitivo `Button`** (`components/button.tsx`): el botón primario `bg-ink`
