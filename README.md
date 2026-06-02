@@ -904,8 +904,13 @@ Idempotente: limpia las tablas antes de insertar.
 
 - **Permisos por rol**: ya hay autenticación (Google OAuth, sangria.agency-only
   — ver "Auth" arriba) y RLS cierra la REST API pública de Supabase. Falta el
-  modelo de roles (Account Manager, Media Planner, Finance, Viewer): hoy todo
-  usuario logueado del dominio tiene acceso total dentro de la app.
+  modelo de roles general (Account Manager, Media Planner, Finance, Viewer): hoy
+  casi todo usuario logueado del dominio tiene acceso total dentro de la app.
+  **Única excepción hoy**: aprobar un plan (ready_to_send → approved) está
+  restringido a una allowlist de emails en `lib/permissions.ts`
+  (`canApprovePlans`). El chequeo real está en la server action
+  `transitionPlanStatus`; el editor esconde el botón "Aprobar (firmado)" para
+  el resto. Cuando se arme el modelo de roles, migrar esta allowlist a roles.
 - **Reportes**: la sección `/reportes` tiene tres herramientas funcionando:
   Reporting Calendar (`/reportes/calendario`), Simulador (`/reportes/simulador`)
   y Generador de reportes históricos (`/reportes/generador`, ver sección

@@ -4,6 +4,8 @@ import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
+import { getCurrentUser } from "@/lib/auth";
+import { canApprovePlans } from "@/lib/permissions";
 import {
   markets,
   mediaPlanFees,
@@ -414,6 +416,20 @@ export async function transitionPlanStatus(input: {
   notes?: string;
 }): Promise<Result> {
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
+
+  // Aprobar un plan está restringido a una allowlist de usuarios (aprobar
+  // congela un snapshot inmutable). Barrera real server-side; la UI esconde el
+  // botón como conveniencia.
+  if (input.to === "approved") {
+    const user = await getCurrentUser();
+    if (!canApprovePlans(user?.email)) {
+      return {
+        ok: false,
+        error:
+          "No tenés permiso para aprobar planes. Solo mariano.mantovani@sangria.agency y herman.grabosky@sangria.agency pueden marcar un plan como Aprobado.",
+      };
+    }
+  }
 
   const [before] = await db
     .select()
