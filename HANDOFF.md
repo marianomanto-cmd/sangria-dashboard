@@ -2,6 +2,38 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — UX hardening (toasts, confirm, loading/error, a11y, mobile)
+
+Auditoría UI/UX (apoyada en el skill `ui-ux-pro-max`) → implementación de los
+gaps transversales:
+
+- **Toasts** (`components/toast.tsx`, `useToast`): feedback no bloqueante
+  (success/error/info) con live-region (role=alert/status) y auto-dismiss.
+  Reemplazan los `alert()` nativos. Toasts de éxito en acciones clave
+  (aprobar/listo/descartar plan, guardar/eliminar proyecto, restaurar, etc.).
+- **Diálogo de confirmación** (`components/confirm-dialog.tsx`, `useConfirm`):
+  modal accesible promise-based (`await confirm({title, body, danger})`) con
+  focus-trap, Escape, backdrop, scroll-lock, restauración de foco. Reemplaza
+  los `confirm()` nativos en los 8 archivos que los usaban.
+- Ambos se montan en `components/app-providers.tsx` (en el layout, envolviendo
+  el contenido).
+- **Estados de carga**: `app/(app)/loading.tsx` + `PageSkeleton`
+  (`components/skeleton.tsx`) → skeleton de página durante la navegación (la
+  chrome persiste). Antes el `Skeleton` existía pero no se usaba.
+- **Errores de UI**: `app/(app)/error.tsx` (boundary con retry) y
+  `app/(app)/not-found.tsx` (404 con `EmptyState`).
+- **a11y de errores de formulario**: `role="alert"` en los contenedores de
+  error (forms de proyecto/plan, config de cliente, calendario, login, etc.)
+  para que los lectores de pantalla los anuncien.
+- **Responsive / mobile**: el sidebar ahora es un **drawer** deslizable en
+  `< lg` (oculto por default, hamburguesa en el topbar, backdrop, cierra al
+  navegar/Escape) y mantiene su comportamiento sticky/colapsable en `≥ lg`.
+  Estado compartido en `components/mobile-nav.tsx` (`MobileNavProvider` +
+  `MobileNavToggle`). La tabla de `/planes` (lista) scrollea horizontal en vez
+  de aplastarse (la de proyectos ya era responsive).
+- Keyframes `toast-in` / `fade-in` / `dialog-in` en `globals.css` (con
+  `prefers-reduced-motion`). Sin cambios de schema; **no requiere acción en prod**.
+
 ### Cambios de la sesión 01/jun/2026 — Skills de Claude Code versionados (ui-ux-pro-max + context7)
 
 - Se agregaron skills de Claude Code al repo en **`.claude/skills/`** para que
@@ -1910,6 +1942,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Mostrar / cambiar el usuario logueado en la chrome | `app/(app)/layout.tsx` lee `getCurrentUser()` una vez y lo pasa a `components/sidebar.tsx` (footer) y `components/topbar.tsx` (avatar + menú `TopbarUser`). |
 | Cambiar quién puede aprobar planes | `lib/permissions.ts` (`PLAN_APPROVER_EMAILS` + `canApprovePlans`). Chequeo real en `transitionPlanStatus` (`app/actions/plans.ts`, branch `to === "approved"`); el botón se esconde vía prop `canApprove` que `…/planes/[planId]/page.tsx` pasa al `PlanEditor`. |
 | Agregar/editar skills de Claude Code (web) | `.claude/skills/` (versionado; el resto de `.claude/` está gitignored). Hoy: `ui-ux-pro-max` (scripts BM25 + data CSV) y `context7` (docs via API). Para sumar otro, copiar su carpeta `SKILL.md` ahí y commitear. Se cargan en la PRÓXIMA sesión web, no en la que se agregan. |
+| Mostrar feedback (éxito/error) o pedir confirmación | `components/toast.tsx` (`useToast().success/error/info`) y `components/confirm-dialog.tsx` (`await useConfirm()({title, body, danger})`). Montados en `components/app-providers.tsx`. NO usar `alert()`/`confirm()` nativos. |
+| Tocar el skeleton/loading o el error/404 de las rutas | `app/(app)/loading.tsx` (+ `PageSkeleton` en `components/skeleton.tsx`), `app/(app)/error.tsx` (boundary + retry), `app/(app)/not-found.tsx`. |
+| Tocar el nav mobile (drawer + hamburguesa) | `components/mobile-nav.tsx` (`MobileNavProvider`, `MobileNavToggle`, `useMobileNav`). El sidebar (`components/sidebar.tsx`) es drawer en `< lg` y sticky en `≥ lg`; el toggle vive en el topbar. |
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
 | Descartar un borrador y volver al plan aprobado | Botón "Descartar borrador" en `editor.tsx` (header, solo en `draft` con `currentVersion > 0`) + `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`. Restaura publishers/placements/fees/nombre/notas desde el snapshot `version = currentVersion` (en transacción) y deja el plan en `approved`. Contraparte de "Editar (nueva versión)". |

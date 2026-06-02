@@ -79,7 +79,7 @@ export function ProjectStatusChanger({
         </span>
       )}
       {error && (
-        <span className="text-[11px] text-danger">{error}</span>
+        <span role="alert" className="text-[11px] text-danger">{error}</span>
       )}
       {currentStatus === "closed" && !pending && !error && (
         <span className="text-[11px] text-muted italic ml-1">

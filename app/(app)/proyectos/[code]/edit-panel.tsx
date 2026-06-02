@@ -177,7 +177,7 @@ export function ProjectEditPanel({
       </Field>
 
       {error && (
-        <div className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-xs text-danger">
+        <div role="alert" className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-xs text-danger">
           {error}
         </div>
       )}

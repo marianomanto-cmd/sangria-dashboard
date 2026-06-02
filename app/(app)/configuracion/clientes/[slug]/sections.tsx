@@ -201,7 +201,7 @@ function PublishersSection({
               <option value="client">Cliente paga directo</option>
             </select>
           </div>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
@@ -443,7 +443,7 @@ function MetricsSection({
               className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-xs font-mono"
             />
           )}
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
@@ -644,7 +644,7 @@ function MarketsSection({
               className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
             />
           </div>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear
@@ -881,7 +881,7 @@ function BudgetOriginsSection({
               disabled={pending}
             />
           </div>
-          {error && <p className="text-xs text-danger">{error}</p>}
+          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
               Crear

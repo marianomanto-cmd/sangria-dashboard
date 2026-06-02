@@ -410,7 +410,7 @@ export function ReportingCalendarClient({
                 </>
               )}
             </p>
-            {error && <p className="text-xs text-danger">{error}</p>}
+            {error && <p role="alert" className="text-xs text-danger">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -468,7 +468,7 @@ export function ReportingCalendarClient({
                 ? " — esta acción no se puede deshacer. Si ya fue entregado, se borra también del histórico."
                 : " — this can't be undone. If it was already delivered, it's removed from history too."}
             </p>
-            {error && <p className="text-xs text-danger">{error}</p>}
+            {error && <p role="alert" className="text-xs text-danger">{error}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
@@ -819,7 +819,7 @@ function CreateManualReportForm({
         />
       </label>
 
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p role="alert" className="text-xs text-danger">{error}</p>}
 
       <div className="flex justify-end gap-2 pt-1">
         <button
@@ -897,7 +897,7 @@ function LinkForm({
           ? "Opcional. Pegá el link del PPT final para encontrarlo rápido a futuro."
           : "Optional. Paste the final PPT link so it's quick to find later."}
       </p>
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p role="alert" className="text-xs text-danger">{error}</p>}
       <div className="flex justify-end gap-2 pt-1">
         {initialUrl && (
           <button
@@ -990,7 +990,7 @@ function AssignDateForm({
           ? "Al guardar, el día de hoy queda registrado como el momento del compromiso."
           : "On save, today is recorded as the moment of the commitment."}
       </p>
-      {error && <p className="text-xs text-danger">{error}</p>}
+      {error && <p role="alert" className="text-xs text-danger">{error}</p>}
       <div className="flex justify-end gap-2 pt-1">
         <button
           type="button"

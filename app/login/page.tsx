@@ -34,7 +34,7 @@ export default async function LoginPage({ searchParams }: Props) {
 
         <div className="rounded-lg border border-line bg-white dark:bg-paper-2 p-6 space-y-4">
           {errorMsg && (
-            <div className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-xs text-danger">
+            <div role="alert" className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-xs text-danger">
               {errorMsg}
             </div>
           )}

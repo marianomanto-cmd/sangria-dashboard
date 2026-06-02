@@ -63,7 +63,7 @@ export function HardDeletePlanButton({
               data — publishers, placements, fees and billings.{" "}
               <strong className="text-ink">This cannot be undone.</strong>
             </p>
-            {error && <p className="text-xs text-danger">{error}</p>}
+            {error && <p role="alert" className="text-xs text-danger">{error}</p>}
             <div className="flex justify-end gap-2 pt-1">
               <button
                 type="button"

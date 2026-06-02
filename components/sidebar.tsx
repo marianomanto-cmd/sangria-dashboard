@@ -21,6 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { SangriaMark } from "@/components/sangria-mark";
+import { useMobileNav } from "@/components/mobile-nav";
 
 type NavEntry = {
   href: string;
@@ -60,18 +61,27 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const clientSlug = searchParams?.get("client") ?? null;
+  const { open: mobileOpen, setOpen: setMobileOpen } = useMobileNav();
 
   return (
-    <aside
-      data-collapsed={collapsed}
-      // Gradiente vertical sutil de rail-2 → rail (más oscuro abajo) para
-      // darle profundidad al sidebar sin separarse del tono del producto.
-      // bg-rail nunca swappea en dark mode (definido fijo en globals.css).
-      // z-20 para que el botón de colapsar (que sobresale con -right-3)
-      // quede por encima del topbar, que también es sticky y tiene z-10.
-      // Sin esto, el topbar tapa la mitad derecha del botón.
-      className="bg-gradient-to-b from-rail-2 to-rail text-white flex flex-col data-[collapsed=true]:w-14 data-[collapsed=false]:w-[220px] transition-[width] duration-200 ease-out shrink-0 sticky top-0 h-screen z-20 border-r border-black/40"
-    >
+    <>
+      {/* Backdrop del drawer en mobile */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-30 bg-ink/50 animate-fade-in"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden
+        />
+      )}
+      <aside
+        data-collapsed={collapsed}
+        // En < lg el sidebar es un drawer fijo que se desliza (translate-x)
+        // controlado por useMobileNav; en ≥ lg vuelve a su comportamiento
+        // sticky con ancho colapsable. bg-rail nunca swappea en dark mode.
+        className={`bg-gradient-to-b from-rail-2 to-rail text-white flex flex-col h-screen border-r border-black/40 fixed inset-y-0 left-0 z-40 w-[220px] transition-transform duration-200 ease-out ${
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:sticky lg:top-0 lg:z-20 lg:translate-x-0 lg:shrink-0 lg:transition-[width] lg:data-[collapsed=true]:w-14 lg:data-[collapsed=false]:w-[220px]`}
+      >
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <SangriaMark size={22} />
         {!collapsed && (
@@ -89,6 +99,7 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
             href={buildHrefWithClient(entry.href, clientSlug)}
             active={isActive(pathname, entry.href, entry.exact)}
             collapsed={collapsed}
+            onNavigate={() => setMobileOpen(false)}
           />
         ))}
       </nav>
@@ -106,6 +117,7 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
             href={buildHrefWithClient(entry.href, clientSlug)}
             active={isActive(pathname, entry.href, entry.exact)}
             collapsed={collapsed}
+            onNavigate={() => setMobileOpen(false)}
           />
         ))}
       </div>
@@ -143,7 +155,7 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
         type="button"
         onClick={() => setCollapsed((c) => !c)}
         aria-label={collapsed ? "Expandir sidebar" : "Colapsar sidebar"}
-        className="absolute -right-3 top-6 w-6 h-6 rounded-full bg-rail border border-white/15 flex items-center justify-center text-line hover:text-white hover:border-white/40 hover:scale-110 active:scale-95 transition-all duration-150 shadow-sm"
+        className="hidden lg:flex absolute -right-3 top-6 w-6 h-6 rounded-full bg-rail border border-white/15 items-center justify-center text-line hover:text-white hover:border-white/40 hover:scale-110 active:scale-95 transition-all duration-150 shadow-sm"
       >
         {collapsed ? (
           <ChevronsRight size={12} />
@@ -151,7 +163,8 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
           <ChevronsLeft size={12} />
         )}
       </button>
-    </aside>
+      </aside>
+    </>
   );
 }
 
@@ -160,16 +173,19 @@ function NavItem({
   href,
   active,
   collapsed,
+  onNavigate,
 }: {
   entry: NavEntry;
   href: string;
   active: boolean;
   collapsed: boolean;
+  onNavigate?: () => void;
 }) {
   const Icon = entry.icon;
   return (
     <Link
       href={href}
+      onClick={onNavigate}
       data-active={active}
       data-collapsed={collapsed}
       className="group relative flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted hover:bg-white/5 hover:text-white data-[active=true]:bg-white/[0.08] data-[active=true]:text-white data-[collapsed=true]:justify-center data-[collapsed=true]:px-0 data-[collapsed=true]:w-9 data-[collapsed=true]:h-9 transition-colors duration-150"

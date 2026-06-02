@@ -6,11 +6,13 @@ import type { AppUser } from "@/lib/auth";
 import { TopbarClientPicker } from "@/components/topbar-client-picker";
 import { TopbarUser } from "@/components/topbar-user";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { MobileNavToggle } from "@/components/mobile-nav";
 
 export async function Topbar({ user }: { user: AppUser | null }) {
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-paper/80 backdrop-blur supports-[backdrop-filter]:bg-paper/70 dark:bg-paper/85">
       <div className="px-6 h-12 flex items-center gap-4">
+        <MobileNavToggle />
         <Breadcrumbs trail={["Sangria", "Dashboard"]} />
 
         <div className="ml-auto flex items-center gap-2">
