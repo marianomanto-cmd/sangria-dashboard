@@ -1370,6 +1370,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+a5cea8b  Unificar el estado de billing en un BillingStatusBadge compartido (#108)
 89ae2d0  Fix: billing facturado se mostraba como draft en la lista de meses (#106)
 42ec544  UX hardening: toasts, confirm, loading/error/404, a11y, sidebar mobile (#104)
 9139255  chore(skills): versionar ui-ux-pro-max + context7 en .claude/skills (#102)
