@@ -16,6 +16,7 @@ import {
   publishers,
 } from "@/db/schema";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
+import { BillingStatusBadge } from "@/components/billing-status-badge";
 import { BillingMonthEditor } from "./editor";
 
 type Props = {
@@ -342,7 +343,7 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
                     >
                       <span className="font-mono text-sm text-ink-2">{m}</span>
                       {billing ? (
-                        <BillingStatusPill status={billing.status} compact />
+                        <BillingStatusBadge status={billing.status} size="sm" />
                       ) : (
                         <span className="text-[10px] text-line">sin cargar</span>
                       )}
@@ -373,31 +374,6 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
         </div>
       )}
     </main>
-  );
-}
-
-export function BillingStatusPill({
-  status,
-  compact = false,
-}: {
-  status: string;
-  compact?: boolean;
-}) {
-  const styles: Record<string, { label: string; cls: string; dot: string }> = {
-    draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-    ready: { label: "listo", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-    sent: { label: "emitida", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
-    invoiced: { label: "facturado", cls: "bg-accent-soft text-accent border-accent-soft", dot: "bg-accent" },
-    paid: { label: "pagada", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  };
-  const s = styles[status] ?? styles.draft;
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-sm border px-1.5 py-0.5 ${compact ? "text-[10px]" : "text-[11px]"} font-medium ${s.cls}`}
-    >
-      <span className={`inline-block h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {s.label}
-    </span>
   );
 }
 
