@@ -2,6 +2,21 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — Fix: billing facturado se mostraba como "draft" en la lista de meses
+
+- **Bug**: en el billing del plan, un mes en estado `invoiced` (facturado)
+  aparecía como **"draft"** en la lista lateral "Meses del plan", aunque el
+  detalle lo mostraba bien como "facturado".
+- Causa: `BillingStatusPill` (en `…/billing/page.tsx`) tenía el mapa de
+  estilos sin la key `invoiced`, así que caía al fallback `styles.draft`. El
+  pill del detalle (`BillingStatusPillInline` en `editor.tsx`) sí la tenía.
+- Fix: se agregó `invoiced` ("facturado", accent) al mapa del pill de la lista.
+- **Nota / deuda**: hay dos mapas de estilos de estado de billing duplicados
+  (lista vs. detalle) con labels que aún difieren (emitida/reportado,
+  pagada/pagado). Conviene unificarlos en un `BillingStatusBadge` compartido
+  (como `PlanStatusBadge`) para que no se repita este tipo de bug.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 01/jun/2026 — UX hardening (toasts, confirm, loading/error, a11y, mobile)
 
 Auditoría UI/UX (apoyada en el skill `ui-ux-pro-max`) → implementación de los

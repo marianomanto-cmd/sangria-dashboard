@@ -387,6 +387,7 @@ export function BillingStatusPill({
     draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
     ready: { label: "listo", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
     sent: { label: "emitida", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
+    invoiced: { label: "facturado", cls: "bg-accent-soft text-accent border-accent-soft", dot: "bg-accent" },
     paid: { label: "pagada", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
   };
   const s = styles[status] ?? styles.draft;
