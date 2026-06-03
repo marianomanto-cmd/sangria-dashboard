@@ -14,6 +14,7 @@ import type { planBillings as planBillingsTable } from "@/db/schema";
 import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm-dialog";
+import { BillingStatusBadge } from "@/components/billing-status-badge";
 import {
   evalNumberInput,
   formatAmountInput,
@@ -177,7 +178,7 @@ export function BillingMonthEditor({
           </p>
           <div className="flex items-center gap-3 mt-1">
             <h2 className="text-xl font-semibold">{month}</h2>
-            <BillingStatusPillInline status={billing.status} />
+            <BillingStatusBadge status={billing.status} />
             {billing.invoiceNumber && (
               <span className="font-mono text-xs text-muted">
                 N° {billing.invoiceNumber}
@@ -402,23 +403,6 @@ export function BillingMonthEditor({
         </Link>
       </div>
     </div>
-  );
-}
-
-function BillingStatusPillInline({ status }: { status: string }) {
-  const styles: Record<string, { label: string; cls: string; dot: string }> = {
-    draft: { label: "borrador", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-    ready: { label: "listo", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-    sent: { label: "reportado", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
-    invoiced: { label: "facturado", cls: "bg-accent-soft text-accent border-accent-soft", dot: "bg-accent" },
-    paid: { label: "pagado", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  };
-  const s = styles[status] ?? styles.draft;
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${s.cls}`}>
-      <span className={`inline-block h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {s.label}
-    </span>
   );
 }
 

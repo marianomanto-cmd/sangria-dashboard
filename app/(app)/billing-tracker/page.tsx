@@ -3,6 +3,7 @@ import { Building2, ChevronRight, Receipt, TrendingUp } from "lucide-react";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { BillingTrackerFilters } from "@/components/billing-tracker-filters";
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
+import { BillingStatusBadge } from "@/components/billing-status-badge";
 import {
   getBillingTracker,
   getBillingTrackerFilterOptions,
@@ -380,18 +381,6 @@ function PlanBlock({
         <tbody>
           {plan.invoices.map((inv) => {
             const href = `/proyectos/${projectCode}/planes/${plan.id}/billing?month=${inv.month}`;
-            const statusLabel =
-              lang === "es"
-                ? inv.status === "paid"
-                  ? "pagado"
-                  : "facturado"
-                : inv.status === "paid"
-                  ? "paid"
-                  : "invoiced";
-            const statusCls =
-              inv.status === "paid"
-                ? "bg-success-soft text-success border-success-soft"
-                : "bg-accent-soft text-accent border-accent-soft";
             return (
               <tr
                 key={inv.id}
@@ -423,11 +412,7 @@ function PlanBlock({
                   </span>
                 </RowCell>
                 <RowCell href={href}>
-                  <span
-                    className={`inline-flex items-center rounded-sm border px-2 py-0.5 text-[11px] font-medium ${statusCls}`}
-                  >
-                    {statusLabel}
-                  </span>
+                  <BillingStatusBadge status={inv.status} lang={lang} />
                 </RowCell>
                 <td className="px-2 py-2.5 align-middle">
                   <Link

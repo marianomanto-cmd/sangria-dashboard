@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/jun/2026 — Unificar el badge de estado de billing
+
+- Se extrajo **`components/billing-status-badge.tsx`** (`BillingStatusBadge`)
+  como fuente de verdad única del label + color del estado de un billing
+  (draft/ready/sent/invoiced/paid), lang-aware (es/en), prop `size` `md`/`sm`.
+- Reemplaza los **3 mapas de estilos duplicados** que existían (lista de meses
+  del plan, detalle del editor, vista global `/billing`) + el pill inline del
+  `/billing-tracker`. Esto resuelve la deuda anotada en el fix anterior: el bug
+  de "facturado → draft" venía justo de tener el mapa repetido y desincronizado.
+- Labels unificados (mismo estado, mismo texto en todas las vistas): la lista
+  de meses ahora dice `borrador/reportado/facturado/pagado` (antes
+  `draft/emitida/pagada`).
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 01/jun/2026 — Fix: billing facturado se mostraba como "draft" en la lista de meses
 
 - **Bug**: en el billing del plan, un mes en estado `invoiced` (facturado)
@@ -1955,6 +1969,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el flow closed → reportado | `app/actions/reports.ts` `markReportDelivered` (delivered_at + project.status='reportado' + audit log). |
 | Agregar un status nuevo a proyectos | `db/schema.ts` enum `projectStatus`, `components/status-badge.tsx`, `components/project-status-changer.tsx` (SELECTABLE / LABELS / PROMPTS). |
 | Cambiar el label/color del badge de estado de un PLAN | `components/plan-status-badge.tsx` (`PlanStatusBadge`) — fuente única usada por el editor, el detalle de proyecto y las tablas de Planes/Proyectos. Prop `size` `md`/`sm`. NO duplicar el mapa de estilos en cada vista. |
+| Cambiar el label/color del badge de estado de un BILLING | `components/billing-status-badge.tsx` (`BillingStatusBadge`) — fuente única (lang-aware es/en, prop `size` `md`/`sm`) usada por la lista de meses del plan, el detalle del editor, `/billing` y `/billing-tracker`. NO duplicar el mapa. |
 | Cambiar el look de un botón / agregar variante o tamaño | `components/button.tsx` — `Button` (para `<button>`) + `buttonVariants()` (className para `<Link>`/`<a>`). Variantes primary/secondary/ghost/danger, tamaños xs/sm/md/lg. NO volver a escribir `bg-ink text-white …` inline; usar el primitivo. |
 | Mostrar / cambiar el usuario logueado en la chrome | `app/(app)/layout.tsx` lee `getCurrentUser()` una vez y lo pasa a `components/sidebar.tsx` (footer) y `components/topbar.tsx` (avatar + menú `TopbarUser`). |
 | Cambiar quién puede aprobar planes | `lib/permissions.ts` (`PLAN_APPROVER_EMAILS` + `canApprovePlans`). Chequeo real en `transitionPlanStatus` (`app/actions/plans.ts`, branch `to === "approved"`); el botón se esconde vía prop `canApprove` que `…/planes/[planId]/page.tsx` pasa al `PlanEditor`. |

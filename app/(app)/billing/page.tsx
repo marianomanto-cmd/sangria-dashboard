@@ -9,26 +9,7 @@ import {
 import { formatUsd } from "@/lib/format";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth } from "@/lib/i18n";
-
-const STATUS_STYLE_BY_LANG: Record<
-  "en" | "es",
-  Record<string, { label: string; cls: string; dot: string }>
-> = {
-  es: {
-    draft: { label: "borrador", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-    ready: { label: "listo", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-    sent: { label: "reportado", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
-    invoiced: { label: "facturado", cls: "bg-accent-soft text-accent border-accent-soft", dot: "bg-accent" },
-    paid: { label: "pagado", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  },
-  en: {
-    draft: { label: "draft", cls: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
-    ready: { label: "ready", cls: "bg-warn-soft text-warn border-warn-soft", dot: "bg-warn" },
-    sent: { label: "reported", cls: "bg-info-soft text-info border-info-soft", dot: "bg-info" },
-    invoiced: { label: "invoiced", cls: "bg-accent-soft text-accent border-accent-soft", dot: "bg-accent" },
-    paid: { label: "paid", cls: "bg-success-soft text-success border-success-soft", dot: "bg-success" },
-  },
-};
+import { BillingStatusBadge } from "@/components/billing-status-badge";
 
 type SearchParams = {
   client?: string;
@@ -76,7 +57,6 @@ export default async function BillingPage({ searchParams }: Props) {
     fromMonth: sp.from || null,
     toMonth: sp.to || null,
   });
-  const STATUS_STYLE = STATUS_STYLE_BY_LANG[lang];
 
   const monthsList = filterOptions.minMonth && filterOptions.maxMonth
     ? enumerateMonths(filterOptions.minMonth, filterOptions.maxMonth)
@@ -158,7 +138,6 @@ export default async function BillingPage({ searchParams }: Props) {
             </thead>
             <tbody>
               {rows.map((r) => {
-                const style = STATUS_STYLE[r.status] ?? STATUS_STYLE.draft;
                 const detailHref = `/proyectos/${r.projectCode}/planes/${r.planId}/billing?month=${r.month}`;
                 return (
                   <tr
@@ -176,12 +155,7 @@ export default async function BillingPage({ searchParams }: Props) {
                       </span>
                     </RowCell>
                     <RowCell href={detailHref}>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${style.cls}`}
-                      >
-                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${style.dot}`} />
-                        {style.label}
-                      </span>
+                      <BillingStatusBadge status={r.status} lang={lang} />
                     </RowCell>
                     <RowCell href={detailHref}>
                       <span className="text-ink font-medium">{r.planName}</span>
