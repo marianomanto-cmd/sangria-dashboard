@@ -2,6 +2,21 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Mapa de análisis: 3 columnas + Leaflet
+
+- **Layout en 3 columnas** (`components/market-analysis.tsx`): filtros (izquierda,
+  vertical) · mapa (centro) · "Por mercado" (derecha); la tabla de activaciones
+  full-width abajo. Totales full-width arriba.
+- **Mapa → Leaflet** (`components/americas-map.tsx`): el SVG propio con d3-geo
+  quedaba angosto/blanco según el footprint. Se reemplazó por **Leaflet** (tiles
+  CARTO, zoom/pan nativos), importado dinámico dentro de un effect (vanilla, sin
+  react-leaflet → sin conflicto con React 19). Cada mercado es una burbuja
+  `divIcon` (tamaño = inversión, número = activaciones), auto-`fitBounds` a lo
+  filtrado, llena el ancho de la columna. Estilos `.mkt-bubble` en `globals.css`.
+  Dep nueva: `leaflet` (+ `@types/leaflet`). `d3-geo`/`topojson-client`/
+  `world-atlas` quedaron sin uso (se pueden quitar en una limpieza futura).
+- Sin cambios de schema. **No requiere acción en prod** (sí `npm install`).
+
 ### Cambios de la sesión 04/jun/2026 — Mapa de análisis: escala del recuadro + zoom con rueda
 
 - **Escala rota** (mapa chiquito en una caja ancha): la causa era el viewBox
