@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -6,8 +6,10 @@ import {
   mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
+  planBillingPublishers,
   planBillings,
   projects,
+  publishers,
 } from "@/db/schema";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -139,4 +141,38 @@ export async function getPortalFilterOptions(
   const months = minMonth && maxMonth ? enumerateMonths(minMonth, maxMonth) : [];
 
   return { budgetOrigins: origins, projects: projs, months };
+}
+
+// Gasto real (consumo) por publisher para un cliente — suma de
+// plan_billing_publishers.amount_real_usd a través de todos sus planes vivos.
+// Alimenta el chart "Inversión por publisher" del Resumen del portal.
+export async function getClientSpendByPublisher(
+  clientId: string,
+): Promise<{ name: string; value: number }[]> {
+  const rows = await db
+    .select({
+      name: publishers.name,
+      value: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+    })
+    .from(planBillingPublishers)
+    .innerJoin(
+      publishers,
+      eq(planBillingPublishers.publisherId, publishers.id),
+    )
+    .innerJoin(
+      planBillings,
+      eq(planBillingPublishers.planBillingId, planBillings.id),
+    )
+    .innerJoin(
+      mediaPlans,
+      and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)),
+    )
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .where(eq(projects.clientId, clientId))
+    .groupBy(publishers.name)
+    .orderBy(desc(sql`sum(${planBillingPublishers.amountRealUsd})`));
+
+  return rows
+    .map((r) => ({ name: r.name, value: Number.parseFloat(r.value) }))
+    .filter((r) => r.value > 0);
 }
