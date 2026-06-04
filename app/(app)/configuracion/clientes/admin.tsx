@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { ArrowUpRight, Plus, Settings } from "lucide-react";
+import { ArrowUpRight, Check, Copy, ExternalLink, Plus, Settings } from "lucide-react";
 import {
   createClient as createClientAction,
   updateClient,
@@ -12,6 +12,7 @@ import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
 import type { clients as clientsTable } from "@/db/schema";
 import type { Language } from "@/lib/i18n";
+import { CLIENT_PORTAL_PASSWORD } from "@/lib/client-portal";
 
 type Client = typeof clientsTable.$inferSelect;
 type ClientStatus = Client["status"];
@@ -83,6 +84,9 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
               <th className="text-left font-medium px-5 py-2.5">Prefijo</th>
               <th className="text-left font-medium px-5 py-2.5">Idioma</th>
               <th className="text-left font-medium px-5 py-2.5">Estado</th>
+              <th className="text-left font-medium px-5 py-2.5">Portal cliente</th>
+              <th className="text-left font-medium px-5 py-2.5">Usuario</th>
+              <th className="text-left font-medium px-5 py-2.5">Contraseña</th>
               <th className="w-10"></th>
             </tr>
           </thead>
@@ -153,6 +157,15 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="px-5 py-2">
+                  <PortalLinkCell slug={c.slug} />
+                </td>
+                <td className="px-5 py-2">
+                  <CopyValue value={c.slug} mono />
+                </td>
+                <td className="px-5 py-2">
+                  <CopyValue value={CLIENT_PORTAL_PASSWORD} mono />
                 </td>
                 <td className="px-2 py-2 text-center">
                   <div className="inline-flex items-center gap-0.5">
@@ -245,6 +258,80 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
         seleccionado en el filtro global. Las métricas (clicks, views, etc.)
         siempre quedan en inglés.
       </p>
+      <p className="text-[11px] text-muted">
+        <strong className="text-ink-2">Portal de cliente</strong>: link público
+        de solo lectura para compartir con el cliente. El acceso es con
+        <strong className="text-ink-2"> Usuario</strong> (el slug del cliente) y
+        la <strong className="text-ink-2">Contraseña</strong> estándar
+        (la misma para todos). Copiá los tres con los botones de cada columna y
+        pasáselos al cliente.
+      </p>
     </div>
+  );
+}
+
+// Celda del link al portal: muestra el path + abre en pestaña nueva + copia la
+// URL absoluta (con el origin actual) al portapapeles.
+function PortalLinkCell({ slug }: { slug: string }) {
+  const path = `/${slug}`;
+  const fullUrl = () =>
+    typeof window !== "undefined" ? `${window.location.origin}${path}` : path;
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <a
+        href={path}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 font-mono text-xs text-accent hover:underline"
+      >
+        {path}
+        <ExternalLink size={11} />
+      </a>
+      <CopyButton getValue={fullUrl} title="Copiar URL del portal" />
+    </div>
+  );
+}
+
+// Valor con botón de copiar al lado (para usuario / contraseña).
+function CopyValue({ value, mono }: { value: string; mono?: boolean }) {
+  return (
+    <div className="inline-flex items-center gap-1.5">
+      <span className={mono ? "font-mono text-xs text-ink-2" : "text-xs text-ink-2"}>
+        {value}
+      </span>
+      <CopyButton getValue={() => value} title="Copiar" />
+    </div>
+  );
+}
+
+function CopyButton({
+  getValue,
+  title,
+}: {
+  getValue: () => string;
+  title: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(getValue());
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1200);
+        } catch {
+          // Clipboard puede fallar en contextos no seguros; lo ignoramos.
+        }
+      }}
+      className="text-muted hover:text-accent inline-flex p-0.5"
+    >
+      {copied ? (
+        <Check size={12} className="text-success" />
+      ) : (
+        <Copy size={12} />
+      )}
+    </button>
   );
 }

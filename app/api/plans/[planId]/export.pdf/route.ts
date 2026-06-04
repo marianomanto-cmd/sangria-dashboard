@@ -1,6 +1,7 @@
 import { getPlanDetail } from "@/db/queries/project-detail";
 import { listMetricsForClient } from "@/app/actions/plans";
 import { renderPlanPdf } from "@/lib/plan-pdf";
+import { canAccessClientExport } from "@/lib/client-portal.server";
 
 export async function GET(
   _req: Request,
@@ -10,6 +11,13 @@ export async function GET(
   const detail = await getPlanDetail(planId);
   if (!detail) {
     return new Response("Plan not found", { status: 404 });
+  }
+
+  // La ruta es pública en el proxy (para que el cliente baje el PDF desde su
+  // portal). La barrera real: usuario interno logueado, o sesión de portal del
+  // cliente dueño del plan.
+  if (!(await canAccessClientExport(detail.client.slug))) {
+    return new Response("Forbidden", { status: 403 });
   }
 
   const allMetrics = await listMetricsForClient(detail.client.id);

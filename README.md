@@ -108,10 +108,17 @@ app/
       calendario/           # Reporting Calendar (closed → reportado, link PPT por reporte)
       simulador/            # Simulador de escenarios con benchmarks históricos
       generador/            # Generador de reportes históricos (Excel) con preview en vivo + column picker
+  (portal)/                 # Portal de cliente PÚBLICO, read-only (fuera del gate de Supabase)
+    [clientSlug]/           # /<slug> — tabs Resumen/Billing/Estimación/Proyectos/Reportes/Benchmarks
+      page.tsx              # gate por cookie → login o tabs; lookup por slug (404 si no existe/reservado)
+      portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
+      portal-login.tsx, portal-logout.tsx, portal-filters.tsx, portal-benchmarks-filters.tsx
   api/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + fechas por publisher/placement)
-      export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts)
+      export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). Acceso: sesión interna O cookie de portal del cliente dueño
+    portal/
+      login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
     reports/
       historical.xlsx/route.ts  # XLSX del generador (misma query que el preview, mismo resolveReportColumns)
   actions/                  # Server Actions (CRUD)
@@ -168,6 +175,8 @@ lib/
   audit-format.ts           # entityNoun / actionVerb / entityLabel / actorLabel / formatRelativeDateTime
   auth.ts                   # getCurrentUser() (server-side)
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
+  client-portal.ts          # portal público: password compartido, slugs reservados, helpers PUROS (edge-safe, los usa el proxy)
+  client-portal.server.ts   # cookie de sesión del portal (set/clear/has) + canAccessClientExport
   supabase/
     server.ts               # cliente Supabase para Server Components / route handlers
     client.ts               # cliente Supabase para Client Components
@@ -531,6 +540,40 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `/auth/signout`.
 - **Setup de prod** (no automático): ver `.env.example` para los
   pasos en Supabase dashboard y Google Cloud Console.
+
+### Portal de cliente (público, read-only)
+- **Qué es**: una vista de solo lectura para compartir con cada cliente en
+  `/<slug>` (el mismo slug interno del cliente, ej. `/copa-airlines`). Tabs:
+  **Resumen** (KPIs + chart), **Billing Tracker**, **Estimación**, **Proyectos**
+  (descarga PDF/Excel de los planes **aprobados** + pacing por placement agrupado
+  por publisher), **Reportes** (próximas entregas + enviados con link al PPT) y
+  **Benchmarks** (tabla CPM/CPC/CPV/CTR como el simulador). Todo scopeado al
+  cliente; reusa las queries internas pasando `clientId`.
+- **Acceso (baja seguridad, a propósito)**: usuario = nombre o slug del cliente;
+  password compartido `sangriaagency` (constante en `lib/client-portal.ts`,
+  `CLIENT_PORTAL_PASSWORD`). El admin de `/configuracion/clientes` muestra el
+  link + usuario + contraseña (con botones de copiar) para pasárselos al cliente.
+  No es auth real; es un gate para compartir un link.
+- **Cómo convive con el gate de la app** (importante):
+  - El portal vive **fuera** del `(app)` group y del login de Supabase. El proxy
+    (`lib/supabase/middleware.ts`) trata como público **solo GET** a `/<slug>`
+    (páginas read-only) + los endpoints dedicados `/api/portal/*` (login/logout,
+    autovalidantes) + la descarga de export de planes (GET).
+  - **Solo GET**: los Server Actions se despachan por POST a la ruta actual sin
+    importar el path, y la app confía en el proxy como gate de sus mutaciones. Si
+    abriéramos POST en `/<slug>`, cualquiera podría invocar acciones internas sin
+    sesión. Por eso el portal **no usa Server Actions**: login/logout son route
+    handlers públicos y todo lo interactivo (filtros, benchmarks, pacing) es
+    URL-based (GET).
+  - **Slugs reservados**: el proxy considera portal a cualquier primer segmento
+    top-level que NO esté en `RESERVED_TOP_LEVEL_SLUGS` (`lib/client-portal.ts`).
+    **Si agregás una sección nueva con ruta top-level, sumala a esa lista** o
+    quedaría accesible sin login. El page del portal igual hace 404 si el slug no
+    es un cliente vivo.
+  - **Cookie**: `setPortalSession(slug)` guarda el slug desbloqueado (httpOnly).
+    El export (`/api/plans/[id]/export.*`) valida `canAccessClientExport(slug)`:
+    pasa si hay sesión interna O cookie de portal del cliente dueño del plan.
+- **Sin cambios de schema**: reusa `clients.slug`. No requiere acción en prod.
 
 ### Seguridad: RLS en todas las tablas de `public`
 - Supabase expone **automáticamente** cada tabla del schema `public` vía su
