@@ -11,7 +11,7 @@ import {
   setReportDeliveryDate,
   setReportPptUrl,
 } from "@/app/actions/reports";
-import { ReportingGantt } from "@/components/reporting-gantt";
+import { MermaidGantt } from "@/components/mermaid-gantt";
 import type { CalendarReport, SentReport } from "@/db/queries/reports";
 import { formatDate, type Language } from "@/lib/i18n";
 
@@ -339,25 +339,91 @@ export function ReportingCalendarClient({
             {lang === "es" ? "ventana -30 / +30 días" : "window -30 / +30 days"}
           </span>
         </header>
-        <ReportingGantt
-          reports={fInProgress}
-          lang={lang}
-          onAssignDate={(reportId, current) => {
-            const r = fInProgress.find((x) => x.reportId === reportId);
-            if (!r) return;
-            openAssign(reportId, r.kind, current, r.projectName);
-          }}
-          onMarkDelivered={(reportId) => {
-            const r = fInProgress.find((x) => x.reportId === reportId);
-            if (!r) return;
-            openMarkDelivered(reportId, r.kind, r.projectName);
-          }}
-          onDeleteManual={(reportId) => {
-            const r = fInProgress.find((x) => x.reportId === reportId);
-            if (!r) return;
-            openConfirmDeleteManual(reportId, r.projectName);
-          }}
-        />
+        <MermaidGantt reports={fInProgress} lang={lang} showClient />
+
+        {/* Acciones por reporte (el Gantt de Mermaid es solo visual) */}
+        {fInProgress.length > 0 && (
+          <div className="mt-4 rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-paper-2">
+                <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                  <th className="text-left font-medium px-5 py-2">
+                    {lang === "es" ? "Reporte" : "Report"}
+                  </th>
+                  <th className="text-left font-medium px-5 py-2">
+                    {lang === "es" ? "Cliente" : "Client"}
+                  </th>
+                  <th className="text-left font-medium px-5 py-2">
+                    {lang === "es" ? "Entrega" : "Delivery"}
+                  </th>
+                  <th className="px-5 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {fInProgress.map((r) => {
+                  const todayISO = new Date().toISOString().slice(0, 10);
+                  const late = !!r.deliveryDate && r.deliveryDate < todayISO;
+                  return (
+                    <tr key={r.reportId} className="border-t border-line-soft">
+                      <td className="px-5 py-2 text-ink">
+                        {r.projectName}
+                        {r.kind === "manual" && (
+                          <span className="ml-2 text-[9px] uppercase tracking-[0.08em] font-semibold text-muted bg-paper-2 border border-line rounded px-1.5 py-0.5">
+                            manual
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-2 text-ink-2">{r.clientName}</td>
+                      <td className="px-5 py-2">
+                        <span className="text-ink-2">
+                          {r.deliveryDate ? formatDate(r.deliveryDate, lang) : "—"}
+                        </span>
+                        {late && (
+                          <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-danger">
+                            {lang === "es" ? "atrasado" : "late"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-2">
+                        <div className="flex items-center justify-end gap-3">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openAssign(r.reportId, r.kind, r.deliveryDate, r.projectName)
+                            }
+                            className="text-[11px] text-muted hover:text-ink"
+                          >
+                            {lang === "es" ? "Editar fecha" : "Edit date"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openMarkDelivered(r.reportId, r.kind, r.projectName)
+                            }
+                            className="text-[11px] text-success hover:underline"
+                          >
+                            {lang === "es" ? "Entregado" : "Delivered"}
+                          </button>
+                          {r.kind === "manual" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openConfirmDeleteManual(r.reportId, r.projectName)
+                              }
+                              className="text-[11px] text-muted hover:text-danger"
+                            >
+                              {lang === "es" ? "Eliminar" : "Delete"}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <SentReportsSection sent={fSent} lang={lang} />
