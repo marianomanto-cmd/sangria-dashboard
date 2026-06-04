@@ -273,6 +273,15 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   draft y reinserta el del snapshot, mapeando old→new ids), restaura nombre +
   notas y vuelve a `approved`. Pre-chequea colisión de nombre con el partial
   unique index si el draft había renombrado el plan. Es irreversible.
+- **Snapshot vs. FKs que pueden desaparecer**: el snapshot es JSONB congelado,
+  así que puede referenciar un `market_id` que ya no existe (los markets se
+  borran/editan desde config; la FK live es `onDelete: set null`). Al restaurar,
+  `revertPlanToApprovedSnapshot` sanitiza cada `market_id` contra los markets
+  vivos — si ya no existe lo deja en `null` (igual que la FK al borrarse) — para
+  no reventar la transacción con un FK violation. El `publisher_id` es seguro
+  (`onDelete: restrict`: un publisher en uso no se puede borrar). Si algo falla
+  igual, la action captura el error y devuelve `{ok:false}` (toast) en vez de
+  propagar y romper la vista.
 
 ### Lifecycle del proyecto
 - Estados: `planning` → `active` → `paused` → `closed` → **`reportado`**.

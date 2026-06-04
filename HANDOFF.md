@@ -2,6 +2,27 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Fix: error al descartar el borrador de un MP
+
+- **Bug**: al "Descartar borrador" (volver al plan aprobado) la vista crasheaba
+  con el error boundary ("Ocurrió un error al cargar esta vista"), no un toast.
+- **Causa raíz**: el snapshot de la versión aprobada es JSONB congelado. Si un
+  placement referenciaba un `market_id` que **se borró** después de la
+  aprobación (los markets se editan/borran desde config; la FK live es
+  `onDelete: set null`), al reinsertar ese placement se violaba la FK a
+  `markets` → la transacción reventaba → la excepción se propagaba sin atrapar
+  (no había try/catch) y disparaba el error boundary en vez de un toast.
+- **Fix** en `revertPlanToApprovedSnapshot` (`app/actions/plans.ts`):
+  - Antes de la transacción, se consultan los markets vivos entre los
+    `market_id` del snapshot; al reinsertar, un `market_id` que ya no existe se
+    deja en `null` (lo mismo que hizo la FK al borrarse).
+  - Se saltean placements cuyo publisher del snapshot no se pudo reinsertar
+    (idMap sin parent), por las dudas.
+  - La transacción va envuelta en try/catch: cualquier fallo inesperado vuelve
+    como `{ok:false}` (toast legible) en vez de romper la vista.
+  - El `publisher_id` es seguro (`onDelete: restrict`).
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Reporte PDF de billing: excluir publishers que paga el cliente
 
 - **Pedido**: los publishers que el cliente paga directo (`agency_pays=false`)

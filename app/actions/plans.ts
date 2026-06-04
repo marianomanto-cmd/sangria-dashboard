@@ -616,77 +616,115 @@ export async function revertPlanToApprovedSnapshot(input: {
 
   // Restaurar es destructivo (borra el contenido del draft y reescribe el del
   // snapshot): lo hacemos en una transacción para no dejar el plan a medias si
-  // algo falla.
-  await db.transaction(async (tx) => {
-    // El delete de publishers cascadea a sus placements (FK onDelete cascade).
-    await tx
-      .delete(mediaPlanPublishers)
-      .where(eq(mediaPlanPublishers.mediaPlanId, input.planId));
-    await tx
-      .delete(mediaPlanFees)
-      .where(eq(mediaPlanFees.mediaPlanId, input.planId));
+  // algo falla. Cualquier error inesperado se captura y se devuelve como
+  // Result (toast) en vez de propagar y romper la vista con el error boundary.
+  //
+  // Un placement del snapshot puede referenciar un market_id que YA NO existe
+  // (los markets se borran/editan desde config; la FK live es onDelete:set null,
+  // pero el JSONB del snapshot congeló el id viejo). Reinsertarlo violaría la FK
+  // a markets y reventaría la transacción → sanitizamos: si el market ya no
+  // existe, lo dejamos en null (lo mismo que hizo la FK al borrarse). El
+  // publisher_id es seguro (FK onDelete:restrict → no se puede borrar en uso).
+  const snapshotMarketIds = Array.from(
+    new Set(
+      (data.placements ?? [])
+        .map((p) => p.marketId)
+        .filter((m): m is string => !!m),
+    ),
+  );
+  const liveMarketIds = new Set<string>();
+  if (snapshotMarketIds.length > 0) {
+    const existingMarkets = await db
+      .select({ id: markets.id })
+      .from(markets)
+      .where(inArray(markets.id, snapshotMarketIds));
+    for (const m of existingMarkets) liveMarketIds.add(m.id);
+  }
 
-    // Reinsertar publishers del snapshot (old id → new id para los placements).
-    const idMap = new Map<string, string>();
-    for (const pub of data.publishers ?? []) {
-      const [newPub] = await tx
-        .insert(mediaPlanPublishers)
-        .values({
-          mediaPlanId: input.planId,
-          publisherId: pub.publisherId,
-          totalPlannedUsd: pub.totalPlannedUsd,
-          agencyPaysOverride: pub.agencyPaysOverride,
-          sortOrder: pub.sortOrder,
+  try {
+    await db.transaction(async (tx) => {
+      // El delete de publishers cascadea a sus placements (FK onDelete cascade).
+      await tx
+        .delete(mediaPlanPublishers)
+        .where(eq(mediaPlanPublishers.mediaPlanId, input.planId));
+      await tx
+        .delete(mediaPlanFees)
+        .where(eq(mediaPlanFees.mediaPlanId, input.planId));
+
+      // Reinsertar publishers del snapshot (old id → new id para los placements).
+      const idMap = new Map<string, string>();
+      for (const pub of data.publishers ?? []) {
+        const [newPub] = await tx
+          .insert(mediaPlanPublishers)
+          .values({
+            mediaPlanId: input.planId,
+            publisherId: pub.publisherId,
+            totalPlannedUsd: pub.totalPlannedUsd,
+            agencyPaysOverride: pub.agencyPaysOverride,
+            sortOrder: pub.sortOrder,
+          })
+          .returning();
+        idMap.set(pub.id, newPub.id);
+      }
+
+      // Solo reinsertamos placements cuyo publisher del snapshot fue reinsertado
+      // (idMap tiene su id). Si por algún motivo falta el parent, lo salteamos en
+      // vez de insertar un FK nulo que reventaría.
+      const placements = (data.placements ?? []).filter((p) =>
+        idMap.has(p.mediaPlanPublisherId),
+      );
+      if (placements.length > 0) {
+        await tx.insert(mediaPlanPlacements).values(
+          placements.map((p) => ({
+            mediaPlanPublisherId: idMap.get(p.mediaPlanPublisherId)!,
+            placementName: p.placementName,
+            marketId: p.marketId && liveMarketIds.has(p.marketId) ? p.marketId : null,
+            audience: p.audience,
+            amountUsd: p.amountUsd,
+            costMethod: p.costMethod,
+            startDate: p.startDate,
+            endDate: p.endDate,
+            metricsJson: p.metricsJson ?? {},
+            notesMd: p.notesMd,
+            sortOrder: p.sortOrder,
+          })),
+        );
+      }
+
+      const fees = data.fees ?? [];
+      if (fees.length > 0) {
+        await tx.insert(mediaPlanFees).values(
+          fees.map((f) => ({
+            mediaPlanId: input.planId,
+            feeType: f.feeType,
+            name: f.name,
+            ratePct: f.ratePct,
+            amountUsd: f.amountUsd,
+            notes: f.notes,
+            sortOrder: f.sortOrder,
+          })),
+        );
+      }
+
+      // Restaurar metadata (nombre + notas) y volver a 'approved'. currentVersion
+      // no cambia: seguimos en la versión aprobada vigente.
+      await tx
+        .update(mediaPlans)
+        .set({
+          name: data.plan.name,
+          notesMd: data.plan.notesMd,
+          status: "approved",
         })
-        .returning();
-      idMap.set(pub.id, newPub.id);
-    }
-
-    const placements = data.placements ?? [];
-    if (placements.length > 0) {
-      await tx.insert(mediaPlanPlacements).values(
-        placements.map((p) => ({
-          mediaPlanPublisherId: idMap.get(p.mediaPlanPublisherId)!,
-          placementName: p.placementName,
-          marketId: p.marketId,
-          audience: p.audience,
-          amountUsd: p.amountUsd,
-          costMethod: p.costMethod,
-          startDate: p.startDate,
-          endDate: p.endDate,
-          metricsJson: p.metricsJson ?? {},
-          notesMd: p.notesMd,
-          sortOrder: p.sortOrder,
-        })),
-      );
-    }
-
-    const fees = data.fees ?? [];
-    if (fees.length > 0) {
-      await tx.insert(mediaPlanFees).values(
-        fees.map((f) => ({
-          mediaPlanId: input.planId,
-          feeType: f.feeType,
-          name: f.name,
-          ratePct: f.ratePct,
-          amountUsd: f.amountUsd,
-          notes: f.notes,
-          sortOrder: f.sortOrder,
-        })),
-      );
-    }
-
-    // Restaurar metadata (nombre + notas) y volver a 'approved'. currentVersion
-    // no cambia: seguimos en la versión aprobada vigente.
-    await tx
-      .update(mediaPlans)
-      .set({
-        name: data.plan.name,
-        notesMd: data.plan.notesMd,
-        status: "approved",
-      })
-      .where(eq(mediaPlans.id, input.planId));
-  });
+        .where(eq(mediaPlans.id, input.planId));
+    });
+  } catch (e) {
+    console.error("revertPlanToApprovedSnapshot failed", e);
+    return {
+      ok: false,
+      error:
+        "No se pudo restaurar el plan aprobado. Es posible que el snapshot referencie datos que ya no existen. Avisá al equipo si persiste.",
+    };
+  }
 
   await recordAudit({
     entityType: "media_plan",
