@@ -10,7 +10,12 @@ import { getBillingTracker } from "@/db/queries/billing-tracker";
 import { getReportingCalendar, getSentReports } from "@/db/queries/reports";
 import { getCampaignTrackerPlan } from "@/db/queries/campaign-tracker";
 import { getBenchmarks, getSimulatorCatalogs } from "@/db/queries/simulator";
+import { getClientSpendByPublisher } from "@/db/queries/client-portal";
 import { FacturacionChart } from "@/components/facturacion-chart";
+import {
+  CumulativeBillingChart,
+  SpendByPublisherChart,
+} from "@/components/portal-charts";
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { BillingStatusBadge } from "@/components/billing-status-badge";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
@@ -41,10 +46,17 @@ export async function ResumenSection({
   clientId: string;
   lang: Language;
 }) {
-  const [kpis, monthly] = await Promise.all([
+  const [kpis, monthly, byPublisher] = await Promise.all([
     getDashboardKpis({ clientId }),
     getMonthlyTotals({ clientId }),
+    getClientSpendByPublisher(clientId),
   ]);
+
+  // Acumulado YTD; si no hay data del año en curso (ej. demo en otros años),
+  // caemos a todos los meses para no mostrar un chart vacío.
+  const year = new Date().getFullYear();
+  const ytd = monthly.filter((m) => m.month.startsWith(`${year}-`));
+  const cumData = ytd.length > 0 ? ytd : monthly;
 
   return (
     <div className="space-y-5">
@@ -63,6 +75,10 @@ export async function ResumenSection({
         />
       </div>
       <FacturacionChart data={monthly} lang={lang} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SpendByPublisherChart data={byPublisher} lang={lang} />
+        <CumulativeBillingChart monthly={cumData} lang={lang} />
+      </div>
     </div>
   );
 }

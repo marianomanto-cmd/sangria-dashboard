@@ -2,6 +2,21 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Portal Resumen: 2 charts nuevos
+
+- **Inversión por publisher** (barras horizontales, top 8 + "Otros"): consumo
+  real acumulado del cliente. Query nueva `getClientSpendByPublisher(clientId)`
+  en `db/queries/client-portal.ts` (suma `plan_billing_publishers.amount_real_usd`
+  por publisher).
+- **Facturado acumulado vs estimado (YTD)** (línea): acumulado corrido de real
+  vs estimado del año en curso (cae a todos los meses si no hay data del año).
+  Deriva de `getMonthlyTotals` (sin query nueva).
+- Componentes en `components/portal-charts.tsx` (`SpendByPublisherChart`,
+  `CumulativeBillingChart`) — recharts, dark-aware con el mismo patrón de
+  `useThemeColors` que `facturacion-chart.tsx`. Se montan en el tab Resumen del
+  portal.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Portal de cliente: ajustes (Gantt, proyectos abiertos, scrollbar)
 
 Ajustes pedidos sobre el portal recién mergeado:
