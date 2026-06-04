@@ -24,7 +24,7 @@ import {
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { BillingStatusBadge } from "@/components/billing-status-badge";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
-import { MermaidGantt } from "@/components/mermaid-gantt";
+import { ReportingGantt } from "@/components/reporting-gantt";
 import { formatUsd, formatUsdCompact, formatPct } from "@/lib/format";
 import { formatDate, formatMonth, type Language } from "@/lib/i18n";
 import { PortalBenchmarksFilters } from "./portal-benchmarks-filters";
@@ -313,7 +313,7 @@ export async function ReportsSection({
         <h2 className="text-sm font-semibold mb-3">
           {lang === "es" ? "Calendario de entregas" : "Delivery calendar"}
         </h2>
-        <MermaidGantt reports={upcoming} lang={lang} />
+        <ReportingGantt reports={upcoming} lang={lang} readOnly />
       </section>
 
       <section>

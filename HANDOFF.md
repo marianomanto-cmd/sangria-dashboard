@@ -2,21 +2,6 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 04/jun/2026 — Gantt de reportes → Mermaid.js
-
-- Los Gantt de reportes (calendario interno + tab Reportes del portal) pasan a
-  **Mermaid.js** (`components/mermaid-gantt.tsx`), cargado desde el CDN de
-  jsdelivr (`mermaid@11`) dinámicamente (script inject, client-only). Cada
-  reporte = una tarea `closed_at → delivery_date`; atrasadas en `crit` (rojo);
-  Mermaid dibuja la línea de "hoy". Tema base con colores de marca.
-- El **calendario interno** (`reporting-calendar-client.tsx`) ahora muestra el
-  Mermaid (visual) + una **tabla de acciones** debajo (editar fecha / entregado
-  / eliminar), porque el diagrama de Mermaid es read-only (antes las acciones
-  estaban en las filas del Gantt SVG).
-- Se **eliminó** `components/reporting-gantt.tsx` (el SVG propio, ya sin uso).
-- Sin cambios de schema, sin deps npm nuevas (Mermaid es por CDN). **No requiere
-  acción en prod** (el browser baja Mermaid de jsdelivr en runtime).
-
 ### Cambios de la sesión 04/jun/2026 — Análisis: filtros multi-select
 
 - Los filtros de publisher / mercado / budget origin pasan a **selección
