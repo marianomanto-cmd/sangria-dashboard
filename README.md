@@ -545,10 +545,12 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - **Qué es**: una vista de solo lectura para compartir con cada cliente en
   `/<slug>` (el mismo slug interno del cliente, ej. `/copa-airlines`). Tabs:
   **Resumen** (KPIs + chart), **Billing Tracker**, **Estimación**, **Proyectos**
-  (descarga PDF/Excel de los planes **aprobados** + pacing por placement agrupado
-  por publisher), **Reportes** (próximas entregas + enviados con link al PPT) y
+  (solo proyectos **abiertos** — planning/active/paused; descarga PDF/Excel de los
+  planes **aprobados** + pacing por placement agrupado por publisher), **Reportes**
+  (**Gantt** de entregas en curso, read-only + tabla de enviados con link al PPT) y
   **Benchmarks** (tabla CPM/CPC/CPV/CTR como el simulador). Todo scopeado al
-  cliente; reusa las queries internas pasando `clientId`.
+  cliente; reusa las queries internas pasando `clientId`. El `ReportingGantt`
+  acepta `readOnly` (sin botones de edición ni links internos) para el portal.
 - **Acceso (baja seguridad, a propósito)**: usuario = nombre o slug del cliente;
   password compartido `sangriaagency` (constante en `lib/client-portal.ts`,
   `CLIENT_PORTAL_PASSWORD`). El admin de `/configuracion/clientes` muestra el

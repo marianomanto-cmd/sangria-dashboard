@@ -106,7 +106,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
         <nav
           role="tablist"
           aria-label={lang === "es" ? "Vistas" : "Views"}
-          className="max-w-[1400px] mx-auto px-6 flex gap-1 overflow-x-auto"
+          className="max-w-[1400px] mx-auto px-6 flex gap-1 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
         >
           {TABS.map((t) => {
             const Icon = t.icon;
