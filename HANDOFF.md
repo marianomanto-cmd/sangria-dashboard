@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Reporte PDF de billing: usar el nombre del plan en la descripción
+
+- **Pedido**: cada línea "Media Placement" del PDF debe incluir el **nombre del
+  media plan** en vez del code del proyecto. Ej: en vez de
+  `tarifas-mexico - Tarifas Mexico - Meta - May 2026` →
+  `COPA.m1188 - Tarifas Mexico - Meta - May 2026` (donde `COPA.m1188` es el
+  nombre del plan).
+- **Fix** en `app/api/billings/[id]/report.pdf/route.ts`: la descripción de
+  cada fila pasó de `${project.code} - ${project.name} - ${publisher} - ${mes}`
+  a `${plan.name} - ${project.name} - ${publisher} - ${mes}`. El code del
+  proyecto era redundante con el nombre (es su slug); el nombre del plan es más
+  útil. `getBillingDetail` ya devolvía `detail.plan.name`.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Fix: error al descartar el borrador de un MP
 
 - **Bug**: al "Descartar borrador" (volver al plan aprobado) la vista crasheaba
