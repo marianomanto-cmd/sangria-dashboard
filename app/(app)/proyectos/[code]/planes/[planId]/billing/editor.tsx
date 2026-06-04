@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
+  clearBillingInvoiceNumber,
   ensureBillingForMonth,
   markBillingInvoiced,
   setFeeImputation,
@@ -162,6 +163,26 @@ export function BillingMonthEditor({
     });
   };
 
+  // Quitar el número de factura: vuelve el billing a "reportado" y lo deja sin
+  // número para poder cargar otro después.
+  const onClearInvoice = async () => {
+    if (
+      !(await confirm({
+        title: "¿Quitar el número de factura?",
+        body: 'El billing vuelve a "reportado" y el número queda vacío. Después podés cargar otro número.',
+        confirmLabel: "Quitar número",
+        danger: true,
+      }))
+    )
+      return;
+    startTransition(async () => {
+      const r = await clearBillingInvoiceNumber({ billingId: billing.id });
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Número de factura quitado · volvió a reportado");
+      router.refresh();
+    });
+  };
+
   const publisherSubtotal = publisherLines
     .filter((p) => p.isBillable)
     .reduce((s, p) => s + p.amountThisMonthUsd, 0);
@@ -192,6 +213,7 @@ export function BillingMonthEditor({
           onTransition={onTransition}
           onReportar={onReportar}
           onFacturar={onFacturar}
+          onClearInvoice={onClearInvoice}
           billingId={billing.id}
           currentInvoiceNumber={billing.invoiceNumber}
         />
@@ -415,6 +437,7 @@ function BillingStatusActions({
   onTransition,
   onReportar,
   onFacturar,
+  onClearInvoice,
   billingId,
   currentInvoiceNumber,
 }: {
@@ -423,6 +446,7 @@ function BillingStatusActions({
   onTransition: (to: "draft" | "ready" | "sent" | "paid" | "invoiced") => void;
   onReportar: () => void;
   onFacturar: (invoiceNumber: string) => void;
+  onClearInvoice: () => void;
   billingId: string;
   currentInvoiceNumber: string | null;
 }) {
@@ -515,14 +539,24 @@ function BillingStatusActions({
               }}
             />
           ) : (
-            <button
-              type="button"
-              onClick={() => setShowInvoiceInput(true)}
-              disabled={pending}
-              className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
-            >
-              Editar número
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setShowInvoiceInput(true)}
+                disabled={pending}
+                className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
+              >
+                Editar número
+              </button>
+              <button
+                type="button"
+                onClick={onClearInvoice}
+                disabled={pending}
+                className="text-xs text-muted hover:text-danger px-2 py-1.5 disabled:opacity-50"
+              >
+                Quitar número
+              </button>
+            </>
           )}
           <button
             type="button"

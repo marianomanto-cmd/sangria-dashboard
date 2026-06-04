@@ -2,6 +2,22 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Billing: editar o quitar el número de factura
+
+- **Pedido**: poder cambiar el número de factura de un billing (sin permitir uno
+  ya ocupado) o quitarle el número y dejarlo vacío.
+- **Editar**: ya funcionaba — `markBillingInvoiced` pre-chequea unicidad contra
+  los demás billings y devuelve error legible (toast) si el número está tomado.
+  El botón "Editar número" está en los estados `invoiced` y `paid`.
+- **Quitar (nuevo)**: nueva action `clearBillingInvoiceNumber` en
+  `app/actions/plan-billing.ts`: pone `invoice_number = null` y revierte el
+  billing `invoiced → sent` (reportado) — un billing facturado sin número sería
+  inconsistente. Sólo se permite desde `invoiced`; si está `paid` pide revertir
+  el pago primero ("Revertir a facturado"). El `due_date` se conserva.
+- **UI**: botón "Quitar número" junto a "Editar número" en el estado `invoiced`
+  (`BillingStatusActions` en el editor de billing del plan), con confirm dialog.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Reporte PDF de billing: usar el nombre del plan en la descripción
 
 - **Pedido**: cada línea "Media Placement" del PDF debe incluir el **nombre del
@@ -2027,7 +2043,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el nombre de archivo del export | `filename` en cada ruta `export.{pdf,xlsx}/route.ts`: hoy `{plan.name}-V{currentVersion}`. |
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` en `app/api/plans/[planId]/export.xlsx/route.ts` (días-overlap inclusive). |
-| Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert) y `markBillingInvoiced` (sent → invoiced con número de factura). Labels: `STATUS_STYLE_BY_LANG` en `app/(app)/billing/page.tsx` y `BillingStatusPillInline` en el editor. |
+| Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
