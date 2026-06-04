@@ -2,6 +2,30 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Análisis por publisher × mercado con mapa de América
+
+- **Nueva vista** que mapea las activaciones (placements de planes aprobados)
+  por mercado sobre un **mapa de América** + tabla filtrable. Filtros: publisher,
+  mercado, budget origin, período. Click en burbuja/ranking → filtra a ese mercado.
+  Vive en **`/analisis`** (interna, con el filtro global de cliente) y en el tab
+  **Análisis** del portal de cliente — ambas usan `components/market-analysis.tsx`.
+- **Mapa** `components/americas-map.tsx`: SVG con **d3-geo** (react-simple-maps no
+  soporta React 19). Topología `world-atlas/countries-110m.json` bundleada,
+  filtrada al hemisferio occidental, proyectada con `geoMercator().fitSize`;
+  dibujamos paths + burbujas (gradiente de marca, glow, anillo de pulso SMIL).
+  Burbuja: tamaño = inversión, número = activaciones. Dark-aware vía `useChartColors`.
+- **Geocoding** `lib/market-geo.ts` (`resolveMarketGeo`): mapea slug/nombre de
+  mercado → centroide (países LATAM + agrupaciones). Los no reconocidos van a una
+  lista "Sin ubicación". **Mercado nuevo → agregar centroide a `GEO`.**
+- **Query** `db/queries/analysis.ts`: `getMarketActivations(filters)` (rows por
+  placement + agregado por mercado) y `getAnalysisFilterOptions(clientId)`.
+  Activación = placement de plan `approved`.
+- **Deps nuevas**: `d3-geo`, `d3-scale`, `topojson-client`, `world-atlas` (+ types).
+- Wiring: sidebar "Análisis x mercado" (icono Globe2), `/analisis` en
+  `CLIENT_FILTER_ROUTES` y en `RESERVED_TOP_LEVEL_SLUGS`.
+- Sin cambios de schema. **No requiere acción en prod** (sí `npm install` por las
+  deps nuevas — ya en package.json/lock).
+
 ### Cambios de la sesión 04/jun/2026 — Polish de charts (recharts) + planeado vs real por publisher
 
 - **Chart kit compartido** `components/chart-kit.tsx`: `useChartColors()` (un solo
@@ -2185,6 +2209,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el portal de cliente (público, read-only) | `app/(portal)/[clientSlug]/` (page + secciones + filtros), `app/api/portal/{login,logout}/route.ts`, `lib/client-portal.ts` (password/reservados/helpers edge-safe), `lib/client-portal.server.ts` (cookie + `canAccessClientExport`), `db/queries/client-portal.ts` (lookup + filtros). El gate público (solo GET) está en `lib/supabase/middleware.ts`. **Toda ruta top-level nueva de la app → sumala a `RESERVED_TOP_LEVEL_SLUGS`.** |
 | Cambiar el password / usuario del portal de cliente | `CLIENT_PORTAL_PASSWORD` en `lib/client-portal.ts` (compartido para todos). El usuario es el slug o el nombre del cliente. El admin (`/configuracion/clientes`) muestra link + usuario + password con copiar. |
 | Cambiar el favicon | `app/icon.svg` (App Router lo toma como icono; hoy "S" blanca sobre negro). No hay `favicon.ico`. |
+| Tocar el análisis por publisher × mercado (mapa) | `components/market-analysis.tsx` (filtros + mapa + ranking + tabla, URL-based), `components/americas-map.tsx` (mapa SVG d3-geo), `lib/market-geo.ts` (centroides de mercados — agregá acá un mercado nuevo), `db/queries/analysis.ts` (`getMarketActivations`, `getAnalysisFilterOptions`). Páginas: `/analisis` (interna) y el tab Análisis del portal. |
 | Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
 | Activar RLS / cerrar la REST API pública de Supabase | `db/rls.sql` — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` en todas las tablas de `public`. Pegarlo en el SQL Editor. La app no se ve afectada (conecta como `postgres`, dueño → bypassa RLS; no se usa `FORCE`). **Toda tabla nueva** necesita su propio ENABLE. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |

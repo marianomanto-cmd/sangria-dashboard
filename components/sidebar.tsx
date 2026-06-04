@@ -16,6 +16,7 @@ import {
   FlaskConical,
   Receipt,
   LineChart,
+  Globe2,
   ChevronsLeft,
   ChevronsRight,
   type LucideIcon,
@@ -48,6 +49,7 @@ const PRIMARY: NavEntry[] = [
   { href: "/reportes", label: "Reportes", icon: BarChart3, exact: true },
   { href: "/billing-tracker", label: "Billing Tracker", icon: Receipt },
   { href: "/campaign-tracker", label: "Campaign Tracker", icon: LineChart },
+  { href: "/analisis", label: "Análisis x mercado", icon: Globe2 },
   { href: "/reportes/simulador", label: "Simulador", icon: FlaskConical },
 ];
 

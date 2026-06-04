@@ -15,6 +15,7 @@ const CLIENT_FILTER_ROUTES = [
   "/billing",
   "/billing-tracker",
   "/campaign-tracker",
+  "/analisis",
   "/auditoria",
   "/reportes",
   "/reportes/calendario",

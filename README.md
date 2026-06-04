@@ -548,7 +548,8 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   planeado vs real** + **facturado acumulado vs estimado YTD**), **Billing
   Tracker**, **Estimación**, **Proyectos**
   (solo proyectos **abiertos** — planning/active/paused; descarga PDF/Excel de los
-  planes **aprobados** + pacing por placement agrupado por publisher), **Reportes**
+  planes **aprobados** + pacing por placement agrupado por publisher), **Análisis**
+  (mapa de América con activaciones por mercado + tabla filtrable), **Reportes**
   (**Gantt** de entregas en curso, read-only + tabla de enviados con link al PPT) y
   **Benchmarks** (tabla CPM/CPC/CPV/CTR como el simulador). Todo scopeado al
   cliente; reusa las queries internas pasando `clientId`. El `ReportingGantt`
@@ -578,6 +579,30 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     El export (`/api/plans/[id]/export.*`) valida `canAccessClientExport(slug)`:
     pasa si hay sesión interna O cookie de portal del cliente dueño del plan.
 - **Sin cambios de schema**: reusa `clients.slug`. No requiere acción en prod.
+
+### Análisis por publisher × mercado (mapa de América)
+- **Qué es**: una vista que mapea las "activaciones" (placements de planes
+  **aprobados**) por mercado sobre un **mapa de América**, con burbujas por
+  mercado (tamaño = inversión planeada, número = # de activaciones) + una tabla
+  filtrable. Filtros: publisher · mercado · budget origin · período (desde/hasta).
+  Click en una burbuja (o en el ranking) filtra a ese mercado.
+- **Dónde**: sección interna `/analisis` (con el filtro global de cliente) y tab
+  **Análisis** del portal de cliente. Ambas renderean el mismo
+  `components/market-analysis.tsx` con datos de `getMarketActivations` +
+  `getAnalysisFilterOptions` (`db/queries/analysis.ts`).
+- **Mapa** (`components/americas-map.tsx`): SVG propio con **d3-geo** (no
+  react-simple-maps, que no soporta React 19). La topología sale de
+  `world-atlas/countries-110m.json` (bundleada), se filtra al hemisferio
+  occidental y se proyecta con `geoMercator().fitSize(...)`; nosotros dibujamos
+  los paths + las burbujas (gradiente de marca, glow y anillo de pulso animado
+  con SMIL). Dark-aware vía `useChartColors` del chart-kit.
+- **Geocoding de mercados**: los `markets` son nombres/slugs sin coordenadas.
+  `lib/market-geo.ts` (`resolveMarketGeo`) mapea los conocidos (países LATAM +
+  agrupaciones como `centroamerica`/`latam`) a un centroide. Los que no
+  matchean se listan aparte ("Sin ubicación en el mapa"), no se fuerzan. **Para
+  sumar un mercado nuevo, agregá su centroide a `GEO` en `lib/market-geo.ts`.**
+- Sin cambios de schema. Deps nuevas: `d3-geo`, `d3-scale`, `topojson-client`,
+  `world-atlas`. **No requiere acción en prod.**
 
 ### Seguridad: RLS en todas las tablas de `public`
 - Supabase expone **automáticamente** cada tabla del schema `public` vía su

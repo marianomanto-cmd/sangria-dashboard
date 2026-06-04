@@ -35,6 +35,7 @@ export const RESERVED_TOP_LEVEL_SLUGS = new Set<string>([
   "auditoria",
   "configuracion",
   "reportes",
+  "analisis",
   // técnicos / assets
   "_next",
   "favicon.ico",

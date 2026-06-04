@@ -5,6 +5,7 @@ import {
   CalendarClock,
   FolderKanban,
   Gauge,
+  Globe2,
   Receipt,
   TrendingUp,
 } from "lucide-react";
@@ -19,6 +20,8 @@ import { PortalLogin } from "./portal-login";
 import { PortalLogout } from "./portal-logout";
 import { PortalFilters } from "./portal-filters";
 import {
+  type AnalysisParams,
+  AnalysisSection,
   type BenchmarkParams,
   BenchmarksSection,
   BillingSection,
@@ -41,6 +44,7 @@ const TABS = [
   { id: "billing", labelEs: "Billing Tracker", labelEn: "Billing Tracker", icon: Receipt },
   { id: "estimacion", labelEs: "Estimación", labelEn: "Estimate", icon: TrendingUp },
   { id: "proyectos", labelEs: "Proyectos", labelEn: "Projects", icon: FolderKanban },
+  { id: "analisis", labelEs: "Análisis", labelEn: "Analysis", icon: Globe2 },
   { id: "reportes", labelEs: "Reportes", labelEn: "Reports", icon: CalendarClock },
   { id: "benchmarks", labelEs: "Benchmarks", labelEn: "Benchmarks", icon: Gauge },
 ] as const;
@@ -81,6 +85,14 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
     costMethod: one(sp.bcm),
     dateFrom: one(sp.bfrom),
     dateTo: one(sp.bto),
+  };
+
+  const analysisParams: AnalysisParams = {
+    pub: one(sp.pub),
+    mkt: one(sp.mkt),
+    bo: one(sp.bo),
+    from: one(sp.from),
+    to: one(sp.to),
   };
 
   const lang = client.language ?? DEFAULT_LANGUAGE;
@@ -164,6 +176,13 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
         )}
         {tab === "proyectos" && (
           <ProjectsSection clientId={client.id} lang={lang} params={portalParams} />
+        )}
+        {tab === "analisis" && (
+          <AnalysisSection
+            clientId={client.id}
+            lang={lang}
+            analysis={analysisParams}
+          />
         )}
         {tab === "reportes" && (
           <ReportsSection clientId={client.id} lang={lang} />
