@@ -80,69 +80,73 @@ export function MarketAnalysis({
 
   return (
     <div className="space-y-5">
-      {/* Filtros */}
-      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-4 py-3 flex items-end gap-3 flex-wrap">
-        <Field label="Publisher">
-          <Select value={cur("pub")} onChange={(v) => update("pub", v)} options={options.publishers} lang={lang} />
-        </Field>
-        <Field label={lang === "es" ? "Mercado" : "Market"}>
-          <Select value={cur("mkt")} onChange={(v) => update("mkt", v)} options={options.markets} lang={lang} />
-        </Field>
-        <Field label="Budget Origin">
-          <Select value={cur("bo")} onChange={(v) => update("bo", v)} options={options.budgetOrigins} lang={lang} />
-        </Field>
-        <Field label={lang === "es" ? "Desde" : "From"}>
-          <input
-            type="month"
-            value={cur("from")}
-            onChange={(e) => update("from", e.target.value)}
-            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </Field>
-        <Field label={lang === "es" ? "Hasta" : "To"}>
-          <input
-            type="month"
-            value={cur("to")}
-            onChange={(e) => update("to", e.target.value)}
-            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-          />
-        </Field>
-        {isFiltered && (
-          <button
-            type="button"
-            onClick={reset}
-            className="inline-flex items-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs text-muted hover:text-ink"
-          >
-            <X size={12} />
-            {lang === "es" ? "Limpiar" : "Clear"}
-          </button>
-        )}
-      </div>
-
-      {/* Strip de totales */}
+      {/* Strip de totales (full width) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Stat label={lang === "es" ? "Activaciones" : "Activations"} value={String(rows.length)} />
         <Stat label={lang === "es" ? "Mercados" : "Markets"} value={String(markets.length)} />
         <Stat label={lang === "es" ? "Inversión" : "Spend"} value={formatUsd(totalSpend)} mono />
       </div>
 
-      {/* Mapa + ranking */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-5">
-        {points.length === 0 ? (
-          <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-16 text-center text-sm text-muted">
-            {lang === "es"
-              ? "Sin mercados geolocalizables para los filtros aplicados."
-              : "No mappable markets for the current filters."}
-          </div>
-        ) : (
-          <AmericasMap
-            points={points}
-            selectedId={selectedMkt || null}
-            onSelect={(id) => update("mkt", id ?? "")}
-            lang={lang}
-          />
-        )}
+      {/* 3 columnas: filtros · mapa · por mercado */}
+      <div className="grid grid-cols-1 lg:grid-cols-[230px_1fr_300px] gap-5 items-start">
+        {/* Filtros (columna izquierda, vertical) */}
+        <div className="rounded-lg border border-line bg-white dark:bg-paper-2 p-4 space-y-3">
+          <Field label="Publisher">
+            <Select value={cur("pub")} onChange={(v) => update("pub", v)} options={options.publishers} lang={lang} />
+          </Field>
+          <Field label={lang === "es" ? "Mercado" : "Market"}>
+            <Select value={cur("mkt")} onChange={(v) => update("mkt", v)} options={options.markets} lang={lang} />
+          </Field>
+          <Field label="Budget Origin">
+            <Select value={cur("bo")} onChange={(v) => update("bo", v)} options={options.budgetOrigins} lang={lang} />
+          </Field>
+          <Field label={lang === "es" ? "Desde" : "From"}>
+            <input
+              type="month"
+              value={cur("from")}
+              onChange={(e) => update("from", e.target.value)}
+              className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </Field>
+          <Field label={lang === "es" ? "Hasta" : "To"}>
+            <input
+              type="month"
+              value={cur("to")}
+              onChange={(e) => update("to", e.target.value)}
+              className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </Field>
+          {isFiltered && (
+            <button
+              type="button"
+              onClick={reset}
+              className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs text-muted hover:text-ink"
+            >
+              <X size={12} />
+              {lang === "es" ? "Limpiar filtros" : "Clear filters"}
+            </button>
+          )}
+        </div>
 
+        {/* Mapa (columna central) */}
+        <div className="min-w-0">
+          {points.length === 0 ? (
+            <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-16 text-center text-sm text-muted">
+              {lang === "es"
+                ? "Sin mercados geolocalizables para los filtros aplicados."
+                : "No mappable markets for the current filters."}
+            </div>
+          ) : (
+            <AmericasMap
+              points={points}
+              selectedId={selectedMkt || null}
+              onSelect={(id) => update("mkt", id ?? "")}
+              lang={lang}
+            />
+          )}
+        </div>
+
+        {/* Por mercado (columna derecha) */}
         <div className="rounded-lg border border-line bg-white dark:bg-paper-2 p-4">
           <h3 className="text-sm font-semibold mb-3">
             {lang === "es" ? "Por mercado" : "By market"}
@@ -160,7 +164,7 @@ export function MarketAnalysis({
                     <button
                       type="button"
                       onClick={() => update("mkt", active ? "" : m.marketId)}
-                      className={`w-full text-left group ${active ? "" : ""}`}
+                      className="w-full text-left group"
                     >
                       <div className="flex items-center justify-between gap-2 text-xs">
                         <span className={`font-medium truncate ${active ? "text-accent" : "text-ink-2 group-hover:text-ink"}`}>
@@ -191,7 +195,7 @@ export function MarketAnalysis({
         </div>
       </div>
 
-      {/* Tabla de activaciones */}
+      {/* Tabla de activaciones (abajo de todo) */}
       <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
         <div className="px-5 py-3 border-b border-line">
           <h3 className="text-sm font-semibold">
@@ -279,7 +283,7 @@ function Select({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[150px] max-w-[220px]"
+      className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
     >
       <option value="">{lang === "es" ? "Todos" : "All"}</option>
       {options.map((o) => (
