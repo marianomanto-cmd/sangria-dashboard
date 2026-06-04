@@ -10,7 +10,12 @@ import { getBillingTracker } from "@/db/queries/billing-tracker";
 import { getReportingCalendar, getSentReports } from "@/db/queries/reports";
 import { getCampaignTrackerPlan } from "@/db/queries/campaign-tracker";
 import { getBenchmarks, getSimulatorCatalogs } from "@/db/queries/simulator";
+import {
+  getAnalysisFilterOptions,
+  getMarketActivations,
+} from "@/db/queries/analysis";
 import { getClientSpendByPublisher } from "@/db/queries/client-portal";
+import { MarketAnalysis } from "@/components/market-analysis";
 import { FacturacionChart } from "@/components/facturacion-chart";
 import {
   CumulativeBillingChart,
@@ -806,6 +811,46 @@ function PCells({
         {fmt(bundle.p75)}
       </td>
     </>
+  );
+}
+
+// ─── Análisis por mercado (mapa) ──────────────────────────────────────────────
+
+export type AnalysisParams = {
+  pub: string;
+  mkt: string;
+  bo: string;
+  from: string;
+  to: string;
+};
+
+export async function AnalysisSection({
+  clientId,
+  lang,
+  analysis,
+}: {
+  clientId: string;
+  lang: Language;
+  analysis: AnalysisParams;
+}) {
+  const [data, options] = await Promise.all([
+    getMarketActivations({
+      clientId,
+      publisherId: analysis.pub || null,
+      marketId: analysis.mkt || null,
+      budgetOriginId: analysis.bo || null,
+      fromMonth: analysis.from || null,
+      toMonth: analysis.to || null,
+    }),
+    getAnalysisFilterOptions(clientId),
+  ]);
+  return (
+    <MarketAnalysis
+      rows={data.rows}
+      markets={data.markets}
+      options={options}
+      lang={lang}
+    />
   );
 }
 
