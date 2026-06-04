@@ -2,6 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Portal de cliente público (read-only) + favicon
+
+- **Nuevo portal de cliente** en `/<slug>` (ej. `/copa-airlines`, reusa el slug
+  interno): vista **solo lectura** para compartir con el cliente, con tabs
+  Resumen (KPIs + chart) · Billing Tracker · Estimación · Proyectos · Reportes ·
+  Benchmarks. Todo scopeado al cliente reusando las queries internas (dashboard,
+  billing-tracker, estimate, reports, campaign-tracker para pacing, simulator
+  para benchmarks). La tab Proyectos lista los planes **aprobados** con descarga
+  PDF/Excel y, al expandir, el pacing por placement agrupado por publisher
+  (con la fecha de última actualización en azul). Filtros por budget origin /
+  proyecto / mes (URL-based).
+- **Acceso**: usuario = nombre o slug del cliente; password compartido
+  `sangriaagency` (`CLIENT_PORTAL_PASSWORD` en `lib/client-portal.ts`). En
+  `/configuracion/clientes` se agregaron columnas **Portal / Usuario /
+  Contraseña** con botones de copiar para pasárselos al cliente.
+- **Seguridad (clave)**: el portal vive fuera del gate de Supabase. El proxy
+  (`lib/supabase/middleware.ts`) abre como público **solo GET** a `/<slug>` +
+  `/api/portal/*` (login/logout autovalidantes) + la descarga de export (GET).
+  **Solo GET a propósito**: los Server Actions se despachan por POST sin importar
+  el path y la app confía en el proxy como gate de mutaciones; por eso el portal
+  **no usa Server Actions** (login/logout = route handlers, todo lo demás es
+  URL-based). Slugs reservados en `RESERVED_TOP_LEVEL_SLUGS` — **toda ruta
+  top-level nueva de la app hay que sumarla ahí**. El export valida
+  `canAccessClientExport` (sesión interna O cookie de portal del cliente dueño).
+- **Favicon**: ahora es una "S" blanca sobre fondo negro (`app/icon.svg`); se
+  removió `app/favicon.ico`.
+- Archivos nuevos: `app/(portal)/[clientSlug]/*`, `app/api/portal/{login,logout}/route.ts`,
+  `lib/client-portal.ts`, `lib/client-portal.server.ts`, `db/queries/client-portal.ts`,
+  `app/icon.svg`. Extendido `getBillingTracker` con `budgetOriginId`.
+- Sin cambios de schema (reusa `clients.slug`). **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Fix: crear reporte manual sin depender del filtro global
 
 - **Bug**: en `/reportes/calendario` el botón "Crear reporte" estaba griseado
@@ -2102,6 +2133,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Descartar un borrador y volver al plan aprobado | Botón "Descartar borrador" en `editor.tsx` (header, solo en `draft` con `currentVersion > 0`) + `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`. Restaura publishers/placements/fees/nombre/notas desde el snapshot `version = currentVersion` (en transacción) y deja el plan en `approved`. Contraparte de "Editar (nueva versión)". |
 | Cambiar el render del log de auditoría / papelera | `app/(app)/auditoria/page.tsx` (log), `app/(app)/auditoria/papelera/page.tsx` (papelera). Sustantivos / verbos / labels de timestamp en `lib/audit-format.ts` — agregar nuevos entityType acá. |
 | Tocar la auth (login con Google, dominio permitido, sign-out) | `lib/supabase/{server,client,middleware}.ts` (cliente Supabase), `lib/auth.ts` (`getCurrentUser`), `proxy.ts` (route protection — Next.js 16 reemplaza middleware.ts), `app/login/`, `app/auth/{callback,signout}/`. El dominio `@sangria.agency` está hardcodeado en `proxy.ts` y `callback/route.ts` — cambiarlo en ambos. |
+| Tocar el portal de cliente (público, read-only) | `app/(portal)/[clientSlug]/` (page + secciones + filtros), `app/api/portal/{login,logout}/route.ts`, `lib/client-portal.ts` (password/reservados/helpers edge-safe), `lib/client-portal.server.ts` (cookie + `canAccessClientExport`), `db/queries/client-portal.ts` (lookup + filtros). El gate público (solo GET) está en `lib/supabase/middleware.ts`. **Toda ruta top-level nueva de la app → sumala a `RESERVED_TOP_LEVEL_SLUGS`.** |
+| Cambiar el password / usuario del portal de cliente | `CLIENT_PORTAL_PASSWORD` en `lib/client-portal.ts` (compartido para todos). El usuario es el slug o el nombre del cliente. El admin (`/configuracion/clientes`) muestra link + usuario + password con copiar. |
+| Cambiar el favicon | `app/icon.svg` (App Router lo toma como icono; hoy "S" blanca sobre negro). No hay `favicon.ico`. |
 | Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
 | Activar RLS / cerrar la REST API pública de Supabase | `db/rls.sql` — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` en todas las tablas de `public`. Pegarlo en el SQL Editor. La app no se ve afectada (conecta como `postgres`, dueño → bypassa RLS; no se usa `FORCE`). **Toda tabla nueva** necesita su propio ENABLE. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |

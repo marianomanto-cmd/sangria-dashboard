@@ -55,6 +55,7 @@ export type TrackerProject = {
 
 export type BillingTrackerFilters = {
   clientId?: string | null;
+  budgetOriginId?: string | null;
   projectId?: string | null;
   fromMonth?: string | null;
   toMonth?: string | null;
@@ -69,6 +70,8 @@ export async function getBillingTracker(
     sql`${planBillings.invoiceNumber} is not null`,
   ];
   if (filters.clientId) conds.push(eq(projects.clientId, filters.clientId));
+  if (filters.budgetOriginId)
+    conds.push(eq(projects.budgetOriginId, filters.budgetOriginId));
   if (filters.projectId) conds.push(eq(projects.id, filters.projectId));
   if (filters.fromMonth) conds.push(gte(planBillings.month, filters.fromMonth));
   if (filters.toMonth) conds.push(lte(planBillings.month, filters.toMonth));

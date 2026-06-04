@@ -1,5 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  isClientPortalPath,
+  isPublicPlanExportPath,
+} from "@/lib/client-portal";
 
 // Helper para el proxy (ex-middleware) de Next.js: crea un cliente Supabase
 // que usa los cookies del request para leer/refrescar la sesión, y devuelve
@@ -40,10 +44,25 @@ export async function updateSession(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
+  // IMPORTANTE: solo abrimos GET para el portal. Los Server Actions se
+  // despachan por POST a la ruta actual SIN importar el path, y la app confía
+  // en este proxy como gate de auth de sus mutaciones. Si dejáramos POST
+  // público en `/<slug>`, cualquiera podría invocar acciones internas sin
+  // sesión. Por eso: el portal (GET) y sus endpoints públicos dedicados
+  // (`/api/portal/*`, login/logout que se autovalidan) son lo único abierto;
+  // los Server Actions siguen gateados.
+  const isGet = request.method === "GET";
   const isPublic =
     path === "/login" ||
     path.startsWith("/auth/") ||
-    path === "/favicon.ico";
+    path === "/favicon.ico" ||
+    // Endpoints públicos del portal (login/logout): se autovalidan adentro.
+    path.startsWith("/api/portal/") ||
+    // Descarga de export de planes (GET): el route handler valida sesión OR
+    // cookie de portal del cliente dueño del plan.
+    (isGet && isPublicPlanExportPath(path)) ||
+    // Páginas del portal de cliente (`/<slug>`), solo lectura → solo GET.
+    (isGet && isClientPortalPath(path));
 
   // Bloqueo de dominio en server-side. El callback ya lo hace, pero acá lo
   // re-chequeamos por si la sesión vino de otra cuenta.

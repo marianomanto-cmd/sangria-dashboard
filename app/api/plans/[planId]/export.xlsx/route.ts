@@ -10,6 +10,7 @@ import {
   sumDirectMetrics,
 } from "@/lib/plan-metrics";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
+import { canAccessClientExport } from "@/lib/client-portal.server";
 
 // Paleta de marca — sincronizada con los design tokens de app/globals.css.
 const ACCENT = "FF7A1F3D";       // header principal, total media, títulos
@@ -92,6 +93,12 @@ export async function GET(
   const detail = await getPlanDetail(planId);
   if (!detail) {
     return new Response("Plan not found", { status: 404 });
+  }
+
+  // Ruta pública en el proxy (para el portal del cliente). Barrera real:
+  // usuario interno logueado, o sesión de portal del cliente dueño del plan.
+  if (!(await canAccessClientExport(detail.client.slug))) {
+    return new Response("Forbidden", { status: 403 });
   }
 
   // El idioma del export sigue al del cliente del plan. Métricas (clicks,
