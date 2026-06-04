@@ -83,7 +83,10 @@ app/
     callback/route.ts       # OAuth callback: exchange + valida @sangria.agency
     signout/route.ts        # POST → cierra sesión
   (app)/                    # layout principal (Sidebar + Topbar) — todo requiere login
-    layout.tsx              # force-dynamic → ninguna page se prerenderea
+    layout.tsx              # async, llama getCurrentUser() una vez, monta AppProviders + MobileNavProvider
+    loading.tsx             # skeleton de página durante la navegación del router (usa PageSkeleton)
+    error.tsx               # error boundary recuperable (retry) — captura errores de server components
+    not-found.tsx           # 404 con EmptyState
     page.tsx                # Dashboard
     clientes/               # /clientes y /clientes/[slug]
     proyectos/              # /proyectos, /proyectos/[code]/*, /proyectos/nuevo
@@ -118,15 +121,23 @@ app/
 
 components/                 # UI compartida
   theme-toggle.tsx          # toggle claro/oscuro (clase .dark en <html>)
-  skeleton.tsx              # placeholders shimmer para loading states
+  skeleton.tsx              # placeholders shimmer para loading states; PageSkeleton para loading.tsx
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   pending-board.tsx         # dashboard: tablero de pendientes compacto + colapsable (persiste en localStorage)
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates
+  billing-filters.tsx       # /billing: dropdowns budget origin/proyecto + slider de meses, URL-based
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
   reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
   reporting-gantt.tsx       # Gantt diario -30/+30 días para reporting calendar
   report-generator-form.tsx # /reportes/generador: filtros cascading + column picker URL-based
+  button.tsx                # Button + buttonVariants() — primitivo único para CTAs (primary/secondary/ghost/danger, xs/sm/md/lg). NO volver a escribir bg-ink inline
+  plan-status-badge.tsx     # PlanStatusBadge — badge de estado del plan (draft/ready_to_send/approved/archived), prop size md/sm. Fuente única; no duplicar
+  billing-status-badge.tsx  # BillingStatusBadge — badge de estado del billing, lang-aware es/en, prop size md/sm. Fuente única; no duplicar
+  toast.tsx                 # ToastProvider + useToast() — feedback no bloqueante success/error/info con live-region (role=alert/status)
+  confirm-dialog.tsx        # ConfirmProvider + useConfirm() — confirmación promise-based con focus-trap, Escape, backdrop. No usar confirm() nativo
+  app-providers.tsx         # monta ToastProvider + ConfirmProvider — en el layout, envuelve el contenido de la app
+  mobile-nav.tsx            # MobileNavProvider + MobileNavToggle + useMobileNav() — sidebar drawer en mobile (< lg)
 db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
@@ -156,6 +167,7 @@ lib/
   audit.ts                  # recordAudit() — wrapper para insertar en audit_log con autor
   audit-format.ts           # entityNoun / actionVerb / entityLabel / actorLabel / formatRelativeDateTime
   auth.ts                   # getCurrentUser() (server-side)
+  permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
   supabase/
     server.ts               # cliente Supabase para Server Components / route handlers
     client.ts               # cliente Supabase para Client Components
@@ -164,6 +176,10 @@ proxy.ts                    # Next.js 16: ex-middleware.ts. Auth gate global.
 public/
   sangria-logo.png          # logo de marca para los exports (PDF/XLSX). Ver "Exports del plan"
 next.config.ts              # outputFileTracingIncludes del logo para las rutas de export
+.claude/
+  skills/                   # Skills versionados de Claude Code on the web (cargados en la próxima sesión; el resto de .claude/ está gitignored)
+    ui-ux-pro-max/          # Design intelligence: BM25 search sobre estilos, paletas, tipografía, UX, charts. Scripts Python + CSVs
+    context7/               # Docs de librerías al día vía la API pública de Context7 (curl, sin API key)
 ```
 
 ---
@@ -384,6 +400,15 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - `plan_billing_fees` es la imputación manual de cada fee del plan en cada
   mes (la suma de imputaciones a lo largo del tiempo no debe pasar el total
   del fee — validado en server actions).
+- **Publishers que paga el cliente directo (`agency_pays=false`)**: se cargan
+  igual en el billing porque su consumo alimenta el cálculo del management fee
+  (que el cliente sí paga), pero su inversión de medios **no se factura ni se
+  reporta**. El PDF de finanzas (`app/api/billings/[id]/report.pdf/route.ts`)
+  filtra las líneas de "Media Placement" por `agencyPays && isBillable`, así
+  que los publishers client-pays nunca aparecen en el reporte. `agencyPays` es
+  la verdad estructural (override del bloque ?? default del publisher);
+  `isBillable` es el flag editable del mes que además permite marcar
+  no-facturable un publisher de agencia en un mes puntual.
 
 ### Campaign Tracker: consumo real vs goal
 - `campaign_placement_actuals (placement_id, metric_key, value_actual,

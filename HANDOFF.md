@@ -1,6 +1,35 @@
-# Handoff — viernes 15/may/2026
+# Handoff — jueves 04/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 04/jun/2026 — Reporte PDF de billing: excluir publishers que paga el cliente
+
+- **Pedido**: los publishers que el cliente paga directo (`agency_pays=false`)
+  no deben facturarse ni reportarse. Su inversión de medios **no** debe estar
+  en el PDF de finanzas. (Sí se siguen cargando en el billing: su consumo
+  alimenta el cálculo del management fee, que el cliente sí paga.)
+- **Fix** en `app/api/billings/[id]/report.pdf/route.ts`: el filtro de líneas
+  de "Media Placement" pasó de `p.isBillable && amount > 0` a
+  `p.agencyPays && p.isBillable && amount > 0`. `agencyPays` es la verdad
+  estructural (override del bloque ?? default del publisher); con esto un
+  publisher client-pays nunca entra al reporte, aunque su `isBillable` haya
+  quedado en `true` (default del insert path o checkbox tildado por error).
+  Se conserva `isBillable` para poder marcar no-facturable un publisher de
+  agencia en un mes puntual.
+- **No se tocó** el cálculo del management fee ni el editor de billing: los
+  publishers client-pays siguen visibles y cargables en la vista mensual.
+- Sin cambios de schema. **No requiere acción en prod.**
+
+### Cambios de la sesión 04/jun/2026 — Actualización completa de la documentación
+
+- **README.md — Estructura del proyecto**: actualizados los bloques de `app/(app)/`, `components/` y `lib/` con todos los archivos nuevos de las sesiones de junio:
+  - `app/(app)/loading.tsx`, `error.tsx`, `not-found.tsx` (esqueleto de página, error boundary, 404).
+  - `components/button.tsx`, `plan-status-badge.tsx`, `billing-status-badge.tsx`, `toast.tsx`, `confirm-dialog.tsx`, `app-providers.tsx`, `mobile-nav.tsx`, `billing-filters.tsx`.
+  - `lib/permissions.ts` (allowlist de aprobación de planes).
+  - Sección nueva `.claude/skills/` (`ui-ux-pro-max`, `context7`).
+  - Descripción de `layout.tsx` actualizada (ahora es async y monta providers).
+- **HANDOFF.md**: encabezado actualizado a 04/jun/2026; se agrega `c1ba37c` (#109) a "Commits recientes".
+- Todos los cambios de código de la sesión 01/jun/2026 ya estaban documentados en las entradas anteriores de este HANDOFF. **No requiere acción en prod.**
 
 ### Cambios de la sesión 01/jun/2026 — Unificar el badge de estado de billing
 
@@ -1370,14 +1399,24 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+c1ba37c  docs: registrar PR #108 en Commits recientes (#109)
 a5cea8b  Unificar el estado de billing en un BillingStatusBadge compartido (#108)
+ac7b394  docs: registrar PR #106 en Commits recientes (#107)
 89ae2d0  Fix: billing facturado se mostraba como draft en la lista de meses (#106)
+de1624a  docs: registrar PR #104 en Commits recientes (#105)
 42ec544  UX hardening: toasts, confirm, loading/error/404, a11y, sidebar mobile (#104)
+0cfac0c  docs: registrar PR #102 en Commits recientes (#103)
 9139255  chore(skills): versionar ui-ux-pro-max + context7 en .claude/skills (#102)
+e1dd84d  docs: registrar PR #100 en Commits recientes (#101)
 4cc96da  Restringir la aprobación de planes a una allowlist de emails (#100)
+10fed4e  docs: registrar PR #98 en Commits recientes (#99)
 e152dfc  Fix: un billing en draft no saca el mes del tablero de pendientes (#98)
+52556e1  docs: registrar PR #96 en Commits recientes (#97)
 5379c4e  Cosmético: primitivo Button + usuario real en el sidebar (#96)
+6051b9a  docs: registrar PR #94 en Commits recientes (#95)
 20e1a1c  Cosmético: unificar el badge de estado de plan + limpiar código muerto (#94)
+cea8f9f  docs: mencionar "Descartar borrador" en el inventario end-to-end (#93)
+2b95a10  docs: registrar PR #91 en Commits recientes (#92)
 1b44492  Editor: descartar borrador y volver al plan aprobado (#91)
 3a16318  Reporting Calendar: reportes manuales (#89) — REQUIERE npm run db:push
 b16dd0c  docs: registrar PR #87 en Commits recientes (#88)
@@ -1954,7 +1993,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` en `app/api/plans/[planId]/export.xlsx/route.ts` (días-overlap inclusive). |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert) y `markBillingInvoiced` (sent → invoiced con número de factura). Labels: `STATUS_STYLE_BY_LANG` en `app/(app)/billing/page.tsx` y `BillingStatusPillInline` en el editor. |
-| Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers facturables con consumo > 0) o `Services` (fees con imputación > 0). |
+| Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
