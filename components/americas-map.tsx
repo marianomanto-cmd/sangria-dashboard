@@ -34,13 +34,13 @@ function escapeHtml(s: string): string {
 
 export function AmericasMap({
   points,
-  selectedId,
+  selectedIds,
   onSelect,
   lang = "es",
 }: {
   points: MapPoint[];
-  selectedId?: string | null;
-  onSelect?: (id: string | null) => void;
+  selectedIds?: string[];
+  onSelect?: (id: string) => void;
   lang?: Language;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -97,7 +97,9 @@ export function AmericasMap({
     };
   }, []);
 
-  // (Re)dibujar burbujas al cambiar puntos / selección.
+  // (Re)dibujar burbujas al cambiar puntos / selección. selKey hace la dep
+  // estable (selectedIds es un array nuevo en cada render).
+  const selKey = (selectedIds ?? []).join(",");
   useEffect(() => {
     const L = LRef.current;
     const map = mapRef.current;
@@ -106,13 +108,14 @@ export function AmericasMap({
     layer.clearLayers();
     if (points.length === 0) return;
 
+    const selected = new Set(selKey ? selKey.split(",") : []);
     const maxValue = Math.max(1, ...points.map((p) => p.value));
     const diam = scaleSqrt().domain([0, maxValue]).range([18, 54]);
     const latlngs: [number, number][] = [];
 
     for (const p of points) {
       const d = Math.round(diam(p.value));
-      const sel = p.id === selectedId;
+      const sel = selected.has(p.id);
       const html =
         `<div class="mkt-bubble${sel ? " mkt-bubble--sel" : ""}" ` +
         `style="width:${d}px;height:${d}px;font-size:${Math.min(13, Math.round(d * 0.42))}px">` +
@@ -136,9 +139,7 @@ export function AmericasMap({
       L.marker([p.lat, p.lng], { icon, riseOnHover: true })
         .addTo(layer)
         .bindTooltip(tip, { direction: "top", offset: [0, -d / 2 - 2], opacity: 1 })
-        .on("click", () =>
-          onSelectRef.current?.(selectedId === p.id ? null : p.id),
-        );
+        .on("click", () => onSelectRef.current?.(p.id));
       latlngs.push([p.lat, p.lng]);
     }
 
@@ -156,7 +157,7 @@ export function AmericasMap({
       }
     }
     map.invalidateSize();
-  }, [ready, points, selectedId, lang]);
+  }, [ready, points, selKey, lang]);
 
   return (
     <div className="relative">

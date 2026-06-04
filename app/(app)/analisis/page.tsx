@@ -46,12 +46,15 @@ export default async function AnalisisPage({
     );
   }
 
+  const list = (v: string | undefined) =>
+    v ? v.split(",").filter(Boolean) : null;
+
   const [data, options] = await Promise.all([
     getMarketActivations({
       clientId: client.id,
-      publisherId: sp.pub || null,
-      marketId: sp.mkt || null,
-      budgetOriginId: sp.bo || null,
+      publisherIds: list(sp.pub),
+      marketIds: list(sp.mkt),
+      budgetOriginIds: list(sp.bo),
       fromMonth: sp.from || null,
       toMonth: sp.to || null,
     }),

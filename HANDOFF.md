@@ -2,6 +2,17 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Análisis: filtros multi-select
+
+- Los filtros de publisher / mercado / budget origin pasan a **selección
+  múltiple** (varios a la vez). Los params `pub`/`mkt`/`bo` ahora guardan listas
+  separadas por coma en la URL; `getMarketActivations` filtra con `inArray`.
+- Nuevo componente `MultiSelect` (popover con checkboxes, cierra al click afuera)
+  en `components/market-analysis.tsx`. Click en una burbuja del mapa o en el
+  ranking **togglea** ese mercado en la selección. El mapa (`americas-map.tsx`)
+  pasa de `selectedId` a `selectedIds` (resalta todos los seleccionados).
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Mapa de análisis: 3 columnas + Leaflet
 
 - **Layout en 3 columnas** (`components/market-analysis.tsx`): filtros (izquierda,
