@@ -46,12 +46,16 @@ export function ReportingGantt({
   onAssignDate,
   onMarkDelivered,
   onDeleteManual,
+  readOnly = false,
 }: {
   reports: CalendarReport[];
   lang: Language;
-  onAssignDate: (reportId: string, current: string | null) => void;
-  onMarkDelivered: (reportId: string) => void;
+  // Opcionales: en modo read-only (portal de cliente) no se pasan y no se
+  // renderizan los botones de edición ni los links internos.
+  onAssignDate?: (reportId: string, current: string | null) => void;
+  onMarkDelivered?: (reportId: string) => void;
   onDeleteManual?: (reportId: string) => void;
+  readOnly?: boolean;
 }) {
   // Ventana fija basada en "hoy" del cliente. Se calcula en render (client),
   // así si el usuario deja la pestaña abierta varios días y recarga, se
@@ -158,9 +162,13 @@ export function ReportingGantt({
   if (reports.length === 0) {
     return (
       <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center text-sm text-muted">
-        {lang === "es"
-          ? "Sin reportes en curso. Asigná fechas a los proyectos cerrados de la tabla de arriba."
-          : "No reports in progress. Assign delivery dates to the closed projects above."}
+        {readOnly
+          ? lang === "es"
+            ? "Sin reportes en curso."
+            : "No reports in progress."
+          : lang === "es"
+            ? "Sin reportes en curso. Asigná fechas a los proyectos cerrados de la tabla de arriba."
+            : "No reports in progress. Assign delivery dates to the closed projects above."}
       </div>
     );
   }
@@ -254,8 +262,13 @@ export function ReportingGantt({
             todayPct={todayPct}
             offDayBands={offDayBands}
             dayTicks={dayTicks}
-            onAssignDate={() => onAssignDate(r.reportId, r.deliveryDate)}
-            onMarkDelivered={() => onMarkDelivered(r.reportId)}
+            readOnly={readOnly}
+            onAssignDate={
+              onAssignDate ? () => onAssignDate(r.reportId, r.deliveryDate) : undefined
+            }
+            onMarkDelivered={
+              onMarkDelivered ? () => onMarkDelivered(r.reportId) : undefined
+            }
             onDeleteManual={
               r.kind === "manual" && onDeleteManual
                 ? () => onDeleteManual(r.reportId)
@@ -324,6 +337,7 @@ function GanttRow({
   todayPct,
   offDayBands,
   dayTicks,
+  readOnly = false,
   onAssignDate,
   onMarkDelivered,
   onDeleteManual,
@@ -341,8 +355,9 @@ function GanttRow({
     isFirstOfMonth: boolean;
     label?: string;
   }[];
-  onAssignDate: () => void;
-  onMarkDelivered: () => void;
+  readOnly?: boolean;
+  onAssignDate?: () => void;
+  onMarkDelivered?: () => void;
   onDeleteManual?: () => void;
 }) {
   // Para project: closedAt = momento en que pasó a 'closed'.
@@ -383,7 +398,7 @@ function GanttRow({
       {/* Label column */}
       <div className="min-w-0 py-1.5">
         <div className="flex items-center gap-1.5 min-w-0">
-          {report.projectCode ? (
+          {report.projectCode && !readOnly ? (
             <Link
               href={`/proyectos/${report.projectCode}`}
               className="text-sm font-medium text-ink hover:text-accent truncate"
@@ -443,35 +458,43 @@ function GanttRow({
             {report.deliveryDate ? formatDate(report.deliveryDate, lang) : "—"}
           </span>
         </div>
-        <div className="flex gap-1.5 mt-1 items-center">
-          <button
-            type="button"
-            onClick={onAssignDate}
-            className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted hover:text-ink underline-offset-2 hover:underline"
-          >
-            {lang === "es" ? "Editar fecha" : "Edit date"}
-          </button>
-          <span className="text-line">·</span>
-          <button
-            type="button"
-            onClick={onMarkDelivered}
-            className="text-[10px] font-medium uppercase tracking-[0.06em] text-success hover:text-success underline-offset-2 hover:underline"
-          >
-            {lang === "es" ? "Entregado" : "Delivered"}
-          </button>
-          {onDeleteManual && (
-            <>
-              <span className="text-line">·</span>
+        {!readOnly && (
+          <div className="flex gap-1.5 mt-1 items-center">
+            {onAssignDate && (
               <button
                 type="button"
-                onClick={onDeleteManual}
-                className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted hover:text-danger underline-offset-2 hover:underline"
+                onClick={onAssignDate}
+                className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted hover:text-ink underline-offset-2 hover:underline"
               >
-                {lang === "es" ? "Eliminar" : "Delete"}
+                {lang === "es" ? "Editar fecha" : "Edit date"}
               </button>
-            </>
-          )}
-        </div>
+            )}
+            {onMarkDelivered && (
+              <>
+                <span className="text-line">·</span>
+                <button
+                  type="button"
+                  onClick={onMarkDelivered}
+                  className="text-[10px] font-medium uppercase tracking-[0.06em] text-success hover:text-success underline-offset-2 hover:underline"
+                >
+                  {lang === "es" ? "Entregado" : "Delivered"}
+                </button>
+              </>
+            )}
+            {onDeleteManual && (
+              <>
+                <span className="text-line">·</span>
+                <button
+                  type="button"
+                  onClick={onDeleteManual}
+                  className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted hover:text-danger underline-offset-2 hover:underline"
+                >
+                  {lang === "es" ? "Eliminar" : "Delete"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Track */}

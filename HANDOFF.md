@@ -2,6 +2,24 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Portal de cliente: ajustes (Gantt, proyectos abiertos, scrollbar)
+
+Ajustes pedidos sobre el portal recién mergeado:
+
+- **Reportes → Gantt**: la tab Reportes ahora muestra el **Gantt de entregas**
+  (read-only) en vez de la tabla de "próximas entregas"; debajo sigue la tabla
+  de **Reportes enviados** con link al PPT. `ReportingGantt`
+  (`components/reporting-gantt.tsx`) ganó un prop **`readOnly`**: oculta los
+  botones de edición (editar fecha / entregado / eliminar) y no linkea al
+  detalle interno del proyecto. Los callbacks pasaron a opcionales.
+- **Proyectos solo abiertos**: la tab Proyectos filtra a proyectos con status
+  **planning / active / paused** (excluye closed y reportado). Sigue mostrando
+  solo planes **aprobados**.
+- **Scrollbar del encabezado**: la nav de tabs (`overflow-x-auto`) mostraba un
+  scrollbar; se ocultó visualmente (sigue scrolleable en mobile) con
+  `[scrollbar-width:none]` + `[&::-webkit-scrollbar]:hidden`.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Portal de cliente público (read-only) + favicon
 
 - **Nuevo portal de cliente** en `/<slug>` (ej. `/copa-airlines`, reusa el slug

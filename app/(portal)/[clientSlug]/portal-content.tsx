@@ -14,6 +14,7 @@ import { FacturacionChart } from "@/components/facturacion-chart";
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { BillingStatusBadge } from "@/components/billing-status-badge";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
+import { ReportingGantt } from "@/components/reporting-gantt";
 import { formatUsd, formatUsdCompact, formatPct } from "@/lib/format";
 import { formatDate, formatMonth, type Language } from "@/lib/i18n";
 import { PortalBenchmarksFilters } from "./portal-benchmarks-filters";
@@ -289,44 +290,9 @@ export async function ReportsSection({
     <div className="space-y-6">
       <section>
         <h2 className="text-sm font-semibold mb-3">
-          {lang === "es" ? "Próximas entregas" : "Upcoming deliveries"}
+          {lang === "es" ? "Calendario de entregas" : "Delivery calendar"}
         </h2>
-        {upcoming.length === 0 ? (
-          <EmptyPortal
-            text={
-              lang === "es"
-                ? "Sin reportes en curso."
-                : "No reports in progress."
-            }
-          />
-        ) : (
-          <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-paper-2">
-                <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-                  <th className="text-left font-medium px-5 py-2">
-                    {lang === "es" ? "Reporte" : "Report"}
-                  </th>
-                  <th className="text-left font-medium px-5 py-2">
-                    {lang === "es" ? "Fecha de entrega" : "Delivery date"}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {upcoming.map((r) => (
-                  <tr key={r.reportId} className="border-t border-line-soft">
-                    <td className="px-5 py-2 text-ink">{r.projectName}</td>
-                    <td className="px-5 py-2 text-ink-2">
-                      {r.deliveryDate
-                        ? formatDate(r.deliveryDate, lang)
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <ReportingGantt reports={upcoming} lang={lang} readOnly />
       </section>
 
       <section>
@@ -425,12 +391,16 @@ export async function ProjectsSection({
     budgetOriginId: params.bo || null,
   });
 
+  // Solo proyectos ABIERTOS (planning/active/paused) — excluye closed/reportado.
+  const OPEN_STATUSES = new Set(["planning", "active", "paused"]);
+
   // Filtro de mes: dejamos proyectos con al menos un plan cuyo período cubre
   // el mes; dentro de cada proyecto mostramos solo esos planes.
   // Solo planes APROBADOS: el portal es para el cliente, no mostramos borradores
   // ni versiones viejas (draft/ready/archived son internos).
   const monthFilter = params.month || null;
   const visible = rows
+    .filter((proj) => OPEN_STATUSES.has(proj.status))
     .map((proj) => {
       let plans = proj.plans.filter((p) => p.status === "approved");
       if (monthFilter) {
