@@ -15,6 +15,7 @@ type SearchParams = {
   client?: string;
   budgetOrigin?: string;
   project?: string;
+  status?: string;
   from?: string;
   to?: string;
 };
@@ -22,6 +23,21 @@ type SearchParams = {
 type Props = {
   searchParams: Promise<SearchParams>;
 };
+
+const BILLING_STATUS_VALUES = [
+  "draft",
+  "ready",
+  "sent",
+  "invoiced",
+  "paid",
+] as const;
+type BillingStatusValue = (typeof BILLING_STATUS_VALUES)[number];
+
+function parseBillingStatus(v: string | undefined): BillingStatusValue | null {
+  return v && (BILLING_STATUS_VALUES as readonly string[]).includes(v)
+    ? (v as BillingStatusValue)
+    : null;
+}
 
 function enumerateMonths(start: string, end: string): string[] {
   const out: string[] = [];
@@ -54,6 +70,7 @@ export default async function BillingPage({ searchParams }: Props) {
     clientId: client?.id ?? null,
     budgetOriginId: sp.budgetOrigin || null,
     projectId: sp.project || null,
+    status: parseBillingStatus(sp.status),
     fromMonth: sp.from || null,
     toMonth: sp.to || null,
   });

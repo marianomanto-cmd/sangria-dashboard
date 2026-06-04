@@ -2,6 +2,19 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — /billing: filtro por estado
+
+- Se agregó un dropdown **Estado** a los filtros de `/billing`
+  (`components/billing-filters.tsx`), junto a Budget Origin / Proyecto / Rango
+  de meses. URL-based (`?status=`), preserva el `?client=` global.
+- Fuente única de los labels/orden: `BILLING_STATUSES` + `billingStatusLabel`
+  exportados desde `components/billing-status-badge.tsx` (mismo texto que el
+  badge, lang-aware es/en).
+- Query: `getBillingsList` (`db/queries/billing.ts`) acepta `status` y filtra
+  por `plan_billings.status`. La page valida `?status=` contra el enum
+  (draft/ready/sent/invoiced/paid) antes de pasarlo.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Billing: editar o quitar el número de factura
 
 - **Pedido**: poder cambiar el número de factura de un billing (sin permitir uno
@@ -2046,7 +2059,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
-| Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
+| Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
 | Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave + cerrar día + comparar) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Actions: `setPlacementActual`, `closeDailyLoad` en `app/actions/campaign-tracker.ts`. |

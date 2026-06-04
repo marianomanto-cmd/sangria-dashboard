@@ -4,6 +4,10 @@ import { useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { MonthRangeSlider } from "@/components/month-range-slider";
+import {
+  BILLING_STATUSES,
+  billingStatusLabel,
+} from "@/components/billing-status-badge";
 import { type Language } from "@/lib/i18n";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -37,6 +41,7 @@ export function BillingFilters({
 
   const currentOrigin = searchParams?.get("budgetOrigin") ?? "";
   const currentProject = searchParams?.get("project") ?? "";
+  const currentStatus = searchParams?.get("status") ?? "";
   const currentFrom = searchParams?.get("from") ?? "";
   const currentTo = searchParams?.get("to") ?? "";
 
@@ -56,6 +61,7 @@ export function BillingFilters({
     updates: Partial<{
       budgetOrigin: string;
       project: string;
+      status: string;
       from: string;
       to: string;
     }>,
@@ -73,6 +79,7 @@ export function BillingFilters({
     const next = new URLSearchParams(searchParams?.toString() ?? "");
     next.delete("budgetOrigin");
     next.delete("project");
+    next.delete("status");
     next.delete("from");
     next.delete("to");
     const qs = next.toString();
@@ -80,7 +87,11 @@ export function BillingFilters({
   };
 
   const isFiltered =
-    !!currentOrigin || !!currentProject || !!currentFrom || !!currentTo;
+    !!currentOrigin ||
+    !!currentProject ||
+    !!currentStatus ||
+    !!currentFrom ||
+    !!currentTo;
 
   return (
     <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 mb-5">
@@ -110,6 +121,21 @@ export function BillingFilters({
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.code} — {p.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label={lang === "es" ? "Estado" : "Status"}>
+          <select
+            value={currentStatus}
+            onChange={(e) => updateParams({ status: e.target.value })}
+            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[150px]"
+          >
+            <option value="">{lang === "es" ? "Todos" : "All"}</option>
+            {BILLING_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {billingStatusLabel(s, lang)}
               </option>
             ))}
           </select>

@@ -126,7 +126,7 @@ components/                 # UI compartida
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   pending-board.tsx         # dashboard: tablero de pendientes compacto + colapsable (persiste en localStorage)
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates
-  billing-filters.tsx       # /billing: dropdowns budget origin/proyecto + slider de meses, URL-based
+  billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
   reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
   reporting-gantt.tsx       # Gantt diario -30/+30 días para reporting calendar
