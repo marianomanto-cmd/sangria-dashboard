@@ -6,7 +6,7 @@ import { DEFAULT_LANGUAGE, formatMonth, type Language } from "@/lib/i18n";
 // Reporte PDF de un plan_billing — formato pedido por finanzas:
 //
 //   #  | Product/service  | Description                            | Qty | Rate | Amount
-//   1  | Media Placement  | <code> - <project> - <publisher> - <month> | 1 | <amt> | <amt>
+//   1  | Media Placement  | <plan> - <project> - <publisher> - <month> | 1 | <amt> | <amt>
 //   2  | Media Placement  | ...                                     | 1 | <amt> | <amt>
 //   3  | Services         | Fee - <Fee name>                        | 1 | <amt> | <amt>
 //   ...
@@ -190,7 +190,7 @@ export async function GET(
     (p) => p.agencyPays && p.isBillable && p.amountThisMonthUsd > 0,
   );
   for (const p of billablePublishers) {
-    const description = `${detail.project.code} - ${detail.project.name} - ${p.publisherName} - ${formatMonth(detail.billing.month, headerLang)}`;
+    const description = `${detail.plan.name} - ${detail.project.name} - ${p.publisherName} - ${formatMonth(detail.billing.month, headerLang)}`;
     drawRow(rowIdx, "Media Placement", description, p.amountThisMonthUsd, {
       altBg: alt,
     });
