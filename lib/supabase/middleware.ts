@@ -61,6 +61,8 @@ export async function updateSession(request: NextRequest) {
     // Descarga de export de planes (GET): el route handler valida sesión OR
     // cookie de portal del cliente dueño del plan.
     (isGet && isPublicPlanExportPath(path)) ||
+    // Export de benchmarks (GET): el route se autovalida con canAccessClientExport.
+    (isGet && path.startsWith("/api/benchmarks/export")) ||
     // Páginas del portal de cliente (`/<slug>`), solo lectura → solo GET.
     (isGet && isClientPortalPath(path));
 

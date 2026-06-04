@@ -2,6 +2,18 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Benchmarks (portal): descargar Excel / PDF
+
+- El tab **Benchmarks** del portal suma botones **Excel** y **PDF** que bajan lo
+  que está **filtrado** (mismos params que la query: pub/mkt/cm/from/to).
+- Nuevo route `app/api/benchmarks/export/route.ts`: corre `getBenchmarks` con los
+  filtros y arma el archivo. **Excel** (ExcelJS) con p25/p50/p75 de CPM/CPC/CPV/
+  CTR + N/Spend/Delivery; **PDF** (pdf-lib, landscape) resumen con la mediana
+  (p50). Público en el proxy (GET) y autovalidado con `canAccessClientExport`
+  (sesión interna O cookie de portal del cliente).
+- Reusa deps existentes (exceljs/pdf-lib). Sin schema. **No requiere acción en
+  prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Análisis: filtros multi-select
 
 - Los filtros de publisher / mercado / budget origin pasan a **selección
