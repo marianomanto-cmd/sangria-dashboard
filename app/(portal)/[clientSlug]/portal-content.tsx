@@ -669,8 +669,35 @@ export async function BenchmarksSection({
     getSimulatorCatalogs(clientId),
   ]);
 
+  // Href del export con los filtros actuales (mismos params que la query).
+  const exportHref = (fmt: "xlsx" | "pdf") => {
+    const qs = new URLSearchParams({ clientId, fmt });
+    if (bench.publisherId) qs.set("pub", bench.publisherId);
+    if (bench.marketId) qs.set("mkt", bench.marketId);
+    if (bench.costMethod) qs.set("cm", bench.costMethod);
+    if (bench.dateFrom) qs.set("from", bench.dateFrom);
+    if (bench.dateTo) qs.set("to", bench.dateTo);
+    return `/api/benchmarks/export?${qs.toString()}`;
+  };
+
   return (
     <div>
+      <div className="flex justify-end gap-2 mb-3">
+        <a
+          href={exportHref("xlsx")}
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-ink-2 hover:text-accent hover:border-accent transition-colors"
+        >
+          <FileSpreadsheet size={14} />
+          Excel
+        </a>
+        <a
+          href={exportHref("pdf")}
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-ink-2 hover:text-accent hover:border-accent transition-colors"
+        >
+          <Download size={14} />
+          PDF
+        </a>
+      </div>
       <PortalBenchmarksFilters catalogs={catalogs} />
       {rows.length === 0 ? (
         <EmptyPortal
