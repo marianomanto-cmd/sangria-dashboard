@@ -590,15 +590,15 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   **Análisis** del portal de cliente. Ambas renderean el mismo
   `components/market-analysis.tsx` con datos de `getMarketActivations` +
   `getAnalysisFilterOptions` (`db/queries/analysis.ts`).
-- **Mapa** (`components/americas-map.tsx`): SVG propio con **d3-geo** (no
-  react-simple-maps, que no soporta React 19). Topología
-  `world-atlas/countries-110m.json` (bundleada), filtrada al hemisferio
-  occidental **hasta Canadá** (se excluye Groenlandia). Dibujamos los paths +
-  las burbujas (gradiente de marca, glow y anillo de pulso animado con SMIL),
-  dark-aware vía `useChartColors`. **Zoom a lo filtrado**: la proyección se
-  re-`fitea` al bounding box de los mercados visibles — silueta real del país
-  para países normales, centroide + span fijo para los enormes (US/Canadá, que
-  con Alaska distorsionan) o agrupaciones. Sin filtro encuadra todo el footprint.
+- **Mapa** (`components/americas-map.tsx`): **Leaflet** (tiles reales de CARTO,
+  zoom/pan nativos). Se importa **dinámico dentro de un effect** (vanilla
+  Leaflet, sin react-leaflet) para no tocar `window` en SSR. Cada mercado es una
+  burbuja `divIcon` (tamaño = inversión, número = activaciones, gradiente de
+  marca) con tooltip y click→filtra. El mapa se auto-`fitBounds` a los mercados
+  visibles (zoom a lo filtrado) y llena el ancho de su columna. Tiles
+  `light_all`/`dark_all` según el tema. Estilos de la burbuja: `.mkt-bubble` en
+  `globals.css`. (Antes era un SVG propio con d3-geo; se cambió a Leaflet por
+  robustez de zoom/escala.)
 - **Geocoding de mercados (todo en la UI, sin tocar la DB)**: los `markets` son
   nombres/slugs libres sin coordenadas. `lib/market-geo.ts` (`resolveMarketGeo`)
   resuelve por (1) match exacto normalizado y (2) match por **token** — una
