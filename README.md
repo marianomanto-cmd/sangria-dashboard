@@ -544,8 +544,9 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 ### Portal de cliente (público, read-only)
 - **Qué es**: una vista de solo lectura para compartir con cada cliente en
   `/<slug>` (el mismo slug interno del cliente, ej. `/copa-airlines`). Tabs:
-  **Resumen** (KPIs + chart de inversión mensual + **inversión por publisher**
-  + **facturado acumulado vs estimado YTD**), **Billing Tracker**, **Estimación**, **Proyectos**
+  **Resumen** (KPIs + chart de inversión mensual + **inversión por publisher
+  planeado vs real** + **facturado acumulado vs estimado YTD**), **Billing
+  Tracker**, **Estimación**, **Proyectos**
   (solo proyectos **abiertos** — planning/active/paused; descarga PDF/Excel de los
   planes **aprobados** + pacing por placement agrupado por publisher), **Reportes**
   (**Gantt** de entregas en curso, read-only + tabla de enviados con link al PPT) y

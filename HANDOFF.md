@@ -2,6 +2,22 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Polish de charts (recharts) + planeado vs real por publisher
+
+- **Chart kit compartido** `components/chart-kit.tsx`: `useChartColors()` (un solo
+  hook de tokens/dark-mode, antes duplicado en facturacion-chart y portal-charts),
+  `tooltipStyle()` (card de tooltip único con sombra) y `<ChartGradient>` (defs de
+  gradiente reusable). `facturacion-chart.tsx` y `portal-charts.tsx` ahora lo usan.
+- **Polish visual**: barras con **fill de gradiente** (accent → accent-2) y esquinas
+  redondeadas, grid más sutil (horizontal-only, dasharray `2 4`, opacity 0.6),
+  tooltips consistentes. El "Facturado acumulado vs estimado" pasó de línea a
+  **área** (fill degradé bajo la curva de facturado + estimado como línea punteada).
+- **Inversión por publisher** ahora muestra **planeado vs real** (dos barras por
+  publisher). `getClientSpendByPublisher` devuelve `{name, planned, real}`:
+  planned = `media_plan_publishers.total_planned_usd` (planes no-draft), real =
+  `plan_billing_publishers.amount_real_usd`.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Portal Resumen: 2 charts nuevos
 
 - **Inversión por publisher** (barras horizontales, top 8 + "Otros"): consumo
