@@ -27,7 +27,7 @@ import { type Language } from "@/lib/i18n";
 // ════════════════════════════════════════════════════════════════════════════
 
 const PAD = 16;
-const MAX_H = 560;
+const MAX_H = 600;
 const MIN_H = 240;
 const MIN_K = 1;
 const MAX_K = 8;
@@ -136,6 +136,26 @@ function bboxPolygon([w, s, e, n]: BBox) {
   };
 }
 
+// Evita que el recuadro quede una tira finita (footprint LATAM = muy alto) o
+// demasiado panorámico: si el aspect cae fuera de [minA, maxA] ensanchamos el
+// bbox geográfico (más océano/contexto a los lados) para acercarlo al rango.
+function clampBBoxAspect(bbox: BBox, minA: number, maxA: number): BBox {
+  let [w, s, e, n] = bbox;
+  const a = bboxAspect([w, s, e, n]);
+  if (a > 0 && a < minA) {
+    const cx = (w + e) / 2;
+    const half = ((e - w) / 2) * (minA / a);
+    w = cx - half;
+    e = cx + half;
+  } else if (a > maxA) {
+    const cy = (s + n) / 2;
+    const half = ((n - s) / 2) * (a / maxA);
+    s = Math.max(-82, cy - half);
+    n = Math.min(82, cy + half);
+  }
+  return [w, s, e, n];
+}
+
 function clampPan(x: number, y: number, k: number, W: number, H: number) {
   const minX = W * (1 - k);
   const minY = H * (1 - k);
@@ -183,7 +203,8 @@ export function AmericasMap({
   // Layout + proyección: el recuadro toma el aspect del contenido y la
   // proyección se fitea a esos píxeles → el mapa llena la caja.
   const { svgW, svgH, projection, paths } = useMemo(() => {
-    const bbox = computeBBox(points);
+    // Aspect acotado a [0.9, 1.5] para que el recuadro no quede una tira.
+    const bbox = clampBBoxAspect(computeBBox(points), 0.9, 1.5);
     const aspect = bboxAspect(bbox);
     let h = Math.min(MAX_H, availW / aspect);
     h = Math.max(MIN_H, h);
