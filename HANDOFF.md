@@ -2,6 +2,23 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Mapa de análisis: match de mercados + zoom (todo UI)
+
+Ajustes al mapa, **sin tocar la DB** (todo en `lib/market-geo.ts` + el componente):
+
+- **Match por token**: un mercado como "Estados Unidos - Varios" no matcheaba
+  (solo había match exacto) → caía a "Sin ubicación" y el mapa quedaba vacío.
+  `resolveMarketGeo` ahora hace (1) match exacto y (2) match por token (la clave
+  conocida aparece como palabra dentro del nombre normalizado). Cubre suffixes
+  típicos (" - Varios", " - Nacional", " - CABA", etc.) + alias (eeuu/ee-uu).
+- **Zoom a lo filtrado**: la proyección se re-`fitea` al bounding box de los
+  mercados visibles (`computeProjection` en `americas-map.tsx`): silueta real
+  del país para países normales, centroide + span fijo para los enormes (US/
+  Canadá con Alaska) o agrupaciones. Sin filtro encuadra todo el footprint.
+  Cada país lleva su `feature` (nombre en world-atlas) en `GEO`.
+- **Groenlandia excluida** (hasta Canadá alcanza; no tira el encuadre al NE).
+- Sin cambios de schema, sin deps nuevas. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Análisis por publisher × mercado con mapa de América
 
 - **Nueva vista** que mapea las activaciones (placements de planes aprobados)

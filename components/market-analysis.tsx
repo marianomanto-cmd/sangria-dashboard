@@ -65,6 +65,8 @@ export function MarketAnalysis({
           count: m.count,
           lat: geo.lat,
           lng: geo.lng,
+          featureName: geo.feature,
+          kind: geo.kind,
         });
       } else {
         un.push(m);
