@@ -631,6 +631,39 @@ export async function markBillingInvoiced(input: {
   return persistTransition(before, update, input.billingId);
 }
 
+// Quita el número de factura de un billing y lo devuelve a 'sent' (reportado).
+// Un billing 'invoiced' sin número sería inconsistente — la factura es,
+// justamente, el número —, así que quitarlo revierte el estado. Sólo se permite
+// desde 'invoiced': si está 'paid' hay que revertir el pago primero (botón
+// "Revertir a facturado"). El dueDate se conserva como historial.
+export async function clearBillingInvoiceNumber(input: {
+  billingId: string;
+}): Promise<Result> {
+  const [before] = await db
+    .select()
+    .from(planBillings)
+    .where(eq(planBillings.id, input.billingId))
+    .limit(1);
+  if (!before) return { ok: false, error: "Billing no encontrado" };
+
+  if (before.status !== "invoiced") {
+    return {
+      ok: false,
+      error:
+        before.status === "paid"
+          ? "El billing está pagado. Revertí el pago a 'facturado' antes de quitar el número."
+          : `No se puede quitar el número de factura desde el estado '${before.status}'.`,
+    };
+  }
+
+  const update: Record<string, unknown> = {
+    invoiceNumber: null,
+    status: "sent",
+  };
+
+  return persistTransition(before, update, input.billingId);
+}
+
 async function persistTransition(
   before: typeof planBillings.$inferSelect,
   update: Record<string, unknown>,
