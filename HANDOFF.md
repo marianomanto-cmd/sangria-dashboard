@@ -2,6 +2,24 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Reporte PDF de billing: excluir publishers que paga el cliente
+
+- **Pedido**: los publishers que el cliente paga directo (`agency_pays=false`)
+  no deben facturarse ni reportarse. Su inversión de medios **no** debe estar
+  en el PDF de finanzas. (Sí se siguen cargando en el billing: su consumo
+  alimenta el cálculo del management fee, que el cliente sí paga.)
+- **Fix** en `app/api/billings/[id]/report.pdf/route.ts`: el filtro de líneas
+  de "Media Placement" pasó de `p.isBillable && amount > 0` a
+  `p.agencyPays && p.isBillable && amount > 0`. `agencyPays` es la verdad
+  estructural (override del bloque ?? default del publisher); con esto un
+  publisher client-pays nunca entra al reporte, aunque su `isBillable` haya
+  quedado en `true` (default del insert path o checkbox tildado por error).
+  Se conserva `isBillable` para poder marcar no-facturable un publisher de
+  agencia en un mes puntual.
+- **No se tocó** el cálculo del management fee ni el editor de billing: los
+  publishers client-pays siguen visibles y cargables en la vista mensual.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Actualización completa de la documentación
 
 - **README.md — Estructura del proyecto**: actualizados los bloques de `app/(app)/`, `components/` y `lib/` con todos los archivos nuevos de las sesiones de junio:
@@ -1975,7 +1993,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` en `app/api/plans/[planId]/export.xlsx/route.ts` (días-overlap inclusive). |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert) y `markBillingInvoiced` (sent → invoiced con número de factura). Labels: `STATUS_STYLE_BY_LANG` en `app/(app)/billing/page.tsx` y `BillingStatusPillInline` en el editor. |
-| Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers facturables con consumo > 0) o `Services` (fees con imputación > 0). |
+| Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns + slider). Las opciones vienen de `getBillingFilterOptions` en `db/queries/billing.ts`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |

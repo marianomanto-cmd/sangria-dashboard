@@ -400,6 +400,15 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - `plan_billing_fees` es la imputación manual de cada fee del plan en cada
   mes (la suma de imputaciones a lo largo del tiempo no debe pasar el total
   del fee — validado en server actions).
+- **Publishers que paga el cliente directo (`agency_pays=false`)**: se cargan
+  igual en el billing porque su consumo alimenta el cálculo del management fee
+  (que el cliente sí paga), pero su inversión de medios **no se factura ni se
+  reporta**. El PDF de finanzas (`app/api/billings/[id]/report.pdf/route.ts`)
+  filtra las líneas de "Media Placement" por `agencyPays && isBillable`, así
+  que los publishers client-pays nunca aparecen en el reporte. `agencyPays` es
+  la verdad estructural (override del bloque ?? default del publisher);
+  `isBillable` es el flag editable del mes que además permite marcar
+  no-facturable un publisher de agencia en un mes puntual.
 
 ### Campaign Tracker: consumo real vs goal
 - `campaign_placement_actuals (placement_id, metric_key, value_actual,

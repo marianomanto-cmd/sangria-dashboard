@@ -179,9 +179,15 @@ export async function GET(
   let rowIdx = 1;
   let alt = false;
 
-  // Publishers facturables con consumo > 0
+  // Solo van al reporte los publishers que la AGENCIA paga (agencyPays). Los
+  // que el cliente paga directo se cargan igual en el billing (su consumo
+  // alimenta el cálculo del management fee, que el cliente sí paga), pero su
+  // inversión de medios NO se factura ni se reporta: se excluyen del PDF.
+  // `agencyPays` es la verdad estructural (override del bloque ?? default del
+  // publisher); `isBillable` es el flag editable del mes y se respeta además
+  // para poder marcar no-facturable un publisher de agencia en un mes puntual.
   const billablePublishers = detail.publisherLines.filter(
-    (p) => p.isBillable && p.amountThisMonthUsd > 0,
+    (p) => p.agencyPays && p.isBillable && p.amountThisMonthUsd > 0,
   );
   for (const p of billablePublishers) {
     const description = `${detail.project.code} - ${detail.project.name} - ${p.publisherName} - ${formatMonth(detail.billing.month, headerLang)}`;
