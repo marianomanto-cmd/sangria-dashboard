@@ -1,6 +1,7 @@
 import { PageShell } from "@/components/page-shell";
 import { ReportingCalendarClient } from "@/components/reporting-calendar-client";
 import { getReportingCalendar, getSentReports } from "@/db/queries/reports";
+import { getClientOptions } from "@/db/queries/clients";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/i18n";
 
@@ -13,9 +14,10 @@ export default async function ReportingCalendarPage({ searchParams }: Props) {
   const client = await resolveClientFromSearchParams(sp);
   const lang: Language = client?.language ?? DEFAULT_LANGUAGE;
 
-  const [data, sent] = await Promise.all([
+  const [data, sent, clientOptions] = await Promise.all([
     getReportingCalendar(client?.id ?? null),
     getSentReports(client?.id ?? null),
+    getClientOptions(),
   ]);
 
   return (
@@ -36,6 +38,7 @@ export default async function ReportingCalendarPage({ searchParams }: Props) {
         currentClient={
           client ? { id: client.id, name: client.name } : null
         }
+        clientOptions={clientOptions}
       />
     </PageShell>
   );
