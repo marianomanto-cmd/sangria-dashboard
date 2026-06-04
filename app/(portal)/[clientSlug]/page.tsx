@@ -99,7 +99,10 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
   const opts = await getPortalFilterOptions(client.id);
 
   return (
-    <div className="min-h-screen bg-paper">
+    // Contenedor de scroll propio del portal con la barra oculta (el cliente
+    // pidió no ver la scrollbar). Sigue scrolleable con rueda/trackpad/drag.
+    // Scoped al portal: no afecta la app interna.
+    <div className="h-[100dvh] overflow-y-auto overflow-x-hidden bg-paper [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
       {/* Header */}
       <header className="border-b border-line bg-white dark:bg-paper-2">
         <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
