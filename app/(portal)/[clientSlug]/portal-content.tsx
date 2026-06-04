@@ -833,12 +833,13 @@ export async function AnalysisSection({
   lang: Language;
   analysis: AnalysisParams;
 }) {
+  const list = (v: string) => (v ? v.split(",").filter(Boolean) : null);
   const [data, options] = await Promise.all([
     getMarketActivations({
       clientId,
-      publisherId: analysis.pub || null,
-      marketId: analysis.mkt || null,
-      budgetOriginId: analysis.bo || null,
+      publisherIds: list(analysis.pub),
+      marketIds: list(analysis.mkt),
+      budgetOriginIds: list(analysis.bo),
       fromMonth: analysis.from || null,
       toMonth: analysis.to || null,
     }),

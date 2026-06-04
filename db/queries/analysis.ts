@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, isNull, lte, type SQL } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -42,9 +42,9 @@ export type MarketAgg = {
 
 export type AnalysisFilters = {
   clientId: string;
-  publisherId?: string | null;
-  marketId?: string | null;
-  budgetOriginId?: string | null;
+  publisherIds?: string[] | null;
+  marketIds?: string[] | null;
+  budgetOriginIds?: string[] | null;
   fromMonth?: string | null; // YYYY-MM
   toMonth?: string | null; // YYYY-MM
 };
@@ -57,12 +57,12 @@ export async function getMarketActivations(
     isNull(mediaPlans.deletedAt),
     eq(mediaPlans.status, "approved"),
   ];
-  if (filters.publisherId)
-    conds.push(eq(mediaPlanPublishers.publisherId, filters.publisherId));
-  if (filters.marketId)
-    conds.push(eq(mediaPlanPlacements.marketId, filters.marketId));
-  if (filters.budgetOriginId)
-    conds.push(eq(projects.budgetOriginId, filters.budgetOriginId));
+  if (filters.publisherIds?.length)
+    conds.push(inArray(mediaPlanPublishers.publisherId, filters.publisherIds));
+  if (filters.marketIds?.length)
+    conds.push(inArray(mediaPlanPlacements.marketId, filters.marketIds));
+  if (filters.budgetOriginIds?.length)
+    conds.push(inArray(projects.budgetOriginId, filters.budgetOriginIds));
   if (filters.fromMonth)
     conds.push(gte(mediaPlanPlacements.endDate, `${filters.fromMonth}-01`));
   if (filters.toMonth)

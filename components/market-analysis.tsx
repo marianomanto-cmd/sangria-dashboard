@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { X } from "lucide-react";
+import { Check, ChevronDown, X } from "lucide-react";
 import { AmericasMap, type MapPoint } from "@/components/americas-map";
 import type {
   ActivationRow,
@@ -31,6 +31,11 @@ export function MarketAnalysis({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const cur = (k: string) => searchParams?.get(k) ?? "";
+  // Multi-select: los params pub/mkt/bo guardan listas separadas por coma.
+  const curList = (k: string) => {
+    const v = searchParams?.get(k) ?? "";
+    return v ? v.split(",").filter(Boolean) : [];
+  };
 
   const update = (k: string, v: string) => {
     const next = new URLSearchParams(searchParams?.toString() ?? "");
@@ -40,6 +45,14 @@ export function MarketAnalysis({
     router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
+  const setList = (k: string, arr: string[]) =>
+    update(k, arr.join(","));
+
+  const toggleList = (k: string, id: string) => {
+    const arr = curList(k);
+    setList(k, arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
+  };
+
   const reset = () => {
     const next = new URLSearchParams(searchParams?.toString() ?? "");
     for (const k of ["pub", "mkt", "bo", "from", "to"]) next.delete(k);
@@ -47,9 +60,13 @@ export function MarketAnalysis({
     router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
-  const selectedMkt = cur("mkt");
+  const mktList = curList("mkt");
   const isFiltered =
-    !!cur("pub") || !!selectedMkt || !!cur("bo") || !!cur("from") || !!cur("to");
+    curList("pub").length > 0 ||
+    mktList.length > 0 ||
+    curList("bo").length > 0 ||
+    !!cur("from") ||
+    !!cur("to");
 
   // Mercados → puntos del mapa (los que geocodifican). Los que no, a una lista.
   const { points, unmapped } = useMemo(() => {
@@ -92,13 +109,13 @@ export function MarketAnalysis({
         {/* Filtros (columna izquierda, vertical) */}
         <div className="rounded-lg border border-line bg-white dark:bg-paper-2 p-4 space-y-3">
           <Field label="Publisher">
-            <Select value={cur("pub")} onChange={(v) => update("pub", v)} options={options.publishers} lang={lang} />
+            <MultiSelect values={curList("pub")} onChange={(a) => setList("pub", a)} options={options.publishers} lang={lang} />
           </Field>
           <Field label={lang === "es" ? "Mercado" : "Market"}>
-            <Select value={cur("mkt")} onChange={(v) => update("mkt", v)} options={options.markets} lang={lang} />
+            <MultiSelect values={mktList} onChange={(a) => setList("mkt", a)} options={options.markets} lang={lang} />
           </Field>
           <Field label="Budget Origin">
-            <Select value={cur("bo")} onChange={(v) => update("bo", v)} options={options.budgetOrigins} lang={lang} />
+            <MultiSelect values={curList("bo")} onChange={(a) => setList("bo", a)} options={options.budgetOrigins} lang={lang} />
           </Field>
           <Field label={lang === "es" ? "Desde" : "From"}>
             <input
@@ -139,8 +156,8 @@ export function MarketAnalysis({
           ) : (
             <AmericasMap
               points={points}
-              selectedId={selectedMkt || null}
-              onSelect={(id) => update("mkt", id ?? "")}
+              selectedIds={mktList}
+              onSelect={(id) => toggleList("mkt", id)}
               lang={lang}
             />
           )}
@@ -158,12 +175,12 @@ export function MarketAnalysis({
           ) : (
             <ul className="space-y-2.5">
               {markets.map((m) => {
-                const active = selectedMkt === m.marketId;
+                const active = mktList.includes(m.marketId);
                 return (
                   <li key={m.marketId}>
                     <button
                       type="button"
-                      onClick={() => update("mkt", active ? "" : m.marketId)}
+                      onClick={() => toggleList("mkt", m.marketId)}
                       className="w-full text-left group"
                     >
                       <div className="flex items-center justify-between gap-2 text-xs">
@@ -268,30 +285,94 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Select({
-  value,
+// Multi-select con popover de checkboxes (selección múltiple). URL-based vía el
+// onChange del parent (GET, portal-safe). Cierra al hacer click afuera.
+function MultiSelect({
+  values,
   onChange,
   options,
   lang,
 }: {
-  value: string;
-  onChange: (v: string) => void;
+  values: string[];
+  onChange: (next: string[]) => void;
   options: { id: string; name: string }[];
   lang: Language;
 }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const toggle = (id: string) =>
+    onChange(values.includes(id) ? values.filter((v) => v !== id) : [...values, id]);
+
+  const allLabel = lang === "es" ? "Todos" : "All";
+  const summary =
+    values.length === 0
+      ? allLabel
+      : values.length === 1
+        ? (options.find((o) => o.id === values[0])?.name ?? "1")
+        : `${values.length} ${lang === "es" ? "seleccionados" : "selected"}`;
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-    >
-      <option value="">{lang === "es" ? "Todos" : "All"}</option>
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {o.name}
-        </option>
-      ))}
-    </select>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-2 rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+      >
+        <span className={`truncate ${values.length ? "text-ink" : "text-muted"}`}>
+          {summary}
+        </span>
+        <ChevronDown size={14} className="text-muted shrink-0" />
+      </button>
+      {open && (
+        <div className="absolute z-30 mt-1 w-full max-h-64 overflow-auto rounded-md border border-line bg-white dark:bg-paper-2 shadow-lg py-1">
+          {options.length === 0 ? (
+            <p className="px-2.5 py-1.5 text-xs text-muted">
+              {lang === "es" ? "Sin opciones" : "No options"}
+            </p>
+          ) : (
+            options.map((o) => {
+              const checked = values.includes(o.id);
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => toggle(o.id)}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left text-sm hover:bg-paper-2"
+                >
+                  <span
+                    className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                      checked ? "bg-accent border-accent text-white" : "border-line"
+                    }`}
+                  >
+                    {checked && <Check size={11} strokeWidth={3} />}
+                  </span>
+                  <span className="truncate text-ink-2">{o.name}</span>
+                </button>
+              );
+            })
+          )}
+          {values.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange([])}
+              className="w-full border-t border-line-soft px-2.5 py-1.5 text-left text-xs text-muted hover:text-ink"
+            >
+              {lang === "es" ? "Limpiar" : "Clear"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
