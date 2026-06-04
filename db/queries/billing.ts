@@ -43,6 +43,7 @@ export type BillingsListFilters = {
   clientId?: string | null;
   budgetOriginId?: string | null;
   projectId?: string | null;
+  status?: (typeof planBillings.$inferSelect)["status"] | null;
   fromMonth?: string | null;  // YYYY-MM inclusive
   toMonth?: string | null;    // YYYY-MM inclusive
 };
@@ -55,6 +56,7 @@ export async function getBillingsList(
   if (filters.budgetOriginId)
     conds.push(eq(projects.budgetOriginId, filters.budgetOriginId));
   if (filters.projectId) conds.push(eq(projects.id, filters.projectId));
+  if (filters.status) conds.push(eq(planBillings.status, filters.status));
   if (filters.fromMonth) conds.push(gte(planBillings.month, filters.fromMonth));
   if (filters.toMonth) conds.push(lte(planBillings.month, filters.toMonth));
 

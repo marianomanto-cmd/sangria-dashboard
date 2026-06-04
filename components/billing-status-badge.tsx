@@ -33,6 +33,22 @@ const SIZES = {
   sm: "px-1.5 py-0.5 text-[10px]",
 } as const;
 
+// Orden canónico del lifecycle, para poblar dropdowns/filtros sin redefinir la
+// lista en cada lugar.
+export const BILLING_STATUSES: BillingStatus[] = [
+  "draft",
+  "ready",
+  "sent",
+  "invoiced",
+  "paid",
+];
+
+// Label lang-aware de un estado (mismo texto que el badge). Útil para filtros.
+export function billingStatusLabel(status: string, lang: Language = "es"): string {
+  const map = STYLES[lang] ?? STYLES.es;
+  return (map[status as BillingStatus] ?? map.draft).label;
+}
+
 export function BillingStatusBadge({
   status,
   lang = "es",
