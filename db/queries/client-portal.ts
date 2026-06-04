@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -143,22 +143,20 @@ export async function getPortalFilterOptions(
   return { budgetOrigins: origins, projects: projs, months };
 }
 
-// Gasto real (consumo) por publisher para un cliente — suma de
-// plan_billing_publishers.amount_real_usd a través de todos sus planes vivos.
+// Inversión por publisher para un cliente: planeado (media_plan_publishers,
+// planes no-draft) vs real (plan_billing_publishers). Dos agregaciones por
+// separado (para no caer en cartesian) mergeadas por nombre de publisher.
 // Alimenta el chart "Inversión por publisher" del Resumen del portal.
 export async function getClientSpendByPublisher(
   clientId: string,
-): Promise<{ name: string; value: number }[]> {
-  const rows = await db
+): Promise<{ name: string; planned: number; real: number }[]> {
+  const realRows = await db
     .select({
       name: publishers.name,
       value: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
     })
     .from(planBillingPublishers)
-    .innerJoin(
-      publishers,
-      eq(planBillingPublishers.publisherId, publishers.id),
-    )
+    .innerJoin(publishers, eq(planBillingPublishers.publisherId, publishers.id))
     .innerJoin(
       planBillings,
       eq(planBillingPublishers.planBillingId, planBillings.id),
@@ -169,10 +167,40 @@ export async function getClientSpendByPublisher(
     )
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(eq(projects.clientId, clientId))
-    .groupBy(publishers.name)
-    .orderBy(desc(sql`sum(${planBillingPublishers.amountRealUsd})`));
+    .groupBy(publishers.name);
 
-  return rows
-    .map((r) => ({ name: r.name, value: Number.parseFloat(r.value) }))
-    .filter((r) => r.value > 0);
+  const plannedRows = await db
+    .select({
+      name: publishers.name,
+      value: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+    })
+    .from(mediaPlanPublishers)
+    .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
+    .innerJoin(
+      mediaPlans,
+      and(
+        eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+        isNull(mediaPlans.deletedAt),
+        ne(mediaPlans.status, "draft"),
+      ),
+    )
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .where(eq(projects.clientId, clientId))
+    .groupBy(publishers.name);
+
+  const map = new Map<string, { name: string; planned: number; real: number }>();
+  for (const r of plannedRows) {
+    const v = Number.parseFloat(r.value);
+    map.set(r.name, { name: r.name, planned: v, real: 0 });
+  }
+  for (const r of realRows) {
+    const v = Number.parseFloat(r.value);
+    const e = map.get(r.name) ?? { name: r.name, planned: 0, real: 0 };
+    e.real = v;
+    map.set(r.name, e);
+  }
+
+  return Array.from(map.values())
+    .filter((r) => r.planned > 0 || r.real > 0)
+    .sort((a, b) => b.planned + b.real - (a.planned + a.real));
 }

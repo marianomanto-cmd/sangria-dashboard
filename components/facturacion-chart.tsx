@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -13,50 +12,7 @@ import {
 import { formatUsdCompact } from "@/lib/format";
 import { formatMonthShort, type Language, t } from "@/lib/i18n";
 import type { MonthlyTotal } from "@/db/queries/dashboard";
-
-// Recharts no acepta CSS vars en `fill`/`stroke` por su pipeline interno
-// (re-renderiza el SVG con strings literales). Por eso resolvemos los
-// tokens vía getComputedStyle y observamos cambios de la clase `dark` en
-// <html> para re-renderizar cuando cambia el tema.
-function useThemeColors() {
-  const [colors, setColors] = useState({
-    grid: "#e7e5e4",
-    axis: "#78716c",
-    projected: "#d6d3d1",
-    real: "#1c1917",
-    tooltipBorder: "#d6d3d1",
-    tooltipBg: "#ffffff",
-    tooltipText: "#1c1917",
-  });
-
-  useEffect(() => {
-    function read() {
-      const cs = getComputedStyle(document.documentElement);
-      const v = (n: string, f: string) => cs.getPropertyValue(n).trim() || f;
-      const isDark = document.documentElement.classList.contains("dark");
-      setColors({
-        grid: v("--color-line-soft", "#e7e5e4"),
-        axis: v("--color-muted", "#78716c"),
-        projected: v("--color-line", "#d6d3d1"),
-        real: isDark
-          ? v("--color-accent", "#d4658e")
-          : v("--color-ink", "#1c1917"),
-        tooltipBorder: v("--color-line", "#d6d3d1"),
-        tooltipBg: isDark ? v("--color-paper-2", "#1c1917") : "#ffffff",
-        tooltipText: v("--color-ink", "#1c1917"),
-      });
-    }
-    read();
-    const obs = new MutationObserver(read);
-    obs.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-    return () => obs.disconnect();
-  }, []);
-
-  return colors;
-}
+import { ChartGradient, tooltipStyle, useChartColors } from "@/components/chart-kit";
 
 export function FacturacionChart({
   data,
@@ -66,7 +22,7 @@ export function FacturacionChart({
   lang?: Language;
 }) {
   const fmt = (m: string) => formatMonthShort(m, lang);
-  const c = useThemeColors();
+  const c = useChartColors();
   return (
     <div className="rounded-lg border border-line bg-white dark:bg-paper-2 p-5">
       <div className="flex items-baseline justify-between mb-4">
@@ -102,7 +58,13 @@ export function FacturacionChart({
           margin={{ top: 4, right: 8, left: 0, bottom: 4 }}
           barCategoryGap="28%"
         >
-          <CartesianGrid stroke={c.grid} strokeDasharray="3 3" vertical={false} />
+          <ChartGradient id="fc-real" from={c.accent2} to={c.real} />
+          <CartesianGrid
+            stroke={c.grid}
+            strokeDasharray="2 4"
+            vertical={false}
+            opacity={0.6}
+          />
           <XAxis
             dataKey="month"
             tickFormatter={fmt}
@@ -120,32 +82,22 @@ export function FacturacionChart({
             style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}
           />
           <Tooltip
-            cursor={{ fill: c.grid, opacity: 0.3 }}
-            contentStyle={{
-              borderRadius: 8,
-              border: `1px solid ${c.tooltipBorder}`,
-              backgroundColor: c.tooltipBg,
-              color: c.tooltipText,
-              fontSize: 12,
-              fontFamily: "var(--font-sans)",
-            }}
+            cursor={{ fill: c.grid, opacity: 0.25 }}
+            contentStyle={tooltipStyle(c)}
             labelFormatter={(label) => fmt(String(label))}
-            formatter={(value, name) => [
-              formatUsdCompact(Number(value)),
-              name,
-            ]}
+            formatter={(value, name) => [formatUsdCompact(Number(value)), name]}
           />
           <Bar
             dataKey="projected"
             name={t("common.estimated", lang)}
             fill={c.projected}
-            radius={[2, 2, 0, 0]}
+            radius={[4, 4, 0, 0]}
           />
           <Bar
             dataKey="real"
             name={lang === "es" ? "Real" : "Real"}
-            fill={c.real}
-            radius={[2, 2, 0, 0]}
+            fill="url(#fc-real)"
+            radius={[4, 4, 0, 0]}
           />
         </BarChart>
       </ResponsiveContainer>

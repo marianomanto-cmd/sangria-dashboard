@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
+  Area,
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
+  ComposedChart,
+  Legend,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,75 +16,47 @@ import {
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { formatMonthShort, type Language } from "@/lib/i18n";
 import type { MonthlyTotal } from "@/db/queries/dashboard";
+import {
+  ChartGradient,
+  tooltipStyle,
+  useChartColors,
+} from "@/components/chart-kit";
 
-// Recharts no acepta CSS vars en fill/stroke (re-renderiza el SVG con strings
-// literales), así que resolvemos los tokens vía getComputedStyle y observamos
-// la clase `dark` del <html> para re-pintar al cambiar el tema. Mismo patrón
-// que components/facturacion-chart.tsx.
-function useThemeColors() {
-  const [c, setC] = useState({
-    grid: "#e7e5e4",
-    axis: "#78716c",
-    accent: "#7a1f3d",
-    accent2: "#a8345f",
-    ink: "#1c1917",
-    line: "#d6d3d1",
-    tooltipBorder: "#d6d3d1",
-    tooltipBg: "#ffffff",
-    tooltipText: "#1c1917",
-  });
-  useEffect(() => {
-    function read() {
-      const cs = getComputedStyle(document.documentElement);
-      const v = (n: string, f: string) => cs.getPropertyValue(n).trim() || f;
-      const isDark = document.documentElement.classList.contains("dark");
-      setC({
-        grid: v("--color-line-soft", "#e7e5e4"),
-        axis: v("--color-muted", "#78716c"),
-        accent: v("--color-accent", "#7a1f3d"),
-        accent2: v("--color-accent-2", "#a8345f"),
-        ink: isDark ? v("--color-accent", "#d4658e") : v("--color-ink", "#1c1917"),
-        line: v("--color-line", "#d6d3d1"),
-        tooltipBorder: v("--color-line", "#d6d3d1"),
-        tooltipBg: isDark ? v("--color-paper-2", "#1c1917") : "#ffffff",
-        tooltipText: v("--color-ink", "#1c1917"),
-      });
-    }
-    read();
-    const obs = new MutationObserver(read);
-    obs.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class"],
-    });
-    return () => obs.disconnect();
-  }, []);
-  return c;
-}
-
-// ─── Inversión por publisher (barras horizontales, top N) ─────────────────────
+// ─── Inversión por publisher (barras horizontales: planeado vs real) ──────────
 
 export function SpendByPublisherChart({
   data,
   lang = "es",
   topN = 8,
 }: {
-  data: { name: string; value: number }[];
+  data: { name: string; planned: number; real: number }[];
   lang?: Language;
   topN?: number;
 }) {
-  const c = useThemeColors();
+  const c = useChartColors();
 
-  // Top N + agrupamos el resto en "Otros" para no estirar el eje.
-  const sorted = [...data].sort((a, b) => b.value - a.value);
+  // Top N por (planeado+real) + el resto agrupado en "Otros".
+  const sorted = [...data].sort(
+    (a, b) => b.planned + b.real - (a.planned + a.real),
+  );
   const head = sorted.slice(0, topN);
   const rest = sorted.slice(topN);
-  const restSum = rest.reduce((s, r) => s + r.value, 0);
+  const restPlanned = rest.reduce((s, r) => s + r.planned, 0);
+  const restReal = rest.reduce((s, r) => s + r.real, 0);
   const rows =
-    restSum > 0
-      ? [...head, { name: lang === "es" ? "Otros" : "Other", value: restSum }]
+    restPlanned > 0 || restReal > 0
+      ? [
+          ...head,
+          {
+            name: lang === "es" ? "Otros" : "Other",
+            planned: restPlanned,
+            real: restReal,
+          },
+        ]
       : head;
 
-  const palette = [c.accent, c.accent2];
+  const plannedLabel = lang === "es" ? "Planeado" : "Planned";
+  const realLabel = lang === "es" ? "Real" : "Real";
 
   return (
     <div className="rounded-lg border border-line bg-white dark:bg-paper-2 p-5">
@@ -92,21 +64,28 @@ export function SpendByPublisherChart({
         {lang === "es" ? "Inversión por publisher" : "Spend by publisher"}
       </h2>
       <p className="text-[11px] uppercase tracking-[0.08em] text-muted mb-4">
-        {lang === "es" ? "consumo real acumulado" : "accumulated real spend"}
+        {lang === "es" ? "planeado vs real" : "planned vs real"}
       </p>
       {rows.length === 0 ? (
         <p className="text-sm text-muted py-8 text-center">
-          {lang === "es" ? "Sin consumo cargado aún." : "No spend loaded yet."}
+          {lang === "es" ? "Sin datos aún." : "No data yet."}
         </p>
       ) : (
-        <ResponsiveContainer width="100%" height={Math.max(160, rows.length * 34)}>
+        <ResponsiveContainer width="100%" height={Math.max(180, rows.length * 46)}>
           <BarChart
             data={rows}
             layout="vertical"
             margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
-            barCategoryGap="22%"
+            barCategoryGap="26%"
+            barGap={2}
           >
-            <CartesianGrid stroke={c.grid} strokeDasharray="3 3" horizontal={false} />
+            <ChartGradient
+              id="pub-real"
+              from={c.accent}
+              to={c.accent2}
+              direction="horizontal"
+            />
+            <CartesianGrid stroke={c.grid} strokeDasharray="2 4" horizontal={false} opacity={0.6} />
             <XAxis
               type="number"
               tickFormatter={formatUsdCompact}
@@ -125,24 +104,17 @@ export function SpendByPublisherChart({
               style={{ fontSize: 11, fontFamily: "var(--font-sans)" }}
             />
             <Tooltip
-              cursor={{ fill: c.grid, opacity: 0.3 }}
-              contentStyle={{
-                borderRadius: 8,
-                border: `1px solid ${c.tooltipBorder}`,
-                backgroundColor: c.tooltipBg,
-                color: c.tooltipText,
-                fontSize: 12,
-              }}
-              formatter={(value) => [
-                formatUsd(Number(value)),
-                lang === "es" ? "Inversión" : "Spend",
-              ]}
+              cursor={{ fill: c.grid, opacity: 0.25 }}
+              contentStyle={tooltipStyle(c)}
+              formatter={(value, name) => [formatUsd(Number(value)), String(name)]}
             />
-            <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-              {rows.map((_, i) => (
-                <Cell key={i} fill={palette[i % palette.length]} />
-              ))}
-            </Bar>
+            <Legend
+              wrapperStyle={{ fontSize: 11, paddingTop: 6 }}
+              iconType="circle"
+              iconSize={8}
+            />
+            <Bar dataKey="planned" name={plannedLabel} fill={c.projected} radius={[0, 4, 4, 0]} />
+            <Bar dataKey="real" name={realLabel} fill="url(#pub-real)" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       )}
@@ -159,7 +131,7 @@ export function CumulativeBillingChart({
   monthly: MonthlyTotal[];
   lang?: Language;
 }) {
-  const c = useThemeColors();
+  const c = useChartColors();
   const fmt = (m: string) => formatMonthShort(m, lang);
 
   // Acumulado corrido de real y proyectado sobre los meses ordenados.
@@ -195,7 +167,7 @@ export function CumulativeBillingChart({
             {lang === "es" ? "Estimado" : "Estimate"}
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: c.ink }} />
+            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: c.accent }} />
             {lang === "es" ? "Facturado" : "Invoiced"}
           </span>
         </div>
@@ -206,8 +178,15 @@ export function CumulativeBillingChart({
         </p>
       ) : (
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-            <CartesianGrid stroke={c.grid} strokeDasharray="3 3" vertical={false} />
+          <ComposedChart data={data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+            <ChartGradient
+              id="cum-real"
+              from={c.accent}
+              to={c.accent}
+              fromOpacity={0.22}
+              toOpacity={0.01}
+            />
+            <CartesianGrid stroke={c.grid} strokeDasharray="2 4" vertical={false} opacity={0.6} />
             <XAxis
               dataKey="month"
               tickFormatter={fmt}
@@ -225,13 +204,7 @@ export function CumulativeBillingChart({
               style={{ fontSize: 11, fontFamily: "var(--font-mono)" }}
             />
             <Tooltip
-              contentStyle={{
-                borderRadius: 8,
-                border: `1px solid ${c.tooltipBorder}`,
-                backgroundColor: c.tooltipBg,
-                color: c.tooltipText,
-                fontSize: 12,
-              }}
+              contentStyle={tooltipStyle(c)}
               labelFormatter={(m) => fmt(String(m))}
               formatter={(value, name) => [
                 formatUsd(Number(value)),
@@ -247,19 +220,22 @@ export function CumulativeBillingChart({
             <Line
               type="monotone"
               dataKey="projected"
+              name="projected"
               stroke={c.line}
               strokeWidth={2}
               strokeDasharray="5 4"
               dot={false}
             />
-            <Line
+            <Area
               type="monotone"
               dataKey="real"
-              stroke={c.ink}
+              name="real"
+              stroke={c.accent}
               strokeWidth={2.5}
+              fill="url(#cum-real)"
               dot={false}
             />
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       )}
     </div>
