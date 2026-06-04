@@ -591,16 +591,22 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `components/market-analysis.tsx` con datos de `getMarketActivations` +
   `getAnalysisFilterOptions` (`db/queries/analysis.ts`).
 - **Mapa** (`components/americas-map.tsx`): SVG propio con **d3-geo** (no
-  react-simple-maps, que no soporta React 19). La topología sale de
-  `world-atlas/countries-110m.json` (bundleada), se filtra al hemisferio
-  occidental y se proyecta con `geoMercator().fitSize(...)`; nosotros dibujamos
-  los paths + las burbujas (gradiente de marca, glow y anillo de pulso animado
-  con SMIL). Dark-aware vía `useChartColors` del chart-kit.
-- **Geocoding de mercados**: los `markets` son nombres/slugs sin coordenadas.
-  `lib/market-geo.ts` (`resolveMarketGeo`) mapea los conocidos (países LATAM +
-  agrupaciones como `centroamerica`/`latam`) a un centroide. Los que no
-  matchean se listan aparte ("Sin ubicación en el mapa"), no se fuerzan. **Para
-  sumar un mercado nuevo, agregá su centroide a `GEO` en `lib/market-geo.ts`.**
+  react-simple-maps, que no soporta React 19). Topología
+  `world-atlas/countries-110m.json` (bundleada), filtrada al hemisferio
+  occidental **hasta Canadá** (se excluye Groenlandia). Dibujamos los paths +
+  las burbujas (gradiente de marca, glow y anillo de pulso animado con SMIL),
+  dark-aware vía `useChartColors`. **Zoom a lo filtrado**: la proyección se
+  re-`fitea` al bounding box de los mercados visibles — silueta real del país
+  para países normales, centroide + span fijo para los enormes (US/Canadá, que
+  con Alaska distorsionan) o agrupaciones. Sin filtro encuadra todo el footprint.
+- **Geocoding de mercados (todo en la UI, sin tocar la DB)**: los `markets` son
+  nombres/slugs libres sin coordenadas. `lib/market-geo.ts` (`resolveMarketGeo`)
+  resuelve por (1) match exacto normalizado y (2) match por **token** — una
+  clave conocida que aparece como palabra dentro del nombre, así
+  "Estados Unidos - Varios" → `estados-unidos`. Cubre países LATAM + agrupaciones
+  (`centroamerica`/`latam`/…). Los no reconocidos se listan aparte ("Sin
+  ubicación en el mapa"). **Para sumar/ajustar un mercado, editá `GEO` en
+  `lib/market-geo.ts`** (centroide + `feature` = nombre del país en world-atlas).
 - Sin cambios de schema. Deps nuevas: `d3-geo`, `d3-scale`, `topojson-client`,
   `world-atlas`. **No requiere acción en prod.**
 
