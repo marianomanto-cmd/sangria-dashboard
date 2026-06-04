@@ -8,8 +8,10 @@ import type { SimulatorCatalogs } from "@/db/queries/simulator";
 // Server Actions, a diferencia del simulador interno). Params: bp/bm/bcm/bfrom/bto.
 export function PortalBenchmarksFilters({
   catalogs,
+  trailing,
 }: {
   catalogs: SimulatorCatalogs;
+  trailing?: React.ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -56,16 +58,19 @@ export function PortalBenchmarksFilters({
       />
       <Dt label="Desde" value={cur("bfrom")} onChange={(v) => update("bfrom", v)} />
       <Dt label="Hasta" value={cur("bto")} onChange={(v) => update("bto", v)} />
-      {filtered && (
-        <button
-          type="button"
-          onClick={reset}
-          className="inline-flex items-center justify-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs text-muted hover:text-ink h-fit"
-        >
-          <X size={12} />
-          Limpiar
-        </button>
-      )}
+      <div className="flex items-end gap-2 flex-wrap">
+        {trailing}
+        {filtered && (
+          <button
+            type="button"
+            onClick={reset}
+            className="inline-flex items-center justify-center gap-1 rounded-md border border-line px-2.5 py-1.5 text-xs text-muted hover:text-ink h-fit"
+          >
+            <X size={12} />
+            Limpiar
+          </button>
+        )}
+      </div>
     </div>
   );
 }

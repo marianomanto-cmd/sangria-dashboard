@@ -682,23 +682,27 @@ export async function BenchmarksSection({
 
   return (
     <div>
-      <div className="flex justify-end gap-2 mb-3">
-        <a
-          href={exportHref("xlsx")}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-ink-2 hover:text-accent hover:border-accent transition-colors"
-        >
-          <FileSpreadsheet size={14} />
-          Excel
-        </a>
-        <a
-          href={exportHref("pdf")}
-          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-ink-2 hover:text-accent hover:border-accent transition-colors"
-        >
-          <Download size={14} />
-          PDF
-        </a>
-      </div>
-      <PortalBenchmarksFilters catalogs={catalogs} />
+      <PortalBenchmarksFilters
+        catalogs={catalogs}
+        trailing={
+          <>
+            <a
+              href={exportHref("xlsx")}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-xs text-ink-2 hover:text-accent hover:border-accent transition-colors h-fit"
+            >
+              <FileSpreadsheet size={13} />
+              Excel
+            </a>
+            <a
+              href={exportHref("pdf")}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-xs text-ink-2 hover:text-accent hover:border-accent transition-colors h-fit"
+            >
+              <Download size={13} />
+              PDF
+            </a>
+          </>
+        }
+      />
       {rows.length === 0 ? (
         <EmptyPortal
           text={
