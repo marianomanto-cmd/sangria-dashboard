@@ -2,6 +2,22 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Mapa de análisis: escala del recuadro + zoom con rueda
+
+- **Escala rota** (mapa chiquito en una caja ancha): la causa era el viewBox
+  portrait fijo dentro de una celda ancha → la proyección fiteaba por alto y
+  quedaba angosto/centrado. Ahora el recuadro se **dimensiona al aspect del
+  contenido** (`computeBBox` + `bboxAspect` en `americas-map.tsx`): se mide el
+  ancho disponible, se calcula el alto desde el aspect (cap `MAX_H`), y la
+  proyección se fitea a esos píxeles → el mapa **llena la caja**.
+- **Zoom con la rueda del mouse** + **pan arrastrando**: un `<g transform>`
+  aplica `scale/translate`; la rueda hace zoom hacia el cursor (clamp 1–8x),
+  arrastrar panea (clamp para no perder el mapa), botón de reset arriba a la
+  derecha. Listener `wheel` nativo non-passive para `preventDefault`. Las
+  burbujas mantienen tamaño constante (se separan al hacer zoom); el stroke de
+  países es `non-scaling`. El zoom se resetea al cambiar el filtro.
+- Sin cambios de schema, todo UI. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Mapa de análisis: match de mercados + zoom (todo UI)
 
 Ajustes al mapa, **sin tocar la DB** (todo en `lib/market-geo.ts` + el componente):
