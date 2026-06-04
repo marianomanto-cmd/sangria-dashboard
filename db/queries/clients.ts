@@ -39,3 +39,15 @@ export async function getClientsList(): Promise<ClientListRow[]> {
     activePipelineUsd: Number.parseFloat(r.activePipelineUsd),
   }));
 }
+
+// Lista liviana de clientes seleccionables (no archivados) para dropdowns —
+// ej. el selector de cliente al crear un reporte manual en el calendario.
+export async function getClientOptions(): Promise<
+  { id: string; name: string }[]
+> {
+  return db
+    .select({ id: clients.id, name: clients.name })
+    .from(clients)
+    .where(ne(clients.status, "archived"))
+    .orderBy(asc(clients.name));
+}

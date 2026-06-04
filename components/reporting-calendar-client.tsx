@@ -45,12 +45,14 @@ export function ReportingCalendarClient({
   sent,
   lang,
   currentClient,
+  clientOptions,
 }: {
   pending: CalendarReport[];
   inProgress: CalendarReport[];
   sent: SentReport[];
   lang: Language;
   currentClient: { id: string; name: string } | null;
+  clientOptions: { id: string; name: string }[];
 }) {
   const [dialog, setDialog] = useState<DialogState>({ kind: "closed" });
   const [pendingAction, startTransition] = useTransition();
@@ -152,23 +154,24 @@ export function ReportingCalendarClient({
   };
 
   const submitCreateManual = (input: {
+    clientId: string;
     name: string;
     description: string;
     deliveryDate: string;
   }) => {
     if (dialog.kind !== "createManual") return;
-    if (!currentClient) {
+    if (!input.clientId) {
       setError(
         lang === "es"
-          ? "Elegí un cliente en el topbar antes de crear un reporte manual."
-          : "Pick a client in the topbar before creating a manual report.",
+          ? "Elegí un cliente para el reporte."
+          : "Pick a client for the report.",
       );
       return;
     }
     setError(null);
     startTransition(async () => {
       const res = await createManualReport({
-        clientId: currentClient.id,
+        clientId: input.clientId,
         name: input.name,
         description: input.description || null,
         deliveryDate: input.deliveryDate,
@@ -218,13 +221,13 @@ export function ReportingCalendarClient({
         )}
         <Button
           onClick={openCreateManual}
-          disabled={!currentClient}
+          disabled={clientOptions.length === 0}
           title={
-            currentClient
+            clientOptions.length > 0
               ? undefined
               : lang === "es"
-                ? "Elegí un cliente en el topbar"
-                : "Pick a client in the topbar"
+                ? "No hay clientes activos"
+                : "No active clients"
           }
         >
           <Plus size={14} strokeWidth={2.5} />
@@ -440,10 +443,11 @@ export function ReportingCalendarClient({
       )}
 
       {/* Dialog: crear reporte manual */}
-      {dialog.kind === "createManual" && currentClient && (
+      {dialog.kind === "createManual" && (
         <Modal onClose={close}>
           <CreateManualReportForm
-            clientName={currentClient.name}
+            clientOptions={clientOptions}
+            defaultClientId={currentClient?.id ?? ""}
             lang={lang}
             pending={pendingAction}
             error={error}
@@ -732,29 +736,35 @@ function SentReportsSection({
 }
 
 function CreateManualReportForm({
-  clientName,
+  clientOptions,
+  defaultClientId,
   lang,
   pending,
   error,
   onCancel,
   onSubmit,
 }: {
-  clientName: string;
+  clientOptions: { id: string; name: string }[];
+  defaultClientId: string;
   lang: Language;
   pending: boolean;
   error: string | null;
   onCancel: () => void;
   onSubmit: (input: {
+    clientId: string;
     name: string;
     description: string;
     deliveryDate: string;
   }) => void;
 }) {
+  const [clientId, setClientId] = useState<string>(
+    defaultClientId || (clientOptions.length === 1 ? clientOptions[0].id : ""),
+  );
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [deliveryDate, setDeliveryDate] = useState<string>(defaultDate());
 
-  const canSubmit = name.trim().length > 0 && !!deliveryDate;
+  const canSubmit = !!clientId && name.trim().length > 0 && !!deliveryDate;
 
   return (
     <form
@@ -762,13 +772,38 @@ function CreateManualReportForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!canSubmit) return;
-        onSubmit({ name: name.trim(), description: description.trim(), deliveryDate });
+        onSubmit({
+          clientId,
+          name: name.trim(),
+          description: description.trim(),
+          deliveryDate,
+        });
       }}
     >
       <h3 className="text-base font-semibold">
         {lang === "es" ? "Crear reporte manual" : "Create manual report"}
       </h3>
-      <p className="text-sm text-muted">{clientName}</p>
+
+      <label className="block">
+        <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
+          {lang === "es" ? "Cliente" : "Client"}
+        </span>
+        <select
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          required
+          className="mt-1 block w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        >
+          <option value="" disabled>
+            {lang === "es" ? "Elegí un cliente…" : "Pick a client…"}
+          </option>
+          {clientOptions.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <label className="block">
         <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">

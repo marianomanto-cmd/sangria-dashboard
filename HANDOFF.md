@@ -2,6 +2,19 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Fix: crear reporte manual sin depender del filtro global
+
+- **Bug**: en `/reportes/calendario` el botón "Crear reporte" estaba griseado
+  cuando no había un cliente seleccionado en el filtro global del topbar — no se
+  podía crear un reporte manual sin antes elegir cliente arriba.
+- **Fix**: el cliente ahora se elige **dentro del modal** de creación. Nueva
+  query liviana `getClientOptions()` (`db/queries/clients.ts`, `{id,name}` de
+  clientes no archivados) que la page pasa al `ReportingCalendarClient`. El
+  `CreateManualReportForm` agrega un `<select>` de cliente (preseleccionado con
+  el `?client=` global si lo hay). El botón sólo se deshabilita si no existe
+  ningún cliente activo; `submitCreateManual` usa el `clientId` del form.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — /billing: filtro por estado
 
 - Se agregó un dropdown **Estado** a los filtros de `/billing`
@@ -275,9 +288,12 @@ gaps transversales:
 > nueva.
 
 - Botón **"Crear reporte"** en `/reportes/calendario` (esquina sup. derecha,
-  al lado del filtro de Budget Origin). Abre un modal con **nombre,
-  descripción, fecha de entrega**. Requiere que haya un cliente seleccionado
-  en el filtro global del topbar — sino el botón queda deshabilitado.
+  al lado del filtro de Budget Origin). Abre un modal con **cliente, nombre,
+  descripción, fecha de entrega**. El selector de cliente vive en el modal
+  (poblado por `getClientOptions`), así que NO depende del filtro global del
+  topbar: si hay un cliente en `?client=` viene preseleccionado, sino se elige
+  ahí. El botón sólo se deshabilita si no hay ningún cliente activo.
+  (Antes exigía un cliente en el filtro global y el botón quedaba griseado.)
 - El reporte manual aparece en el Gantt como cualquiera de los otros, con
   badge "manual" y la descripción opcional inline. Se puede editar fecha,
   marcar entregado, asignar link al PPT y **eliminar** (los project_reports
