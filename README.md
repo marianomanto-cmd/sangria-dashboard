@@ -108,8 +108,9 @@ app/
       calendario/           # Reporting Calendar (closed → reportado, link PPT por reporte)
       simulador/            # Simulador de escenarios con benchmarks históricos
       generador/            # Generador de reportes históricos (Excel) con preview en vivo + column picker
+    analisis/               # Análisis publisher × mercado con mapa de América (filtro global de cliente)
   (portal)/                 # Portal de cliente PÚBLICO, read-only (fuera del gate de Supabase)
-    [clientSlug]/           # /<slug> — tabs Resumen/Billing/Estimación/Proyectos/Reportes/Benchmarks
+    [clientSlug]/           # /<slug> — tabs Resumen/Billing/Estimación/Proyectos/Análisis/Reportes/Benchmarks
       page.tsx              # gate por cookie → login o tabs; lookup por slug (404 si no existe/reservado)
       portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
       portal-login.tsx, portal-logout.tsx, portal-filters.tsx, portal-benchmarks-filters.tsx
@@ -119,6 +120,8 @@ app/
       export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). Acceso: sesión interna O cookie de portal del cliente dueño
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
+    benchmarks/
+      export/route.ts       # Excel/PDF de benchmarks filtrados (público + canAccessClientExport)
     reports/
       historical.xlsx/route.ts  # XLSX del generador (misma query que el preview, mismo resolveReportColumns)
   actions/                  # Server Actions (CRUD)
@@ -129,6 +132,10 @@ app/
 components/                 # UI compartida
   theme-toggle.tsx          # toggle claro/oscuro (clase .dark en <html>)
   skeleton.tsx              # placeholders shimmer para loading states; PageSkeleton para loading.tsx
+  chart-kit.tsx             # recharts compartido: useChartColors() (dark-aware) + tooltipStyle() + <ChartGradient>
+  portal-charts.tsx         # charts del Resumen del portal: SpendByPublisherChart (planeado vs real) + CumulativeBillingChart (área YTD)
+  americas-map.tsx          # mapa de mercados con Leaflet (tiles CARTO, burbujas por mercado, zoom/pan)
+  market-analysis.tsx       # vista de análisis publisher × mercado (filtros multi-select + mapa + ranking + tabla); /analisis y portal
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   pending-board.tsx         # dashboard: tablero de pendientes compacto + colapsable (persiste en localStorage)
@@ -157,6 +164,8 @@ db/
     clients.ts, billing.ts, billing-tracker.ts, audit-log.ts, budget-origins.ts,
     reports.ts, campaign-tracker.ts, plan-trash.ts (planes borrados),
     pendings.ts (tablero de pendientes del dashboard)
+    analysis.ts             # activaciones por mercado (mapa /analisis + portal): getMarketActivations + getAnalysisFilterOptions
+    client-portal.ts        # portal: getPortalClient, getPortalFilterOptions, getClientSpendByPublisher
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -177,6 +186,8 @@ lib/
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
   client-portal.ts          # portal público: password compartido, slugs reservados, helpers PUROS (edge-safe, los usa el proxy)
   client-portal.server.ts   # cookie de sesión del portal (set/clear/has) + canAccessClientExport
+  market-geo.ts             # geocoding de mercados → centroide (match exacto + por token); para el mapa de Análisis
+  project-period.ts         # período del proyecto (min/max de placements) + aviso "termina pronto" (≤7 días)
   supabase/
     server.ts               # cliente Supabase para Server Components / route handlers
     client.ts               # cliente Supabase para Client Components
