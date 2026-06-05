@@ -1,4 +1,4 @@
-# Handoff — jueves 04/jun/2026
+# Handoff — viernes 05/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
@@ -1669,6 +1669,29 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+e94ea38  Proyectos (lista): columna Período + aviso "termina pronto" (#132)
+3a26719  Proyectos: período inicio/fin + aviso "termina pronto" (#131)
+722181c  Benchmarks: botones Excel/PDF dentro del recuadro de filtros (#130)
+f8ee7fd  Benchmarks (portal): descargar Excel / PDF de lo filtrado (#129)
+4583b1e  Revert: volver al Gantt SVG (deshacer Mermaid) (#128)
+436314d  Reportes: Gantt con Mermaid.js (#127) — revertido por #128
+6e52838  Análisis: filtros multi-select (varios mercados / publishers) (#126)
+425616d  Mapa de análisis: reemplazar SVG d3-geo por Leaflet (#125)
+66d1418  Análisis: layout en 3 columnas + mapa menos angosto (#124)
+87d72e7  Portal: ocultar la barra de scroll (#123)
+20fb0cb  Mapa: arreglar escala del recuadro + zoom con rueda del mouse (#122)
+6c74272  Mapa de análisis: match de mercados por token + zoom a lo filtrado (#121)
+7fd0c5c  Análisis por publisher × mercado con mapa de América (interna + portal) (#120)
+f4800c4  Polish de charts: kit compartido, gradientes, área cumulativa, planeado vs real (#119)
+d32f82c  Portal Resumen: inversión por publisher + facturado acumulado vs estimado (#118)
+5cd986b  Portal: Gantt en Reportes, solo proyectos abiertos, ocultar scrollbar (#117)
+891205c  Portal de cliente público (read-only): billing, estimación, proyectos, reportes, benchmarks (#116)
+6894773  Fix: crear reporte manual sin depender del filtro global de cliente (#115)
+ef72348  /billing: agregar filtro por estado (#114)
+2d62b0e  Billing: editar o quitar el número de factura de un report (#113)
+1b0d84a  Billing PDF: usar el nombre del plan en la descripción de cada línea (#112)
+4f5e655  Fix: descartar borrador de MP reventaba con un market_id borrado (#111)
+5eb4d8d  Billing: excluir del reporte PDF los publishers que paga el cliente (#110)
 c1ba37c  docs: registrar PR #108 en Commits recientes (#109)
 a5cea8b  Unificar el estado de billing en un BillingStatusBadge compartido (#108)
 ac7b394  docs: registrar PR #106 en Commits recientes (#107)
