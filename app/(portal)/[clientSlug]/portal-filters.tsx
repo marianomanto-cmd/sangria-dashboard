@@ -4,7 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { X } from "lucide-react";
 import { formatMonth, type Language } from "@/lib/i18n";
 
-export type PortalFilterField = "origin" | "project" | "month";
+export type PortalFilterField = "pstatus" | "origin" | "project" | "month";
 
 // Filtros URL-based del portal (read-only). Preserva el ?tab= y solo toca los
 // params de filtro (bo / proj / month). Mismo patrón que los filtros internos
@@ -41,17 +41,33 @@ export function PortalFilters({
     next.delete("bo");
     next.delete("proj");
     next.delete("month");
+    next.delete("pstatus");
     const qs = next.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
   };
 
   const isFiltered =
+    (fields.includes("pstatus") && !!cur("pstatus")) ||
     (fields.includes("origin") && !!cur("bo")) ||
     (fields.includes("project") && !!cur("proj")) ||
     (fields.includes("month") && !!cur("month"));
 
   return (
     <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-4 py-3 mb-5 flex items-end gap-3 flex-wrap">
+      {fields.includes("pstatus") && (
+        <Field label={lang === "es" ? "Estado" : "Status"}>
+          <select
+            value={cur("pstatus") || "abiertos"}
+            onChange={(e) =>
+              update("pstatus", e.target.value === "abiertos" ? "" : e.target.value)
+            }
+            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[140px]"
+          >
+            <option value="abiertos">{lang === "es" ? "Abiertos" : "Open"}</option>
+            <option value="cerrados">{lang === "es" ? "Cerrados" : "Closed"}</option>
+          </select>
+        </Field>
+      )}
       {fields.includes("origin") && (
         <Field label="Budget Origin">
           <select

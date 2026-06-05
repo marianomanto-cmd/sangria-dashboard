@@ -45,6 +45,7 @@ export type PortalParams = {
   proj: string;
   month: string;
   plan: string;
+  pstatus: string; // "" (abiertos, default) | "cerrados"
 };
 
 // ─── Resumen ────────────────────────────────────────────────────────────────
@@ -417,8 +418,11 @@ export async function ProjectsSection({
     budgetOriginId: params.bo || null,
   });
 
-  // Solo proyectos ABIERTOS (planning/active/paused) — excluye closed/reportado.
-  const OPEN_STATUSES = new Set(["planning", "active", "paused"]);
+  // Filtro de estado: abiertos (default) o cerrados.
+  const STATUSES =
+    params.pstatus === "cerrados"
+      ? new Set(["closed", "reportado"])
+      : new Set(["planning", "active", "paused"]);
 
   // Filtro de mes: dejamos proyectos con al menos un plan cuyo período cubre
   // el mes; dentro de cada proyecto mostramos solo esos planes.
@@ -426,7 +430,7 @@ export async function ProjectsSection({
   // ni versiones viejas (draft/ready/archived son internos).
   const monthFilter = params.month || null;
   const visible = rows
-    .filter((proj) => OPEN_STATUSES.has(proj.status))
+    .filter((proj) => STATUSES.has(proj.status))
     .map((proj) => {
       let plans = proj.plans.filter((p) => p.status === "approved");
       if (monthFilter) {
