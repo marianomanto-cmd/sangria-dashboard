@@ -13,6 +13,11 @@ import type {
 } from "@/db/queries/dashboard";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
 import { formatDate, type Language } from "@/lib/i18n";
+import {
+  endingSoonDays,
+  endingSoonLabel,
+  projectPeriod,
+} from "@/lib/project-period";
 
 type Props = {
   rows: DashboardProjectRow[];
@@ -76,7 +81,7 @@ export function ProjectsTableExpandable({
   // siga siendo legible (scroll horizontal) en vez de comprimirse.
   const table = (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[820px] text-sm">
+      <table className="w-full min-w-[980px] text-sm">
         <thead className="bg-paper-2/60">
           <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
             <th className="w-8"></th>
@@ -87,6 +92,7 @@ export function ProjectsTableExpandable({
             <th className={`text-left font-medium ${headerPad}`}>Estado</th>
             <th className={`text-right font-medium ${headerPad}`}>Budget</th>
             <th className={`text-right font-medium ${headerPad}`}>Gastado</th>
+            <th className={`text-left font-medium ${headerPad}`}>Período</th>
             <th className={`text-left font-medium ${headerPad} w-[180px]`}>
               Avance
             </th>
@@ -168,7 +174,10 @@ function ProjectRowExpandable({
   const barWidth = Math.min(project.consumptionPct, 100);
   const hasPlans = project.plans.length > 0;
 
-  const colSpan = (showClient ? 8 : 7);
+  const period = projectPeriod(project.plans);
+  const endingDays = endingSoonDays(period.end);
+
+  const colSpan = (showClient ? 9 : 8);
 
   return (
     <>
@@ -223,6 +232,18 @@ function ProjectRowExpandable({
         </td>
         <td className={`${cellPad} text-right font-mono text-ink-2`}>
           {project.spentUsd > 0 ? formatUsd(project.spentUsd) : "—"}
+        </td>
+        <td className={`${cellPad} whitespace-nowrap`}>
+          <span className="font-mono text-xs text-ink-2">
+            {period.start ? formatDate(period.start, lang) : "—"}
+            <span className="text-line"> → </span>
+            {period.end ? formatDate(period.end, lang) : "—"}
+          </span>
+          {endingDays !== null && (
+            <div className="text-[11px] font-medium text-warn">
+              {endingSoonLabel(endingDays, lang)}
+            </div>
+          )}
         </td>
         <td className={cellPad}>
           <div className="flex items-center gap-3">
