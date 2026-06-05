@@ -558,7 +558,7 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   **Resumen** (KPIs + chart de inversión mensual + **inversión por publisher
   planeado vs real** + **facturado acumulado vs estimado YTD**), **Billing
   Tracker**, **Estimación**, **Proyectos**
-  (solo proyectos **abiertos** — planning/active/paused; descarga PDF/Excel de los
+  (filtro de estado **Abiertos/Cerrados**, default abiertos; descarga PDF/Excel de los
   planes **aprobados** + pacing por placement agrupado por publisher), **Análisis**
   (mapa de América con activaciones por mercado + tabla filtrable), **Reportes**
   (**Gantt** de entregas en curso, read-only + tabla de enviados con link al PPT) y
