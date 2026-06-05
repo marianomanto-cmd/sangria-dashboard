@@ -2,6 +2,19 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/jun/2026 — Proyectos: período + aviso "termina pronto"
+
+- **Fecha de inicio y fin del proyecto** en la vista interna (`/proyectos/[code]`,
+  ya estaba la Período) y en la **vista de cliente** (tab Proyectos del portal,
+  agregado al header de cada card). El fin se deriva del último placement de los
+  planes (no hay columna de fin en `projects`).
+- **Aviso a ≤7 días del fin**: leyenda en `text-warn` debajo de la fecha
+  ("Termina en N días" / "Termina hoy" / "mañana") cuando el proyecto está a 7
+  días o menos de terminar.
+- Helper compartido `lib/project-period.ts` (`projectPeriod`, `daysUntilEnd`,
+  `endingSoonDays`, `endingSoonLabel`). Sin cambios de schema, todo en la UI.
+  **No requiere acción en prod.**
+
 ### Cambios de la sesión 04/jun/2026 — Benchmarks (portal): descargar Excel / PDF
 
 - El tab **Benchmarks** del portal suma botones **Excel** y **PDF** que bajan lo

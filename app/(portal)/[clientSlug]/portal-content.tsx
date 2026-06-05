@@ -27,6 +27,11 @@ import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { ReportingGantt } from "@/components/reporting-gantt";
 import { formatUsd, formatUsdCompact, formatPct } from "@/lib/format";
 import { formatDate, formatMonth, type Language } from "@/lib/i18n";
+import {
+  endingSoonDays,
+  endingSoonLabel,
+  projectPeriod,
+} from "@/lib/project-period";
 import { PortalBenchmarksFilters } from "./portal-benchmarks-filters";
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -447,7 +452,10 @@ export async function ProjectsSection({
 
   return (
     <div className="flex flex-col gap-5">
-      {visible.map((proj) => (
+      {visible.map((proj) => {
+        const period = projectPeriod(proj.plans);
+        const endingDays = endingSoonDays(period.end);
+        return (
         <section
           key={proj.id}
           className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden"
@@ -456,6 +464,21 @@ export async function ProjectsSection({
             <div className="min-w-0">
               <p className="font-semibold text-ink truncate">{proj.name}</p>
               <p className="font-mono text-[11px] text-muted">{proj.code}</p>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-[10px] uppercase tracking-[0.08em] text-muted">
+                {lang === "es" ? "Período" : "Period"}
+              </p>
+              <p className="font-mono text-xs text-ink-2">
+                {period.start ? formatDate(period.start, lang) : "—"}
+                <span className="text-line"> → </span>
+                {period.end ? formatDate(period.end, lang) : "—"}
+              </p>
+              {endingDays !== null && (
+                <p className="text-[11px] font-medium text-warn mt-0.5">
+                  {endingSoonLabel(endingDays, lang)}
+                </p>
+              )}
             </div>
           </header>
           <div className="divide-y divide-line-soft">
@@ -526,7 +549,8 @@ export async function ProjectsSection({
             })}
           </div>
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }

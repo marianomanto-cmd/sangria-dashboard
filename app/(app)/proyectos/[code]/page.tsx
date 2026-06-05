@@ -12,6 +12,7 @@ import { ProjectEditPanel } from "./edit-panel";
 import { DeletePlanButton } from "@/components/delete-plan-button";
 import { buttonVariants } from "@/components/button";
 import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+import { endingSoonDays, endingSoonLabel, projectPeriod } from "@/lib/project-period";
 import {
   DEFAULT_LANGUAGE,
   formatDate,
@@ -34,6 +35,10 @@ export default async function ProjectDetailPage({ params }: Props) {
     .from(budgetOrigins)
     .where(eq(budgetOrigins.clientId, client.id))
     .orderBy(asc(budgetOrigins.name));
+
+  // Fin del proyecto = último placement de sus planes; aviso si termina ≤7 días.
+  const derivedEnd = projectPeriod(plans).end;
+  const endingDays = endingSoonDays(derivedEnd);
 
   const totalPlanned = plans.reduce((s, p) => s + p.totalUsd, 0);
   const totalSpent = plans.reduce((s, p) => s + p.spentRealUsd, 0);
@@ -122,16 +127,19 @@ export default async function ProjectDetailPage({ params }: Props) {
           <span className="font-mono text-sm text-ink-2">
             {formatDate(project.startDate, lang)}
             <span className="text-line"> → </span>
-            {(() => {
-              const ends = plans.map((p) => p.periodEnd).filter((d): d is string => !!d).sort();
-              return ends.length > 0 ? formatDate(ends[ends.length - 1], lang) : "—";
-            })()}
+            {derivedEnd ? formatDate(derivedEnd, lang) : "—"}
           </span>
-          <p className="text-[10px] text-muted mt-0.5">
-            {lang === "es"
-              ? "fin derivado del último placement"
-              : "end derived from the latest placement"}
-          </p>
+          {endingDays !== null ? (
+            <p className="text-[11px] font-medium text-warn mt-0.5">
+              {endingSoonLabel(endingDays, lang)}
+            </p>
+          ) : (
+            <p className="text-[10px] text-muted mt-0.5">
+              {lang === "es"
+                ? "fin derivado del último placement"
+                : "end derived from the latest placement"}
+            </p>
+          )}
         </Meta>
         <Meta label={lang === "es" ? "Total gross budget" : "Total gross budget"}>
           <span className="font-mono text-sm font-semibold tabular-nums text-ink">
