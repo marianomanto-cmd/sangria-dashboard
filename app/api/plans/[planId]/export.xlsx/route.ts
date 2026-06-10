@@ -10,7 +10,15 @@ import {
   sumDirectMetrics,
 } from "@/lib/plan-metrics";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
+import {
+  AUX_SHEET_DEFAULT_NAME,
+  AUX_SHEET_GRID_ROW_OFFSET,
+  auxCellNumber,
+  evalAuxFormula,
+  isAuxFormula,
+} from "@/lib/aux-sheet";
 import { canAccessClientExport } from "@/lib/client-portal.server";
+import type { PlanAuxSheet } from "@/db/queries/project-detail";
 
 // Paleta de marca — sincronizada con los design tokens de app/globals.css.
 const ACCENT = "FF7A1F3D";       // header principal, total media, títulos
@@ -539,6 +547,11 @@ export async function GET(
   // ─────────────────────────────────────────────────────────────────────────
   buildBudgetByMarketSheet(wb, detail, lang);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // TABS 3+ — Tabs auxiliares del plan (uno por sheet creado, en orden)
+  // ─────────────────────────────────────────────────────────────────────────
+  for (const aux of detail.auxSheets) buildAuxSheet(wb, detail, aux, lang);
+
   // ─── Output ─────────────────────────────────────────────────────────────
   const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 
@@ -703,4 +716,91 @@ function buildBudgetByMarketSheet(
     cell.border = allBorders;
   }
   footRow.height = 22;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tabs 3+ — Tabs auxiliares (grillas libres del planner). Mismo encabezado de
+// metadata que el editor (proyecto, período, budget origin) y la grilla tal
+// cual se cargó; las celdas que parsean limpio como número van numéricas y
+// las fórmulas ("=…") se escriben como fórmulas reales de Excel (la
+// numeración del editor coincide con la del tab, así las refs no se corren).
+// ────────────────────────────────────────────────────────────────────────────
+
+function buildAuxSheet(
+  wb: ExcelJS.Workbook,
+  detail: NonNullable<Awaited<ReturnType<typeof getPlanDetail>>>,
+  aux: PlanAuxSheet,
+  lang: Language,
+) {
+  // Nombre de tab válido para Excel: sin []:*?/\ y máx. 31 chars; si colisiona
+  // con otro tab del workbook, sufijo numérico.
+  const base =
+    aux.name.replace(/[\[\]:*?/\\]/g, "").trim().slice(0, 31) ||
+    AUX_SHEET_DEFAULT_NAME;
+  let title = base;
+  for (
+    let i = 2;
+    wb.worksheets.some((s) => s.name.toLowerCase() === title.toLowerCase());
+    i++
+  ) {
+    const suffix = ` (${i})`;
+    title = base.slice(0, 31 - suffix.length) + suffix;
+  }
+  const ws = wb.addWorksheet(title);
+
+  const gridCols = Math.max(1, ...aux.grid.map((r) => r.length));
+  const totalCols = Math.max(2, gridCols);
+  ws.columns = Array.from({ length: totalCols }, (_, c) => ({
+    width: c === 0 ? 24 : 16,
+  }));
+
+  // Metadata del plan, mismo estilo que el Tab 1.
+  const allPlacements = detail.publishers.flatMap((g) => g.placements);
+  const period = placementsPeriod(allPlacements);
+  const periodFormatted =
+    period.start && period.end
+      ? `${formatDate(period.start, lang)} → ${formatDate(period.end, lang)}`
+      : "—";
+  const infoPairs: [string, string][] = [
+    [t("common.project", lang), `${detail.project.code} — ${detail.project.name}`],
+    [t("common.period", lang), periodFormatted],
+    [t("common.budgetOrigin", lang), detail.budgetOrigin.name],
+  ];
+  infoPairs.forEach(([label, value], i) => {
+    const row = ws.getRow(i + 1);
+    row.getCell(1).value = label;
+    row.getCell(1).font = { bold: true, color: { argb: WHITE } };
+    row.getCell(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: ACCENT },
+    };
+    row.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
+    row.getCell(2).value = value;
+    row.getCell(2).font = { bold: true };
+    row.getCell(2).alignment = { vertical: "middle", horizontal: "left" };
+    ws.mergeCells(i + 1, 2, i + 1, totalCols);
+    row.height = 20;
+  });
+
+  // Grilla libre (una fila de aire después de la metadata; AUX_SHEET_GRID_ROW_
+  // OFFSET es la misma numeración que muestra el editor).
+  aux.grid.forEach((cells, r) => {
+    const row = ws.getRow(AUX_SHEET_GRID_ROW_OFFSET + r);
+    cells.forEach((cell, c) => {
+      if (!cell.trim()) return;
+      if (isAuxFormula(cell)) {
+        // Solo va como fórmula si nuestro evaluador la resuelve (garantiza
+        // sintaxis válida); si no, va el texto crudo para que se vea el error.
+        const res = evalAuxFormula(cell, aux.grid, { r, c });
+        // Uppercase: Excel guarda refs y funciones en mayúsculas; nuestro
+        // lenguaje no tiene strings literales, así que es seguro.
+        row.getCell(c + 1).value = res.ok
+          ? { formula: cell.trimStart().slice(1).toUpperCase(), result: res.value }
+          : cell;
+        return;
+      }
+      row.getCell(c + 1).value = auxCellNumber(cell) ?? cell;
+    });
+  });
 }

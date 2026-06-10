@@ -31,6 +31,7 @@ import {
   updatePlanMetadata,
   updatePlanPublisher,
 } from "@/app/actions/plans";
+import { AuxSheetSection } from "./aux-sheet";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
@@ -439,6 +440,9 @@ export function PlanEditor({
 
       {/* Preview tipo Excel (read-only) */}
       <ExcelPreview detail={detail} allMetrics={allMetrics} lang={lang} />
+
+      {/* Tabs auxiliares — grillas libres, tabs extra del Excel tras el Budget split */}
+      <AuxSheetSection detail={detail} editable={editable} lang={lang} />
 
       {/* Fees */}
       <section>

@@ -392,6 +392,43 @@ export const mediaPlanFees = pgTable("media_plan_fees", {
 });
 
 // ════════════════════════════════════════════════════════════════════════════
+// Tabs auxiliares del plan — grillas libres tipo Excel que el planner edita a
+// mano (N por plan, opcionales). Es material de trabajo: NO participa del
+// lifecycle de aprobación ni de los snapshots (aprobar / descartar borrador
+// no las toca). Cada tab sale en el export Excel después del "Budget por
+// mercado", repitiendo arriba la metadata del plan (proyecto, período, budget
+// origin) y debajo la grilla tal cual se cargó.
+//
+// grid_json es un array de filas; cada fila, un array de celdas (strings
+// libres). Una celda que empieza con "=" es una fórmula estilo Excel (refs
+// A1 + SUM/AVERAGE/etc.) que el export escribe como fórmula real. Límites y
+// helpers compartidos en lib/aux-sheet.ts.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const mediaPlanAuxSheets = pgTable(
+  "media_plan_aux_sheets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaPlanId: uuid("media_plan_id")
+      .notNull()
+      .references(() => mediaPlans.id, { onDelete: "cascade" }),
+    name: text("name").notNull().default("Auxiliar"), // nombre del tab en el Excel
+    gridJson: jsonb("grid_json")
+      .$type<string[][]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_mpas_plan").on(t.mediaPlanId, t.sortOrder)],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // Snapshots inmutables — cada vez que el plan se aprueba se guarda el
 // estado completo en JSON + el PDF firmado.
 // ════════════════════════════════════════════════════════════════════════════

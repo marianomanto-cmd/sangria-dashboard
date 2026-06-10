@@ -92,6 +92,7 @@ app/
     proyectos/              # /proyectos, /proyectos/[code]/*, /proyectos/nuevo
       [code]/planes/[planId]/
         editor.tsx          # editor del plan (publishers + placements + fees)
+        aux-sheet.tsx       # tabs auxiliares del plan: grillas libres tipo Excel con fórmulas (tabs extra del export)
         billing/            # editor de facturación mensual
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
@@ -126,7 +127,7 @@ app/
       historical.xlsx/route.ts  # XLSX del generador (misma query que el preview, mismo resolveReportColumns)
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
-    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts
+    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts, aux-sheets.ts
   globals.css
 
 components/                 # UI compartida
@@ -174,6 +175,7 @@ lib/
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
   brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
   plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns + placementsPeriod + sumDirectMetrics (compartido PDF/Excel/preview)
+  aux-sheet.ts              # tabs auxiliares del plan: límites + sanitize/normalize + evaluador de fórmulas (refs A1 + SUM/AVERAGE/…) compartido editor/actions/export
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
@@ -302,6 +304,36 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (`onDelete: restrict`: un publisher en uso no se puede borrar). Si algo falla
   igual, la action captura el error y devuelve `{ok:false}` (toast) en vez de
   propagar y romper la vista.
+
+### Tabs auxiliares del plan (tabs extra del Excel, con fórmulas)
+- Cada plan puede tener **N tabs auxiliares** opcionales
+  (`media_plan_aux_sheets`, ordenados por `sort_order`): **grillas libres tipo
+  Excel** que el planner edita a mano desde el editor del plan (botón **"Crear
+  tab auxiliar"**, una sección colapsable por tab). Arriba muestran la metadata
+  del plan (proyecto, período, budget origin, read-only); debajo, filas vacías
+  editables con navegación Enter/Shift+Enter.
+- **Fórmulas**: una celda que empieza con `=` es una fórmula estilo Excel —
+  aritmética (`+ - * /`, paréntesis), referencias A1 (`=B5*2`) y funciones
+  `SUM / AVERAGE / MIN / MAX / COUNT` sobre rangos (`=SUM(A5:A10)`). La
+  numeración visible del editor **coincide** con la del tab exportado (la
+  grilla arranca en la fila `AUX_SHEET_GRID_ROW_OFFSET` = 5), así las refs
+  significan lo mismo en ambos lados. El editor muestra el resultado (la
+  fórmula cruda al enfocar, como Excel) y errores con códigos `#REF!`,
+  `#VALUE!`, `#DIV/0!`, `#CIRC!` (ciclos), `#ERROR!`. Evaluador propio de
+  descenso recursivo en `lib/aux-sheet.ts` (NO usa `eval()`).
+- `grid_json` es un `string[][]` (filas × celdas). Solo se guardan strings; el
+  **export Excel** agrega cada tab **después del "Budget por mercado"** (en
+  orden), castea a número las celdas que parsean limpio (US format) y escribe
+  las fórmulas que resuelven como **fórmulas reales de Excel** (con resultado
+  cacheado; las que no parsean van como texto crudo). El nombre del tab es el
+  del planner (sanitizado a nombre válido). El PDF no los incluye.
+- Es material de trabajo: **no** participa del lifecycle de aprobación ni de
+  los snapshots (aprobar / descartar borrador no los toca) y se borran duro
+  (no pasan por la papelera). Crear/editar/borrar solo con el plan en `draft`
+  (la UI lo esconde; las actions bloquean `archived` como el resto).
+- Límites y helpers compartidos en `lib/aux-sheet.ts`; CRUD en
+  `app/actions/aux-sheets.ts`; UI en
+  `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx`.
 
 ### Lifecycle del proyecto
 - Estados: `planning` → `active` → `paused` → `closed` → **`reportado`**.
@@ -803,6 +835,13 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
   días entre los meses que cubre `[startDate, endDate]` y la agrega por
   mercado × mes (los sin fecha caen en una columna "Undated"/"Sin fecha"). Solo
   USD, sin métricas.
+- **Tabs 3+ — Tabs auxiliares (uno por cada tab creado en el plan)**: las
+  grillas libres que el planner editó en el editor, con la misma metadata del
+  plan arriba (proyecto, período, budget origin). El nombre de cada tab es el
+  que le puso el planner (sanitizado: sin `[]:*?/\`, máx. 31 chars, sufijo
+  `(2)` si colisiona con otro tab). Las celdas numéricas (US format) van como
+  número y las fórmulas (`=…`) como **fórmulas reales de Excel**. Ver "Tabs
+  auxiliares del plan" en convenciones.
 
 ### i18n y decisiones
 

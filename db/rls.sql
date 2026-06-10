@@ -37,6 +37,7 @@ alter table public.media_plans                 enable row level security;
 alter table public.media_plan_publishers       enable row level security;
 alter table public.media_plan_placements       enable row level security;
 alter table public.media_plan_fees             enable row level security;
+alter table public.media_plan_aux_sheets       enable row level security;
 alter table public.media_plan_snapshots        enable row level security;
 alter table public.plan_billings               enable row level security;
 alter table public.plan_billing_publishers     enable row level security;

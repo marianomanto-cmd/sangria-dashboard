@@ -4,6 +4,7 @@ import {
   budgetOrigins,
   clients,
   markets,
+  mediaPlanAuxSheets,
   mediaPlanFees,
   mediaPlanPlacements,
   mediaPlanPublishers,
@@ -262,6 +263,14 @@ export type PlanSnapshot = {
   signedPdfUrl: string | null;
 };
 
+// Tabs auxiliares del plan (N, opcionales): grillas libres que se editan en
+// el editor y salen como tabs extra del Excel. Ver lib/aux-sheet.ts.
+export type PlanAuxSheet = {
+  id: string;
+  name: string;
+  grid: string[][];
+};
+
 export type PlanDetail = {
   plan: typeof mediaPlans.$inferSelect;
   project: { id: string; code: string; name: string; totalGrossBudgetUsd: string | null };
@@ -275,6 +284,7 @@ export type PlanDetail = {
   publishers: PlanPublisherGroup[];
   fees: PlanFee[];
   snapshots: PlanSnapshot[];
+  auxSheets: PlanAuxSheet[];
   totals: {
     media: number;
     fees: number;
@@ -360,6 +370,20 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     .where(eq(mediaPlanSnapshots.mediaPlanId, planId))
     .orderBy(desc(mediaPlanSnapshots.versionNumber));
 
+  // Defensivo ante la ventana deploy-antes-de-migración: si la tabla todavía
+  // no existe en prod (falta correr el SQL / db:push), el plan se sigue
+  // abriendo sin tabs auxiliares en vez de tirar 500.
+  let auxSheetRows: (typeof mediaPlanAuxSheets.$inferSelect)[] = [];
+  try {
+    auxSheetRows = await db
+      .select()
+      .from(mediaPlanAuxSheets)
+      .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
+      .orderBy(asc(mediaPlanAuxSheets.sortOrder), asc(mediaPlanAuxSheets.createdAt));
+  } catch {
+    auxSheetRows = [];
+  }
+
   const placementsByPub = new Map<string, PlanPlacement[]>();
   for (const r of placementRows) {
     const p = r.placement;
@@ -437,6 +461,11 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     publishers: publisherGroups,
     fees,
     snapshots: snapshotRows,
+    auxSheets: auxSheetRows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      grid: s.gridJson ?? [],
+    })),
     totals: {
       media: totalMedia,
       fees: totalFees,
