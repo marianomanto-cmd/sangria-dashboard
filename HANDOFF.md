@@ -1740,6 +1740,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+07029a3  Plan: chip "Última edición" de la versión vigente + modal read-only de cambios (#137)
 8d1a43a  Tabs auxiliares del plan: grillas libres con fórmulas + tabs extra en el Excel (#135)
 b611490  Portal Proyectos: filtro Abiertos/Cerrados (default abiertos) (#134)
 681698e  docs: barrido README + HANDOFF (sesión 05/jun) (#133)
