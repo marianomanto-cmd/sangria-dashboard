@@ -4,6 +4,7 @@ import {
   budgetOrigins,
   clients,
   markets,
+  mediaPlanAuxSheets,
   mediaPlanFees,
   mediaPlanPlacements,
   mediaPlanPublishers,
@@ -262,6 +263,14 @@ export type PlanSnapshot = {
   signedPdfUrl: string | null;
 };
 
+// Sheet auxiliar del plan (máx. 1, opcional): grilla libre que se edita en el
+// editor y sale como tab extra del Excel. Ver lib/aux-sheet.ts.
+export type PlanAuxSheet = {
+  id: string;
+  name: string;
+  grid: string[][];
+};
+
 export type PlanDetail = {
   plan: typeof mediaPlans.$inferSelect;
   project: { id: string; code: string; name: string; totalGrossBudgetUsd: string | null };
@@ -275,6 +284,7 @@ export type PlanDetail = {
   publishers: PlanPublisherGroup[];
   fees: PlanFee[];
   snapshots: PlanSnapshot[];
+  auxSheet: PlanAuxSheet | null;
   totals: {
     media: number;
     fees: number;
@@ -360,6 +370,12 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     .where(eq(mediaPlanSnapshots.mediaPlanId, planId))
     .orderBy(desc(mediaPlanSnapshots.versionNumber));
 
+  const [auxSheetRow] = await db
+    .select()
+    .from(mediaPlanAuxSheets)
+    .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
+    .limit(1);
+
   const placementsByPub = new Map<string, PlanPlacement[]>();
   for (const r of placementRows) {
     const p = r.placement;
@@ -437,6 +453,13 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     publishers: publisherGroups,
     fees,
     snapshots: snapshotRows,
+    auxSheet: auxSheetRow
+      ? {
+          id: auxSheetRow.id,
+          name: auxSheetRow.name,
+          grid: auxSheetRow.gridJson ?? [],
+        }
+      : null,
     totals: {
       media: totalMedia,
       fees: totalFees,

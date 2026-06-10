@@ -31,6 +31,7 @@ const ENTITY_NOUN: Record<string, { singular: string; article: "el" | "la" }> = 
   media_plan_publisher: { singular: "publisher del plan", article: "el" },
   media_plan_placement: { singular: "placement", article: "el" },
   media_plan_fee: { singular: "fee del plan", article: "el" },
+  media_plan_aux_sheet: { singular: "sheet auxiliar del plan", article: "el" },
   plan_billing: { singular: "billing del plan", article: "el" },
   plan_billing_publisher: { singular: "consumo de publisher", article: "el" },
   plan_billing_fee: { singular: "imputación de fee", article: "la" },

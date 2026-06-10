@@ -10,7 +10,9 @@ import {
   sumDirectMetrics,
 } from "@/lib/plan-metrics";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
+import { AUX_SHEET_DEFAULT_NAME, auxCellNumber } from "@/lib/aux-sheet";
 import { canAccessClientExport } from "@/lib/client-portal.server";
+import type { PlanAuxSheet } from "@/db/queries/project-detail";
 
 // Paleta de marca — sincronizada con los design tokens de app/globals.css.
 const ACCENT = "FF7A1F3D";       // header principal, total media, títulos
@@ -539,6 +541,11 @@ export async function GET(
   // ─────────────────────────────────────────────────────────────────────────
   buildBudgetByMarketSheet(wb, detail, lang);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // TAB 3 — Sheet auxiliar (solo si el plan tiene uno creado)
+  // ─────────────────────────────────────────────────────────────────────────
+  if (detail.auxSheet) buildAuxSheet(wb, detail, detail.auxSheet, lang);
+
   // ─── Output ─────────────────────────────────────────────────────────────
   const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 
@@ -703,4 +710,78 @@ function buildBudgetByMarketSheet(
     cell.border = allBorders;
   }
   footRow.height = 22;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tab 3 — Sheet auxiliar (grilla libre del planner). Mismo encabezado de
+// metadata que el editor (proyecto, período, budget origin) y la grilla tal
+// cual se cargó; las celdas que parsean limpio como número van numéricas.
+// ────────────────────────────────────────────────────────────────────────────
+
+function buildAuxSheet(
+  wb: ExcelJS.Workbook,
+  detail: NonNullable<Awaited<ReturnType<typeof getPlanDetail>>>,
+  aux: PlanAuxSheet,
+  lang: Language,
+) {
+  // Nombre de tab válido para Excel: sin []:*?/\ y máx. 31 chars; si colisiona
+  // con otro tab del workbook, sufijo numérico.
+  const base =
+    aux.name.replace(/[\[\]:*?/\\]/g, "").trim().slice(0, 31) ||
+    AUX_SHEET_DEFAULT_NAME;
+  let title = base;
+  for (
+    let i = 2;
+    wb.worksheets.some((s) => s.name.toLowerCase() === title.toLowerCase());
+    i++
+  ) {
+    const suffix = ` (${i})`;
+    title = base.slice(0, 31 - suffix.length) + suffix;
+  }
+  const ws = wb.addWorksheet(title);
+
+  const gridCols = Math.max(1, ...aux.grid.map((r) => r.length));
+  const totalCols = Math.max(2, gridCols);
+  ws.columns = Array.from({ length: totalCols }, (_, c) => ({
+    width: c === 0 ? 24 : 16,
+  }));
+
+  // Metadata del plan, mismo estilo que el Tab 1.
+  const allPlacements = detail.publishers.flatMap((g) => g.placements);
+  const period = placementsPeriod(allPlacements);
+  const periodFormatted =
+    period.start && period.end
+      ? `${formatDate(period.start, lang)} → ${formatDate(period.end, lang)}`
+      : "—";
+  const infoPairs: [string, string][] = [
+    [t("common.project", lang), `${detail.project.code} — ${detail.project.name}`],
+    [t("common.period", lang), periodFormatted],
+    [t("common.budgetOrigin", lang), detail.budgetOrigin.name],
+  ];
+  infoPairs.forEach(([label, value], i) => {
+    const row = ws.getRow(i + 1);
+    row.getCell(1).value = label;
+    row.getCell(1).font = { bold: true, color: { argb: WHITE } };
+    row.getCell(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: ACCENT },
+    };
+    row.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
+    row.getCell(2).value = value;
+    row.getCell(2).font = { bold: true };
+    row.getCell(2).alignment = { vertical: "middle", horizontal: "left" };
+    ws.mergeCells(i + 1, 2, i + 1, totalCols);
+    row.height = 20;
+  });
+
+  // Grilla libre (una fila de aire después de la metadata).
+  const startRow = infoPairs.length + 2;
+  aux.grid.forEach((cells, r) => {
+    const row = ws.getRow(startRow + r);
+    cells.forEach((cell, c) => {
+      if (!cell.trim()) return;
+      row.getCell(c + 1).value = auxCellNumber(cell) ?? cell;
+    });
+  });
 }

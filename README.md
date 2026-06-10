@@ -92,6 +92,7 @@ app/
     proyectos/              # /proyectos, /proyectos/[code]/*, /proyectos/nuevo
       [code]/planes/[planId]/
         editor.tsx          # editor del plan (publishers + placements + fees)
+        aux-sheet.tsx       # sheet auxiliar del plan: grilla libre tipo Excel (tab extra del export)
         billing/            # editor de facturación mensual
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
@@ -126,7 +127,7 @@ app/
       historical.xlsx/route.ts  # XLSX del generador (misma query que el preview, mismo resolveReportColumns)
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
-    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts
+    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts, aux-sheets.ts
   globals.css
 
 components/                 # UI compartida
@@ -174,6 +175,7 @@ lib/
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
   brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
   plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns + placementsPeriod + sumDirectMetrics (compartido PDF/Excel/preview)
+  aux-sheet.ts              # sheet auxiliar del plan: límites + sanitizeAuxGrid/normalizeAuxGrid + auxCellNumber (compartido editor/actions/export)
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
@@ -302,6 +304,25 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (`onDelete: restrict`: un publisher en uso no se puede borrar). Si algo falla
   igual, la action captura el error y devuelve `{ok:false}` (toast) en vez de
   propagar y romper la vista.
+
+### Sheet auxiliar del plan (tab extra del Excel)
+- Cada plan puede tener **un** sheet auxiliar opcional (`media_plan_aux_sheets`,
+  unique por `media_plan_id`): una **grilla libre tipo Excel** que el planner
+  edita a mano desde el editor del plan (sección colapsable debajo del preview).
+  Arriba muestra la metadata del plan (proyecto, período, budget origin,
+  read-only); debajo, filas vacías editables con navegación Enter/Shift+Enter.
+- `grid_json` es un `string[][]` (filas × celdas). Solo se guardan strings; el
+  **export Excel** castea a número las celdas que parsean limpio (US format) y
+  agrega el sheet como **tab después del "Budget por mercado"**, con el nombre
+  que le puso el planner (sanitizado a nombre válido de tab). El PDF no lo
+  incluye.
+- Es material de trabajo: **no** participa del lifecycle de aprobación ni de
+  los snapshots (aprobar / descartar borrador no lo toca) y se borra duro (no
+  pasa por la papelera). Crear/editar/borrar solo con el plan en `draft` (la
+  UI lo esconde; las actions bloquean `archived` como el resto).
+- Límites y helpers compartidos en `lib/aux-sheet.ts`; CRUD en
+  `app/actions/aux-sheets.ts`; UI en
+  `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx`.
 
 ### Lifecycle del proyecto
 - Estados: `planning` → `active` → `paused` → `closed` → **`reportado`**.
@@ -803,6 +824,12 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
   días entre los meses que cubre `[startDate, endDate]` y la agrega por
   mercado × mes (los sin fecha caen en una columna "Undated"/"Sin fecha"). Solo
   USD, sin métricas.
+- **Tab 3 — Sheet auxiliar (solo si el plan tiene uno creado)**: la grilla
+  libre que el planner editó en el editor, con la misma metadata del plan
+  arriba (proyecto, período, budget origin). El nombre del tab es el que le
+  puso el planner (sanitizado: sin `[]:*?/\`, máx. 31 chars, sufijo `(2)` si
+  colisiona con otro tab). Las celdas numéricas (US format) van como número.
+  Ver "Sheet auxiliar del plan" en convenciones.
 
 ### i18n y decisiones
 

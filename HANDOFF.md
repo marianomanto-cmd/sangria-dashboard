@@ -1,6 +1,32 @@
-# Handoff — viernes 05/jun/2026
+# Handoff — miércoles 10/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 10/jun/2026 — Sheet auxiliar del plan (tab extra del Excel)
+
+- **Nueva feature**: cada media plan puede tener **un sheet auxiliar** opcional
+  — una grilla libre tipo Excel que el planner edita a mano desde el editor del
+  plan (sección colapsable debajo del preview). Arriba muestra la metadata del
+  plan read-only (proyecto, período, budget origin); debajo, filas vacías
+  editables (Enter/Shift+Enter navegan como en la grilla de placements, Enter
+  en la última fila agrega una; botones "+ Fila" / "+ Columna"; autosave por
+  celda al blur). Nombre del sheet editable inline; eliminar con confirm.
+- **Export Excel**: si el plan tiene sheet auxiliar, sale como **tab después
+  del "Budget por mercado"**, con el nombre del planner (sanitizado a nombre
+  válido de tab Excel) y la misma metadata arriba. Celdas que parsean limpio
+  como número US van numéricas. El PDF no lo incluye.
+- **Schema**: tabla nueva `media_plan_aux_sheets` (`media_plan_id` unique →
+  máx. 1 por plan, `name`, `grid_json` jsonb `string[][]`, cascade on delete).
+  No participa de snapshots/aprobación (aprobar o descartar borrador no la
+  toca); delete duro, sin papelera.
+- **Archivos**: `lib/aux-sheet.ts` (límites + helpers compartidos),
+  `app/actions/aux-sheets.ts` (CRUD con audit), `aux-sheet.tsx` junto al
+  editor, `getPlanDetail` ahora devuelve `auxSheet`, tab 3 en
+  `export.xlsx/route.ts`, noun nuevo en `lib/audit-format.ts`.
+- **REQUIERE ACCIÓN EN PROD**: `npm run db:push` (tabla nueva) **+** activar
+  RLS en Supabase SQL Editor:
+  `alter table public.media_plan_aux_sheets enable row level security;`
+  (ya agregado a `db/rls.sql`).
 
 ### Cambios de la sesión 04/jun/2026 — Proyectos: período + aviso "termina pronto"
 
@@ -2279,7 +2305,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
-| Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado). |
+| Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Sheet auxiliar si el plan tiene uno). |
+| Tocar el sheet auxiliar del plan (grilla libre / tab extra del Excel) | UI: `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx` (sección colapsable en el editor). CRUD: `app/actions/aux-sheets.ts`. Límites + helpers (sanitize/normalize/auxCellNumber): `lib/aux-sheet.ts`. Schema: `media_plan_aux_sheets` (1 por plan). El tab del export: `buildAuxSheet` en `export.xlsx/route.ts`. |
 | Qué métricas se muestran / cómo se computan en los exports | `lib/plan-metrics.ts` — `resolveMetricColumns` (qué columnas: directs presentes + calculated que resuelven), `placementMetricValue` (valor por placement: guardado o computado), `evalFormula`. Lo usan **PDF y Excel**. Las calculated NO están en `metrics_json`. |
 | Cambiar el logo de los exports         | Reemplazar `public/sangria-logo.png` (o `.jpg`). Lo carga `lib/brand-logo.ts`; el tracing está en `next.config.ts` (`outputFileTracingIncludes`). Posición/tamaño: PDF en `lib/plan-pdf.ts`, XLSX en `export.xlsx/route.ts`. |
 | Cambiar el nombre de archivo del export | `filename` en cada ruta `export.{pdf,xlsx}/route.ts`: hoy `{plan.name}-V{currentVersion}`. |
