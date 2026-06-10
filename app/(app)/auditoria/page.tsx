@@ -1,19 +1,9 @@
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
 import { PageShell } from "@/components/page-shell";
-import {
-  getAuditLog,
-  getAuditLogStats,
-  type AuditLogRow,
-} from "@/db/queries/audit-log";
-import {
-  actionVerb,
-  actorLabel,
-  entityLabel,
-  entityNoun,
-  formatAbsoluteDateTime,
-  formatRelativeDateTime,
-} from "@/lib/audit-format";
+import { AuditEntry } from "@/components/audit-entry";
+import { getAuditLog, getAuditLogStats } from "@/db/queries/audit-log";
+import { actionVerb, entityNoun } from "@/lib/audit-format";
 
 type Props = {
   searchParams: Promise<{
@@ -129,136 +119,8 @@ export default async function AuditoriaPage({ searchParams }: Props) {
   );
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Entry — un evento del log con diff de campos cambiados
-// ────────────────────────────────────────────────────────────────────────────
-
-function AuditEntry({ row }: { row: AuditLogRow }) {
-  const noun = entityNoun(row.entityType);
-  const verb = actionVerb(row.action);
-  const actor = actorLabel(row.userEmail, row.userId);
-  const label = entityLabel(row.entityType, row.beforeJson, row.afterJson);
-  const relative = formatRelativeDateTime(row.createdAt);
-  const absolute = formatAbsoluteDateTime(row.createdAt);
-  const diff = computeDiff(row.beforeJson, row.afterJson);
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-baseline gap-2 flex-wrap">
-        <ActionBadge action={row.action} verb={verb} />
-        <p className="text-sm text-ink-2 leading-relaxed">
-          <span className="font-medium text-ink">{actor}</span>{" "}
-          {verb} {noun.article} <span className="text-ink-2">{noun.singular}</span>
-          {label && (
-            <>
-              {" "}
-              <span className="font-medium text-ink">&ldquo;{label}&rdquo;</span>
-            </>
-          )}
-        </p>
-        <span
-          className="ml-auto font-mono text-[11px] text-muted whitespace-nowrap"
-          title={absolute}
-        >
-          {relative}
-        </span>
-      </div>
-      {diff.length > 0 && (
-        <ul className="ml-1 mt-0.5 text-xs flex flex-col gap-0.5">
-          {diff.map((d) => (
-            <li key={d.field} className="font-mono text-[11.5px]">
-              <span className="text-muted">{d.field}:</span>{" "}
-              {d.before !== undefined && (
-                <span className="text-warn">
-                  {formatValue(d.before)}
-                </span>
-              )}
-              {d.before !== undefined && d.after !== undefined && (
-                <span className="text-line mx-1">→</span>
-              )}
-              {d.after !== undefined && (
-                <span className="text-success">{formatValue(d.after)}</span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function ActionBadge({ action, verb }: { action: string; verb: string }) {
-  const styles: Record<string, string> = {
-    create: "bg-success-soft text-success border-success-soft",
-    update: "bg-info-soft text-info border-info-soft",
-    delete: "bg-danger-soft text-danger border-danger-soft",
-  };
-  const cls = styles[action] ?? "bg-paper-2 text-muted border-line";
-  return (
-    <span
-      className={`inline-flex items-center rounded-sm border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] ${cls}`}
-    >
-      {verb}
-    </span>
-  );
-}
-
-type FieldDiff = { field: string; before?: unknown; after?: unknown };
-
-const FIELD_BLACKLIST = new Set([
-  "id",
-  "recordedAt",
-  "createdAt",
-  "updatedAt",
-  "duplicatedFromPlanId",
-  "duplicatedFrom",
-  "placementsCopied",
-  "publishersCopied",
-  "feesCopied",
-]);
-
-function computeDiff(
-  before: unknown,
-  after: unknown,
-): FieldDiff[] {
-  if (before === null && after !== null && typeof after === "object" && after) {
-    // Create — listamos campos relevantes del nuevo objeto.
-    const obj = after as Record<string, unknown>;
-    return Object.entries(obj)
-      .filter(([k]) => !FIELD_BLACKLIST.has(k))
-      .filter(([, v]) => v !== null && v !== undefined && v !== "")
-      .map(([field, v]) => ({ field, after: v }));
-  }
-  if (
-    before &&
-    typeof before === "object" &&
-    after &&
-    typeof after === "object"
-  ) {
-    const b = before as Record<string, unknown>;
-    const a = after as Record<string, unknown>;
-    const keys = Array.from(
-      new Set([...Object.keys(b), ...Object.keys(a)]),
-    ).filter((k) => !FIELD_BLACKLIST.has(k));
-    return keys
-      .filter((k) => JSON.stringify(b[k]) !== JSON.stringify(a[k]))
-      .map((k) => ({ field: k, before: b[k], after: a[k] }));
-  }
-  return [];
-}
-
-function formatValue(v: unknown): string {
-  if (v === null || v === undefined) return "—";
-  if (typeof v === "string") return v;
-  if (typeof v === "number") return String(v);
-  if (typeof v === "boolean") return String(v);
-  if (v instanceof Date) return v.toISOString();
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return String(v);
-  }
-}
+// El render de cada evento (oración + diff de campos) vive en
+// components/audit-entry.tsx, compartido con el modal de cambios del plan.
 
 // ────────────────────────────────────────────────────────────────────────────
 // Filter pills

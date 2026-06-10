@@ -32,6 +32,7 @@ import {
   updatePlanPublisher,
 } from "@/app/actions/plans";
 import { AuxSheetSection } from "./aux-sheet";
+import { PlanLastEdit, type PlanEditHistory } from "./plan-history";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
@@ -94,6 +95,7 @@ export function PlanEditor({
   allMetrics,
   lang = "en",
   canApprove = false,
+  editHistory,
 }: {
   detail: PlanDetail;
   allPublishers: PublisherCatalog[];
@@ -104,6 +106,9 @@ export function PlanEditor({
   // botón "Aprobar (firmado)" solo se muestra si es true; la barrera real está
   // en la server action transitionPlanStatus.
   canApprove?: boolean;
+  // Historial de la versión vigente (audit_log, ya acotado por page.tsx):
+  // alimenta el chip "Última edición" + su modal read-only.
+  editHistory?: PlanEditHistory;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -258,6 +263,11 @@ export function PlanEditor({
           <p className="text-sm text-muted mt-1 font-mono">
             {detail.project.code}.{detail.plan.name}
           </p>
+          {editHistory && (
+            <div className="mt-1.5">
+              <PlanLastEdit history={editHistory} />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

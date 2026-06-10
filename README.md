@@ -93,6 +93,7 @@ app/
       [code]/planes/[planId]/
         editor.tsx          # editor del plan (publishers + placements + fees)
         aux-sheet.tsx       # tabs auxiliares del plan: grillas libres tipo Excel con fórmulas (tabs extra del export)
+        plan-history.tsx    # chip "Última edición" + modal read-only con los cambios de la versión vigente (audit_log)
         billing/            # editor de facturación mensual
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
@@ -152,6 +153,7 @@ components/                 # UI compartida
   toast.tsx                 # ToastProvider + useToast() — feedback no bloqueante success/error/info con live-region (role=alert/status)
   confirm-dialog.tsx        # ConfirmProvider + useConfirm() — confirmación promise-based con focus-trap, Escape, backdrop. No usar confirm() nativo
   app-providers.tsx         # monta ToastProvider + ConfirmProvider — en el layout, envuelve el contenido de la app
+  audit-entry.tsx           # render de un evento del audit_log (oración + diff de campos) — lo usan /auditoria y el modal de cambios del plan
   mobile-nav.tsx            # MobileNavProvider + MobileNavToggle + useMobileNav() — sidebar drawer en mobile (< lg)
 db/
   schema.ts                 # tablas + enums
@@ -562,6 +564,17 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   histórica — no hay restore (los `before_json` del proyecto borrado
   no traen los planes cascadeados). Acceso desde `/auditoria` con el
   botón "Papelera (N)".
+- **"Última edición" en el editor del plan**: chip debajo del nombre con
+  quién/cuándo editó por última vez la **versión vigente**; click → modal
+  read-only con la lista de cambios (mismo render `components/audit-entry.tsx`
+  que `/auditoria`: oración + diff de campos). Los eventos salen de
+  `getPlanAuditEvents(planId, {since})` en `db/queries/audit-log.ts`: junta
+  plan + publishers + placements + fees + tabs auxiliares (incluso hijos ya
+  borrados, vía el `mediaPlanId`/`mediaPlanPublisherId` de los JSON del audit).
+  La ventana la computa la page con los snapshots: en draft/ready, desde la
+  última aprobación; en approved/archived, desde la aprobación anterior (los
+  cambios que produjeron la versión vigente). Los updates de tabs auxiliares
+  se compactan a "filas×cols · N celdas cambiadas" para no inflar el payload.
 
 ### Auth (Google OAuth, sangria.agency-only)
 - Toda la app está detrás de un `proxy.ts` (Next.js 16 reemplaza

@@ -177,3 +177,68 @@ export function actorLabel(
   if (userId) return `usuario ${userId.slice(0, 8)}`;
   return "Sistema";
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Diff de campos cambiados entre before/afterJson — para renderizar "campo:
+// antes → después" en /auditoria y en el modal de cambios del plan. Compartido
+// (puro, client-safe).
+// ════════════════════════════════════════════════════════════════════════════
+
+export type AuditFieldDiff = { field: string; before?: unknown; after?: unknown };
+
+// Campos sin valor informativo en el diff (ids, timestamps, metadata interna
+// de duplicación).
+const FIELD_BLACKLIST = new Set([
+  "id",
+  "recordedAt",
+  "createdAt",
+  "updatedAt",
+  "duplicatedFromPlanId",
+  "duplicatedFrom",
+  "placementsCopied",
+  "publishersCopied",
+  "feesCopied",
+]);
+
+export function computeAuditDiff(
+  before: unknown,
+  after: unknown,
+): AuditFieldDiff[] {
+  if (before === null && after !== null && typeof after === "object" && after) {
+    // Create — listamos campos relevantes del nuevo objeto.
+    const obj = after as Record<string, unknown>;
+    return Object.entries(obj)
+      .filter(([k]) => !FIELD_BLACKLIST.has(k))
+      .filter(([, v]) => v !== null && v !== undefined && v !== "")
+      .map(([field, v]) => ({ field, after: v }));
+  }
+  if (
+    before &&
+    typeof before === "object" &&
+    after &&
+    typeof after === "object"
+  ) {
+    const b = before as Record<string, unknown>;
+    const a = after as Record<string, unknown>;
+    const keys = Array.from(
+      new Set([...Object.keys(b), ...Object.keys(a)]),
+    ).filter((k) => !FIELD_BLACKLIST.has(k));
+    return keys
+      .filter((k) => JSON.stringify(b[k]) !== JSON.stringify(a[k]))
+      .map((k) => ({ field: k, before: b[k], after: a[k] }));
+  }
+  return [];
+}
+
+export function formatAuditValue(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "string") return v;
+  if (typeof v === "number") return String(v);
+  if (typeof v === "boolean") return String(v);
+  if (v instanceof Date) return v.toISOString();
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return String(v);
+  }
+}

@@ -2,6 +2,28 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 10/jun/2026 — "Última edición" del plan + modal de cambios
+
+- **Chip "Última edición"** en el header del editor del plan (debajo del
+  nombre): quién y cuándo editó por última vez la **versión vigente** —
+  derivado del `audit_log`, sin schema nuevo. Click → **modal read-only** con
+  la lista de cambios (oración + diff de campos, mismo render que /auditoria).
+- **Query nueva** `getPlanAuditEvents(planId, {since})` en
+  `db/queries/audit-log.ts`: junta los eventos del plan y de su contenido
+  (publishers / placements / fees / tabs auxiliares), **incluyendo hijos ya
+  borrados** — se buscan por el `mediaPlanId` / `mediaPlanPublisherId` que
+  viaja en los JSON del audit, no por las tablas vivas. Los updates de tabs
+  auxiliares se compactan a "filas×cols · N celdas cambiadas" (guardan la
+  grilla completa por evento y inflarían el payload de la página).
+- **Ventana "versión vigente"** (la computa `page.tsx` con los snapshots):
+  draft/ready → cambios desde la última aprobación (o creación si v0);
+  approved/archived → desde la aprobación anterior (los cambios que
+  produjeron la versión vigente, aprobación incluida).
+- **Refactor**: el render de un evento (`AuditEntry` + diff) se movió de
+  `/auditoria/page.tsx` a `components/audit-entry.tsx`, y `computeAuditDiff` /
+  `formatAuditValue` a `lib/audit-format.ts` — compartidos por ambas vistas.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 10/jun/2026 — Tabs auxiliares del plan (tabs extra del Excel, con fórmulas)
 
 - **Nueva feature**: cada media plan puede tener **N tabs auxiliares** — grillas
@@ -2366,7 +2388,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Editar / eliminar un proyecto | `app/(app)/proyectos/[code]/edit-panel.tsx` (UI) + `updateProject` / `deleteProject` en `app/actions/projects.ts`. El alta (`createProject` + `proyectos/nuevo/form.tsx`) deriva el `code` del nombre. |
 | Cambiar el form de "+ Nuevo plan" (vacío vs duplicar) | `app/(app)/proyectos/[code]/planes/nuevo/form.tsx` (UI) + `app/(app)/proyectos/[code]/planes/nuevo/page.tsx` (carga las opciones de fuentes via `listSourcePlansForClient`). Action: `duplicatePlan` en `app/actions/plans.ts`. |
 | Descartar un borrador y volver al plan aprobado | Botón "Descartar borrador" en `editor.tsx` (header, solo en `draft` con `currentVersion > 0`) + `revertPlanToApprovedSnapshot` en `app/actions/plans.ts`. Restaura publishers/placements/fees/nombre/notas desde el snapshot `version = currentVersion` (en transacción) y deja el plan en `approved`. Contraparte de "Editar (nueva versión)". |
-| Cambiar el render del log de auditoría / papelera | `app/(app)/auditoria/page.tsx` (log), `app/(app)/auditoria/papelera/page.tsx` (papelera). Sustantivos / verbos / labels de timestamp en `lib/audit-format.ts` — agregar nuevos entityType acá. |
+| Cambiar el render del log de auditoría / papelera | `app/(app)/auditoria/page.tsx` (log), `app/(app)/auditoria/papelera/page.tsx` (papelera). Sustantivos / verbos / labels de timestamp en `lib/audit-format.ts` — agregar nuevos entityType acá. El render de cada evento (oración + diff) vive en `components/audit-entry.tsx` (compartido con el modal del plan). |
+| Tocar el chip "Última edición" / modal de cambios del plan | UI: `app/(app)/proyectos/[code]/planes/[planId]/plan-history.tsx` (`PlanLastEdit` + modal read-only). Datos: `getPlanAuditEvents` en `db/queries/audit-log.ts`. La ventana de la versión vigente la computa `…/planes/[planId]/page.tsx` con `detail.snapshots`. |
 | Tocar la auth (login con Google, dominio permitido, sign-out) | `lib/supabase/{server,client,middleware}.ts` (cliente Supabase), `lib/auth.ts` (`getCurrentUser`), `proxy.ts` (route protection — Next.js 16 reemplaza middleware.ts), `app/login/`, `app/auth/{callback,signout}/`. El dominio `@sangria.agency` está hardcodeado en `proxy.ts` y `callback/route.ts` — cambiarlo en ambos. |
 | Tocar el portal de cliente (público, read-only) | `app/(portal)/[clientSlug]/` (page + secciones + filtros), `app/api/portal/{login,logout}/route.ts`, `lib/client-portal.ts` (password/reservados/helpers edge-safe), `lib/client-portal.server.ts` (cookie + `canAccessClientExport`), `db/queries/client-portal.ts` (lookup + filtros). El gate público (solo GET) está en `lib/supabase/middleware.ts`. **Toda ruta top-level nueva de la app → sumala a `RESERVED_TOP_LEVEL_SLUGS`.** |
 | Cambiar el password / usuario del portal de cliente | `CLIENT_PORTAL_PASSWORD` en `lib/client-portal.ts` (compartido para todos). El usuario es el slug o el nombre del cliente. El admin (`/configuracion/clientes`) muestra link + usuario + password con copiar. |
