@@ -1718,6 +1718,9 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+8d1a43a  Tabs auxiliares del plan: grillas libres con fórmulas + tabs extra en el Excel (#135)
+b611490  Portal Proyectos: filtro Abiertos/Cerrados (default abiertos) (#134)
+681698e  docs: barrido README + HANDOFF (sesión 05/jun) (#133)
 e94ea38  Proyectos (lista): columna Período + aviso "termina pronto" (#132)
 3a26719  Proyectos: período inicio/fin + aviso "termina pronto" (#131)
 722181c  Benchmarks: botones Excel/PDF dentro del recuadro de filtros (#130)
