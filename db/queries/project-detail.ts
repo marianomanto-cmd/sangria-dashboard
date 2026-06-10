@@ -263,8 +263,8 @@ export type PlanSnapshot = {
   signedPdfUrl: string | null;
 };
 
-// Sheet auxiliar del plan (máx. 1, opcional): grilla libre que se edita en el
-// editor y sale como tab extra del Excel. Ver lib/aux-sheet.ts.
+// Tabs auxiliares del plan (N, opcionales): grillas libres que se editan en
+// el editor y salen como tabs extra del Excel. Ver lib/aux-sheet.ts.
 export type PlanAuxSheet = {
   id: string;
   name: string;
@@ -284,7 +284,7 @@ export type PlanDetail = {
   publishers: PlanPublisherGroup[];
   fees: PlanFee[];
   snapshots: PlanSnapshot[];
-  auxSheet: PlanAuxSheet | null;
+  auxSheets: PlanAuxSheet[];
   totals: {
     media: number;
     fees: number;
@@ -370,11 +370,19 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     .where(eq(mediaPlanSnapshots.mediaPlanId, planId))
     .orderBy(desc(mediaPlanSnapshots.versionNumber));
 
-  const [auxSheetRow] = await db
-    .select()
-    .from(mediaPlanAuxSheets)
-    .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
-    .limit(1);
+  // Defensivo ante la ventana deploy-antes-de-migración: si la tabla todavía
+  // no existe en prod (falta correr el SQL / db:push), el plan se sigue
+  // abriendo sin tabs auxiliares en vez de tirar 500.
+  let auxSheetRows: (typeof mediaPlanAuxSheets.$inferSelect)[] = [];
+  try {
+    auxSheetRows = await db
+      .select()
+      .from(mediaPlanAuxSheets)
+      .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
+      .orderBy(asc(mediaPlanAuxSheets.sortOrder), asc(mediaPlanAuxSheets.createdAt));
+  } catch {
+    auxSheetRows = [];
+  }
 
   const placementsByPub = new Map<string, PlanPlacement[]>();
   for (const r of placementRows) {
@@ -453,13 +461,11 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     publishers: publisherGroups,
     fees,
     snapshots: snapshotRows,
-    auxSheet: auxSheetRow
-      ? {
-          id: auxSheetRow.id,
-          name: auxSheetRow.name,
-          grid: auxSheetRow.gridJson ?? [],
-        }
-      : null,
+    auxSheets: auxSheetRows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      grid: s.gridJson ?? [],
+    })),
     totals: {
       media: totalMedia,
       fees: totalFees,

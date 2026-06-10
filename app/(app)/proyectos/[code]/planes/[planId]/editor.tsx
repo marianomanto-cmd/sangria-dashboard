@@ -441,7 +441,7 @@ export function PlanEditor({
       {/* Preview tipo Excel (read-only) */}
       <ExcelPreview detail={detail} allMetrics={allMetrics} lang={lang} />
 
-      {/* Sheet auxiliar — grilla libre, tab extra del Excel tras el Budget split */}
+      {/* Tabs auxiliares — grillas libres, tabs extra del Excel tras el Budget split */}
       <AuxSheetSection detail={detail} editable={editable} lang={lang} />
 
       {/* Fees */}

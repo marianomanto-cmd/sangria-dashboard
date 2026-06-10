@@ -10,7 +10,13 @@ import {
   sumDirectMetrics,
 } from "@/lib/plan-metrics";
 import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/lib/i18n";
-import { AUX_SHEET_DEFAULT_NAME, auxCellNumber } from "@/lib/aux-sheet";
+import {
+  AUX_SHEET_DEFAULT_NAME,
+  AUX_SHEET_GRID_ROW_OFFSET,
+  auxCellNumber,
+  evalAuxFormula,
+  isAuxFormula,
+} from "@/lib/aux-sheet";
 import { canAccessClientExport } from "@/lib/client-portal.server";
 import type { PlanAuxSheet } from "@/db/queries/project-detail";
 
@@ -542,9 +548,9 @@ export async function GET(
   buildBudgetByMarketSheet(wb, detail, lang);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // TAB 3 — Sheet auxiliar (solo si el plan tiene uno creado)
+  // TABS 3+ — Tabs auxiliares del plan (uno por sheet creado, en orden)
   // ─────────────────────────────────────────────────────────────────────────
-  if (detail.auxSheet) buildAuxSheet(wb, detail, detail.auxSheet, lang);
+  for (const aux of detail.auxSheets) buildAuxSheet(wb, detail, aux, lang);
 
   // ─── Output ─────────────────────────────────────────────────────────────
   const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
@@ -713,9 +719,11 @@ function buildBudgetByMarketSheet(
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Tab 3 — Sheet auxiliar (grilla libre del planner). Mismo encabezado de
+// Tabs 3+ — Tabs auxiliares (grillas libres del planner). Mismo encabezado de
 // metadata que el editor (proyecto, período, budget origin) y la grilla tal
-// cual se cargó; las celdas que parsean limpio como número van numéricas.
+// cual se cargó; las celdas que parsean limpio como número van numéricas y
+// las fórmulas ("=…") se escriben como fórmulas reales de Excel (la
+// numeración del editor coincide con la del tab, así las refs no se corren).
 // ────────────────────────────────────────────────────────────────────────────
 
 function buildAuxSheet(
@@ -775,12 +783,23 @@ function buildAuxSheet(
     row.height = 20;
   });
 
-  // Grilla libre (una fila de aire después de la metadata).
-  const startRow = infoPairs.length + 2;
+  // Grilla libre (una fila de aire después de la metadata; AUX_SHEET_GRID_ROW_
+  // OFFSET es la misma numeración que muestra el editor).
   aux.grid.forEach((cells, r) => {
-    const row = ws.getRow(startRow + r);
+    const row = ws.getRow(AUX_SHEET_GRID_ROW_OFFSET + r);
     cells.forEach((cell, c) => {
       if (!cell.trim()) return;
+      if (isAuxFormula(cell)) {
+        // Solo va como fórmula si nuestro evaluador la resuelve (garantiza
+        // sintaxis válida); si no, va el texto crudo para que se vea el error.
+        const res = evalAuxFormula(cell, aux.grid, { r, c });
+        // Uppercase: Excel guarda refs y funciones en mayúsculas; nuestro
+        // lenguaje no tiene strings literales, así que es seguro.
+        row.getCell(c + 1).value = res.ok
+          ? { formula: cell.trimStart().slice(1).toUpperCase(), result: res.value }
+          : cell;
+        return;
+      }
       row.getCell(c + 1).value = auxCellNumber(cell) ?? cell;
     });
   });

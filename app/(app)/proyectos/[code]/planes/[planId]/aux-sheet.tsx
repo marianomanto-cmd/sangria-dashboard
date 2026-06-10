@@ -1,13 +1,17 @@
 "use client";
 
-// Sheet auxiliar del plan: grilla libre tipo Excel (máx. 1 por plan) que sale
-// como tab extra del export Excel, después del "Budget por mercado". Arriba
-// muestra la misma metadata que ese tab (proyecto, período, budget origin,
-// read-only) y debajo la grilla editable. La grilla vive en estado local (nada
-// más en la página la consume), así que los commits guardan sin router.refresh.
+// Tabs auxiliares del plan: grillas libres tipo Excel (N por plan) que salen
+// como tabs extra del export Excel, después del "Budget por mercado". Cada tab
+// muestra arriba la misma metadata que el tab exportado (proyecto, período,
+// budget origin, read-only) y debajo la grilla editable. Las celdas que
+// empiezan con "=" son fórmulas (refs A1 con la numeración visible + SUM/
+// AVERAGE/MIN/MAX/COUNT): el editor muestra el resultado y la fórmula cruda
+// al enfocar; el export las escribe como fórmulas reales de Excel. La grilla
+// vive en estado local (nada más en la página la consume), así que los
+// commits guardan sin router.refresh.
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { ChevronDown, Plus, Sheet, Trash2 } from "lucide-react";
 import {
   createAuxSheet,
@@ -19,9 +23,12 @@ import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm-dialog";
 import type { PlanAuxSheet, PlanDetail } from "@/db/queries/project-detail";
 import {
+  AUX_SHEET_GRID_ROW_OFFSET,
   AUX_SHEET_MAX_COLS,
   AUX_SHEET_MAX_ROWS,
   auxColLetter,
+  evalAuxFormula,
+  isAuxFormula,
   normalizeAuxGrid,
 } from "@/lib/aux-sheet";
 import { formatDate, t, type Language } from "@/lib/i18n";
@@ -46,41 +53,43 @@ export function AuxSheetSection({
       if (!r.ok) toast.error(r.error);
       else
         toast.success(
-          lang === "es" ? "Sheet auxiliar creado" : "Auxiliary sheet created",
+          lang === "es" ? "Tab auxiliar creado" : "Auxiliary tab created",
         );
       router.refresh();
     });
   };
 
-  if (!detail.auxSheet) {
-    if (!editable) return null;
-    return (
-      <section className="rounded-lg border border-dashed border-line px-5 py-4 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium">Sheet auxiliar</p>
-          <p className="text-xs text-muted mt-0.5">
-            Grilla libre que se agrega al Excel como un tab más, después del
-            Budget split. Arranca con la info del plan arriba y filas vacías
-            para completar a mano.
-          </p>
-        </div>
-        <Button variant="secondary" size="sm" onClick={onCreate} disabled={pending}>
-          <Plus size={14} strokeWidth={2} />
-          Agregar sheet auxiliar
-        </Button>
-      </section>
-    );
-  }
+  if (detail.auxSheets.length === 0 && !editable) return null;
 
-  // key por id: si se borra y se vuelve a crear, el editor rearranca limpio.
   return (
-    <AuxSheetEditor
-      key={detail.auxSheet.id}
-      sheet={detail.auxSheet}
-      detail={detail}
-      editable={editable}
-      lang={lang}
-    />
+    <>
+      {detail.auxSheets.map((sheet) => (
+        // key por id: si se borra y se vuelve a crear, el editor rearranca limpio.
+        <AuxSheetEditor
+          key={sheet.id}
+          sheet={sheet}
+          detail={detail}
+          editable={editable}
+          lang={lang}
+        />
+      ))}
+      {editable && (
+        <section className="rounded-lg border border-dashed border-line px-5 py-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Tabs auxiliares</p>
+            <p className="text-xs text-muted mt-0.5">
+              Grillas libres que se agregan al Excel como tabs, después del
+              Budget split. Soportan fórmulas: <code>=B5*2</code>,{" "}
+              <code>=SUM(A5:A10)</code>.
+            </p>
+          </div>
+          <Button variant="secondary" size="sm" onClick={onCreate} disabled={pending}>
+            <Plus size={14} strokeWidth={2} />
+            Crear tab auxiliar
+          </Button>
+        </section>
+      )}
+    </>
   );
 }
 
@@ -100,11 +109,29 @@ function AuxSheetEditor({
   const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
-  // Última grilla commiteada — los inputs son uncontrolled (defaultValue) como
-  // el resto del editor; acá solo guardamos lo que ya se mandó a la action.
+  // Última grilla commiteada (valores crudos, fórmulas incluidas).
   const [grid, setGrid] = useState<string[][]>(() => normalizeAuxGrid(sheet.grid));
+  // Celda en edición: muestra el valor crudo mientras tiene foco; el resto
+  // de las celdas muestran el valor computado (como Excel).
+  const [editing, setEditing] = useState<{ r: number; c: number; draft: string } | null>(
+    null,
+  );
 
   const cols = grid[0]?.length ?? 0;
+
+  // Valores de display: fórmulas evaluadas (o su código de error), el resto
+  // tal cual. Recomputa solo cuando la grilla commiteada cambia.
+  const display = useMemo(
+    () =>
+      grid.map((row, r) =>
+        row.map((cell, c) => {
+          if (!isAuxFormula(cell)) return cell;
+          const res = evalAuxFormula(cell, grid, { r, c });
+          return res.ok ? fmtNumber(res.value) : res.error;
+        }),
+      ),
+    [grid],
+  );
 
   const save = (next: string[][]) => {
     startTransition(async () => {
@@ -114,6 +141,7 @@ function AuxSheetEditor({
   };
 
   const commitCell = (r: number, c: number, value: string) => {
+    setEditing(null);
     if (grid[r][c] === value) return;
     const next = grid.map((row, ri) =>
       ri === r ? row.map((cell, ci) => (ci === c ? value : cell)) : row,
@@ -149,7 +177,7 @@ function AuxSheetEditor({
   const onDelete = async () => {
     if (
       !(await confirm({
-        title: "¿Eliminar el sheet auxiliar?",
+        title: `¿Eliminar el tab auxiliar "${sheet.name}"?`,
         body: "Se pierde todo el contenido de la grilla y el tab deja de salir en el Excel. Esta acción no se puede deshacer.",
         confirmLabel: "Eliminar",
         danger: true,
@@ -159,7 +187,7 @@ function AuxSheetEditor({
     startTransition(async () => {
       const r = await deleteAuxSheet({ sheetId: sheet.id });
       if (!r.ok) toast.error(r.error);
-      else toast.success("Sheet auxiliar eliminado");
+      else toast.success("Tab auxiliar eliminado");
       router.refresh();
     });
   };
@@ -176,9 +204,6 @@ function AuxSheetEditor({
     [t("common.period", lang), periodFormatted],
     [t("common.budgetOrigin", lang), detail.budgetOrigin.name],
   ];
-  // Los números de fila replican el layout del tab exportado: metadata,
-  // una fila de aire y recién ahí la grilla.
-  const gridRowOffset = infoRows.length + 2;
 
   return (
     <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
@@ -201,8 +226,8 @@ function AuxSheetEditor({
         )}
         <span className="text-xs text-muted flex-1">
           {lang === "es"
-            ? "Sheet auxiliar · tab del Excel después del Budget split"
-            : "Auxiliary sheet · Excel tab after the Budget split"}
+            ? "Tab auxiliar · sale en el Excel después del Budget split"
+            : "Auxiliary tab · exported to Excel after the Budget split"}
         </span>
         <ChevronDown
           size={16}
@@ -256,19 +281,30 @@ function AuxSheetEditor({
                 {grid.map((row, r) => (
                   <tr key={r}>
                     <td className="bg-paper border border-line-soft text-center text-[10px] text-muted">
-                      {gridRowOffset + r}
+                      {AUX_SHEET_GRID_ROW_OFFSET + r}
                     </td>
-                    {row.map((cell, c) => (
-                      <td key={c} className="border border-line-soft p-0">
-                        <input
-                          type="text"
-                          defaultValue={cell}
-                          disabled={!editable}
-                          onBlur={(e) => commitCell(r, c, e.target.value)}
-                          className="w-full bg-transparent px-2 py-1 focus:outline-none focus:bg-accent-soft/40 disabled:opacity-60"
-                        />
-                      </td>
-                    ))}
+                    {row.map((cell, c) => {
+                      const isEditing = editing?.r === r && editing?.c === c;
+                      return (
+                        <td key={c} className="border border-line-soft p-0">
+                          <input
+                            type="text"
+                            value={isEditing ? editing.draft : display[r][c]}
+                            disabled={!editable}
+                            onFocus={() => setEditing({ r, c, draft: cell })}
+                            onChange={(e) =>
+                              setEditing({ r, c, draft: e.target.value })
+                            }
+                            onBlur={(e) => commitCell(r, c, e.target.value)}
+                            className={`w-full bg-transparent px-2 py-1 focus:outline-none focus:bg-accent-soft/40 disabled:opacity-60 ${
+                              !isEditing && isAuxFormula(cell)
+                                ? "font-mono tabular-nums text-right"
+                                : ""
+                            }`}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -296,6 +332,14 @@ function AuxSheetEditor({
                   <Plus size={12} strokeWidth={2} />
                   Columna
                 </Button>
+                <span className="text-[11px] text-muted">
+                  Fórmulas: <code>=B{AUX_SHEET_GRID_ROW_OFFSET}*2</code> ·{" "}
+                  <code>
+                    =SUM(A{AUX_SHEET_GRID_ROW_OFFSET}:A
+                    {AUX_SHEET_GRID_ROW_OFFSET + 5})
+                  </code>{" "}
+                  · AVERAGE / MIN / MAX / COUNT
+                </span>
               </>
             )}
             <span className="flex-1 text-right text-[11px] text-muted">
@@ -307,10 +351,10 @@ function AuxSheetEditor({
                 onClick={onDelete}
                 disabled={pending}
                 className="inline-flex items-center gap-1 text-[11px] text-muted hover:text-danger disabled:opacity-50"
-                title="Eliminar el sheet auxiliar (y su tab del Excel)"
+                title="Eliminar el tab auxiliar (y su tab del Excel)"
               >
                 <Trash2 size={12} strokeWidth={2} />
-                Eliminar sheet
+                Eliminar tab
               </button>
             )}
           </div>
@@ -318,6 +362,11 @@ function AuxSheetEditor({
       )}
     </section>
   );
+}
+
+// Resultado de fórmula en formato US (regla de la app), hasta 2 decimales.
+function fmtNumber(v: number): string {
+  return v.toLocaleString("en-US", { maximumFractionDigits: 2 });
 }
 
 // Navegación tipo planilla (igual que la grilla de placements): Enter baja a

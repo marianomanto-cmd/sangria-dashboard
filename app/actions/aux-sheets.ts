@@ -1,11 +1,12 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import {
   AUX_SHEET_DEFAULT_COLS,
+  AUX_SHEET_DEFAULT_NAME,
   AUX_SHEET_DEFAULT_ROWS,
   sanitizeAuxGrid,
 } from "@/lib/aux-sheet";
@@ -29,7 +30,7 @@ async function revalidatePlanPaths(planId: string) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// Sheet auxiliar del plan (máx. 1 por plan) — ver lib/aux-sheet.ts
+// Tabs auxiliares del plan (N por plan) — ver lib/aux-sheet.ts
 // ════════════════════════════════════════════════════════════════════════════
 
 export async function createAuxSheet(input: {
@@ -45,15 +46,6 @@ export async function createAuxSheet(input: {
   if (!plan || plan.deletedAt) return { ok: false, error: "Plan no encontrado" };
   if (plan.status === "archived") return { ok: false, error: "Plan archivado" };
 
-  const [existing] = await db
-    .select({ id: mediaPlanAuxSheets.id })
-    .from(mediaPlanAuxSheets)
-    .where(eq(mediaPlanAuxSheets.mediaPlanId, input.planId))
-    .limit(1);
-  if (existing) {
-    return { ok: false, error: "El plan ya tiene un sheet auxiliar" };
-  }
-
   // La grilla nace con el tamaño default para que el editor muestre filas
   // vacías listas para tipear (como un tab nuevo de Excel).
   const emptyGrid = Array.from({ length: AUX_SHEET_DEFAULT_ROWS }, () =>
@@ -61,9 +53,27 @@ export async function createAuxSheet(input: {
   );
 
   try {
+    // Sort order = max + 1; el nombre default lleva el número de tab para
+    // distinguirlos ("Auxiliar", "Auxiliar 2", …) — editable después.
+    const [{ next, count }] = await db
+      .select({
+        next: sql<number>`coalesce(max(${mediaPlanAuxSheets.sortOrder}), -1) + 1`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(mediaPlanAuxSheets)
+      .where(eq(mediaPlanAuxSheets.mediaPlanId, input.planId));
+
     const [sheet] = await db
       .insert(mediaPlanAuxSheets)
-      .values({ mediaPlanId: input.planId, gridJson: emptyGrid })
+      .values({
+        mediaPlanId: input.planId,
+        name:
+          count === 0
+            ? AUX_SHEET_DEFAULT_NAME
+            : `${AUX_SHEET_DEFAULT_NAME} ${count + 1}`,
+        gridJson: emptyGrid,
+        sortOrder: next,
+      })
       .returning();
 
     await recordAudit({
@@ -77,7 +87,7 @@ export async function createAuxSheet(input: {
     return { ok: true, sheetId: sheet.id };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
-    return { ok: false, error: `No se pudo crear el sheet auxiliar: ${msg}` };
+    return { ok: false, error: `No se pudo crear el tab auxiliar: ${msg}` };
   }
 }
 
@@ -93,12 +103,12 @@ export async function updateAuxSheet(input: {
     .from(mediaPlanAuxSheets)
     .where(eq(mediaPlanAuxSheets.id, input.sheetId))
     .limit(1);
-  if (!before) return { ok: false, error: "Sheet auxiliar no encontrado" };
+  if (!before) return { ok: false, error: "Tab auxiliar no encontrado" };
 
   const update: Record<string, unknown> = {};
   if (input.name !== undefined) {
     if (!input.name.trim()) {
-      return { ok: false, error: "El sheet necesita un nombre" };
+      return { ok: false, error: "El tab necesita un nombre" };
     }
     update.name = input.name.trim();
   }
@@ -128,7 +138,7 @@ export async function updateAuxSheet(input: {
   return { ok: true };
 }
 
-// Hard delete: el sheet es material de trabajo, no pasa por la papelera.
+// Hard delete: el tab es material de trabajo, no pasa por la papelera.
 export async function deleteAuxSheet(input: {
   sheetId: string;
 }): Promise<Result> {
