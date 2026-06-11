@@ -2,6 +2,56 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 11/jun/2026 — Reporting Calendar: comentarios por reporte
+
+- **Botoncito "Comentarios (N)"** en cada reporte del calendario — pendientes,
+  filas del Gantt y enviados; project y manual por igual. Abre un **modalcito**
+  con la lista de comentarios (**autor + fecha y hora**, "(editado)" si se
+  modificó), edición/borrado inline (borrar pide confirm) y un compose box
+  abajo. El **primer comentario de un reporte manual es su descripción**:
+  `createManualReport` la siembra al crear (con el creador como autor); las
+  descripciones de manuales pre-existentes se backfillean por SQL (abajo).
+- **Schema**: tabla nueva `report_comments` — polimórfica vía dos FKs nullable
+  (`project_report_id` / `manual_report_id`, exactamente una seteada — lo
+  valida la action), `body`, autor denormalizado (`author_user_id` /
+  `author_email`, como audit_log), timestamps. Cascade al borrar el reporte.
+- **Counts server-side**: `CalendarReport` y `SentReport` ahora traen
+  `commentsCount` (query agrupada en `db/queries/reports.ts`, defensiva si la
+  tabla no existe aún → 0). El modal refresca con `router.refresh()`.
+- **Archivos**: `app/actions/report-comments.ts` (list/add/update/delete con
+  audit), `components/report-comments.tsx` (botón + modal), `ReportingGantt`
+  expone `onOpenComments` (el portal read-only no lo pasa → sin botón).
+- **REQUIERE ACCIÓN EN PROD** (SQL para el editor de Supabase, idempotente):
+
+  ```sql
+  create table if not exists public.report_comments (
+    id uuid primary key default gen_random_uuid(),
+    project_report_id uuid references public.project_reports(id) on delete cascade,
+    manual_report_id uuid references public.manual_reports(id) on delete cascade,
+    body text not null,
+    author_user_id uuid,
+    author_email text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  );
+  create index if not exists idx_report_comments_project
+    on public.report_comments (project_report_id, created_at);
+  create index if not exists idx_report_comments_manual
+    on public.report_comments (manual_report_id, created_at);
+  alter table public.report_comments enable row level security;
+
+  -- Backfill: la descripción de los reportes manuales existentes entra como
+  -- primer comentario (solo si el reporte aún no tiene ninguno).
+  insert into public.report_comments (manual_report_id, body, created_at, updated_at)
+  select mr.id, btrim(mr.description), mr.created_at, mr.created_at
+  from public.manual_reports mr
+  where mr.description is not null
+    and btrim(mr.description) <> ''
+    and not exists (
+      select 1 from public.report_comments rc where rc.manual_report_id = mr.id
+    );
+  ```
+
 ### Cambios de la sesión 10/jun/2026 — Preview del plan: toggle Budget por mercado
 
 - El **preview tipo Excel** del editor del plan (`ExcelPreview`) suma un
@@ -2379,6 +2429,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
+| Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |

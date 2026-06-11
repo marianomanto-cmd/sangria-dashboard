@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -7,7 +7,29 @@ import {
   mediaPlans,
   projects,
   projectReports,
+  reportComments,
 } from "@/db/schema";
+
+// Cantidad de comentarios por reporte (project + manual en un solo mapa —
+// los ids son uuids, no colisionan). Defensivo: si la tabla todavía no
+// existe en prod (falta correr el SQL), devuelve un mapa vacío en vez de
+// romper el calendario.
+async function getCommentCountsByReport(): Promise<Record<string, number>> {
+  try {
+    const rows = await db
+      .select({
+        reportId: sql<string>`coalesce(${reportComments.projectReportId}, ${reportComments.manualReportId})`,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(reportComments)
+      .groupBy(
+        sql`coalesce(${reportComments.projectReportId}, ${reportComments.manualReportId})`,
+      );
+    return Object.fromEntries(rows.map((r) => [r.reportId, r.count]));
+  } catch {
+    return {};
+  }
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // Reporting Calendar: lo que necesita la página /reportes/calendario.
@@ -50,6 +72,8 @@ export type CalendarReport = {
   clientSlug: string;
   deliveryDate: string | null;
   deliveryDateAssignedAt: string | null;
+  // Cantidad de comentarios del tablerito (botón "Comentarios" de la UI).
+  commentsCount: number;
 };
 
 export type ReportingCalendarData = {
@@ -69,7 +93,7 @@ export async function getReportingCalendar(
   const manualConds = [isNull(manualReports.deliveredAt)];
   if (clientId) manualConds.push(eq(manualReports.clientId, clientId));
 
-  const [projRows, manualRows] = await Promise.all([
+  const [projRows, manualRows, commentCounts] = await Promise.all([
     db
       .select({
         reportId: projectReports.id,
@@ -106,6 +130,7 @@ export async function getReportingCalendar(
       .innerJoin(clients, eq(clients.id, manualReports.clientId))
       .where(and(...manualConds))
       .orderBy(asc(manualReports.createdAt)),
+    getCommentCountsByReport(),
   ]);
 
   const pending: CalendarReport[] = [];
@@ -132,6 +157,7 @@ export async function getReportingCalendar(
           : r.deliveryDateAssignedAt
             ? String(r.deliveryDateAssignedAt)
             : null,
+      commentsCount: commentCounts[r.reportId] ?? 0,
     };
     if (row.deliveryDate) inProgress.push(row);
     else pending.push(row);
@@ -158,6 +184,7 @@ export async function getReportingCalendar(
         r.deliveryDateAssignedAt instanceof Date
           ? r.deliveryDateAssignedAt.toISOString()
           : String(r.deliveryDateAssignedAt),
+      commentsCount: commentCounts[r.reportId] ?? 0,
     });
   }
 
@@ -231,6 +258,7 @@ export type SentReport = {
   deliveredAt: string;
   reportPptUrl: string | null;
   planNames: string[];            // solo para project (vacío para manual)
+  commentsCount: number;
 };
 
 export async function getSentReports(
@@ -242,7 +270,7 @@ export async function getSentReports(
   const manualConds = [isNotNull(manualReports.deliveredAt)];
   if (clientId) manualConds.push(eq(manualReports.clientId, clientId));
 
-  const [projRows, manualRows] = await Promise.all([
+  const [projRows, manualRows, commentCounts] = await Promise.all([
     db
       .select({
         reportId: projectReports.id,
@@ -281,6 +309,7 @@ export async function getSentReports(
       .innerJoin(clients, eq(clients.id, manualReports.clientId))
       .where(and(...manualConds))
       .orderBy(desc(manualReports.deliveredAt)),
+    getCommentCountsByReport(),
   ]);
 
   // Plan names para project rows (filtro de texto).
@@ -323,6 +352,7 @@ export async function getSentReports(
           : String(r.deliveredAt),
       reportPptUrl: r.reportPptUrl,
       planNames: plansByProject.get(r.projectId) ?? [],
+      commentsCount: commentCounts[r.reportId] ?? 0,
     });
   }
 
@@ -347,6 +377,7 @@ export async function getSentReports(
           : String(r.deliveredAt),
       reportPptUrl: r.reportPptUrl,
       planNames: [],
+      commentsCount: commentCounts[r.reportId] ?? 0,
     });
   }
 

@@ -146,6 +146,7 @@ components/                 # UI compartida
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
   reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
   reporting-gantt.tsx       # Gantt diario -30/+30 días para reporting calendar
+  report-comments.tsx       # tablerito de comentarios por reporte del calendario (botón + modal con autor/fecha/hora)
   report-generator-form.tsx # /reportes/generador: filtros cascading + column picker URL-based
   button.tsx                # Button + buttonVariants() — primitivo único para CTAs (primary/secondary/ghost/danger, xs/sm/md/lg). NO volver a escribir bg-ink inline
   plan-status-badge.tsx     # PlanStatusBadge — badge de estado del plan (draft/ready_to_send/approved/archived), prop size md/sm. Fuente única; no duplicar
@@ -1148,6 +1149,16 @@ Idempotente: limpia las tablas antes de insertar.
   otro): el analista lo carga/edita/quita desde un modal (acción
   `setReportPptUrl`) para encontrar el reporte rápido a futuro. **Requiere
   `npm run db:push`** en prod para crear la columna `report_ppt_url`.
+  Además, **cada reporte** (pendientes, Gantt y enviados — project y manual
+  por igual) tiene un botoncito **"Comentarios (N)"** que abre un tablerito
+  read-only-friendly: lista de comentarios con **autor + fecha y hora**,
+  edición/borrado inline y compose abajo. El **primer comentario de un
+  reporte manual es su descripción** (sembrada al crearlo con el creador como
+  autor; las pre-existentes se backfillean por SQL). Tabla `report_comments`
+  (dos FKs nullable project/manual, cascade), actions en
+  `app/actions/report-comments.ts`, UI en `components/report-comments.tsx`
+  (el Gantt expone `onOpenComments`, oculto en el portal read-only).
+  **Requiere SQL en prod** (tabla + RLS + backfill — ver HANDOFF).
 - **i18n parcial**: las áreas de mayor visibilidad (dashboard, listas
   globales, exports, dates) están traducidas a `en`/`es`. Quedan strings
   hardcodeados en formularios secundarios (`/proyectos/nuevo`, editor

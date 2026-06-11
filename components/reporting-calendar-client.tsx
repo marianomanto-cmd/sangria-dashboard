@@ -12,6 +12,10 @@ import {
   setReportPptUrl,
 } from "@/app/actions/reports";
 import { ReportingGantt } from "@/components/reporting-gantt";
+import {
+  ReportCommentsButton,
+  ReportCommentsModal,
+} from "@/components/report-comments";
 import type { CalendarReport, SentReport } from "@/db/queries/reports";
 import { formatDate, type Language } from "@/lib/i18n";
 
@@ -58,6 +62,12 @@ export function ReportingCalendarClient({
   const [pendingAction, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [budgetOrigin, setBudgetOrigin] = useState<string>("");
+  // Tablerito de comentarios abierto desde una fila del Gantt.
+  const [commentsFor, setCommentsFor] = useState<{
+    reportId: string;
+    kind: ReportKind;
+    title: string;
+  } | null>(null);
 
   // Solo se cuentan budget origins reales (project_reports los tienen;
   // manual_reports vienen con null y no entran al filtro).
@@ -308,14 +318,22 @@ export function ReportingCalendarClient({
                         : "—"}
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      <Button
-                        size="xs"
-                        onClick={() =>
-                          openAssign(r.reportId, r.kind, null, r.projectName)
-                        }
-                      >
-                        {lang === "es" ? "Asignar fecha" : "Assign date"}
-                      </Button>
+                      <span className="inline-flex items-center gap-3">
+                        <ReportCommentsButton
+                          reportRef={{ kind: r.kind, reportId: r.reportId }}
+                          title={r.projectName}
+                          count={r.commentsCount}
+                          lang={lang}
+                        />
+                        <Button
+                          size="xs"
+                          onClick={() =>
+                            openAssign(r.reportId, r.kind, null, r.projectName)
+                          }
+                        >
+                          {lang === "es" ? "Asignar fecha" : "Assign date"}
+                        </Button>
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -356,6 +374,11 @@ export function ReportingCalendarClient({
             const r = fInProgress.find((x) => x.reportId === reportId);
             if (!r) return;
             openConfirmDeleteManual(reportId, r.projectName);
+          }}
+          onOpenComments={(reportId) => {
+            const r = fInProgress.find((x) => x.reportId === reportId);
+            if (!r) return;
+            setCommentsFor({ reportId, kind: r.kind, title: r.projectName });
           }}
         />
       </section>
@@ -455,6 +478,16 @@ export function ReportingCalendarClient({
             onSubmit={submitCreateManual}
           />
         </Modal>
+      )}
+
+      {/* Tablerito de comentarios (abierto desde el Gantt) */}
+      {commentsFor && (
+        <ReportCommentsModal
+          reportRef={{ kind: commentsFor.kind, reportId: commentsFor.reportId }}
+          title={commentsFor.title}
+          lang={lang}
+          onClose={() => setCommentsFor(null)}
+        />
       )}
 
       {/* Dialog: confirmar eliminación de reporte manual */}
@@ -634,6 +667,7 @@ function SentReportsSection({
                 <th className="px-4 py-2.5">
                   {lang === "es" ? "Reporte (PPT)" : "Report (PPT)"}
                 </th>
+                <th className="px-4 py-2.5" />
               </tr>
             </thead>
             <tbody>
@@ -710,6 +744,14 @@ function SentReportsSection({
                         {lang === "es" ? "Agregar link" : "Add link"}
                       </button>
                     )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <ReportCommentsButton
+                      reportRef={{ kind: r.kind, reportId: r.reportId }}
+                      title={r.projectName}
+                      count={r.commentsCount}
+                      lang={lang}
+                    />
                   </td>
                 </tr>
               ))}
