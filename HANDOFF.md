@@ -1804,6 +1804,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+c44dfc3  Reporting Calendar: tablerito de comentarios por reporte (#141)
 0974f17  Preview del plan: toggle para ver también el Budget por mercado (Tab 2) (#139)
 07029a3  Plan: chip "Última edición" de la versión vigente + modal read-only de cambios (#137)
 8d1a43a  Tabs auxiliares del plan: grillas libres con fórmulas + tabs extra en el Excel (#135)
