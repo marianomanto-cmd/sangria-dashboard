@@ -1158,7 +1158,8 @@ Idempotente: limpia las tablas antes de insertar.
   (dos FKs nullable project/manual, cascade), actions en
   `app/actions/report-comments.ts`, UI en `components/report-comments.tsx`
   (el Gantt expone `onOpenComments`, oculto en el portal read-only).
-  **Requiere SQL en prod** (tabla + RLS + backfill — ver HANDOFF).
+  Requirió SQL en prod (tabla + RLS + backfill de descripciones) — **ya
+  aplicado**; el SQL de referencia vive en el HANDOFF.
 - **i18n parcial**: las áreas de mayor visibilidad (dashboard, listas
   globales, exports, dates) están traducidas a `en`/`es`. Quedan strings
   hardcodeados en formularios secundarios (`/proyectos/nuevo`, editor
