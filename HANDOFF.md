@@ -1860,6 +1860,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+ecb4d28  Aux sheets: undo/redo (Ctrl+Z / Ctrl+Shift+Z) (#146)
+b9e8513  docs: registrar PR #144 en Commits recientes (#145)
 a980742  Aux sheets: range select, copy/paste, and merge cells (#144) — REQUIERE npm run db:push
 102279a  docs: registrar PR #141 en Commits recientes (#142)
 c44dfc3  Reporting Calendar: tablerito de comentarios por reporte (#141)
