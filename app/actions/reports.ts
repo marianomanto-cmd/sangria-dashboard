@@ -3,8 +3,15 @@
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
-import { clients, manualReports, projects, projectReports } from "@/db/schema";
+import {
+  clients,
+  manualReports,
+  projects,
+  projectReports,
+  reportComments,
+} from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
+import { getCurrentUser } from "@/lib/auth";
 
 type Result = { ok: true } | { ok: false; error: string };
 type ReportKind = "project" | "manual";
@@ -383,6 +390,24 @@ export async function createManualReport(input: {
     action: "create",
     afterJson: created,
   });
+
+  // La descripción entra como PRIMER comentario del tablerito del reporte
+  // (ver app/actions/report-comments.ts), con el creador como autor.
+  // Defensivo: si la tabla todavía no existe en prod (falta correr el SQL),
+  // el reporte se crea igual — el seed lazy de listReportComments lo cubre.
+  if (created.description) {
+    try {
+      const user = await getCurrentUser();
+      await db.insert(reportComments).values({
+        manualReportId: created.id,
+        body: created.description,
+        authorUserId: user?.id ?? null,
+        authorEmail: user?.email ?? null,
+      });
+    } catch {
+      // noop — seed lazy al abrir el modal de comentarios.
+    }
+  }
 
   revalidatePath("/reportes/calendario");
   return { ok: true };

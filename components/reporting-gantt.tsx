@@ -46,6 +46,7 @@ export function ReportingGantt({
   onAssignDate,
   onMarkDelivered,
   onDeleteManual,
+  onOpenComments,
   readOnly = false,
 }: {
   reports: CalendarReport[];
@@ -55,6 +56,7 @@ export function ReportingGantt({
   onAssignDate?: (reportId: string, current: string | null) => void;
   onMarkDelivered?: (reportId: string) => void;
   onDeleteManual?: (reportId: string) => void;
+  onOpenComments?: (reportId: string) => void;
   readOnly?: boolean;
 }) {
   // Ventana fija basada en "hoy" del cliente. Se calcula en render (client),
@@ -274,6 +276,9 @@ export function ReportingGantt({
                 ? () => onDeleteManual(r.reportId)
                 : undefined
             }
+            onOpenComments={
+              onOpenComments ? () => onOpenComments(r.reportId) : undefined
+            }
           />
         ))}
       </div>
@@ -341,6 +346,7 @@ function GanttRow({
   onAssignDate,
   onMarkDelivered,
   onDeleteManual,
+  onOpenComments,
 }: {
   report: CalendarReport;
   lang: Language;
@@ -359,6 +365,7 @@ function GanttRow({
   onAssignDate?: () => void;
   onMarkDelivered?: () => void;
   onDeleteManual?: () => void;
+  onOpenComments?: () => void;
 }) {
   // Para project: closedAt = momento en que pasó a 'closed'.
   // Para manual: closedAt = createdAt (cuando se creó). El marker gris en el
@@ -490,6 +497,19 @@ function GanttRow({
                   className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted hover:text-danger underline-offset-2 hover:underline"
                 >
                   {lang === "es" ? "Eliminar" : "Delete"}
+                </button>
+              </>
+            )}
+            {onOpenComments && (
+              <>
+                <span className="text-line">·</span>
+                <button
+                  type="button"
+                  onClick={onOpenComments}
+                  className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted hover:text-ink underline-offset-2 hover:underline"
+                >
+                  {lang === "es" ? "Comentarios" : "Comments"}
+                  {report.commentsCount > 0 ? ` (${report.commentsCount})` : ""}
                 </button>
               </>
             )}

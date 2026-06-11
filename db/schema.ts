@@ -624,6 +624,46 @@ export const manualReports = pgTable(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// Comentarios de reportes — tablerito de comments por reporte del Reporting
+// Calendar (project_reports y manual_reports por igual). Polimórfico vía dos
+// FKs nullable: exactamente UNA seteada (lo valida la server action, no la
+// DB). El autor va denormalizado como en audit_log. Al crear un reporte
+// manual, su descripción se siembra como primer comentario (con el creador
+// como autor); los manuales pre-existentes se backfillean una vez vía SQL
+// (ver "acción en prod" en HANDOFF).
+// ════════════════════════════════════════════════════════════════════════════
+
+export const reportComments = pgTable(
+  "report_comments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectReportId: uuid("project_report_id").references(
+      () => projectReports.id,
+      { onDelete: "cascade" },
+    ),
+    manualReportId: uuid("manual_report_id").references(
+      () => manualReports.id,
+      { onDelete: "cascade" },
+    ),
+    body: text("body").notNull(),
+    // Autor denormalizado (mismo approach que audit_log). Null = "Sistema"
+    // (p.ej. el seed lazy de la descripción de manuales pre-existentes).
+    authorUserId: uuid("author_user_id"),
+    authorEmail: text("author_email"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_report_comments_project").on(t.projectReportId, t.createdAt),
+    index("idx_report_comments_manual").on(t.manualReportId, t.createdAt),
+  ],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // Campaign Tracker — valores reales acumulados que carga la trafficker por
 // placement y métrica. NO es time-series: hay un solo row por (placement,
 // metric_key) y el valor se reemplaza en cada edición (autosave). El

@@ -36,6 +36,7 @@ const ENTITY_NOUN: Record<string, { singular: string; article: "el" | "la" }> = 
   plan_billing_publisher: { singular: "consumo de publisher", article: "el" },
   plan_billing_fee: { singular: "imputación de fee", article: "la" },
   project_report: { singular: "reporte de proyecto", article: "el" },
+  report_comment: { singular: "comentario de reporte", article: "el" },
   campaign_placement_actual: { singular: "valor real de placement", article: "el" },
   campaign_actual_snapshot: { singular: "snapshot de tracker", article: "el" },
   simulator_scenario: { singular: "escenario", article: "el" },
@@ -96,6 +97,11 @@ export function entityLabel(
       return pick(["month"]);
     case "project_report":
       return pick(["projectName", "deliveryDate"]);
+    case "report_comment": {
+      // El "nombre" de un comentario es su cuerpo, truncado.
+      const body = pick(["body"]);
+      return body && body.length > 60 ? `${body.slice(0, 60)}…` : body;
+    }
     default:
       return pick(["name", "label", "title", "month", "slug", "code"]);
   }
