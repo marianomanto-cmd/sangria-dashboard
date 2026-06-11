@@ -1,4 +1,4 @@
-# Handoff — miércoles 10/jun/2026
+# Handoff — jueves 11/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
@@ -21,7 +21,8 @@ Estado del repo al cierre y plan para retomar en otra sesión.
 - **Archivos**: `app/actions/report-comments.ts` (list/add/update/delete con
   audit), `components/report-comments.tsx` (botón + modal), `ReportingGantt`
   expone `onOpenComments` (el portal read-only no lo pasa → sin botón).
-- **REQUIERE ACCIÓN EN PROD** (SQL para el editor de Supabase, idempotente):
+- **Acción en prod**: ✅ **ya aplicada** (11/jun/2026) — SQL para el editor
+  de Supabase, idempotente (queda acá por referencia / otros entornos):
 
   ```sql
   create table if not exists public.report_comments (
@@ -119,8 +120,9 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   `app/actions/aux-sheets.ts` (CRUD con audit), `aux-sheet.tsx` junto al
   editor, `getPlanDetail` ahora devuelve `auxSheets[]`, tabs 3+ en
   `export.xlsx/route.ts`, noun nuevo en `lib/audit-format.ts`.
-- **REQUIERE ACCIÓN EN PROD** (SQL para el editor de Supabase, idempotente —
-  equivalente a `npm run db:push` + la línea de RLS ya agregada a `db/rls.sql`):
+- **Acción en prod**: ✅ **ya aplicada** (10/jun/2026) — SQL para el editor
+  de Supabase, idempotente, equivalente a `npm run db:push` + la línea de
+  RLS ya agregada a `db/rls.sql` (queda acá por referencia / otros entornos):
 
   ```sql
   create table if not exists public.media_plan_aux_sheets (
@@ -1804,9 +1806,13 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+102279a  docs: registrar PR #141 en Commits recientes (#142)
 c44dfc3  Reporting Calendar: tablerito de comentarios por reporte (#141)
+ec08651  docs: registrar PR #139 en Commits recientes (#140)
 0974f17  Preview del plan: toggle para ver también el Budget por mercado (Tab 2) (#139)
+77408f6  docs: registrar PR #137 en Commits recientes (#138)
 07029a3  Plan: chip "Última edición" de la versión vigente + modal read-only de cambios (#137)
+ca063f0  docs: registrar PRs #133-#135 en Commits recientes (#136)
 8d1a43a  Tabs auxiliares del plan: grillas libres con fórmulas + tabs extra en el Excel (#135)
 b611490  Portal Proyectos: filtro Abiertos/Cerrados (default abiertos) (#134)
 681698e  docs: barrido README + HANDOFF (sesión 05/jun) (#133)
