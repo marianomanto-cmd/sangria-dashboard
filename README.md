@@ -333,9 +333,18 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     rinde con `rowSpan/colSpan` y el export con `ws.mergeCells` (mismas coords).
     Helpers (`sanitizeMerges`, `findMerge`, `rectsIntersect`) en `lib/aux-sheet.ts`,
     saneadas server-side en `updateAuxSheet`.
+  - **Formato y tamaños**: **negrita** (`Ctrl/Cmd+B` o botón **N**), **cursiva**
+    (`Ctrl/Cmd+I` o **K**) y **ajuste de texto / wrap** (botón **Wrap**) por celda
+    o rango; **ensanchar columnas / alargar filas** arrastrando el borde del
+    header de columna (`A,B,…`) o del número de fila. Todo vive en la columna
+    `media_plan_aux_sheets.style_json` (`{cells:{"r:c":{b,i,w}}, cols:{}, rows:{}}`,
+    px). El editor lo rinde con clases + `colgroup`/altos de fila (`table-fixed`)
+    y el export con `cell.font` / `cell.alignment.wrapText` / `column.width`
+    (px/7) / `row.height` (px·0.75). Helpers en `lib/aux-sheet.ts`
+    (`sanitizeAuxStyle`, `cellFmt`, límites `AUX_COL_*` / `AUX_ROW_*`).
   - **Deshacer / rehacer**: `Ctrl/Cmd+Z` y `Ctrl/Cmd+Shift+Z` (o `Ctrl+Y`, o los
     botones Deshacer/Rehacer). Historial **por tab** de hasta `HISTORY_MAX` (50)
-    snapshots `{grid, merges}`: cada mutación apila el estado previo y una
+    snapshots `{grid, merges, style}`: cada mutación apila el estado previo y una
     edición nueva limpia el redo. Deshacer/rehacer también **persiste** (mismo
     `updateAuxSheet`). Mientras se edita una celda, `Ctrl+Z` es el undo de texto
     nativo del input (la grilla solo lo toma fuera de edición).
@@ -355,9 +364,10 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   **fórmulas reales de Excel** (con resultado cacheado; las que no parsean van
   como texto crudo) y aplica las uniones con `ws.mergeCells`. El nombre del tab
   es el del planner (sanitizado a nombre válido). El PDF no los incluye.
-- **Defensivo deploy→migración**: `getPlanDetail` lee los tabs aunque la columna
-  `merges_json` todavía no exista en prod (cae a una lectura sin esa columna,
-  con `merges: []`), así no desaparecen los tabs hasta correr el SQL.
+- **Defensivo deploy→migración**: `getPlanDetail` lee los tabs aunque
+  `merges_json` o `style_json` todavía no existan en prod — cae en cascada
+  (grid+merges+style → grid+merges → solo grid), con `merges: []` / `style`
+  vacío, así no desaparecen los tabs hasta correr el SQL.
 - Es material de trabajo: **no** participa del lifecycle de aprobación ni de
   los snapshots (aprobar / descartar borrador no los toca) y se borran duro
   (no pasan por la papelera). Crear/editar/borrar solo con el plan en `draft`

@@ -2,6 +2,42 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 11/jun/2026 — Tabs auxiliares: formato (negrita/cursiva/wrap) + resize de columnas/filas
+
+> **ACCIÓN REQUERIDA EN PROD**: agrega la columna `style_json` a
+> `media_plan_aux_sheets`. Correr **`npm run db:push`** después del deploy o
+> pegar el SQL de abajo en el SQL Editor de Supabase (idempotente, aditivo, sin
+> backfill). La tabla **ya tiene RLS** (a nivel tabla) → no tocar `db/rls.sql`.
+> La lectura es defensiva en cascada: si la columna no existe, los tabs se
+> siguen mostrando (sin estilos) hasta correr el SQL.
+>
+> ```sql
+> alter table public.media_plan_aux_sheets
+>   add column if not exists style_json jsonb not null
+>   default '{"cells":{},"cols":{},"rows":{}}'::jsonb;
+> ```
+
+- El editor de tabs auxiliares suma **formato estilo Excel**:
+  - **Negrita** (`Ctrl/Cmd+B` o botón **N**), **cursiva** (`Ctrl/Cmd+I` o **K**)
+    y **wrap / ajuste de texto** (botón **Wrap**) por celda o rango.
+  - **Ensanchar columnas / alargar filas** arrastrando el borde del header de
+    columna o del número de fila (preview en vivo, clamp a límites).
+- **Schema**: columna nueva `style_json` (jsonb) con
+  `{cells:{"r:c":{b?,i?,w?}}, cols:{idx:px}, rows:{idx:px}}`. Helpers puros en
+  `lib/aux-sheet.ts` (`AuxStyle`, `AuxCellFmt`, `sanitizeAuxStyle`, `cellFmt`,
+  `emptyAuxStyle`, `AUX_COL_*` / `AUX_ROW_*`), saneados server-side en
+  `updateAuxSheet`. `getPlanDetail` lee en cascada (grid+merges+style →
+  grid+merges → grid) para la ventana deploy→migración.
+- **Export** (`export.xlsx`): negrita/cursiva → `cell.font`; wrap →
+  `cell.alignment.wrapText`; anchos → `column.width` (px/7); altos →
+  `row.height` (px·0.75).
+- **Undo/redo**: el snapshot ahora incluye `style` (formato + tamaños entran al
+  historial como cualquier otra mutación).
+- **Archivos**: `lib/aux-sheet.ts`, `db/schema.ts`, `db/queries/project-detail.ts`,
+  `app/actions/aux-sheets.ts`, `app/api/plans/[planId]/export.xlsx/route.ts`,
+  `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx`. `tsc`, `eslint`
+  (archivos tocados) y `next build` en verde.
+
 ### Cambios de la sesión 11/jun/2026 — Tabs auxiliares: deshacer / rehacer (Ctrl+Z)
 
 - El editor de tabs auxiliares (`aux-sheet.tsx`) suma **deshacer / rehacer**:

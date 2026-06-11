@@ -1,6 +1,12 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { sanitizeMerges, type AuxMerge } from "@/lib/aux-sheet";
+import {
+  emptyAuxStyle,
+  sanitizeAuxStyle,
+  sanitizeMerges,
+  type AuxMerge,
+  type AuxStyle,
+} from "@/lib/aux-sheet";
 import {
   budgetOrigins,
   clients,
@@ -271,6 +277,7 @@ export type PlanAuxSheet = {
   name: string;
   grid: string[][];
   merges: AuxMerge[];
+  style: AuxStyle;
 };
 
 export type PlanDetail = {
@@ -381,33 +388,52 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     name: string;
     gridJson: string[][] | null;
     mergesJson: AuxMerge[] | null;
+    styleJson: AuxStyle | null;
   };
   let auxSheetRows: AuxRow[] = [];
   try {
+    // Camino feliz: grilla + uniones + estilos.
     auxSheetRows = await db
       .select({
         id: mediaPlanAuxSheets.id,
         name: mediaPlanAuxSheets.name,
         gridJson: mediaPlanAuxSheets.gridJson,
         mergesJson: mediaPlanAuxSheets.mergesJson,
+        styleJson: mediaPlanAuxSheets.styleJson,
       })
       .from(mediaPlanAuxSheets)
       .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
       .orderBy(asc(mediaPlanAuxSheets.sortOrder), asc(mediaPlanAuxSheets.createdAt));
   } catch {
     try {
+      // style_json todavía no migrada: leer con uniones, sin estilos.
       const rows = await db
         .select({
           id: mediaPlanAuxSheets.id,
           name: mediaPlanAuxSheets.name,
           gridJson: mediaPlanAuxSheets.gridJson,
+          mergesJson: mediaPlanAuxSheets.mergesJson,
         })
         .from(mediaPlanAuxSheets)
         .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
         .orderBy(asc(mediaPlanAuxSheets.sortOrder), asc(mediaPlanAuxSheets.createdAt));
-      auxSheetRows = rows.map((r) => ({ ...r, mergesJson: [] }));
+      auxSheetRows = rows.map((r) => ({ ...r, styleJson: null }));
     } catch {
-      auxSheetRows = [];
+      try {
+        // ni merges_json ni style_json: solo la grilla.
+        const rows = await db
+          .select({
+            id: mediaPlanAuxSheets.id,
+            name: mediaPlanAuxSheets.name,
+            gridJson: mediaPlanAuxSheets.gridJson,
+          })
+          .from(mediaPlanAuxSheets)
+          .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
+          .orderBy(asc(mediaPlanAuxSheets.sortOrder), asc(mediaPlanAuxSheets.createdAt));
+        auxSheetRows = rows.map((r) => ({ ...r, mergesJson: [], styleJson: null }));
+      } catch {
+        auxSheetRows = [];
+      }
     }
   }
 
@@ -495,6 +521,7 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
         name: s.name,
         grid,
         merges: sanitizeMerges(s.mergesJson ?? [], grid),
+        style: sanitizeAuxStyle(s.styleJson ?? emptyAuxStyle(), grid),
       };
     }),
     totals: {

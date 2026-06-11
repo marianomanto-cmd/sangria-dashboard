@@ -32,17 +32,28 @@ import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm-dialog";
 import type { PlanAuxSheet, PlanDetail } from "@/db/queries/project-detail";
 import {
+  AUX_COL_DEFAULT_WIDTH,
+  AUX_COL_MAX_WIDTH,
+  AUX_COL_MIN_WIDTH,
+  AUX_ROW_DEFAULT_HEIGHT,
+  AUX_ROW_MAX_HEIGHT,
+  AUX_ROW_MIN_HEIGHT,
   AUX_SHEET_GRID_ROW_OFFSET,
   AUX_SHEET_MAX_CELL_LEN,
   AUX_SHEET_MAX_COLS,
   AUX_SHEET_MAX_ROWS,
+  type AuxCellFmt,
   type AuxMerge,
+  type AuxStyle,
   auxColLetter,
+  cellFmt,
+  emptyAuxStyle,
   evalAuxFormula,
   findMerge,
   isAuxFormula,
   normalizeAuxGrid,
   rectsIntersect,
+  sanitizeAuxStyle,
   sanitizeMerges,
 } from "@/lib/aux-sheet";
 import { formatDate, t, type Language } from "@/lib/i18n";
@@ -109,10 +120,13 @@ export function AuxSheetSection({
 
 type Sel = { ar: number; ac: number; fr: number; fc: number };
 type Rect = { r0: number; c0: number; r1: number; c1: number };
-type AuxSnapshot = { grid: string[][]; merges: AuxMerge[] };
+type AuxSnapshot = { grid: string[][]; merges: AuxMerge[]; style: AuxStyle };
+type ResizeState = { kind: "col" | "row"; index: number; size: number };
 
 // Pasos de deshacer/rehacer que se guardan por tab.
 const HISTORY_MAX = 50;
+
+const GUTTER_W = 40; // ancho de la columna de números de fila (px)
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, n));
@@ -178,6 +192,10 @@ function AuxSheetEditor({
   const [merges, setMerges] = useState<AuxMerge[]>(() =>
     sanitizeMerges(sheet.merges, normalizeAuxGrid(sheet.grid)),
   );
+  // Estilos: formato por celda (negrita/cursiva/wrap) + anchos/altos.
+  const [style, setStyle] = useState<AuxStyle>(() =>
+    sanitizeAuxStyle(sheet.style ?? emptyAuxStyle(), normalizeAuxGrid(sheet.grid)),
+  );
   // Celda en edición (muestra el valor crudo mientras tiene foco).
   const [editing, setEditing] = useState<{ r: number; c: number; draft: string } | null>(
     null,
@@ -188,11 +206,16 @@ function AuxSheetEditor({
   // estado previo {grid, merges}; una edición nueva limpia el redo.
   const [undoStack, setUndoStack] = useState<AuxSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<AuxSnapshot[]>([]);
+  // Resize en curso de una columna/fila (preview en vivo mientras se arrastra).
+  const [resize, setResize] = useState<ResizeState | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const skipBlurRef = useRef(false);
   const editingRef = useRef<typeof editing>(null);
+  const resizeRef = useRef<
+    { kind: "col" | "row"; index: number; start: number; startSize: number; size: number } | null
+  >(null);
   useEffect(() => {
     editingRef.current = editing;
   }, [editing]);
@@ -235,7 +258,11 @@ function AuxSheetEditor({
   const focusContainer = () =>
     requestAnimationFrame(() => containerRef.current?.focus());
 
-  const save = (payload: { grid?: string[][]; merges?: AuxMerge[] }) => {
+  const save = (payload: {
+    grid?: string[][];
+    merges?: AuxMerge[];
+    style?: AuxStyle;
+  }) => {
     startTransition(async () => {
       const r = await updateAuxSheet({ sheetId: sheet.id, ...payload });
       if (!r.ok) toast.error(r.error);
@@ -244,7 +271,7 @@ function AuxSheetEditor({
 
   // Apila el estado actual para poder deshacerlo; limpia el redo (rama nueva).
   const pushHistory = () => {
-    setUndoStack((s) => [...s, { grid, merges }].slice(-HISTORY_MAX));
+    setUndoStack((s) => [...s, { grid, merges, style }].slice(-HISTORY_MAX));
     setRedoStack([]);
   };
 
@@ -482,12 +509,13 @@ function AuxSheetEditor({
     if (!editable || undoStack.length === 0) return;
     const prev = undoStack[undoStack.length - 1];
     setUndoStack((s) => s.slice(0, -1));
-    setRedoStack((r) => [...r, { grid, merges }].slice(-HISTORY_MAX));
+    setRedoStack((r) => [...r, { grid, merges, style }].slice(-HISTORY_MAX));
     setEditing(null);
     setGrid(prev.grid);
     setMerges(prev.merges);
+    setStyle(prev.style);
     setSel((s) => clampSel(s, prev.grid));
-    save({ grid: prev.grid, merges: prev.merges });
+    save({ grid: prev.grid, merges: prev.merges, style: prev.style });
     focusContainer();
   };
 
@@ -495,13 +523,105 @@ function AuxSheetEditor({
     if (!editable || redoStack.length === 0) return;
     const snap = redoStack[redoStack.length - 1];
     setRedoStack((r) => r.slice(0, -1));
-    setUndoStack((s) => [...s, { grid, merges }].slice(-HISTORY_MAX));
+    setUndoStack((s) => [...s, { grid, merges, style }].slice(-HISTORY_MAX));
     setEditing(null);
     setGrid(snap.grid);
     setMerges(snap.merges);
+    setStyle(snap.style);
     setSel((s) => clampSel(s, snap.grid));
-    save({ grid: snap.grid, merges: snap.merges });
+    save({ grid: snap.grid, merges: snap.merges, style: snap.style });
     focusContainer();
+  };
+
+  // ─── Formato de celda: negrita / cursiva / wrap ───────────────────────────
+  const applyFmt = (key: "b" | "i" | "w") => {
+    if (!editable) return;
+    const { r0, c0, r1, c1 } = selRect;
+    const keys: string[] = [];
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const m = findMerge(merges, r, c);
+        if (m && !(m.r0 === r && m.c0 === c)) continue; // saltear celdas tapadas
+        keys.push(`${r}:${c}`);
+      }
+    }
+    if (keys.length === 0) return;
+    // Si TODAS ya tienen el flag → lo saca (toggle), si no lo pone en todas.
+    const allOn = keys.every((k) => style.cells[k]?.[key]);
+    pushHistory();
+    const cells = { ...style.cells };
+    for (const k of keys) {
+      const cur: AuxCellFmt = { ...(cells[k] ?? {}) };
+      if (allOn) delete cur[key];
+      else cur[key] = true;
+      if (Object.keys(cur).length === 0) delete cells[k];
+      else cells[k] = cur;
+    }
+    const next = { ...style, cells };
+    setStyle(next);
+    save({ style: next });
+    focusContainer();
+  };
+  // Formato de la celda activa (para el estado "pressed" de los botones).
+  const activeFmt = cellFmt(style, active.r, active.c);
+
+  // ─── Anchos de columna / altos de fila (con preview en vivo) ───────────────
+  const colWidth = (c: number) =>
+    resize?.kind === "col" && resize.index === c
+      ? resize.size
+      : style.cols[c] ?? AUX_COL_DEFAULT_WIDTH;
+  const rowHeight = (r: number) =>
+    resize?.kind === "row" && resize.index === r
+      ? resize.size
+      : style.rows[r] ?? AUX_ROW_DEFAULT_HEIGHT;
+
+  const commitResize = (kind: "col" | "row", index: number, size: number) => {
+    pushHistory();
+    const next: AuxStyle =
+      kind === "col"
+        ? { ...style, cols: { ...style.cols, [index]: size } }
+        : { ...style, rows: { ...style.rows, [index]: size } };
+    setStyle(next);
+    save({ style: next });
+  };
+
+  // Arrastre del borde de un header de columna / número de fila. Los listeners
+  // se crean por gesto (cierran sobre el estado actual; nada muta durante el
+  // arrastre) y se limpian al soltar.
+  const onResizeMouseDown = (
+    e: React.MouseEvent,
+    kind: "col" | "row",
+    index: number,
+  ) => {
+    if (!editable || e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startSize = kind === "col" ? colWidth(index) : rowHeight(index);
+    const start = kind === "col" ? e.clientX : e.clientY;
+    resizeRef.current = { kind, index, start, startSize, size: startSize };
+    setResize({ kind, index, size: startSize });
+    const move = (ev: MouseEvent) => {
+      const rz = resizeRef.current;
+      if (!rz) return;
+      const pos = rz.kind === "col" ? ev.clientX : ev.clientY;
+      const raw = rz.startSize + (pos - rz.start);
+      const size =
+        rz.kind === "col"
+          ? clamp(Math.round(raw), AUX_COL_MIN_WIDTH, AUX_COL_MAX_WIDTH)
+          : clamp(Math.round(raw), AUX_ROW_MIN_HEIGHT, AUX_ROW_MAX_HEIGHT);
+      rz.size = size;
+      setResize({ kind: rz.kind, index: rz.index, size });
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      const rz = resizeRef.current;
+      resizeRef.current = null;
+      setResize(null);
+      if (rz) commitResize(rz.kind, rz.index, rz.size);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
   };
 
   const onRename = (value: string) => {
@@ -554,6 +674,12 @@ function AuxSheetEditor({
       } else if (k === "y" || k === "Y") {
         e.preventDefault();
         redo();
+      } else if (k === "b" || k === "B") {
+        e.preventDefault();
+        applyFmt("b");
+      } else if (k === "i" || k === "I") {
+        e.preventDefault();
+        applyFmt("i");
       } else if (k === "a" || k === "A") {
         e.preventDefault();
         selectAll();
@@ -678,20 +804,43 @@ function AuxSheetEditor({
             onKeyDown={onGridKeyDown}
             className="overflow-x-auto border-t border-line-soft outline-none focus:bg-accent-soft/5"
           >
-            <table className="text-xs border-collapse select-none">
+            <table
+              className="text-xs border-collapse select-none table-fixed"
+              style={{
+                width:
+                  GUTTER_W +
+                  Array.from({ length: cols }, (_, c) => colWidth(c)).reduce(
+                    (a, b) => a + b,
+                    0,
+                  ),
+              }}
+            >
+              <colgroup>
+                <col style={{ width: GUTTER_W }} />
+                {Array.from({ length: cols }, (_, c) => (
+                  <col key={c} style={{ width: colWidth(c) }} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
-                  <th className="w-9 bg-paper border border-line-soft" />
+                  <th className="bg-paper border border-line-soft" />
                   {Array.from({ length: cols }, (_, c) => {
                     const colSel = c >= selRect.c0 && c <= selRect.c1;
                     return (
                       <th
                         key={c}
-                        className={`border border-line-soft px-2 py-1 text-[10px] font-medium min-w-[7.5rem] ${
+                        className={`relative border border-line-soft px-2 py-1 text-[10px] font-medium ${
                           colSel ? "bg-accent-soft/60 text-accent" : "bg-paper text-muted"
                         }`}
                       >
                         {auxColLetter(c)}
+                        {editable && (
+                          <span
+                            onMouseDown={(e) => onResizeMouseDown(e, "col", c)}
+                            className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-accent/40"
+                            title="Arrastrar para ensanchar la columna"
+                          />
+                        )}
                       </th>
                     );
                   })}
@@ -723,13 +872,20 @@ function AuxSheetEditor({
                 {grid.map((row, r) => {
                   const rowSel = r >= selRect.r0 && r <= selRect.r1;
                   return (
-                    <tr key={r}>
+                    <tr key={r} style={{ height: rowHeight(r) }}>
                       <td
-                        className={`border border-line-soft text-center text-[10px] ${
+                        className={`relative border border-line-soft text-center text-[10px] ${
                           rowSel ? "bg-accent-soft/60 text-accent" : "bg-paper text-muted"
                         }`}
                       >
                         {AUX_SHEET_GRID_ROW_OFFSET + r}
+                        {editable && (
+                          <span
+                            onMouseDown={(e) => onResizeMouseDown(e, "row", r)}
+                            className="absolute bottom-0 left-0 w-full h-1.5 cursor-row-resize hover:bg-accent/40"
+                            title="Arrastrar para alargar la fila"
+                          />
+                        )}
                       </td>
                       {row.map((cell, c) => {
                         const m = findMerge(merges, r, c);
@@ -745,6 +901,7 @@ function AuxSheetEditor({
                         const isActive = r === active.r && c === active.c;
                         const isEditing = editing?.r === r && editing?.c === c;
                         const formula = !isEditing && isAuxFormula(cell);
+                        const fmt = cellFmt(style, r, c);
                         return (
                           <td
                             key={c}
@@ -783,18 +940,20 @@ function AuxSheetEditor({
                                   }
                                   commitCell(r, c, e.target.value);
                                 }}
-                                className="w-full bg-white dark:bg-paper-2 px-2 py-1 outline-none ring-2 ring-inset ring-accent"
+                                className="w-full h-full bg-white dark:bg-paper-2 px-2 py-1 outline-none ring-2 ring-inset ring-accent"
                               />
                             ) : (
                               <div
                                 onMouseDown={(e) => onCellMouseDown(e, r, c)}
                                 onMouseEnter={() => onCellMouseEnter(r, c)}
                                 onDoubleClick={() => onCellDoubleClick(r, c)}
-                                className={`px-2 py-1 min-h-[1.75rem] cursor-cell truncate ${
+                                className={`h-full min-h-[1.75rem] px-2 py-1 cursor-cell ${
+                                  fmt.w ? "whitespace-pre-wrap break-words" : "truncate"
+                                } ${fmt.b ? "font-semibold" : ""} ${fmt.i ? "italic" : ""} ${
                                   inSel ? "bg-accent-soft/40" : ""
-                                } ${
-                                  isActive ? "ring-2 ring-inset ring-accent" : ""
-                                } ${formula ? "font-mono tabular-nums text-right text-accent" : ""}`}
+                                } ${isActive ? "ring-2 ring-inset ring-accent" : ""} ${
+                                  formula ? "font-mono tabular-nums text-right text-accent" : ""
+                                }`}
                               >
                                 {display[r][c] || " "}
                               </div>
@@ -867,6 +1026,34 @@ function AuxSheetEditor({
                   title="Separar las celdas combinadas de la selección"
                 >
                   Separar
+                </Button>
+                <span className="text-line">|</span>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => applyFmt("b")}
+                  title="Negrita (Ctrl/Cmd+B)"
+                  className={activeFmt.b ? "bg-accent-soft/60 text-accent" : ""}
+                >
+                  <span className="font-bold">N</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => applyFmt("i")}
+                  title="Cursiva (Ctrl/Cmd+I)"
+                  className={activeFmt.i ? "bg-accent-soft/60 text-accent" : ""}
+                >
+                  <span className="italic">K</span>
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => applyFmt("w")}
+                  title="Ajustar texto (wrap) dentro de la celda"
+                  className={activeFmt.w ? "bg-accent-soft/60 text-accent" : ""}
+                >
+                  Wrap
                 </Button>
                 <span className="text-line">|</span>
                 <Button variant="ghost" size="xs" onClick={() => void copySelection()}>

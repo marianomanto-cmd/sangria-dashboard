@@ -137,6 +137,78 @@ export function sanitizeMerges(input: unknown, grid: AuxSheetGrid): AuxMerge[] {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Estilos de celda + tamaños de fila/columna
+// ════════════════════════════════════════════════════════════════════════════
+// Formato por celda (negrita / cursiva / wrap) en un mapa sparse keyed por
+// "r:c", más anchos de columna / altos de fila por índice (en px). Todo en la
+// columna style_json. El editor lo aplica con clases + inline-style; el export
+// con cell.font / cell.alignment / column.width / row.height.
+
+export type AuxCellFmt = { b?: boolean; i?: boolean; w?: boolean };
+export type AuxStyle = {
+  cells: Record<string, AuxCellFmt>; // key "r:c"
+  cols: Record<string, number>; // índice de columna → ancho px
+  rows: Record<string, number>; // índice de fila → alto px
+};
+
+export const AUX_COL_DEFAULT_WIDTH = 120;
+export const AUX_COL_MIN_WIDTH = 48;
+export const AUX_COL_MAX_WIDTH = 640;
+export const AUX_ROW_DEFAULT_HEIGHT = 28;
+export const AUX_ROW_MIN_HEIGHT = 20;
+export const AUX_ROW_MAX_HEIGHT = 400;
+
+export const emptyAuxStyle = (): AuxStyle => ({ cells: {}, cols: {}, rows: {} });
+
+export function cellFmt(style: AuxStyle, r: number, c: number): AuxCellFmt {
+  return style.cells[`${r}:${c}`] ?? {};
+}
+
+const clampNum = (n: number, lo: number, hi: number) =>
+  Math.max(lo, Math.min(hi, n));
+
+// Sanea el estilo contra las dimensiones de la grilla: descarta celdas/índices
+// fuera de rango, conserva solo flags booleanos true y clampea anchos/altos.
+export function sanitizeAuxStyle(input: unknown, grid: AuxSheetGrid): AuxStyle {
+  const out = emptyAuxStyle();
+  if (!input || typeof input !== "object") return out;
+  const rows = grid.length;
+  const cols = Math.max(0, ...grid.map((r) => r.length));
+  const inp = input as { cells?: unknown; cols?: unknown; rows?: unknown };
+
+  if (inp.cells && typeof inp.cells === "object") {
+    for (const [k, v] of Object.entries(inp.cells as Record<string, unknown>)) {
+      const m = /^(\d+):(\d+)$/.exec(k);
+      if (!m || !v || typeof v !== "object") continue;
+      if (Number(m[1]) >= rows || Number(m[2]) >= cols) continue;
+      const f = v as Record<string, unknown>;
+      const fmt: AuxCellFmt = {};
+      if (f.b === true) fmt.b = true;
+      if (f.i === true) fmt.i = true;
+      if (f.w === true) fmt.w = true;
+      if (Object.keys(fmt).length) out.cells[k] = fmt;
+    }
+  }
+  if (inp.cols && typeof inp.cols === "object") {
+    for (const [k, v] of Object.entries(inp.cols as Record<string, unknown>)) {
+      const c = Number(k);
+      if (!Number.isInteger(c) || c < 0 || c >= cols) continue;
+      if (typeof v !== "number" || !Number.isFinite(v)) continue;
+      out.cols[c] = clampNum(v, AUX_COL_MIN_WIDTH, AUX_COL_MAX_WIDTH);
+    }
+  }
+  if (inp.rows && typeof inp.rows === "object") {
+    for (const [k, v] of Object.entries(inp.rows as Record<string, unknown>)) {
+      const r = Number(k);
+      if (!Number.isInteger(r) || r < 0 || r >= rows) continue;
+      if (typeof v !== "number" || !Number.isFinite(v)) continue;
+      out.rows[r] = clampNum(v, AUX_ROW_MIN_HEIGHT, AUX_ROW_MAX_HEIGHT);
+    }
+  }
+  return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Fórmulas
 // ════════════════════════════════════════════════════════════════════════════
 

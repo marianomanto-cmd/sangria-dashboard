@@ -675,6 +675,11 @@ function buildAuxSheet(
   ws.columns = Array.from({ length: totalCols }, (_, c) => ({
     width: c === 0 ? 24 : 16,
   }));
+  // Anchos custom del editor (px → unidad de Excel ≈ px/7).
+  for (const [c, px] of Object.entries(aux.style.cols)) {
+    const idx = Number(c) + 1;
+    if (idx >= 1 && idx <= totalCols) ws.getColumn(idx).width = px / 7;
+  }
 
   // Metadata del plan, mismo estilo que el Tab 1.
   const allPlacements = detail.publishers.flatMap((g) => g.placements);
@@ -711,20 +716,36 @@ function buildAuxSheet(
     const row = ws.getRow(AUX_SHEET_GRID_ROW_OFFSET + r);
     cells.forEach((cell, c) => {
       if (!cell.trim()) return;
+      const target = row.getCell(c + 1);
       if (isAuxFormula(cell)) {
         // Solo va como fórmula si nuestro evaluador la resuelve (garantiza
         // sintaxis válida); si no, va el texto crudo para que se vea el error.
         const res = evalAuxFormula(cell, aux.grid, { r, c });
         // Uppercase: Excel guarda refs y funciones en mayúsculas; nuestro
         // lenguaje no tiene strings literales, así que es seguro.
-        row.getCell(c + 1).value = res.ok
+        target.value = res.ok
           ? { formula: cell.trimStart().slice(1).toUpperCase(), result: res.value }
           : cell;
-        return;
+      } else {
+        target.value = auxCellNumber(cell) ?? cell;
       }
-      row.getCell(c + 1).value = auxCellNumber(cell) ?? cell;
+      // Formato del editor: negrita / cursiva / wrap.
+      const fmt = aux.style.cells[`${r}:${c}`];
+      if (fmt) {
+        if (fmt.b || fmt.i) {
+          target.font = { ...(target.font ?? {}), bold: !!fmt.b, italic: !!fmt.i };
+        }
+        if (fmt.w) {
+          target.alignment = { ...(target.alignment ?? {}), wrapText: true };
+        }
+      }
     });
   });
+
+  // Altos de fila custom del editor (px → puntos ≈ px*0.75).
+  for (const [r, px] of Object.entries(aux.style.rows)) {
+    ws.getRow(AUX_SHEET_GRID_ROW_OFFSET + Number(r)).height = px * 0.75;
+  }
 
   // Celdas combinadas: mismas coords que la grilla (fila +AUX_SHEET_GRID_ROW_
   // OFFSET, columna +1). Centramos la master. try/catch por las dudas: nuestras

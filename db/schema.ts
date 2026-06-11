@@ -423,6 +423,16 @@ export const mediaPlanAuxSheets = pgTable(
       .$type<{ r0: number; c0: number; r1: number; c1: number }[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    // Estilos: formato por celda (negrita/cursiva/wrap) + anchos de columna y
+    // altos de fila (px). Ver lib/aux-sheet.ts.
+    styleJson: jsonb("style_json")
+      .$type<{
+        cells: Record<string, { b?: boolean; i?: boolean; w?: boolean }>;
+        cols: Record<string, number>;
+        rows: Record<string, number>;
+      }>()
+      .notNull()
+      .default(sql`'{"cells":{},"cols":{},"rows":{}}'::jsonb`),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
