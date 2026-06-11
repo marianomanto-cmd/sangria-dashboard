@@ -2,6 +2,45 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 11/jun/2026 — Tabs auxiliares estilo Excel: copy/paste + combinar celdas
+
+> **ACCIÓN REQUERIDA EN PROD**: este cambio agrega la columna `merges_json` a
+> `media_plan_aux_sheets`. Correr **`npm run db:push`** después del deploy o
+> pegar el SQL de abajo en el SQL Editor de Supabase (idempotente, aditivo, sin
+> backfill). La tabla **ya tiene RLS** habilitado (es a nivel tabla), así que
+> **no** hay que tocar `db/rls.sql`. La lectura es defensiva: si la columna
+> todavía no existe, los tabs se siguen mostrando (con `merges: []`).
+>
+> ```sql
+> alter table public.media_plan_aux_sheets
+>   add column if not exists merges_json jsonb not null default '[]'::jsonb;
+> ```
+
+- El editor de tabs auxiliares (`aux-sheet.tsx`) pasó de inputs celda-por-celda
+  a una grilla **estilo Excel** con:
+  - **Selección de rango** (arrastrar mouse / Shift+click / flechas /
+    Shift+flechas / `Ctrl/Cmd+A`). Editar con doble click, Enter, F2 o tipeando;
+    dentro de la edición Enter baja, Tab a la derecha, Escape cancela.
+  - **Copiar / cortar / pegar / borrar** rangos (`Ctrl/Cmd+C/X/V`, `Supr` o
+    botones). Portapapeles **TSV** → se puede pegar desde/hacia Excel/Sheets;
+    pegar agranda la grilla hasta los topes y un valor 1×1 rellena la selección.
+  - **Combinar / separar celdas** (botones sobre la selección). Las uniones se
+    guardan en la columna nueva `merges_json` (`{r0,c0,r1,c1}[]` en coords de la
+    grilla); al combinar sobrevive el valor del top-left y las tapadas quedan
+    vacías (así fórmulas y export las tratan como vacías). El export las escribe
+    con `ws.mergeCells` y el editor con `rowSpan/colSpan`.
+- **Fórmulas y sumatorias ya existían** (`=B5*2`, `=SUM(A5:A10)`, AVERAGE/MIN/
+  MAX/COUNT) — esta sesión sumó la interacción que faltaba (copy/paste + merge).
+- **Schema**: `media_plan_aux_sheets.merges_json` (jsonb, default `'[]'`).
+  Helpers puros nuevos en `lib/aux-sheet.ts` (`AuxMerge`, `sanitizeMerges`,
+  `findMerge`, `rectsIntersect`, `AUX_SHEET_MAX_MERGES`), saneados server-side en
+  `updateAuxSheet`. `getPlanDetail` devuelve `merges` por tab (lectura defensiva
+  ante la ventana deploy→migración). Export en `export.xlsx/route.ts`.
+- **Archivos**: `lib/aux-sheet.ts`, `db/schema.ts`, `db/queries/project-detail.ts`,
+  `app/actions/aux-sheets.ts`, `app/api/plans/[planId]/export.xlsx/route.ts`,
+  `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx`. `tsc`, `eslint`
+  (sobre los archivos tocados) y `next build` en verde.
+
 ### Cambios de la sesión 11/jun/2026 — Reporting Calendar: comentarios por reporte
 
 - **Botoncito "Comentarios (N)"** en cada reporte del calendario — pendientes,

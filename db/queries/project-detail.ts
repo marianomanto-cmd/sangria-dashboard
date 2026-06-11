@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { sanitizeMerges, type AuxMerge } from "@/lib/aux-sheet";
 import {
   budgetOrigins,
   clients,
@@ -269,6 +270,7 @@ export type PlanAuxSheet = {
   id: string;
   name: string;
   grid: string[][];
+  merges: AuxMerge[];
 };
 
 export type PlanDetail = {
@@ -370,18 +372,43 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     .where(eq(mediaPlanSnapshots.mediaPlanId, planId))
     .orderBy(desc(mediaPlanSnapshots.versionNumber));
 
-  // Defensivo ante la ventana deploy-antes-de-migración: si la tabla todavía
-  // no existe en prod (falta correr el SQL / db:push), el plan se sigue
-  // abriendo sin tabs auxiliares en vez de tirar 500.
-  let auxSheetRows: (typeof mediaPlanAuxSheets.$inferSelect)[] = [];
+  // Defensivo ante la ventana deploy-antes-de-migración. Dos capas:
+  //  1) tabla ausente → sin tabs auxiliares (no rompe el plan).
+  //  2) columna merges_json ausente (migración nueva sin correr) → se vuelve a
+  //     leer SIN esa columna para no esconder los tabs hasta correr el SQL.
+  type AuxRow = {
+    id: string;
+    name: string;
+    gridJson: string[][] | null;
+    mergesJson: AuxMerge[] | null;
+  };
+  let auxSheetRows: AuxRow[] = [];
   try {
     auxSheetRows = await db
-      .select()
+      .select({
+        id: mediaPlanAuxSheets.id,
+        name: mediaPlanAuxSheets.name,
+        gridJson: mediaPlanAuxSheets.gridJson,
+        mergesJson: mediaPlanAuxSheets.mergesJson,
+      })
       .from(mediaPlanAuxSheets)
       .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
       .orderBy(asc(mediaPlanAuxSheets.sortOrder), asc(mediaPlanAuxSheets.createdAt));
   } catch {
-    auxSheetRows = [];
+    try {
+      const rows = await db
+        .select({
+          id: mediaPlanAuxSheets.id,
+          name: mediaPlanAuxSheets.name,
+          gridJson: mediaPlanAuxSheets.gridJson,
+        })
+        .from(mediaPlanAuxSheets)
+        .where(eq(mediaPlanAuxSheets.mediaPlanId, planId))
+        .orderBy(asc(mediaPlanAuxSheets.sortOrder), asc(mediaPlanAuxSheets.createdAt));
+      auxSheetRows = rows.map((r) => ({ ...r, mergesJson: [] }));
+    } catch {
+      auxSheetRows = [];
+    }
   }
 
   const placementsByPub = new Map<string, PlanPlacement[]>();
@@ -461,11 +488,15 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
     publishers: publisherGroups,
     fees,
     snapshots: snapshotRows,
-    auxSheets: auxSheetRows.map((s) => ({
-      id: s.id,
-      name: s.name,
-      grid: s.gridJson ?? [],
-    })),
+    auxSheets: auxSheetRows.map((s) => {
+      const grid = s.gridJson ?? [];
+      return {
+        id: s.id,
+        name: s.name,
+        grid,
+        merges: sanitizeMerges(s.mergesJson ?? [], grid),
+      };
+    }),
     totals: {
       media: totalMedia,
       fees: totalFees,

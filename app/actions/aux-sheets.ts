@@ -8,7 +8,9 @@ import {
   AUX_SHEET_DEFAULT_COLS,
   AUX_SHEET_DEFAULT_NAME,
   AUX_SHEET_DEFAULT_ROWS,
+  type AuxMerge,
   sanitizeAuxGrid,
+  sanitizeMerges,
 } from "@/lib/aux-sheet";
 import { mediaPlanAuxSheets, mediaPlans, projects } from "@/db/schema";
 
@@ -95,6 +97,7 @@ export async function updateAuxSheet(input: {
   sheetId: string;
   name?: string;
   grid?: string[][];
+  merges?: AuxMerge[];
 }): Promise<Result> {
   if (!input.sheetId) return { ok: false, error: "Falta sheet_id" };
 
@@ -112,10 +115,18 @@ export async function updateAuxSheet(input: {
     }
     update.name = input.name.trim();
   }
+  let nextGrid: string[][] | null = null;
   if (input.grid !== undefined) {
     const grid = sanitizeAuxGrid(input.grid);
     if (!grid) return { ok: false, error: "Grilla inválida" };
     update.gridJson = grid;
+    nextGrid = grid;
+  }
+  if (input.merges !== undefined) {
+    // Saneamos contra la grilla que va a quedar persistida (la nueva si vino,
+    // si no la que ya estaba) para descartar uniones fuera de rango.
+    const gridForMerges = nextGrid ?? before.gridJson ?? [];
+    update.mergesJson = sanitizeMerges(input.merges, gridForMerges);
   }
   if (Object.keys(update).length === 0) return { ok: true };
   update.updatedAt = new Date();
