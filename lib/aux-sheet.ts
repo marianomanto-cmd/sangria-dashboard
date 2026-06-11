@@ -81,6 +81,62 @@ export function auxColLetter(index: number): string {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Celdas combinadas (merge)
+// ════════════════════════════════════════════════════════════════════════════
+// Rangos rectangulares {r0,c0,r1,c1} en coordenadas de la GRILLA (0-based, las
+// mismas que indexan grid_json). El valor vive en la celda top-left (master);
+// las celdas tapadas se guardan VACÍAS, así el evaluador de fórmulas y el
+// export las tratan como vacías sin lógica extra. El editor las rinde con
+// rowSpan/colSpan y el export las escribe con ws.mergeCells (mismas coords).
+
+export type AuxMerge = { r0: number; c0: number; r1: number; c1: number };
+
+// Techo de uniones por tab (defensivo, validado server-side además de la UI).
+export const AUX_SHEET_MAX_MERGES = 200;
+
+export function rectsIntersect(a: AuxMerge, b: AuxMerge): boolean {
+  return a.r0 <= b.r1 && a.r1 >= b.r0 && a.c0 <= b.c1 && a.c1 >= b.c0;
+}
+
+// La unión que cubre la celda (r,c), o null. La master es (m.r0, m.c0).
+export function findMerge(
+  merges: AuxMerge[],
+  r: number,
+  c: number,
+): AuxMerge | null {
+  for (const m of merges) {
+    if (r >= m.r0 && r <= m.r1 && c >= m.c0 && c <= m.c1) return m;
+  }
+  return null;
+}
+
+// Valida las uniones que llegan del cliente/DB contra las dimensiones de la
+// grilla: enteros, dentro de límites, normalizadas (r0≤r1, c0≤c1), de >1 celda
+// y sin solaparse entre sí (la primera gana). Devuelve la lista saneada.
+export function sanitizeMerges(input: unknown, grid: AuxSheetGrid): AuxMerge[] {
+  if (!Array.isArray(input)) return [];
+  const rows = grid.length;
+  const cols = Math.max(0, ...grid.map((r) => r.length));
+  const out: AuxMerge[] = [];
+  for (const m of input) {
+    if (!m || typeof m !== "object") continue;
+    const { r0, c0, r1, c1 } = m as Record<string, unknown>;
+    if (![r0, c0, r1, c1].every((n) => Number.isInteger(n))) continue;
+    const R0 = Math.min(r0 as number, r1 as number);
+    const R1 = Math.max(r0 as number, r1 as number);
+    const C0 = Math.min(c0 as number, c1 as number);
+    const C1 = Math.max(c0 as number, c1 as number);
+    if (R0 < 0 || C0 < 0 || R1 >= rows || C1 >= cols) continue; // fuera de rango
+    if (R0 === R1 && C0 === C1) continue; // una sola celda no es unión
+    const cand = { r0: R0, c0: C0, r1: R1, c1: C1 };
+    if (out.some((e) => rectsIntersect(e, cand))) continue; // sin solapes
+    out.push(cand);
+    if (out.length >= AUX_SHEET_MAX_MERGES) break;
+  }
+  return out;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Fórmulas
 // ════════════════════════════════════════════════════════════════════════════
 

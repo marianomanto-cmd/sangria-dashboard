@@ -314,8 +314,25 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (`media_plan_aux_sheets`, ordenados por `sort_order`): **grillas libres tipo
   Excel** que el planner edita a mano desde el editor del plan (botón **"Crear
   tab auxiliar"**, una sección colapsable por tab). Arriba muestran la metadata
-  del plan (proyecto, período, budget origin, read-only); debajo, filas vacías
-  editables con navegación Enter/Shift+Enter.
+  del plan (proyecto, período, budget origin, read-only); debajo, la grilla
+  editable.
+- **Interacción estilo Excel** (todo en `aux-sheet.tsx`, estado local):
+  - **Selección de rango** con mouse (arrastrar o Shift+click) y teclado
+    (flechas, Shift+flechas para extender, `Ctrl/Cmd+A` para todo). La celda
+    activa se edita con doble click, Enter, F2 o tipeando (reemplaza). Dentro de
+    la edición: Enter baja, Tab a la derecha, Escape cancela.
+  - **Copiar / cortar / pegar / borrar** rangos: `Ctrl/Cmd+C` · `X` · `V` ·
+    `Supr` (o los botones Copiar/Pegar/Borrar). El portapapeles es **TSV**, así
+    que se puede **pegar desde Excel/Sheets** (y copiar hacia ellos); pegar
+    agranda la grilla hasta los topes y un valor 1×1 rellena toda la selección.
+  - **Combinar / separar celdas**: botones Combinar/Separar sobre la selección.
+    Las uniones viven en `media_plan_aux_sheets.merges_json` (`{r0,c0,r1,c1}[]`
+    en coords de la grilla). Al combinar **sobrevive solo el valor de la celda
+    top-left** (master); las tapadas se guardan vacías, así el evaluador de
+    fórmulas y el export las tratan como vacías sin lógica extra. El editor las
+    rinde con `rowSpan/colSpan` y el export con `ws.mergeCells` (mismas coords).
+    Helpers (`sanitizeMerges`, `findMerge`, `rectsIntersect`) en `lib/aux-sheet.ts`,
+    saneadas server-side en `updateAuxSheet`.
 - **Fórmulas**: una celda que empieza con `=` es una fórmula estilo Excel —
   aritmética (`+ - * /`, paréntesis), referencias A1 (`=B5*2`) y funciones
   `SUM / AVERAGE / MIN / MAX / COUNT` sobre rangos (`=SUM(A5:A10)`). La
@@ -325,12 +342,16 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   fórmula cruda al enfocar, como Excel) y errores con códigos `#REF!`,
   `#VALUE!`, `#DIV/0!`, `#CIRC!` (ciclos), `#ERROR!`. Evaluador propio de
   descenso recursivo en `lib/aux-sheet.ts` (NO usa `eval()`).
-- `grid_json` es un `string[][]` (filas × celdas). Solo se guardan strings; el
-  **export Excel** agrega cada tab **después del "Budget por mercado"** (en
-  orden), castea a número las celdas que parsean limpio (US format) y escribe
-  las fórmulas que resuelven como **fórmulas reales de Excel** (con resultado
-  cacheado; las que no parsean van como texto crudo). El nombre del tab es el
-  del planner (sanitizado a nombre válido). El PDF no los incluye.
+- `grid_json` es un `string[][]` (filas × celdas) y `merges_json` un
+  `{r0,c0,r1,c1}[]`. Solo se guardan strings; el **export Excel** agrega cada
+  tab **después del "Budget por mercado"** (en orden), castea a número las
+  celdas que parsean limpio (US format), escribe las fórmulas que resuelven como
+  **fórmulas reales de Excel** (con resultado cacheado; las que no parsean van
+  como texto crudo) y aplica las uniones con `ws.mergeCells`. El nombre del tab
+  es el del planner (sanitizado a nombre válido). El PDF no los incluye.
+- **Defensivo deploy→migración**: `getPlanDetail` lee los tabs aunque la columna
+  `merges_json` todavía no exista en prod (cae a una lectura sin esa columna,
+  con `merges: []`), así no desaparecen los tabs hasta correr el SQL.
 - Es material de trabajo: **no** participa del lifecycle de aprobación ni de
   los snapshots (aprobar / descartar borrador no los toca) y se borran duro
   (no pasan por la papelera). Crear/editar/borrar solo con el plan en `draft`

@@ -417,6 +417,12 @@ export const mediaPlanAuxSheets = pgTable(
       .$type<string[][]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
+    // Celdas combinadas: rangos {r0,c0,r1,c1} en coords de la grilla. El valor
+    // vive en la master (top-left); las tapadas quedan vacías. Ver lib/aux-sheet.ts.
+    mergesJson: jsonb("merges_json")
+      .$type<{ r0: number; c0: number; r1: number; c1: number }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()

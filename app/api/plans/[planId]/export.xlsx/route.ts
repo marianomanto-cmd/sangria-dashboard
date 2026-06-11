@@ -725,4 +725,24 @@ function buildAuxSheet(
       row.getCell(c + 1).value = auxCellNumber(cell) ?? cell;
     });
   });
+
+  // Celdas combinadas: mismas coords que la grilla (fila +AUX_SHEET_GRID_ROW_
+  // OFFSET, columna +1). Centramos la master. try/catch por las dudas: nuestras
+  // uniones no se solapan, pero ExcelJS tira si una unión pisa otra.
+  for (const m of aux.merges) {
+    const top = AUX_SHEET_GRID_ROW_OFFSET + m.r0;
+    const left = m.c0 + 1;
+    const bottom = AUX_SHEET_GRID_ROW_OFFSET + m.r1;
+    const right = m.c1 + 1;
+    try {
+      ws.mergeCells(top, left, bottom, right);
+      ws.getCell(top, left).alignment = {
+        vertical: "middle",
+        horizontal: "center",
+        wrapText: true,
+      };
+    } catch {
+      // unión inválida → se ignora, el resto del tab sale igual
+    }
+  }
 }
