@@ -1845,6 +1845,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+a980742  Aux sheets: range select, copy/paste, and merge cells (#144) — REQUIERE npm run db:push
 102279a  docs: registrar PR #141 en Commits recientes (#142)
 c44dfc3  Reporting Calendar: tablerito de comentarios por reporte (#141)
 ec08651  docs: registrar PR #139 en Commits recientes (#140)
