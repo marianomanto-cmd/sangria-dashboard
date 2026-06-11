@@ -2,6 +2,20 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 10/jun/2026 — Preview del plan: toggle Budget por mercado
+
+- El **preview tipo Excel** del editor del plan (`ExcelPreview`) suma un
+  **toggle de pills** "Plan de medios" / "Budget por mercado" para
+  previsualizar también el **Tab 2 del Excel**: tabla mercado × mes con
+  prorrateo por días, columna "Sin fecha" si aplica, totales por fila/columna
+  y grand total.
+- **Refactor anti-divergencia**: el prorrateo (`prorateByMonth`) y la
+  agregación (`buildBudgetSplit`) se movieron de `export.xlsx/route.ts` a
+  **`lib/budget-split.ts`** — el Tab 2 del export y el preview
+  (`BudgetSplitPreview` en `editor.tsx`) consumen exactamente la misma
+  función.
+- Sin cambios de schema. **No requiere acción en prod.**
+
 ### Cambios de la sesión 10/jun/2026 — "Última edición" del plan + modal de cambios
 
 - **Chip "Última edición"** en el header del editor del plan (debajo del
@@ -2360,7 +2374,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el logo de los exports         | Reemplazar `public/sangria-logo.png` (o `.jpg`). Lo carga `lib/brand-logo.ts`; el tracing está en `next.config.ts` (`outputFileTracingIncludes`). Posición/tamaño: PDF en `lib/plan-pdf.ts`, XLSX en `export.xlsx/route.ts`. |
 | Cambiar el nombre de archivo del export | `filename` en cada ruta `export.{pdf,xlsx}/route.ts`: hoy `{plan.name}-V{currentVersion}`. |
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
-| Cambiar el prorrateo del budget split por mercado | `prorateByMonth` en `app/api/plans/[planId]/export.xlsx/route.ts` (días-overlap inclusive). |
+| Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
@@ -2416,7 +2430,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el generador de reportes históricos | `app/(app)/reportes/generador/page.tsx` (UI/preview), `components/report-generator-form.tsx` (filtros + column picker), `db/queries/historical-report.ts` (`getHistoricalReport` + `getReportFilterOptions`), `app/api/reports/historical.xlsx/route.ts` (Excel). Page y Excel comparten `resolveReportColumns` de `lib/historical-report-columns.ts` para que preview = archivo. |
 | Cambiar qué columnas se ofrecen en el generador | `lib/historical-report-columns.ts` — `IDENTITY_COL_IDS` y `MONEY_COL_IDS` definen las columnas fijas; las métricas vienen del catálogo del cliente vía `getReportFilterOptions`. URL param `?cols=...` (comma-separated). |
 | Tocar las tabs del billing-tracker | `app/(app)/billing-tracker/page.tsx` — la página lee `?tab=tracker|estimates` (default `tracker`) y server-rendera lo correspondiente. El nav está inline (`TabsNav`), URL-based con `<Link>`. |
-| Tocar el preview tipo Excel del editor del plan | `ExcelPreview` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`. Read-only, colapsable; usa los mismos helpers que el export (`resolveMetricColumns`, `placementMetricValue`, `sumDirectMetrics` de `lib/plan-metrics.ts`). |
+| Tocar el preview tipo Excel del editor del plan | `ExcelPreview` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`. Read-only, colapsable, con toggle "Plan de medios" / "Budget por mercado" (pills). Tab 1 usa los helpers de `lib/plan-metrics.ts`; Tab 2 (`BudgetSplitPreview`) usa `buildBudgetSplit` de `lib/budget-split.ts` — los mismos que el export. |
 | Tocar el formato US / fórmulas estilo Excel de los inputs | `lib/format.ts` — `formatIntInput`, `formatAmountInput`, `parseNumberInput`, `evalNumberInput` (con un mini parser de descenso recursivo, NO usa `eval()`). Wireado en `NumberInput`, `RateInput`, `DeliveryInput`, `RatePctInput` del editor del plan y `NumInput` del billing. |
 | Cambiar el link al PPT del reporte | Schema: `project_reports.report_ppt_url`. Acción: `setReportPptUrl` en `app/actions/reports.ts`. UI: `LinkForm` en `components/reporting-calendar-client.tsx` (modal). Aparece en cada fila de la lista de Reportes Enviados. |
 

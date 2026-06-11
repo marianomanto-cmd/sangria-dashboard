@@ -62,7 +62,8 @@ import {
   DIRECT_METRIC_RATES,
   type CostMethod,
 } from "@/lib/cost-methods";
-import { formatDate, type Language } from "@/lib/i18n";
+import { formatDate, formatMonth, t, type Language } from "@/lib/i18n";
+import { buildBudgetSplit, NO_DATE_KEY } from "@/lib/budget-split";
 import {
   evalFormula,
   placementMetricValue,
@@ -1993,6 +1994,9 @@ function ExcelPreview({
   lang: Language;
 }) {
   const [open, setOpen] = useState(true);
+  // Qué tab del Excel se previsualiza: el plan (Tab 1) o el budget split por
+  // mercado (Tab 2).
+  const [view, setView] = useState<"plan" | "split">("plan");
   const allPlacements = detail.publishers.flatMap((g) => g.placements);
   const metricCols = resolveMetricColumns(allMetrics, allPlacements);
   const directSlugs = metricCols
@@ -2030,6 +2034,12 @@ function ExcelPreview({
       lang === "es"
         ? "Read-only. Audiencia, notas y fees no se muestran acá; sí salen en el Excel/PDF."
         : "Read-only. Audience, notes and fees are omitted here; they do appear in the Excel/PDF.",
+    tabPlan: lang === "es" ? "Plan de medios" : "Media plan",
+    tabSplit: lang === "es" ? "Budget por mercado" : "Budget by market",
+    splitNote:
+      lang === "es"
+        ? "Read-only. Prorrateo por días de cada placement entre los meses que cubre — idéntico al Tab 2 del Excel."
+        : "Read-only. Each placement prorated by days across the months it covers — identical to Tab 2 of the Excel.",
   };
 
   const numCell = "px-3 py-1.5 text-right font-mono tabular-nums";
@@ -2055,6 +2065,23 @@ function ExcelPreview({
 
       {open && (
         <>
+          {/* Toggle de tab a previsualizar: Tab 1 (plan) / Tab 2 (budget split) */}
+          <div className="flex items-center px-4 py-2 border-t border-line-soft">
+            <div className="inline-flex items-center gap-0.5 rounded-md border border-line bg-paper p-0.5">
+              <PreviewTab active={view === "plan"} onClick={() => setView("plan")}>
+                {L.tabPlan}
+              </PreviewTab>
+              <PreviewTab active={view === "split"} onClick={() => setView("split")}>
+                {L.tabSplit}
+              </PreviewTab>
+            </div>
+          </div>
+
+          {view === "split" ? (
+            <div className="overflow-x-auto border-t border-line-soft">
+              <BudgetSplitPreview detail={detail} lang={lang} />
+            </div>
+          ) : (
           <div className="overflow-x-auto border-t border-line-soft">
             <table className="text-xs whitespace-nowrap">
               <thead className="bg-paper">
@@ -2154,12 +2181,113 @@ function ExcelPreview({
               </tbody>
             </table>
           </div>
+          )}
           <p className="px-4 py-2 text-[11px] text-muted border-t border-line-soft">
-            {L.note}
+            {view === "split" ? L.splitNote : L.note}
           </p>
         </>
       )}
     </section>
+  );
+}
+
+// Pill del toggle de la vista previa (Tab 1 / Tab 2 del Excel).
+function PreviewTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-active={active}
+      className="px-2.5 py-1 rounded text-xs font-medium text-muted hover:text-ink data-[active=true]:bg-accent-soft data-[active=true]:text-accent transition-colors"
+    >
+      {children}
+    </button>
+  );
+}
+
+// Tab 2 del Excel en vivo: budget split por mercado × mes. Usa el MISMO
+// helper de agregación que el export (lib/budget-split.ts) — cero divergencia
+// preview-vs-archivo.
+function BudgetSplitPreview({
+  detail,
+  lang,
+}: {
+  detail: PlanDetail;
+  lang: Language;
+}) {
+  const split = buildBudgetSplit(
+    detail.publishers.flatMap((g) => g.placements),
+    {
+      noMarketLabel: lang === "es" ? "(sin mercado)" : "(no market)",
+      locale: lang === "es" ? "es" : "en",
+    },
+  );
+  const noDateLabel = lang === "es" ? "Sin fecha" : "Undated";
+  const numCell = "px-3 py-1.5 text-right font-mono tabular-nums";
+
+  if (split.markets.length === 0) {
+    return (
+      <div className="px-4 py-8 text-center text-xs text-muted">
+        {lang === "es"
+          ? "Sin placements con inversión todavía."
+          : "No placements with investment yet."}
+      </div>
+    );
+  }
+
+  return (
+    <table className="text-xs whitespace-nowrap">
+      <thead className="bg-paper">
+        <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
+          <th className="text-left font-medium px-3 py-1.5">
+            {t("common.market", lang)}
+          </th>
+          {split.monthKeys.map((k) => (
+            <th key={k} className="text-right font-medium px-3 py-1.5">
+              {k === NO_DATE_KEY ? noDateLabel : formatMonth(k, lang)}
+            </th>
+          ))}
+          <th className="text-right font-medium px-3 py-1.5">
+            {t("common.total", lang)}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {split.markets.map((market) => (
+          <tr key={market} className="border-t border-line-soft hover:bg-paper-2/40">
+            <td className="px-3 py-1.5 font-medium">{market}</td>
+            {split.monthKeys.map((k) => {
+              const v = split.amounts.get(market)?.get(k) ?? 0;
+              return (
+                <td key={k} className={numCell}>
+                  {v > 0 ? formatUsd(v) : ""}
+                </td>
+              );
+            })}
+            <td className={`${numCell} font-semibold bg-accent-soft/60`}>
+              {formatUsd(split.marketTotals.get(market) ?? 0)}
+            </td>
+          </tr>
+        ))}
+        <tr className="bg-accent text-white font-semibold border-t-2 border-accent">
+          <td className="px-3 py-1.5">{t("common.total", lang)}</td>
+          {split.monthKeys.map((k) => (
+            <td key={k} className={numCell}>
+              {formatUsd(split.monthTotals.get(k) ?? 0)}
+            </td>
+          ))}
+          <td className={numCell}>{formatUsd(split.grandTotal)}</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }
 
