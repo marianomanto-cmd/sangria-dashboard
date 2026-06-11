@@ -18,6 +18,7 @@ import {
   isAuxFormula,
 } from "@/lib/aux-sheet";
 import { canAccessClientExport } from "@/lib/client-portal.server";
+import { buildBudgetSplit, NO_DATE_KEY } from "@/lib/budget-split";
 import type { PlanAuxSheet } from "@/db/queries/project-detail";
 
 // Paleta de marca — sincronizada con los design tokens de app/globals.css.
@@ -31,67 +32,8 @@ const MUTED = "FF78716C";        // --color-muted
 const thin = { style: "thin" as const, color: { argb: BORDER } };
 const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
 
-// ────────────────────────────────────────────────────────────────────────────
-// Helpers de cálculo
-// ────────────────────────────────────────────────────────────────────────────
-
-// Prorratea un monto entre los meses que cubre [startISO, endISO] usando
-// proporción de días (inclusive en ambos extremos). Si faltan fechas devuelve
-// el monto bajo la clave especial "no-date" para que aparezca en una columna
-// aparte y nunca se "pierda".
-function prorateByMonth(
-  amount: number,
-  startISO: string | null,
-  endISO: string | null,
-): Map<string, number> {
-  const out = new Map<string, number>();
-  if (amount === 0) return out;
-  if (!startISO || !endISO) {
-    out.set("no-date", amount);
-    return out;
-  }
-  const s = parseDate(startISO);
-  const e = parseDate(endISO);
-  if (!s || !e || e < s) {
-    out.set("no-date", amount);
-    return out;
-  }
-  const totalDays = daysBetween(s, e) + 1;
-  if (totalDays <= 0) {
-    out.set("no-date", amount);
-    return out;
-  }
-  let cursor = new Date(s.getFullYear(), s.getMonth(), 1);
-  while (cursor <= e) {
-    const y = cursor.getFullYear();
-    const mIdx = cursor.getMonth();
-    const monthStart = new Date(y, mIdx, 1);
-    const monthEnd = new Date(y, mIdx + 1, 0);
-    const segStart = monthStart > s ? monthStart : s;
-    const segEnd = monthEnd < e ? monthEnd : e;
-    const days = daysBetween(segStart, segEnd) + 1;
-    if (days > 0) {
-      const key = `${y}-${String(mIdx + 1).padStart(2, "0")}`;
-      out.set(key, (out.get(key) ?? 0) + (amount * days) / totalDays);
-    }
-    cursor = new Date(y, mIdx + 1, 1);
-  }
-  return out;
-}
-
-function parseDate(iso: string): Date | null {
-  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (!m) return null;
-  return new Date(
-    Number.parseInt(m[1], 10),
-    Number.parseInt(m[2], 10) - 1,
-    Number.parseInt(m[3], 10),
-  );
-}
-
-function daysBetween(a: Date, b: Date): number {
-  return Math.round((b.getTime() - a.getTime()) / 86400000);
-}
+// El prorrateo por días + la agregación mercado × mes viven en
+// lib/budget-split.ts, compartidos con el preview del editor del plan.
 
 export async function GET(
   _req: Request,
@@ -585,39 +527,19 @@ function buildBudgetByMarketSheet(
     views: [{ state: "frozen", xSplit: 1, ySplit: 1 }],
   });
 
-  // Agrega placements → market × month con prorrateo por días.
-  const noMarketLabel = lang === "es" ? "(sin mercado)" : "(no market)";
+  // Agregación placements → market × month (prorrateo por días) compartida
+  // con el preview del editor: lib/budget-split.ts.
   const noDateLabel = lang === "es" ? "Sin fecha" : "Undated";
-  const byMarket = new Map<string, Map<string, number>>();
-  const monthsSet = new Set<string>();
-  let hasNoDate = false;
-
-  for (const grp of detail.publishers) {
-    for (const pl of grp.placements) {
-      if (!pl.amountUsd) continue;
-      const market = pl.marketName ?? noMarketLabel;
-      const alloc = prorateByMonth(pl.amountUsd, pl.startDate, pl.endDate);
-      let m = byMarket.get(market);
-      if (!m) {
-        m = new Map();
-        byMarket.set(market, m);
-      }
-      for (const [key, usd] of alloc) {
-        m.set(key, (m.get(key) ?? 0) + usd);
-        if (key === "no-date") hasNoDate = true;
-        else monthsSet.add(key);
-      }
-    }
-  }
-
-  const sortedMonths = [...monthsSet].sort();
-  // "no-date" se renderiza como última columna si aplica.
-  const monthKeys = hasNoDate ? [...sortedMonths, "no-date"] : sortedMonths;
-  const monthHeaders = monthKeys.map((k) =>
-    k === "no-date" ? noDateLabel : formatMonth(k, lang),
+  const split = buildBudgetSplit(
+    detail.publishers.flatMap((g) => g.placements),
+    {
+      noMarketLabel: lang === "es" ? "(sin mercado)" : "(no market)",
+      locale: lang === "es" ? "es" : "en",
+    },
   );
-  const sortedMarkets = [...byMarket.keys()].sort((a, b) =>
-    a.localeCompare(b, lang === "es" ? "es" : "en"),
+  const { monthKeys, markets: sortedMarkets, amounts: byMarket } = split;
+  const monthHeaders = monthKeys.map((k) =>
+    k === NO_DATE_KEY ? noDateLabel : formatMonth(k, lang),
   );
 
   // Columnas

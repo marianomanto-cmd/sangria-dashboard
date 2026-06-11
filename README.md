@@ -178,6 +178,7 @@ lib/
   brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
   plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns + placementsPeriod + sumDirectMetrics (compartido PDF/Excel/preview)
   aux-sheet.ts              # tabs auxiliares del plan: límites + sanitize/normalize + evaluador de fórmulas (refs A1 + SUM/AVERAGE/…) compartido editor/actions/export
+  budget-split.ts           # prorrateo por días + agregación mercado × mes — compartido por el Tab 2 del Excel y el preview del editor
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
@@ -740,11 +741,21 @@ linkean a las rutas de abajo). Ambos comparten idioma, logo, métricas, firma y
 disclaimer; difieren en el layout.
 
 **Preview tipo Excel en el editor**: el componente `ExcelPreview` (en
-`editor.tsx`) renderiza una tabla **read-only** que replica el Tab 1 del Excel —
-cada placement con todas las métricas en columnas, subtotal por publisher
-(fechas + montos + métricas) y fila `TOTAL MEDIA`. Usa los **mismos helpers** que
-los exports (`resolveMetricColumns`, `placementMetricValue`, `evalFormula`,
-`sumDirectMetrics`, `placementsPeriod` en `lib/plan-metrics.ts`) para no divergir.
+`editor.tsx`) renderiza una tabla **read-only** con un **toggle de tab**
+(pills "Plan de medios" / "Budget por mercado") que replica los dos tabs del
+Excel:
+
+- **Plan de medios** (Tab 1): cada placement con todas las métricas en
+  columnas, subtotal por publisher (fechas + montos + métricas) y fila
+  `TOTAL MEDIA`. Usa los **mismos helpers** que los exports
+  (`resolveMetricColumns`, `placementMetricValue`, `evalFormula`,
+  `sumDirectMetrics`, `placementsPeriod` en `lib/plan-metrics.ts`) para no
+  divergir.
+- **Budget por mercado** (Tab 2): mercado × mes con prorrateo por días
+  (`BudgetSplitPreview` en `editor.tsx`). La agregación vive en
+  `lib/budget-split.ts` (`buildBudgetSplit` + `prorateByMonth`) y la usan
+  **tanto el preview como el Tab 2 del export** — cero divergencia.
+
 Es colapsable; audiencia/notas/fees se omiten (sí salen en el Excel/PDF). La
 edición sigue en la grilla + inspector; el preview es solo visualización. (Una
 "planilla 100% editable" se evaluará aparte en otra branch.)
