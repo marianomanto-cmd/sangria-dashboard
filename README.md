@@ -333,6 +333,12 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     rinde con `rowSpan/colSpan` y el export con `ws.mergeCells` (mismas coords).
     Helpers (`sanitizeMerges`, `findMerge`, `rectsIntersect`) en `lib/aux-sheet.ts`,
     saneadas server-side en `updateAuxSheet`.
+  - **Deshacer / rehacer**: `Ctrl/Cmd+Z` y `Ctrl/Cmd+Shift+Z` (o `Ctrl+Y`, o los
+    botones Deshacer/Rehacer). Historial **por tab** de hasta `HISTORY_MAX` (50)
+    snapshots `{grid, merges}`: cada mutación apila el estado previo y una
+    edición nueva limpia el redo. Deshacer/rehacer también **persiste** (mismo
+    `updateAuxSheet`). Mientras se edita una celda, `Ctrl+Z` es el undo de texto
+    nativo del input (la grilla solo lo toma fuera de edición).
 - **Fórmulas**: una celda que empieza con `=` es una fórmula estilo Excel —
   aritmética (`+ - * /`, paréntesis), referencias A1 (`=B5*2`) y funciones
   `SUM / AVERAGE / MIN / MAX / COUNT` sobre rangos (`=SUM(A5:A10)`). La
