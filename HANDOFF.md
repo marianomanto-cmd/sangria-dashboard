@@ -2,6 +2,21 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 11/jun/2026 — Tabs auxiliares: deshacer / rehacer (Ctrl+Z)
+
+- El editor de tabs auxiliares (`aux-sheet.tsx`) suma **deshacer / rehacer**:
+  `Ctrl/Cmd+Z` y `Ctrl/Cmd+Shift+Z` (o `Ctrl+Y`, o botones Deshacer/Rehacer).
+- Historial **por tab** de hasta 50 snapshots `{grid, merges}` (en estado local):
+  cada mutación (editar celda, pegar, borrar, combinar/separar, +fila/+columna)
+  apila el estado previo con `pushHistory()`; una edición nueva limpia el redo.
+  Deshacer/rehacer restaura grilla + uniones, recorta la selección a las nuevas
+  dimensiones y **persiste** vía el mismo `updateAuxSheet`.
+- Mientras se edita una celda, `Ctrl+Z` queda como el undo de texto nativo del
+  input (el handler de la grilla sólo lo toma fuera de edición).
+- **Sin cambios de schema**, todo en el cliente. **No requiere acción en prod.**
+- Archivo: `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx`. `tsc`,
+  `eslint` (archivo tocado) y `next build` en verde.
+
 ### Cambios de la sesión 11/jun/2026 — Tabs auxiliares estilo Excel: copy/paste + combinar celdas
 
 > **ACCIÓN REQUERIDA EN PROD**: este cambio agrega la columna `merges_json` a

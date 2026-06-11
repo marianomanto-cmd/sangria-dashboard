@@ -109,6 +109,10 @@ export function AuxSheetSection({
 
 type Sel = { ar: number; ac: number; fr: number; fc: number };
 type Rect = { r0: number; c0: number; r1: number; c1: number };
+type AuxSnapshot = { grid: string[][]; merges: AuxMerge[] };
+
+// Pasos de deshacer/rehacer que se guardan por tab.
+const HISTORY_MAX = 50;
 
 const clamp = (n: number, lo: number, hi: number) =>
   Math.max(lo, Math.min(hi, n));
@@ -139,6 +143,19 @@ const expandRectToMerges = (rect: Rect, merges: AuxMerge[]): Rect => {
   return { r0, c0, r1, c1 };
 };
 
+// Recorta una selección a las dimensiones de una grilla (tras deshacer/rehacer,
+// la grilla puede haber encogido).
+const clampSel = (s: Sel, g: string[][]): Sel => {
+  const R = Math.max(0, g.length - 1);
+  const C = Math.max(0, (g[0]?.length ?? 1) - 1);
+  return {
+    ar: clamp(s.ar, 0, R),
+    ac: clamp(s.ac, 0, C),
+    fr: clamp(s.fr, 0, R),
+    fc: clamp(s.fc, 0, C),
+  };
+};
+
 function AuxSheetEditor({
   sheet,
   detail,
@@ -167,6 +184,10 @@ function AuxSheetEditor({
   );
   // Selección: ancla (anchor) + foco (focus). El rect normalizado se deriva.
   const [sel, setSel] = useState<Sel>({ ar: 0, ac: 0, fr: 0, fc: 0 });
+  // Historial deshacer/rehacer (Ctrl+Z / Ctrl+Shift+Z): cada mutación apila el
+  // estado previo {grid, merges}; una edición nueva limpia el redo.
+  const [undoStack, setUndoStack] = useState<AuxSnapshot[]>([]);
+  const [redoStack, setRedoStack] = useState<AuxSnapshot[]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -221,8 +242,15 @@ function AuxSheetEditor({
     });
   };
 
+  // Apila el estado actual para poder deshacerlo; limpia el redo (rama nueva).
+  const pushHistory = () => {
+    setUndoStack((s) => [...s, { grid, merges }].slice(-HISTORY_MAX));
+    setRedoStack([]);
+  };
+
   const writeCell = (r: number, c: number, value: string) => {
     if (grid[r]?.[c] === value) return;
+    pushHistory();
     const next = grid.map((row, ri) =>
       ri === r ? row.map((cell, ci) => (ci === c ? value : cell)) : row,
     );
@@ -293,6 +321,7 @@ function AuxSheetEditor({
       }),
     );
     if (changed) {
+      pushHistory();
       setGrid(next);
       save({ grid: next });
     }
@@ -359,6 +388,7 @@ function AuxSheetEditor({
     };
     const keptMerges = merges.filter((m) => !rectsIntersect(m, written));
     const mergesChanged = keptMerges.length !== merges.length;
+    pushHistory();
     setGrid(next);
     if (mergesChanged) setMerges(keptMerges);
     setSel({ ar: written.r0, ac: written.c0, fr: written.r1, fc: written.c1 });
@@ -415,6 +445,7 @@ function AuxSheetEditor({
           : cell,
       ),
     );
+    pushHistory();
     setGrid(next);
     setMerges(kept);
     setSel({ ar: rect.r0, ac: rect.c0, fr: rect.r0, fc: rect.c0 });
@@ -425,6 +456,7 @@ function AuxSheetEditor({
   const doUnmerge = () => {
     if (!canUnmerge) return;
     const kept = merges.filter((m) => !rectsIntersect(m, selRect));
+    pushHistory();
     setMerges(kept);
     save({ merges: kept });
     focusContainer();
@@ -432,6 +464,7 @@ function AuxSheetEditor({
 
   const addRow = () => {
     if (rows >= AUX_SHEET_MAX_ROWS) return;
+    pushHistory();
     const next = [...grid, Array<string>(cols).fill("")];
     setGrid(next);
     save({ grid: next });
@@ -439,9 +472,36 @@ function AuxSheetEditor({
 
   const addCol = () => {
     if (cols >= AUX_SHEET_MAX_COLS) return;
+    pushHistory();
     const next = grid.map((row) => [...row, ""]);
     setGrid(next);
     save({ grid: next });
+  };
+
+  const undo = () => {
+    if (!editable || undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    setUndoStack((s) => s.slice(0, -1));
+    setRedoStack((r) => [...r, { grid, merges }].slice(-HISTORY_MAX));
+    setEditing(null);
+    setGrid(prev.grid);
+    setMerges(prev.merges);
+    setSel((s) => clampSel(s, prev.grid));
+    save({ grid: prev.grid, merges: prev.merges });
+    focusContainer();
+  };
+
+  const redo = () => {
+    if (!editable || redoStack.length === 0) return;
+    const snap = redoStack[redoStack.length - 1];
+    setRedoStack((r) => r.slice(0, -1));
+    setUndoStack((s) => [...s, { grid, merges }].slice(-HISTORY_MAX));
+    setEditing(null);
+    setGrid(snap.grid);
+    setMerges(snap.merges);
+    setSel((s) => clampSel(s, snap.grid));
+    save({ grid: snap.grid, merges: snap.merges });
+    focusContainer();
   };
 
   const onRename = (value: string) => {
@@ -487,6 +547,13 @@ function AuxSheetEditor({
       } else if (k === "v" || k === "V") {
         e.preventDefault();
         void pasteSelection();
+      } else if (k === "z" || k === "Z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+      } else if (k === "y" || k === "Y") {
+        e.preventDefault();
+        redo();
       } else if (k === "a" || k === "A") {
         e.preventDefault();
         selectAll();
@@ -748,6 +815,25 @@ function AuxSheetEditor({
                 <Button
                   variant="ghost"
                   size="xs"
+                  onClick={undo}
+                  disabled={undoStack.length === 0}
+                  title="Deshacer (Ctrl/Cmd+Z)"
+                >
+                  Deshacer
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={redo}
+                  disabled={redoStack.length === 0}
+                  title="Rehacer (Ctrl/Cmd+Shift+Z)"
+                >
+                  Rehacer
+                </Button>
+                <span className="text-line">|</span>
+                <Button
+                  variant="ghost"
+                  size="xs"
                   onClick={addRow}
                   disabled={pending || rows >= AUX_SHEET_MAX_ROWS}
                 >
@@ -793,7 +879,7 @@ function AuxSheetEditor({
                   Borrar
                 </Button>
                 <span className="text-[11px] text-muted hidden md:inline">
-                  Ctrl/Cmd+C/V · doble click o Enter para editar ·{" "}
+                  Ctrl/Cmd+C/V/Z · doble click o Enter para editar ·{" "}
                   <code>=SUM(A{AUX_SHEET_GRID_ROW_OFFSET}:A{AUX_SHEET_GRID_ROW_OFFSET + 5})</code>
                 </span>
               </>
