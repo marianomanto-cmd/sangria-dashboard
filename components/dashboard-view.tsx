@@ -3,6 +3,7 @@
 import { FacturacionChart } from "@/components/facturacion-chart";
 import { PendingBoard } from "@/components/pending-board";
 import { ProjectsTableExpandable } from "@/components/projects-table-expandable";
+import { SectionBoundary } from "@/components/section-boundary";
 import type {
   DashboardKpis,
   DashboardProjects,
@@ -49,56 +50,64 @@ export function DashboardView({
       </header>
 
       {/* 1. Pendientes + alertas (lo más importante, arriba) */}
-      <PendingBoard pendings={pendings} lang={lang} />
+      <SectionBoundary name="pending">
+        <PendingBoard pendings={pendings} lang={lang} />
+      </SectionBoundary>
 
       {/* 2. KPIs como strip de contexto */}
-      <section className="mt-6 rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-3 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
-        <CompactKpi
-          label={labels.pipelineActive}
-          value={formatUsdCompact(kpis.pipelineActiveUsd)}
-        />
-        <CompactKpi
-          label={labels.activeClients}
-          value={String(kpis.activeClients)}
-        />
-        <CompactKpi
-          label={labels.invoicedYtd}
-          value={
-            kpis.invoicedYtdUsd > 0 ? formatUsdCompact(kpis.invoicedYtdUsd) : "—"
-          }
-          dim={kpis.invoicedYtdUsd === 0}
-        />
-        <CompactKpi
-          label={labels.avgProgress}
-          value={formatPct(kpis.consumptionPct)}
-        />
-      </section>
+      <SectionBoundary name="kpis">
+        <section className="mt-6 rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-3 grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3">
+          <CompactKpi
+            label={labels.pipelineActive}
+            value={formatUsdCompact(kpis.pipelineActiveUsd)}
+          />
+          <CompactKpi
+            label={labels.activeClients}
+            value={String(kpis.activeClients)}
+          />
+          <CompactKpi
+            label={labels.invoicedYtd}
+            value={
+              kpis.invoicedYtdUsd > 0 ? formatUsdCompact(kpis.invoicedYtdUsd) : "—"
+            }
+            dim={kpis.invoicedYtdUsd === 0}
+          />
+          <CompactKpi
+            label={labels.avgProgress}
+            value={formatPct(kpis.consumptionPct)}
+          />
+        </section>
+      </SectionBoundary>
 
       {/* 3. Chart de facturación mensual */}
-      <section className="mt-6">
-        <FacturacionChart data={monthly} lang={lang} />
-      </section>
+      <SectionBoundary name="chart">
+        <section className="mt-6">
+          <FacturacionChart data={monthly} lang={lang} />
+        </section>
+      </SectionBoundary>
 
       {/* 4. Tabla de proyectos (drill-down a planes) */}
-      <section className="mt-6 rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-        <div className="px-5 py-2.5 border-b border-line flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">
-            {lang === "es" ? "Proyectos" : "Projects"}
-          </h2>
-          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            {projects.rows.length}{" "}
-            {lang === "es"
-              ? "totales · click ▶ para ver planes"
-              : "total · click ▶ to see plans"}
-          </span>
-        </div>
-        <ProjectsTableExpandable
-          rows={projects.rows}
-          showClient
-          dense={false}
-          lang={lang}
-        />
-      </section>
+      <SectionBoundary name="projects">
+        <section className="mt-6 rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+          <div className="px-5 py-2.5 border-b border-line flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold">
+              {lang === "es" ? "Proyectos" : "Projects"}
+            </h2>
+            <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+              {projects.rows.length}{" "}
+              {lang === "es"
+                ? "totales · click ▶ para ver planes"
+                : "total · click ▶ to see plans"}
+            </span>
+          </div>
+          <ProjectsTableExpandable
+            rows={projects.rows}
+            showClient
+            dense={false}
+            lang={lang}
+          />
+        </section>
+      </SectionBoundary>
     </main>
   );
 }

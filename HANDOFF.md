@@ -1,6 +1,42 @@
-# Handoff — jueves 11/jun/2026
+# Handoff — martes 16/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 16/jun/2026 — Dashboard caído: resiliencia por sección + fallbacks
+
+- **Incidente**: el Dashboard (`/`) tiraba el error boundary ("Ocurrió un error
+  al cargar esta vista", `ref/digest 3865035138`) de forma **determinística**;
+  el resto de la app andaba bien. En los logs de Vercel: primero una tanda de
+  `Vercel Runtime Timeout Error` en `/` y `/planes` (pico de carga — el
+  prefetch del sidebar dispara ~30 requests de golpe mientras el dashboard corre
+  ~12 queries en paralelo; se recuperó solo) y, **por separado y persistente**,
+  un `TypeError: Cannot read prop…` SOLO en el render del dashboard (mensaje
+  truncado por la observabilidad; sin acceso a la DB de prod desde la sesión no
+  se pudo reproducir el stack completo).
+- **Causa raíz**: aún **sin pinpoint exacto**. El path de queries del dashboard
+  está blindado, y `getDashboardProjects` / `ProjectsTableExpandable` los
+  comparte `/proyectos` (que funciona) → el throw está en el render de un widget
+  **exclusivo del dashboard**. Pendiente: leer el log `DASHERR[<seccion>]` /
+  `DASHQ[<query>]` (o la consola del browser, que muestra el TypeError sin
+  truncar porque `DashboardView` es client component) para ubicar la propiedad y
+  sección exactas.
+- **Mitigación (esta sesión)** — el dashboard ya no se cae entero:
+  - `components/section-boundary.tsx` (**nuevo**): error boundary a nivel
+    sección. Aísla cada widget del dashboard — si uno tira excepción, muestra un
+    placeholder ("No se pudo cargar esta sección") y el resto de la página sigue
+    funcionando (no más pantalla en blanco). Loguea
+    `DASHERR[<seccion>]:<propiedad>` para ubicar la causa.
+  - `components/dashboard-view.tsx`: cada sección (pendientes, KPIs, chart,
+    proyectos) va envuelta en `<SectionBoundary>`.
+  - `app/(app)/page.tsx`: las 4 queries pasan de `Promise.all` a
+    `Promise.allSettled` con fallbacks vacíos por sección (si una query falla,
+    degrada esa parte en vez de tumbar la vista) + loguea `DASHQ[<query>]`.
+    Se agregó `export const maxDuration = 30` como headroom para los picos de
+    timeout vistos en `/` y `/planes`.
+- **Sin cambios de schema.** `tsc` + `eslint` (archivos tocados) + `next build`
+  en verde. **No requiere acción en prod** salvo el deploy (merge a `main`).
+- **Próximo paso**: con el dashboard ya usable, leer `DASHERR[...]` (logs de
+  Vercel o consola del browser) para el fix preciso del widget que rompe.
 
 ### Cambios de la sesión 11/jun/2026 — Tabs auxiliares: deshacer / rehacer (Ctrl+Z)
 
