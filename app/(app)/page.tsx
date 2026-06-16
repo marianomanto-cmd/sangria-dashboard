@@ -21,7 +21,12 @@ type Props = {
   searchParams: Promise<{ client?: string; view?: string }>;
 };
 
-export const maxDuration = 30;
+// Timeout de la función. La PRIMERA carga en frío (cache miss) dispara las ~15
+// queries pesadas y, sobre la conexión fría a la DB, puede tardar; le damos
+// 60s de aire para que complete y deje el Data Cache poblado. Las cargas
+// siguientes salen del cache (instantáneas), así que este tope solo aplica al
+// arranque en frío.
+export const maxDuration = 60;
 
 // ─── Cache de datos del dashboard ─────────────────────────────────────────────
 // El dashboard es la página más pesada (dispara ~15-20 queries agregadas por

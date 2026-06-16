@@ -82,7 +82,9 @@ export function DashboardOperaciones({
             {projects.rows.length} {es ? "totales" : "total"}
           </span>
         </div>
-        <div className="overflow-x-auto">
+        {/* Desktop: tabla. En mobile usamos tarjetas (abajo) para no forzar
+            scroll horizontal. */}
+        <div className="hidden lg:block overflow-x-auto">
           <table className="w-full text-sm min-w-[840px]">
             <thead className="bg-paper-2/60 text-[11px] uppercase tracking-[0.06em] text-muted">
               <tr>
@@ -144,7 +146,58 @@ export function DashboardOperaciones({
             </tbody>
           </table>
         </div>
+
+        {/* Mobile: tarjetas (sin scroll horizontal). */}
+        <div className="lg:hidden divide-y divide-line-soft">
+          {projects.rows.map((r) => (
+            <Link
+              key={r.id}
+              href={`/proyectos/${r.code}`}
+              className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-medium text-ink">{r.name}</span>
+                <span className="shrink-0">
+                  <StatusBadge status={r.status} />
+                </span>
+              </div>
+              <p className="font-mono text-[11px] text-muted mt-0.5">
+                {r.code} · {r.clientName}
+              </p>
+              <div className="mt-2.5 flex items-center gap-2">
+                <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-accent"
+                    style={{ width: `${Math.min(100, Math.max(0, r.consumptionPct))}%` }}
+                  />
+                </div>
+                <span className="font-mono text-xs text-muted tabular-nums">
+                  {formatPct(r.consumptionPct, 0)}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <CardStat label="Budget" value={formatUsdCompact(r.totalBudgetUsd)} />
+                <CardStat
+                  label={es ? "Facturado" : "Invoiced"}
+                  value={r.spentUsd > 0 ? formatUsdCompact(r.spentUsd) : "—"}
+                />
+                <CardStat label={es ? "Planes" : "Plans"} value={String(r.planCount)} />
+              </div>
+            </Link>
+          ))}
+        </div>
       </section>
+    </div>
+  );
+}
+
+function CardStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">{value}</p>
     </div>
   );
 }
