@@ -63,9 +63,12 @@ producción real conviene migrar a `db:generate` + `db:migrate`.
 
 - **Next.js 16.2.6** (App Router, Turbopack)
 - **React 19.2** + TypeScript 5
-- **Tailwind v4** con `@theme` block (paleta `stone` + accent `#7a1f3d`).
-  Dark mode class-based (`.dark` en `<html>`): los tokens se redefinen
-  bajo `.dark` en `globals.css` así toda utility swappea sola.
+- **Tailwind v4** con `@theme` block (rediseño Round 03: negro + crema cálido,
+  accent vino `#7a1f3d`, `--color-surface` para cards). Dark mode class-based
+  (`.dark` en `<html>`): los tokens se redefinen bajo `.dark` en `globals.css`
+  así toda utility swappea sola.
+- **Fuentes** (`next/font/google`): Geist (UI), JetBrains Mono (cifras) y
+  **Archivo** (display / titulares, `--font-display`).
 - **Drizzle ORM 0.45** sobre Postgres (Supabase)
 - **postgres-js** como driver
 - **lucide-react** para íconos
@@ -271,7 +274,7 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   clickeables y alternan asc↔desc. Default name asc.
 - **Density toggle** (Normal / Compacta), persistido en `localStorage`
   (`sangria:planes:density`) vía `useSyncExternalStore` — mismo patrón que
-  `pending-board` y `theme-toggle`.
+  `theme-toggle`.
 - **Vista "Por proyecto"** (toggle alternativo a Lista, también persistido en
   `sangria:planes:view`): planes anidados bajo cada proyecto, con mini-resumen
   por card (cantidad + total media + consumido).
@@ -550,10 +553,12 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `/proyectos/[code]`; se concentraron en `/billing-tracker` (tab Estimates)
   para no duplicar (PRs #77 + #83).
 
-### Tablero de pendientes del dashboard
+### Pendientes del dashboard
 - `getDashboardPendings(clientId)` en `db/queries/pendings.ts` arma las cuatro
-  listas que muestra `components/pending-board.tsx`, debajo de la tabla de
-  proyectos. Todo se deriva de columnas existentes (no hay flags nuevos):
+  listas que consumen las 3 vistas del dashboard rediseñado
+  (`components/dashboard/`), normalizadas por `groupPendings` (`shared.tsx`) →
+  cada item con su **href real** al detalle + `clientSlug` (para `?client=`).
+  Todo se deriva de columnas existentes (no hay flags nuevos):
   - **Billing reports a completar**: por cada plan `approved` (no borrado), los
     meses dentro del span de sus placements cuyo cierre ya pasó (`mes < mes
     actual`) cuyo billing todavía no se terminó. Un mes cuenta como **terminado**
@@ -568,14 +573,12 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     date asignada, sin entregar) — `upcoming` = a ≤7 días; `overdue` = ya pasó.
   - **Facturas impagas**: cualquier `plan_billings` con `paid_at` null (incluye
     draft/ready/sent/invoiced); se marcan vencidas si `due_date < hoy`.
-- El board entero se colapsa/expande desde su encabezado (chevron). La
-  preferencia se guarda en `localStorage` (`sangria:pending-board-collapsed`,
-  leída con `useSyncExternalStore` para no romper la hidratación) y se mantiene
-  entre visitas; el server siempre arranca abierto.
-- Cada card muestra hasta 3 filas (`PREVIEW`) con "+ N más" para ver el resto;
-  sus filas linkean al área correspondiente (billing del plan, campaign tracker,
-  calendario de reportes). Si una categoría está vacía muestra "Al día" en
-  verde. El layout es compacto (densidad reducida en cards y filas).
+- **Dónde se ven**: en **Cuentas** y **Ejecutivo**, las más urgentes con un botón
+  "Ver todos →" que cambia a la vista **Operaciones**; en **Operaciones**, el
+  board completo de 4 columnas. Cada fila tiene un botón que navega al **detalle
+  real** (billing del plan, campaign tracker, generador/calendario de reportes,
+  /billing). (El board colapsable viejo `pending-board.tsx` se borró con el
+  rediseño.)
 
 ### Audit log
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` +
@@ -1056,21 +1059,27 @@ sql<string>`max(${tbl.col})::text`
 ```
 Y parsear con `new Date(str)` después.
 
-### Dashboard: sin caché (queries directas)
-[app/(app)/page.tsx](app/(app)/page.tsx) corre sus 4 bloques de datos (KPIs,
-proyectos, monthly, pendientes) en `Promise.all`, **sin caché**. Se probó
-`unstable_cache` durante el incidente del pooler pero se sacó: no era la causa
-del cuelgue (era un loop infinito en `enumerateMonths`, ver más abajo) y con la
-DB chica las queries son instantáneas. La resiliencia del pooler la dan hoy
-`max: 8` conexiones (ver "Pool de conexiones") + el `statement_timeout` a nivel
-rol. Si en el futuro crece el tráfico, se puede reintroducir caché por cliente.
+### Dashboard: caché por cliente + resiliencia
+[app/(app)/page.tsx](app/(app)/page.tsx) cachea sus 4 bloques de datos (KPIs,
+proyectos, monthly, pendientes) con **`unstable_cache`** (revalida 60s, keyed
+por `clientId`). Motivo: el dashboard es la página más pesada (~15-20 queries
+agregadas por carga) y, sin caché, cada (re)carga / cambio de cliente armaba una
+tormenta de conexiones concurrentes que saturaba el Transaction Pooler de
+Supabase (`Postgres.js: Unknown Message`, `Failed query`, Vercel Runtime
+Timeouts). Con caché, tras la 1ª carga las siguientes salen del Data Cache (0
+queries, instantáneo). Además es **resiliente**: `resolveClientFromSearchParams`
+va en `try/catch`, las 4 queries en `Promise.allSettled` con fallbacks vacíos, y
+cada vista en su `SectionBoundary` → un fallo transitorio degrada esa sección en
+vez de tirar el error boundary de ruta. `maxDuration = 60` da aire a la 1ª carga
+en frío que puebla el cache.
 
 ### Pool de conexiones
 - `prepare: false` para Transaction Pooler (puerto 6543).
-- `max: 8` por warm-instance. Da lugar a las ~12 queries concurrentes del
-  dashboard sin que queueen ni se traben. (Se probó `max: 3` durante el
-  incidente del pooler, pero la fuga de conexiones que motivaba bajarlo la
-  causaba un loop infinito en `enumerateMonths`, ya arreglado.)
+- `max: 8` por warm-instance. Da lugar a las queries concurrentes sin que
+  queueen ni se traben (el dashboard además ahora **cachea** esas queries, ver
+  "Dashboard: caché por cliente"). (Se probó `max: 3` durante el incidente del
+  pooler, pero la fuga de conexiones que motivaba bajarlo la causaba un loop
+  infinito en `enumerateMonths`, ya arreglado.)
 - `idle_timeout: 20`, `connect_timeout: 10`.
 
 ---
