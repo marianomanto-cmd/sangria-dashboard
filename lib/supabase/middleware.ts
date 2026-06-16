@@ -14,6 +14,17 @@ import {
 // lo cerramos automáticamente y mandamos a /login con `?error=domain`. Es
 // defensa en profundidad — el bloqueo principal está en el callback de OAuth.
 export async function updateSession(request: NextRequest) {
+  // ⚠ PREVIEW ABIERTO (solo deploys de PREVIEW de Vercel, NUNCA producción):
+  // saltamos el gate de auth para poder ver/compartir el preview del rediseño
+  // sin login @sangria. Producción (VERCEL_ENV === 'production') sigue gateada
+  // igual que siempre. OJO: el preview usa la DB de PROD, así que con esto
+  // cualquiera con la URL del preview ve data real — no compartir públicamente,
+  // y revisar/quitar este bloque antes de mergear a main si no se quiere que
+  // TODOS los previews queden abiertos.
+  if (process.env.VERCEL_ENV === "preview") {
+    return NextResponse.next({ request });
+  }
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
