@@ -1,7 +1,6 @@
-import {
-  DashboardView,
-  normalizeDashView,
-} from "@/components/dashboard/dashboard-view";
+import { unstable_cache } from "next/cache";
+import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { normalizeDashView } from "@/components/dashboard/types";
 import {
   getDashboardKpis,
   getDashboardProjects,
@@ -11,7 +10,10 @@ import {
   type MonthlyTotal,
 } from "@/db/queries/dashboard";
 import { getDashboardPendings, type DashboardPendings } from "@/db/queries/pendings";
-import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
+import {
+  resolveClientFromSearchParams,
+  type ResolvedClientFilter,
+} from "@/lib/client-filter.server";
 import { getCurrentUser } from "@/lib/auth";
 import { DEFAULT_LANGUAGE } from "@/lib/i18n";
 
@@ -19,9 +21,38 @@ type Props = {
   searchParams: Promise<{ client?: string; view?: string }>;
 };
 
-// Headroom para los picos de carga: el dashboard dispara ~12 queries agregadas
-// en paralelo y bajo contención puede cruzar el timeout default de la función.
 export const maxDuration = 30;
+
+// ─── Cache de datos del dashboard ─────────────────────────────────────────────
+// El dashboard es la página más pesada (dispara ~15-20 queries agregadas por
+// carga). Sin cache, cada (re)carga / cambio de cliente arma una tormenta de
+// conexiones concurrentes contra el pooler de Supabase, que bajo carga se
+// satura/corrompe ("Postgres.js: Unknown Message", "Failed query", timeouts).
+// Cacheamos por cliente (revalida cada 60s): tras la primera carga, las
+// siguientes salen del Data Cache → 0 queries, instantáneo y sin presión sobre
+// la DB. Si una query falla en un cache-miss, unstable_cache NO cachea el error
+// → el `allSettled` de abajo degrada esa sección y el próximo intento reintenta.
+const REVALIDATE = 60;
+const cachedKpis = unstable_cache(
+  (clientId: string | null) => getDashboardKpis({ clientId }),
+  ["dash-kpis-v1"],
+  { revalidate: REVALIDATE },
+);
+const cachedProjects = unstable_cache(
+  (clientId: string | null) => getDashboardProjects({ clientId }),
+  ["dash-projects-v1"],
+  { revalidate: REVALIDATE },
+);
+const cachedMonthly = unstable_cache(
+  (clientId: string | null) => getMonthlyTotals({ clientId }),
+  ["dash-monthly-v1"],
+  { revalidate: REVALIDATE },
+);
+const cachedPendings = unstable_cache(
+  (clientId: string | null) => getDashboardPendings(clientId),
+  ["dash-pendings-v1"],
+  { revalidate: REVALIDATE },
+);
 
 // Fallbacks vacíos por sección. Si una query falla, degradamos esa parte (la UI
 // muestra ceros / vacío) en vez de tumbar toda la vista con el error boundary.
@@ -43,26 +74,33 @@ const EMPTY_PENDINGS: DashboardPendings = {
 function unwrap<T>(r: PromiseSettledResult<T>, fallback: T, label: string): T {
   if (r.status === "fulfilled") return r.value;
   const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
-  // El nombre de la query va primero por si la observabilidad trunca el mensaje.
   console.error(`DASHQ[${label}]:${msg.slice(0, 80)}`, r.reason);
   return fallback;
 }
 
 export default async function DashboardPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const client = await resolveClientFromSearchParams(sp);
-  const clientId = client?.id ?? null;
-  const lang = client?.language ?? DEFAULT_LANGUAGE;
   const view = normalizeDashView(sp.view);
 
-  // El user (para el saludo de la vista Ejecutivo) va en paralelo; si falla, el
-  // dashboard igual renderiza (greeting genérico).
+  // Resolver el cliente del filtro NO debe tumbar la página: si la DB falla
+  // transitoriamente, seguimos sin filtro (cliente = "todos") en vez de tirar
+  // el error boundary de ruta ("Reintentar").
+  let client: ResolvedClientFilter = null;
+  try {
+    client = await resolveClientFromSearchParams(sp);
+  } catch (e) {
+    console.error("DASHQ[client]:", e instanceof Error ? e.message : e);
+  }
+  const clientId = client?.id ?? null;
+  const lang = client?.language ?? DEFAULT_LANGUAGE;
+
+  // El user (saludo de la vista Ejecutivo) en paralelo; si falla, greeting genérico.
   const userP = getCurrentUser().catch(() => null);
   const [kpisR, projectsR, monthlyR, pendingsR] = await Promise.allSettled([
-    getDashboardKpis({ clientId }),
-    getDashboardProjects({ clientId }),
-    getMonthlyTotals({ clientId }),
-    getDashboardPendings(clientId),
+    cachedKpis(clientId),
+    cachedProjects(clientId),
+    cachedMonthly(clientId),
+    cachedPendings(clientId),
   ]);
   const user = await userP;
 
@@ -73,7 +111,7 @@ export default async function DashboardPage({ searchParams }: Props) {
 
   return (
     <DashboardView
-      view={view}
+      initialView={view}
       kpis={kpis}
       projects={projects}
       monthly={monthly}

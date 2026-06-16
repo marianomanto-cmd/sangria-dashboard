@@ -18,6 +18,7 @@ import {
   groupPendings,
   PendingRow,
 } from "@/components/dashboard/shared";
+import { useSetDashView } from "@/components/dashboard/view-context";
 
 type Props = {
   kpis: DashboardKpis;
@@ -52,6 +53,7 @@ export function DashboardEjecutivo({
   lang,
 }: Props) {
   const es = lang === "es";
+  const setView = useSetDashView();
   const flat = flattenPendings(groupPendings(pendings, lang));
   const clients = deriveClients(projects);
   const year = new Date().getFullYear();
@@ -128,12 +130,13 @@ export function DashboardEjecutivo({
                 </span>
               )}
             </div>
-            <Link
-              href="/?view=operaciones"
+            <button
+              type="button"
+              onClick={() => setView("operaciones")}
               className="text-xs font-medium text-accent hover:underline shrink-0"
             >
               {es ? "Ver todos →" : "View all →"}
-            </Link>
+            </button>
           </div>
           {flat.length === 0 ? (
             <p className="text-sm text-success">{es ? "Todo al día." : "All clear."}</p>

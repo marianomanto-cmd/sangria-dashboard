@@ -19,6 +19,7 @@ import {
   MiniBars,
   PendingRow,
 } from "@/components/dashboard/shared";
+import { useSetDashView } from "@/components/dashboard/view-context";
 
 type Props = {
   kpis: DashboardKpis;
@@ -40,6 +41,7 @@ export function DashboardCuentas({
   lang,
 }: Props) {
   const es = lang === "es";
+  const setView = useSetDashView();
   const clients = deriveClients(projects);
   const flat = flattenPendings(groupPendings(pendings, lang));
   const realBars = monthly.map((m) => m.real);
@@ -118,12 +120,13 @@ export function DashboardCuentas({
               </span>
             )}
           </div>
-          <Link
-            href="/?view=operaciones"
+          <button
+            type="button"
+            onClick={() => setView("operaciones")}
             className="text-xs font-medium text-accent hover:underline shrink-0"
           >
             {es ? "Ver todos →" : "View all →"}
-          </Link>
+          </button>
         </div>
         {flat.length === 0 ? (
           <p className="text-sm text-success">{es ? "Todo al día." : "All clear."}</p>
