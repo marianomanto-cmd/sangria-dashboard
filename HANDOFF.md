@@ -2,6 +2,56 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 16/jun/2026 — Rediseño Sangria OS: shell + dashboard de 3 vistas (mergeado a main)
+
+Rediseño completo del look & feel (identidad sangria.agency) + dashboard nuevo
+que reemplaza al viejo. El dashboard viejo (`components/dashboard-view.tsx`,
+`pending-board.tsx`, `kpi-card.tsx`) se **borró**.
+
+- **Identidad nueva (tokens)**: `app/globals.css` re-skin completo a la paleta
+  del rediseño (negro+crema cálido, vino Sangría) en `@theme` + `.dark` (Round
+  03). Se agregó `--color-surface` (blanco de cards), `--font-display`
+  (Archivo) y keyframes `sngRise`/`sngGrow`/`sngMarquee`. Como toda la app usa
+  tokens, **re-skin-ea todo el sitio**.
+- **Fuente Archivo** (`app/layout.tsx`, `next/font/google`, pesos 700/800/900)
+  para titulares (`font-display`).
+- **Shell**: `sidebar.tsx` restyle (228px, dot vino + wordmark Archivo, barra
+  activa 5px, texto white-alpha, fijo oscuro en ambos temas). `topbar.tsx`
+  restyle (`bg-surface`) + `topbar-nav.tsx` (nuevo): título de sección por
+  pathname.
+- **Dashboard nuevo** (`components/dashboard/`): contenedor `dashboard-view.tsx`
+  (**"use client"**) con el **toggle de 3 vistas como estado de cliente →
+  cambio INSTANTÁNEO** (sin re-fetch; refleja la vista en la URL con
+  `history.replaceState`). `types.ts` + `view-context.tsx` (el "Ver todos →"
+  conmuta de vista vía contexto). Cada vista en su `SectionBoundary`. 3 vistas:
+  - **Cuentas** (default): bento por cliente (portfolio en `bg-rail`, pipeline,
+    avance) + card de pendientes + tarjetas de cliente con sparkline.
+  - **Operaciones**: strip de KPIs + board de pendientes (4 columnas) + tabla
+    densa de proyectos.
+  - **Ejecutivo**: header editorial ("Buenas tardes, {nombre}") + banda de KPIs
+    + chart `FacturacionChart` (reusado) + "Requiere atención" + "Clientes activos".
+  - `shared.tsx`: `groupPendings` (cada pendiente → **href real** a su detalle),
+    `deriveClients`, `MiniBars`, `PendingRow`.
+- **Confiabilidad** (clave — el dashboard es la página MÁS pesada, ~15-20 queries
+  por carga; los logs del preview mostraban saturación del pooler:
+  `Postgres.js: Unknown Message`, `Failed query`, Runtime Timeouts):
+  - **Cache** de las 4 queries del dashboard vía `unstable_cache` (revalida 60s,
+    por cliente) en `page.tsx` → tras la 1ª carga salen del Data Cache: 0
+    queries, instantáneo, sin presión sobre la conexión.
+  - `page.tsx` resiliente: `resolveClientFromSearchParams` en `try/catch` (no
+    tira el error boundary de ruta si la DB falla un instante) + `allSettled` +
+    fallbacks vacíos por sección + `maxDuration = 60` (aire para la 1ª carga en
+    frío que puebla el cache).
+- **Datos**: misma firma de queries (`getDashboard*`); **único cambio aditivo**:
+  `db/queries/pendings.ts` trae `clientSlug` en cada pendiente (para routear
+  `?client=`).
+- **Pendiente p/ próxima sesión**: la sección "Tablero de pendientes del
+  dashboard" más abajo en el README describe el board VIEJO (ya borrado) →
+  actualizar. Los "deltas" de los mocks (YoY/trimestre) se omitieron (no hay esa
+  métrica en las queries). Si el primer golpe en frío sigue costando, evaluar
+  bajar el fan-out de queries del dashboard o tunear el pool (`db/index.ts`).
+- `tsc` + `eslint` + `next build` en verde. **Sin cambios de schema.**
+
 ### Cambios de la sesión 16/jun/2026 — Portal Proyectos: filtro de campañas + multi-pacing + export ejecutivo + fix "Ver pacing"
 
 - **Bug arreglado**: en el portal (`/<slug>` → Proyectos), "Ver pacing" de una

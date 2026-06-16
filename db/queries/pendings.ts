@@ -40,6 +40,7 @@ export type PendingBilling = {
   projectCode: string;
   projectName: string;
   clientName: string;
+  clientSlug: string;
   month: string; // YYYY-MM
 };
 
@@ -49,6 +50,7 @@ export type PendingTracking = {
   projectCode: string;
   projectName: string;
   clientName: string;
+  clientSlug: string;
   lastCloseDate: string | null; // YYYY-MM-DD
   daysSinceClose: number | null;
 };
@@ -59,6 +61,7 @@ export type PendingReport = {
   projectCode: string | null;
   projectName: string;
   clientName: string;
+  clientSlug: string;
   deliveryDate: string; // YYYY-MM-DD
   daysUntil: number; // negativo = vencido
 };
@@ -70,6 +73,7 @@ export type PendingInvoice = {
   projectCode: string;
   projectName: string;
   clientName: string;
+  clientSlug: string;
   month: string;
   status: string; // draft | ready | sent | invoiced
   invoiceNumber: string | null;
@@ -171,6 +175,7 @@ export async function getDashboardPendings(
       projectCode: r.projectCode,
       projectName: r.projectName,
       clientName: r.clientName,
+      clientSlug: r.clientSlug,
       deliveryDate: r.deliveryDate,
       daysUntil,
     };
@@ -199,6 +204,7 @@ async function getPendingBillings(
       projectCode: projects.code,
       projectName: projects.name,
       clientName: clients.name,
+      clientSlug: clients.slug,
       periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
       periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
     })
@@ -251,6 +257,7 @@ async function getPendingBillings(
           projectCode: p.projectCode,
           projectName: p.projectName,
           clientName: p.clientName,
+          clientSlug: p.clientSlug,
           month,
         });
       }
@@ -282,6 +289,7 @@ async function getPendingTracking(
       projectCode: projects.code,
       projectName: projects.name,
       clientName: clients.name,
+      clientSlug: clients.slug,
       periodStart: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
       periodEnd: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
     })
@@ -333,6 +341,7 @@ async function getPendingTracking(
       projectCode: r.projectCode,
       projectName: r.projectName,
       clientName: r.clientName,
+      clientSlug: r.clientSlug,
       lastCloseDate: lastClose,
       daysSinceClose: lastClose ? daysBetween(lastClose, today) : null,
     });
@@ -361,6 +370,7 @@ async function getPendingInvoices(
       projectCode: projects.code,
       projectName: projects.name,
       clientName: clients.name,
+      clientSlug: clients.slug,
       month: planBillings.month,
       status: planBillings.status,
       invoiceNumber: planBillings.invoiceNumber,
@@ -380,6 +390,7 @@ async function getPendingInvoices(
     projectCode: r.projectCode,
     projectName: r.projectName,
     clientName: r.clientName,
+    clientSlug: r.clientSlug,
     month: r.month,
     status: r.status,
     invoiceNumber: r.invoiceNumber,
