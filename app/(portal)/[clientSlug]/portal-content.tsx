@@ -44,8 +44,11 @@ export type PortalParams = {
   bo: string;
   proj: string;
   month: string;
+  // Pacing expandido: lista de planIds separados por coma (varios a la vez).
   plan: string;
   pstatus: string; // "" (abiertos, default) | "cerrados"
+  // Filtro multi-select de campañas (planIds separados por coma).
+  camp: string;
 };
 
 // ─── Resumen ────────────────────────────────────────────────────────────────
@@ -396,8 +399,14 @@ function hrefWith(params: PortalParams, changes: Partial<PortalParams>): string 
   const merged = { ...params, ...changes };
   const qs = new URLSearchParams();
   if (merged.tab) qs.set("tab", merged.tab);
+  // IMPORTANTE: preservar pstatus y camp. Antes faltaba pstatus, así que al
+  // expandir el pacing de una campaña cerrada la URL perdía pstatus=cerrados,
+  // volvía a "abiertos" (default) y el proyecto cerrado desaparecía → no se
+  // veía el pacing. (Bug reportado.)
+  if (merged.pstatus) qs.set("pstatus", merged.pstatus);
   if (merged.bo) qs.set("bo", merged.bo);
   if (merged.proj) qs.set("proj", merged.proj);
+  if (merged.camp) qs.set("camp", merged.camp);
   if (merged.month) qs.set("month", merged.month);
   if (merged.plan) qs.set("plan", merged.plan);
   const s = qs.toString();
@@ -406,33 +415,53 @@ function hrefWith(params: PortalParams, changes: Partial<PortalParams>): string 
 
 export async function ProjectsSection({
   clientId,
+  clientSlug,
   lang,
   params,
 }: {
   clientId: string;
+  clientSlug: string;
   lang: Language;
   params: PortalParams;
 }) {
+  // Campañas elegidas en el filtro multi-select (planIds). Si hay alguna, el
+  // usuario pidió campañas puntuales → la selección MANDA: las mostramos sin
+  // importar estado (abierto/cerrado), budget origin ni mes (esos filtros se
+  // ignoran mientras haya campañas elegidas, para que no las escondan).
+  const selectedCampaigns = params.camp
+    ? new Set(params.camp.split(",").filter(Boolean))
+    : null;
+
   const { rows } = await getDashboardProjects({
     clientId,
-    budgetOriginId: params.bo || null,
+    budgetOriginId: selectedCampaigns ? null : params.bo || null,
   });
 
-  // Filtro de estado: abiertos (default) o cerrados.
-  const STATUSES =
-    params.pstatus === "cerrados"
+  // Pacing expandido: varios planes a la vez (planIds separados por coma).
+  const expandedPlans = new Set(
+    params.plan ? params.plan.split(",").filter(Boolean) : [],
+  );
+
+  // Filtro de estado: abiertos (default) o cerrados. Con campañas
+  // seleccionadas, ampliamos a todos los estados (la selección manda).
+  const STATUSES = selectedCampaigns
+    ? new Set(["planning", "active", "paused", "closed", "reportado"])
+    : params.pstatus === "cerrados"
       ? new Set(["closed", "reportado"])
       : new Set(["planning", "active", "paused"]);
 
   // Filtro de mes: dejamos proyectos con al menos un plan cuyo período cubre
-  // el mes; dentro de cada proyecto mostramos solo esos planes.
-  // Solo planes APROBADOS: el portal es para el cliente, no mostramos borradores
-  // ni versiones viejas (draft/ready/archived son internos).
-  const monthFilter = params.month || null;
+  // el mes; dentro de cada proyecto mostramos solo esos planes. Se ignora si
+  // hay campañas elegidas. Solo planes APROBADOS: el portal es para el cliente,
+  // no mostramos borradores ni versiones viejas (draft/ready/archived).
+  const monthFilter = selectedCampaigns ? null : params.month || null;
   const visible = rows
     .filter((proj) => STATUSES.has(proj.status))
     .map((proj) => {
       let plans = proj.plans.filter((p) => p.status === "approved");
+      if (selectedCampaigns) {
+        plans = plans.filter((p) => selectedCampaigns.has(p.id));
+      }
       if (monthFilter) {
         plans = plans.filter((p) =>
           monthInRange(monthFilter, p.periodStart, p.periodEnd),
@@ -454,8 +483,47 @@ export async function ProjectsSection({
     );
   }
 
+  // IDs de todas las campañas visibles → export consolidado del pacing
+  // (reporte ejecutivo de varias campañas en un solo Excel).
+  const visiblePlanIds = visible.flatMap((proj) => proj.plans.map((p) => p.id));
+  const exportHref = `/api/portal/pacing.xlsx?client=${encodeURIComponent(
+    clientSlug,
+  )}&plans=${visiblePlanIds.join(",")}`;
+
   return (
     <div className="flex flex-col gap-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-xs text-muted">
+          {visible.length}{" "}
+          {lang === "es"
+            ? visible.length === 1
+              ? "proyecto"
+              : "proyectos"
+            : visible.length === 1
+              ? "project"
+              : "projects"}{" "}
+          · {visiblePlanIds.length}{" "}
+          {lang === "es"
+            ? visiblePlanIds.length === 1
+              ? "campaña"
+              : "campañas"
+            : visiblePlanIds.length === 1
+              ? "campaign"
+              : "campaigns"}
+        </p>
+        <a
+          href={exportHref}
+          className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink-2 hover:text-accent hover:border-accent transition-colors"
+          title={
+            lang === "es"
+              ? "Descargar el pacing consolidado de todas las campañas visibles (Excel)"
+              : "Download consolidated pacing for all visible campaigns (Excel)"
+          }
+        >
+          <FileSpreadsheet size={14} />
+          {lang === "es" ? "Descargar pacing (Excel)" : "Download pacing (Excel)"}
+        </a>
+      </div>
       {visible.map((proj) => {
         const period = projectPeriod(proj.plans);
         const endingDays = endingSoonDays(period.end);
@@ -487,7 +555,11 @@ export async function ProjectsSection({
           </header>
           <div className="divide-y divide-line-soft">
             {proj.plans.map((plan) => {
-              const expanded = params.plan === plan.id;
+              const expanded = expandedPlans.has(plan.id);
+              // Toggle del pacing dentro del set (varios expandidos a la vez).
+              const nextPlan = expanded
+                ? [...expandedPlans].filter((id) => id !== plan.id)
+                : [...expandedPlans, plan.id];
               return (
                 <div key={plan.id} className="px-5 py-3">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -523,9 +595,7 @@ export async function ProjectsSection({
                         Excel
                       </a>
                       <Link
-                        href={hrefWith(params, {
-                          plan: expanded ? "" : plan.id,
-                        })}
+                        href={hrefWith(params, { plan: nextPlan.join(",") })}
                         scroll={false}
                         className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
                       >
@@ -545,7 +615,11 @@ export async function ProjectsSection({
                   </div>
                   {expanded && (
                     <div className="mt-3">
-                      <PlanPacing planId={plan.id} lang={lang} />
+                      <PlanPacing
+                        planId={plan.id}
+                        clientSlug={clientSlug}
+                        lang={lang}
+                      />
                     </div>
                   )}
                 </div>
@@ -561,9 +635,11 @@ export async function ProjectsSection({
 
 async function PlanPacing({
   planId,
+  clientSlug,
   lang,
 }: {
   planId: string;
+  clientSlug: string;
   lang: Language;
 }) {
   const data = await getCampaignTrackerPlan(planId);
@@ -580,15 +656,30 @@ async function PlanPacing({
 
   return (
     <div className="rounded-md border border-line bg-paper-2/50 p-3">
-      {/* Última actualización del pacing — chiquito, en azul. */}
-      <p className="text-[11px] text-info mb-2">
-        {lang === "es" ? "Pacing actualizado: " : "Pacing updated: "}
-        {lastUpdate
-          ? formatDate(lastUpdate.toISOString().slice(0, 10), lang)
-          : lang === "es"
-            ? "sin cargas aún"
-            : "no loads yet"}
-      </p>
+      {/* Última actualización del pacing + descarga del pacing en Excel
+          (formato espejo del plan de medios). */}
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <p className="text-[11px] text-info">
+          {lang === "es" ? "Pacing actualizado: " : "Pacing updated: "}
+          {lastUpdate
+            ? formatDate(lastUpdate.toISOString().slice(0, 10), lang)
+            : lang === "es"
+              ? "sin cargas aún"
+              : "no loads yet"}
+        </p>
+        <a
+          href={`/api/portal/pacing.xlsx?client=${encodeURIComponent(clientSlug)}&plans=${planId}`}
+          className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent shrink-0"
+          title={
+            lang === "es"
+              ? "Descargar pacing en Excel"
+              : "Download pacing as Excel"
+          }
+        >
+          <FileSpreadsheet size={13} />
+          Excel
+        </a>
+      </div>
 
       <div className="space-y-3">
         {data.publishers.map((pub) => (

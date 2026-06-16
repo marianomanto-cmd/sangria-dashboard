@@ -2,6 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 16/jun/2026 — Portal Proyectos: filtro de campañas + multi-pacing + export ejecutivo + fix "Ver pacing"
+
+- **Bug arreglado**: en el portal (`/<slug>` → Proyectos), "Ver pacing" de una
+  campaña **cerrada** reseteaba el filtro a "Abiertos" y no mostraba el pacing.
+  Causa: `hrefWith` (en `portal-content.tsx`) reconstruía la URL del link sin
+  `pstatus` → se perdía `pstatus=cerrados`. Fix: `hrefWith` ahora preserva
+  `pstatus` (y `camp`).
+- **Filtro multi-select de campañas (con buscador)**: nuevo `CampaignMultiSelect`
+  en `portal-filters.tsx` (popover con search + checkboxes, URL-based vía
+  `?camp=<planIds>`). La pestaña Proyectos suma el campo `"campaign"`. Cuando hay
+  campañas elegidas, **la selección manda**: se ignoran estado/budget origin/mes
+  para que no las escondan. Opciones nuevas en `getPortalFilterOptions`
+  (`campaigns` = planes aprobados del cliente).
+- **Pacing de varias campañas a la vez**: `?plan=` pasó de un id a una **lista**
+  (set de planIds separados por coma); cada "Ver pacing" togglea su id en el set.
+- **Export ejecutivo consolidado**: nueva ruta
+  `GET /api/portal/pacing.xlsx?client=<slug>&plans=<ids>` → un solo Excel con el
+  pacing de **varias campañas**. Tres hojas con el look del Excel del plan:
+  **Resumen** (fila por campaña + total), **Detalle** (campaña → publisher →
+  placement con métricas goal/real en columnas, "detalle amplio") y **Por
+  mercado** (desglose agregado). Pública en el proxy (`/api/portal/*`); valida
+  `canAccessClientExport` + ownership de cada plan; tope `MAX_PLANS` (40),
+  `maxDuration=60`. Reusa `getCampaignTrackerPlan` por plan + `buildMetricRows`
+  para re-derivar calculadas en los subtotales. Botón "Descargar pacing (Excel)"
+  arriba de la lista (todas las visibles) y uno por campaña en el panel de pacing.
+- **Sin cambios de schema.** `tsc` + `eslint` + `next build` en verde. **No
+  requiere acción en prod** salvo el deploy (merge a `main`).
+- Archivos: `app/api/portal/pacing.xlsx/route.ts` (nuevo),
+  `app/(portal)/[clientSlug]/{portal-filters,portal-content,page}.tsx`,
+  `db/queries/client-portal.ts`, `lib/supabase/middleware.ts` (comentario).
+
 ### Cambios de la sesión 16/jun/2026 — Dashboard caído: resiliencia por sección + fallbacks
 
 - **Incidente**: el Dashboard (`/`) tiraba el error boundary ("Ocurrió un error

@@ -56,7 +56,9 @@ export async function updateSession(request: NextRequest) {
     path === "/login" ||
     path.startsWith("/auth/") ||
     path === "/favicon.ico" ||
-    // Endpoints públicos del portal (login/logout): se autovalidan adentro.
+    // Endpoints públicos del portal (login/logout + export de pacing
+    // consolidado): se autovalidan adentro (login/logout solos;
+    // pacing.xlsx con canAccessClientExport + ownership de los planes).
     path.startsWith("/api/portal/") ||
     // Descarga de export de planes (GET): el route handler valida sesión OR
     // cookie de portal del cliente dueño del plan.

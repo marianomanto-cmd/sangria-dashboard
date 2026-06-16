@@ -78,6 +78,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
     month: one(sp.month),
     plan: one(sp.plan),
     pstatus: one(sp.pstatus),
+    camp: one(sp.camp),
   };
 
   const benchParams: BenchmarkParams = {
@@ -161,9 +162,10 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
         )}
         {tab === "proyectos" && (
           <PortalFilters
-            fields={["pstatus", "origin", "month"]}
+            fields={["pstatus", "campaign", "origin", "month"]}
             budgetOrigins={opts.budgetOrigins}
             projects={opts.projects}
+            campaigns={opts.campaigns}
             months={opts.months}
             lang={lang}
           />
@@ -179,7 +181,12 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
           <EstimateSection clientId={client.id} lang={lang} params={portalParams} />
         )}
         {tab === "proyectos" && (
-          <ProjectsSection clientId={client.id} lang={lang} params={portalParams} />
+          <ProjectsSection
+            clientId={client.id}
+            clientSlug={client.slug}
+            lang={lang}
+            params={portalParams}
+          />
         )}
         {tab === "analisis" && (
           <AnalysisSection
