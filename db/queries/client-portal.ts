@@ -47,6 +47,9 @@ export async function getPortalClient(
 export type PortalFilterOptions = {
   budgetOrigins: { id: string; name: string }[];
   projects: { id: string; code: string; name: string }[];
+  // Campañas = planes aprobados del cliente (para el filtro multi-select de la
+  // pestaña Proyectos del portal).
+  campaigns: { id: string; name: string }[];
   months: string[]; // YYYY-MM ascendente
 };
 
@@ -96,6 +99,21 @@ export async function getPortalFilterOptions(
     .where(eq(projects.clientId, clientId))
     .orderBy(asc(projects.code));
 
+  // Campañas del cliente = planes APROBADOS (lo que muestra la pestaña
+  // Proyectos del portal). Alimentan el filtro multi-select por nombre.
+  const campaigns = await db
+    .select({ id: mediaPlans.id, name: mediaPlans.name })
+    .from(mediaPlans)
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .where(
+      and(
+        eq(projects.clientId, clientId),
+        eq(mediaPlans.status, "approved"),
+        isNull(mediaPlans.deletedAt),
+      ),
+    )
+    .orderBy(asc(mediaPlans.name));
+
   // Rango de meses: combina meses de billings + spans de placements del cliente.
   const [billingRange] = await db
     .select({
@@ -140,7 +158,7 @@ export async function getPortalFilterOptions(
   const maxMonth = candidatesMax.sort().reverse()[0] ?? null;
   const months = minMonth && maxMonth ? enumerateMonths(minMonth, maxMonth) : [];
 
-  return { budgetOrigins: origins, projects: projs, months };
+  return { budgetOrigins: origins, projects: projs, campaigns, months };
 }
 
 // Inversión por publisher para un cliente: planeado (media_plan_publishers,

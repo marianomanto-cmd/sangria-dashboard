@@ -115,13 +115,15 @@ app/
     [clientSlug]/           # /<slug> — tabs Resumen/Billing/Estimación/Proyectos/Análisis/Reportes/Benchmarks
       page.tsx              # gate por cookie → login o tabs; lookup por slug (404 si no existe/reservado)
       portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
-      portal-login.tsx, portal-logout.tsx, portal-filters.tsx, portal-benchmarks-filters.tsx
+      portal-login.tsx, portal-logout.tsx, portal-benchmarks-filters.tsx
+      portal-filters.tsx      # filtros URL-based del portal + multi-select de campañas CON BUSCADOR (CampaignMultiSelect)
   api/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + fechas por publisher/placement)
       export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). Acceso: sesión interna O cookie de portal del cliente dueño
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
+      pacing.xlsx/route.ts  # XLSX CONSOLIDADO del pacing de varias campañas (Resumen/Detalle/Por mercado). Público + canAccessClientExport + ownership
     benchmarks/
       export/route.ts       # Excel/PDF de benchmarks filtrados (público + canAccessClientExport)
     reports/
@@ -632,8 +634,11 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   **Resumen** (KPIs + chart de inversión mensual + **inversión por publisher
   planeado vs real** + **facturado acumulado vs estimado YTD**), **Billing
   Tracker**, **Estimación**, **Proyectos**
-  (filtro de estado **Abiertos/Cerrados**, default abiertos; descarga PDF/Excel de los
-  planes **aprobados** + pacing por placement agrupado por publisher), **Análisis**
+  (filtros: estado **Abiertos/Cerrados** (default abiertos) + **multi-select de
+  campañas con buscador** + budget origin + mes; descarga PDF/Excel del plan +
+  **pacing por placement** agrupado por publisher, expandible para **varias
+  campañas a la vez**, con **export Excel consolidado** del pacing —reporte
+  ejecutivo—), **Análisis**
   (mapa de América con activaciones por mercado + tabla filtrable), **Reportes**
   (**Gantt** de entregas en curso, read-only + tabla de enviados con link al PPT) y
   **Benchmarks** (tabla CPM/CPC/CPV/CTR como el simulador). Todo scopeado al
@@ -663,6 +668,23 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   - **Cookie**: `setPortalSession(slug)` guarda el slug desbloqueado (httpOnly).
     El export (`/api/plans/[id]/export.*`) valida `canAccessClientExport(slug)`:
     pasa si hay sesión interna O cookie de portal del cliente dueño del plan.
+- **Pacing del portal (Proyectos)**: cada campaña tiene un toggle "Ver pacing"
+  (URL-based vía `?plan=<ids>` separados por coma → **varios expandidos a la
+  vez**). El filtro **multi-select de campañas** (`?camp=<ids>`,
+  `components`/`portal-filters.tsx`) busca por nombre y, cuando hay campañas
+  elegidas, **la selección manda** (ignora estado/origin/mes para que no las
+  esconda). El bug del "Ver pacing" que perdía `pstatus` (volvía a Abiertos y
+  no mostraba el pacing de campañas cerradas) se arregló en `hrefWith`
+  (preserva `pstatus` + `camp`).
+- **Export consolidado de pacing**
+  (`GET /api/portal/pacing.xlsx?client=<slug>&plans=<ids>`): baja en un solo
+  Excel el pacing de **varias campañas a la vez** (las visibles/seleccionadas),
+  para presentar a nivel ejecutivo. Tres hojas con el look del Excel del plan:
+  **Resumen** (una fila por campaña: goal/real/avance/pace/estado + total),
+  **Detalle** (campaña → publisher → placement, con métricas goal/real en
+  columnas) y **Por mercado** (desglose agregado por mercado). Público en el
+  proxy (`/api/portal/*`); valida `canAccessClientExport` + ownership de cada
+  plan. Reusa `getCampaignTrackerPlan` por plan (tope `MAX_PLANS`).
 - **Sin cambios de schema**: reusa `clients.slug`. No requiere acción en prod.
 
 ### Análisis por publisher × mercado (mapa de América)
