@@ -2,6 +2,49 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 16/jun/2026 — Rediseño Sangria OS: shell + dashboard de 3 vistas (branch `claude/dashboard-redesign`, EN PRUEBA)
+
+> **OJO**: esto vive en el branch `claude/dashboard-redesign`, **sin mergear a
+> main**. Es para testear en el preview de Vercel antes de mandar. El dashboard
+> viejo (`components/dashboard-view.tsx`, `pending-board.tsx`, `kpi-card.tsx`)
+> se **borró** y se reemplazó por el nuevo.
+
+- **Identidad nueva (tokens)**: `app/globals.css` re-skin completo a la paleta
+  del rediseño (negro+crema cálido, vino Sangría) en `@theme` + `.dark` (Round
+  03). Se agregó `--color-surface` (blanco de cards), `--font-display`
+  (Archivo) y keyframes `sngRise`/`sngGrow`/`sngMarquee`. Como toda la app usa
+  tokens, **re-skin-ea todo el sitio** (verificar contraste en otras rutas).
+- **Fuente Archivo** (`app/layout.tsx`, `next/font/google`, pesos 700/800/900)
+  para titulares (`font-display`).
+- **Shell**: `sidebar.tsx` restyle (228px, dot vino + wordmark Archivo, barra
+  activa 5px, texto white-alpha, fijo oscuro en ambos temas). `topbar.tsx`
+  restyle (`bg-surface`) + `topbar-nav.tsx` (nuevo): título de sección por
+  pathname + **toggle de 3 vistas** (solo en `/`, URL-based `?view=`).
+- **Dashboard nuevo** (`components/dashboard/`): contenedor `dashboard-view.tsx`
+  (switch por `?view=` + `SectionBoundary` por vista) + 3 vistas:
+  - **Cuentas** (default): bento por cliente (portfolio en `bg-rail`, pipeline,
+    avance) + card de pendientes + tarjetas de cliente con sparkline.
+  - **Operaciones**: strip de KPIs + board de pendientes (4 columnas) + tabla
+    densa de proyectos.
+  - **Ejecutivo**: header editorial ("Buenas tardes, {nombre}") + banda de KPIs
+    + chart `FacturacionChart` (reusado) + "Requiere atención" + "Clientes
+    activos".
+  - `shared.tsx`: `groupPendings` (cada pendiente → **href real** a su detalle,
+    mapeo del handoff), `deriveClients`, `MiniBars`, `PendingRow`.
+- **Datos**: misma firma de queries (`getDashboard*`); **único cambio aditivo**:
+  `db/queries/pendings.ts` ahora trae `clientSlug` en cada pendiente (para
+  routear con `?client=`). `page.tsx` lee `?view=`, trae `getCurrentUser()`
+  (saludo Ejecutivo) y mantiene `Promise.allSettled` + fallbacks + `maxDuration`.
+- **Decisiones / pendientes de revisar en QA**:
+  - Toggle de vistas = URL `?view=` (persistencia por URL, no localStorage).
+  - Los "deltas" de los mocks (▲ 8.1% YoY, etc.) **se omitieron** (no hay esa
+    métrica en las queries; no se inventan).
+  - No se pudo verificar visualmente desde la sesión (sin DB/acceso al sitio) →
+    **probar en el preview de Vercel del branch**.
+  - La sección "Tablero de pendientes del dashboard" más abajo en este README
+    describe el board VIEJO; actualizar cuando el rediseño se finalice/mergee.
+- `tsc` + `eslint` + `next build` en verde. **Sin cambios de schema.**
+
 ### Cambios de la sesión 16/jun/2026 — Portal Proyectos: filtro de campañas + multi-pacing + export ejecutivo + fix "Ver pacing"
 
 - **Bug arreglado**: en el portal (`/<slug>` → Proyectos), "Ver pacing" de una

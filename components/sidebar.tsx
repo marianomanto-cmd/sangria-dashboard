@@ -21,7 +21,6 @@ import {
   ChevronsRight,
   type LucideIcon,
 } from "lucide-react";
-import { SangriaMark } from "@/components/sangria-mark";
 import { useMobileNav } from "@/components/mobile-nav";
 
 type NavEntry = {
@@ -80,15 +79,25 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
         // En < lg el sidebar es un drawer fijo que se desliza (translate-x)
         // controlado por useMobileNav; en ≥ lg vuelve a su comportamiento
         // sticky con ancho colapsable. bg-rail nunca swappea en dark mode.
-        className={`bg-gradient-to-b from-rail-2 to-rail text-white flex flex-col h-screen border-r border-black/40 fixed inset-y-0 left-0 z-40 w-[220px] transition-transform duration-200 ease-out ${
+        className={`bg-gradient-to-b from-rail-2 to-rail text-white flex flex-col h-screen border-r border-black/40 fixed inset-y-0 left-0 z-40 w-[228px] transition-transform duration-200 ease-out ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
-        } lg:sticky lg:top-0 lg:z-20 lg:translate-x-0 lg:shrink-0 lg:transition-[width] lg:data-[collapsed=true]:w-14 lg:data-[collapsed=false]:w-[220px]`}
+        } lg:sticky lg:top-0 lg:z-20 lg:translate-x-0 lg:shrink-0 lg:transition-[width] lg:data-[collapsed=true]:w-14 lg:data-[collapsed=false]:w-[228px]`}
       >
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-        <SangriaMark size={22} />
+      <div className="flex items-center gap-2.5 px-3.5 pt-4 pb-3">
+        <span
+          aria-hidden
+          className="w-[22px] h-[22px] rounded-full shrink-0"
+          style={{
+            background:
+              "radial-gradient(circle at 38% 32%, #d8587e, #a8345f 55%, #5e1730)",
+          }}
+        />
         {!collapsed && (
-          <span className="text-sm font-semibold tracking-tight">
-            Sangria <span className="text-muted font-normal">/ OS</span>
+          <span className="font-display font-black text-[15px] tracking-[0.1em] text-white leading-none">
+            SANGRIA{" "}
+            <span className="align-middle text-[10px] font-semibold tracking-[0.18em] text-white/45">
+              OS
+            </span>
           </span>
         )}
       </div>
@@ -147,7 +156,7 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
               {user?.name ?? user?.email ?? "—"}
             </div>
             {user?.email && (
-              <span className="text-muted truncate block">{user.email}</span>
+              <span className="text-white/45 truncate block">{user.email}</span>
             )}
           </div>
         )}
@@ -190,16 +199,16 @@ function NavItem({
       onClick={onNavigate}
       data-active={active}
       data-collapsed={collapsed}
-      className="group relative flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-muted hover:bg-white/5 hover:text-white data-[active=true]:bg-white/[0.08] data-[active=true]:text-white data-[collapsed=true]:justify-center data-[collapsed=true]:px-0 data-[collapsed=true]:w-9 data-[collapsed=true]:h-9 transition-colors duration-150"
+      className="group relative flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-white/[0.62] hover:bg-white/5 hover:text-white data-[active=true]:bg-white/[0.09] data-[active=true]:text-white data-[collapsed=true]:justify-center data-[collapsed=true]:px-0 data-[collapsed=true]:w-9 data-[collapsed=true]:h-9 transition-colors duration-150"
       title={collapsed ? entry.label : undefined}
     >
       <span
         aria-hidden
-        className="w-[3px] h-4 rounded-sm shrink-0 bg-transparent group-data-[active=true]:bg-accent group-data-[collapsed=true]:hidden transition-colors"
+        className="w-[5px] h-5 rounded-r-sm shrink-0 -ml-2 bg-transparent group-data-[active=true]:bg-accent group-data-[collapsed=true]:hidden transition-colors"
       />
       <Icon
         size={16}
-        strokeWidth={2}
+        strokeWidth={1.8}
         className="shrink-0 transition-transform group-hover:scale-105"
       />
       {!collapsed && <span className="truncate">{entry.label}</span>}

@@ -6,38 +6,44 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Color — neutros stone (warm) + acento sangría.
-     Tokens sincronizados con _design/index.html (Round 02). */
-  --color-paper:        #fafaf9;
-  --color-paper-2:      #f5f5f4;
-  --color-line-soft:    #e7e5e4;
-  --color-line:         #d6d3d1;
-  --color-muted:        #78716c;
-  --color-ink-2:        #44403c;
-  --color-ink:          #1c1917;
+  /* Color — alto contraste negro+crema, acento vino "Sangría".
+     Tokens del rediseño Round 03 (identidad sangria.agency). */
+  --color-paper:        #fbfaf7;
+  --color-paper-2:      #f1ece5;
+  --color-line-soft:    #f1ece4;
+  --color-line:         #e7e1d8;
+  --color-muted:        #8c8278;
+  --color-ink-2:        #4b433d;
+  --color-ink:          #171210;
 
-  /* Sidebar / nav oscuro. Fijo: no swappea en dark mode. */
-  --color-rail:         #1c1917;
-  --color-rail-2:       #292524;
+  /* Superficie blanca de cards (token nuevo; antes se usaba bg-white). */
+  --color-surface:      #ffffff;
+
+  /* Sidebar / nav casi negro. Fijo oscuro en ambos temas (gradiente
+     rail-2 → rail). En dark se oscurece un poco más. */
+  --color-rail:         #120c0b;
+  --color-rail-2:       #1d1614;
 
   --color-accent:        #7a1f3d;
   --color-accent-2:      #a8345f;
   --color-accent-strong: #5e1730;
-  --color-accent-soft:   #f5e6ec;
+  --color-accent-soft:   #f7e9ee;
   --color-accent-violet: #8b2a52;
 
-  --color-success:      #15803d;
-  --color-success-soft: #dcfce7;
-  --color-warn:         #92400e;
-  --color-warn-soft:    #fef3c7;
-  --color-danger:       #b91c1c;
-  --color-danger-soft:  #fee2e2;
+  --color-success:      #1e7a47;
+  --color-success-soft: #e5f3eb;
+  --color-warn:         #9a5b12;
+  --color-warn-soft:    #fbefd9;
+  --color-danger:       #b0263a;
+  --color-danger-soft:  #fbe7e9;
   --color-info:         #1e40af;
   --color-info-soft:    #dbeafe;
 
-  /* Tipografía — vars vienen de next/font/google en layout.tsx */
+  /* Tipografía — vars vienen de next/font/google en layout.tsx.
+     `display` = Archivo (titulares/labels), cae a Geist. */
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+  --font-display: var(--font-archivo), var(--font-geist), ui-sans-serif, system-ui, sans-serif;
 
   /* Radius — override solo lg para los 10px de las cards.
      sm=4px y md=6px coinciden con los defaults de Tailwind. */
@@ -57,26 +63,31 @@
    sobre superficies oscuras.
    ---------------------------------------------------------------------- */
 .dark {
-  --color-paper:        #0c0a09;
-  --color-paper-2:      #1c1917;
-  --color-line-soft:    #292524;
-  --color-line:         #44403c;
-  --color-muted:        #a8a29e;
-  --color-ink-2:        #d6d3d1;
-  --color-ink:          #fafaf9;
+  --color-paper:        #0b0908;
+  --color-paper-2:      #15100e;
+  --color-surface:      #15100e;
+  --color-line-soft:    #1f1916;
+  --color-line:         #2c2521;
+  --color-muted:        #9b9087;
+  --color-ink-2:        #d6cec5;
+  --color-ink:          #faf6f0;
 
-  --color-accent:        #d4658e;
-  --color-accent-2:      #b8487a;
-  --color-accent-strong: #e88aa9;
-  --color-accent-soft:   #3d1226;
+  /* Sidebar fijo (más oscuro que en light). */
+  --color-rail:         #070504;
+  --color-rail-2:       #120c0b;
+
+  --color-accent:        #e0648b;
+  --color-accent-2:      #c84e76;
+  --color-accent-strong: #f2a0ba;
+  --color-accent-soft:   #2e121c;
   --color-accent-violet: #c4527a;
 
-  --color-success:      #4ade80;
-  --color-success-soft: #052e16;
-  --color-warn:         #fbbf24;
-  --color-warn-soft:    #451a03;
-  --color-danger:       #f87171;
-  --color-danger-soft:  #450a0a;
+  --color-success:      #56c684;
+  --color-success-soft: #11271b;
+  --color-warn:         #e0a23c;
+  --color-warn-soft:    #2b1e0c;
+  --color-danger:       #e8697c;
+  --color-danger-soft:  #2c1115;
   --color-info:         #60a5fa;
   --color-info-soft:    #172554;
 
@@ -295,4 +306,42 @@ body {
 .mkt-bubble--sel {
   border-color: #1c1917;
   box-shadow: 0 0 0 3px rgba(122, 31, 61, 0.4), 0 0 16px rgba(122, 31, 61, 0.55);
+}
+
+/* ----------------------------------------------------------------------
+   Rediseño Sangria OS — animaciones del dashboard.
+   IMPORTANTE: sngRise NO anima opacity desde 0 (rompe si el tab está en
+   background: el contenido quedaría invisible). Solo transform.
+   ---------------------------------------------------------------------- */
+@keyframes sngRise {
+  from { transform: translateY(13px); }
+  to   { transform: translateY(0); }
+}
+.animate-sng-rise {
+  animation: sngRise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes sngGrow {
+  from { transform: scaleY(0.5); }
+  to   { transform: scaleY(1); }
+}
+.animate-sng-grow {
+  transform-origin: bottom;
+  animation: sngGrow 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes sngMarquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.animate-sng-marquee {
+  animation: sngMarquee 36s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sng-rise,
+  .animate-sng-grow,
+  .animate-sng-marquee {
+    animation: none;
+  }
 }

@@ -87,7 +87,7 @@ app/
     loading.tsx             # skeleton de página durante la navegación del router (usa PageSkeleton)
     error.tsx               # error boundary recuperable (retry) — captura errores de server components
     not-found.tsx           # 404 con EmptyState
-    page.tsx                # Dashboard
+    page.tsx                # Dashboard (3 vistas: ?view=cuentas|operaciones|ejecutivo; default cuentas)
     clientes/               # /clientes y /clientes/[slug]
     proyectos/              # /proyectos, /proyectos/[code]/*, /proyectos/nuevo
       [code]/planes/[planId]/
@@ -142,7 +142,8 @@ components/                 # UI compartida
   market-analysis.tsx       # vista de análisis publisher × mercado (filtros multi-select + mapa + ranking + tabla); /analisis y portal
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
-  pending-board.tsx         # dashboard: tablero de pendientes compacto + colapsable (persiste en localStorage)
+  dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
+  topbar-nav.tsx            # título de sección (Archivo) + toggle de 3 vistas del dashboard (client, URL-based ?view=)
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates
   billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
