@@ -1977,6 +1977,10 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+d1681f4  Rediseño Sangria OS: shell + dashboard de 3 vistas + confiabilidad (cache) + mobile cards (#150)
+ec0f750  Portal Proyectos: filtro de campañas + multi-pacing + export ejecutivo + fix "Ver pacing" (#149)
+f8be898  Dashboard: aislar cada sección con error boundary + fallbacks por query (#148)
+2f55809  docs: registrar PR #146 en Commits recientes (#147)
 ecb4d28  Aux sheets: undo/redo (Ctrl+Z / Ctrl+Shift+Z) (#146)
 b9e8513  docs: registrar PR #144 en Commits recientes (#145)
 a980742  Aux sheets: range select, copy/paste, and merge cells (#144) — REQUIERE npm run db:push
