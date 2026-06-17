@@ -356,7 +356,9 @@ function PlanBlock({
         />
       </div>
 
-      <table className="w-full text-sm">
+      {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+      <div className="hidden lg:block overflow-x-auto">
+      <table className="w-full text-sm min-w-[720px]">
         <thead>
           <tr className="text-[11px] uppercase tracking-[0.06em] text-muted bg-white dark:bg-paper-2">
             <th className="text-left font-medium px-5 py-2">
@@ -428,6 +430,56 @@ function PlanBlock({
           })}
         </tbody>
       </table>
+      </div>
+
+      {/* Mobile: tarjetas (sin scroll horizontal). */}
+      <div className="lg:hidden divide-y divide-line-soft">
+        {plan.invoices.map((inv) => {
+          const href = `/proyectos/${projectCode}/planes/${plan.id}/billing?month=${inv.month}`;
+          return (
+            <Link
+              key={inv.id}
+              href={href}
+              className="block px-5 py-3.5 hover:bg-paper-2 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-mono text-ink-2 truncate">
+                    {inv.invoiceNumber}
+                  </p>
+                  <p className="text-xs text-muted">
+                    {formatMonth(inv.month, lang)}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <BillingStatusBadge status={inv.status} lang={lang} />
+                  <p className="font-mono font-semibold text-ink mt-1.5 tabular-nums">
+                    {formatUsd(inv.totalUsd)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                    {lang === "es" ? "Subtotal medios" : "Media subtotal"}
+                  </p>
+                  <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">
+                    {formatUsd(inv.mediaSubtotalUsd)}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                    {lang === "es" ? "Subtotal fees" : "Fees subtotal"}
+                  </p>
+                  <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">
+                    {formatUsd(inv.feeSubtotalUsd)}
+                  </p>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }

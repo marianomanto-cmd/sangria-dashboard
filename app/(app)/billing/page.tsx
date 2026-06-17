@@ -122,7 +122,10 @@ export default async function BillingPage({ searchParams }: Props) {
         </div>
       ) : (
         <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-          <table className="w-full text-sm">
+          {/* Desktop: tabla. En mobile usamos tarjetas (abajo) para evitar
+              scroll horizontal. */}
+          <div className="hidden lg:block overflow-x-auto">
+          <table className="w-full text-sm min-w-[960px]">
             <thead className="bg-paper">
               <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
                 <th className="text-left font-medium px-5 py-2.5">
@@ -221,9 +224,83 @@ export default async function BillingPage({ searchParams }: Props) {
               })}
             </tbody>
           </table>
+          </div>
+
+          {/* Mobile: tarjetas (sin scroll horizontal). */}
+          <div className="lg:hidden divide-y divide-line-soft">
+            {rows.map((r) => {
+              const detailHref = `/proyectos/${r.projectCode}/planes/${r.planId}/billing?month=${r.month}`;
+              return (
+                <Link
+                  key={r.id}
+                  href={detailHref}
+                  className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink truncate">{r.planName}</p>
+                      <p className="text-xs text-ink-2 truncate">{r.projectName}</p>
+                      <p className="font-mono text-[11px] text-muted">
+                        {r.projectCode} · {formatMonth(r.month, lang)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <BillingStatusBadge status={r.status} lang={lang} />
+                      <p className="font-mono font-semibold text-ink mt-1.5">
+                        {formatUsd(r.totalUsd)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <CardStat
+                      label={lang === "es" ? "N°" : "#"}
+                      value={r.invoiceNumber ?? "—"}
+                    />
+                    <CardStat label="Net" value={formatUsd(r.totalNetUsd)} />
+                    <CardStat label="Fee" value={formatUsd(r.totalFeeUsd)} />
+                    <CardStat label="Budget Origin" value={r.budgetOriginName} mono={false} />
+                    <CardStat
+                      label={lang === "es" ? "Cliente" : "Client"}
+                      value={r.clientName}
+                      mono={false}
+                    />
+                    <CardStat
+                      label={lang === "es" ? "Vence" : "Due"}
+                      value={formatDate(r.dueDate, lang)}
+                    />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
         </section>
       )}
     </PageShell>
+  );
+}
+
+function CardStat({
+  label,
+  value,
+  mono = true,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p
+        className={`text-xs text-ink-2 mt-0.5 truncate ${
+          mono ? "font-mono tabular-nums" : ""
+        }`}
+      >
+        {value}
+      </p>
+    </div>
   );
 }
 

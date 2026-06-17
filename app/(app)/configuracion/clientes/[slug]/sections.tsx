@@ -47,7 +47,6 @@ type BudgetOrigin = typeof budgetOriginsTable.$inferSelect;
 export function ClientConfigSections({
   clientId,
   clientSlug,
-  clientName,
   publishers,
   metrics,
   markets,
@@ -220,88 +219,161 @@ function PublishersSection({
         </div>
       )}
       <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-paper">
-            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-              <th className="text-left font-medium px-5 py-2.5">Publisher</th>
-              <th className="text-left font-medium px-5 py-2.5">Slug</th>
-              <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
-              <th className="text-left font-medium px-5 py-2.5">Pago</th>
-              <th className="w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-5 py-8 text-center text-xs text-muted italic">
-                  Sin publishers. Agregá el primero con el botón de arriba.
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => (
-                <tr
-                  key={r.publisherId}
-                  className="border-t border-line-soft hover:bg-paper-2/50"
-                >
-                  <td className="px-5 py-2">
-                    <input
-                      type="text"
-                      defaultValue={r.publisherName}
-                      disabled={pending}
-                      onBlur={(e) =>
-                        e.target.value !== r.publisherName &&
-                        onUpdate(r.publisherId, { name: e.target.value })
-                      }
-                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
-                    />
-                  </td>
-                  <td className="px-5 py-2 font-mono text-xs text-muted">
-                    {r.publisherSlug}
-                  </td>
-                  <td className="px-5 py-2">
-                    <label className="inline-flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={r.enabled}
-                        disabled={pending}
-                        onChange={(e) =>
-                          onUpdate(r.publisherId, { enabled: e.target.checked })
-                        }
-                      />
-                      <span className="text-muted">{r.enabled ? "Sí" : "No"}</span>
-                    </label>
-                  </td>
-                  <td className="px-5 py-2">
-                    <select
-                      value={r.agencyPays ? "agency" : "client"}
-                      disabled={pending}
-                      onChange={(e) =>
-                        onUpdate(r.publisherId, {
-                          agencyPays: e.target.value === "agency",
-                        })
-                      }
-                      className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs disabled:opacity-50"
+        {rows.length === 0 ? (
+          <div className="px-5 py-8 text-center text-xs text-muted italic">
+            Sin publishers. Agregá el primero con el botón de arriba.
+          </div>
+        ) : (
+          <>
+            {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-paper">
+                  <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                    <th className="text-left font-medium px-5 py-2.5">Publisher</th>
+                    <th className="text-left font-medium px-5 py-2.5">Slug</th>
+                    <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
+                    <th className="text-left font-medium px-5 py-2.5">Pago</th>
+                    <th className="w-10" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr
+                      key={r.publisherId}
+                      className="border-t border-line-soft hover:bg-paper-2/50"
                     >
-                      <option value="agency">Agencia paga</option>
-                      <option value="client">Cliente paga directo</option>
-                    </select>
-                  </td>
-                  <td className="px-2 py-2">
+                      <td className="px-5 py-2">
+                        <input
+                          type="text"
+                          defaultValue={r.publisherName}
+                          disabled={pending}
+                          onBlur={(e) =>
+                            e.target.value !== r.publisherName &&
+                            onUpdate(r.publisherId, { name: e.target.value })
+                          }
+                          className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                        />
+                      </td>
+                      <td className="px-5 py-2 font-mono text-xs text-muted">
+                        {r.publisherSlug}
+                      </td>
+                      <td className="px-5 py-2">
+                        <label className="inline-flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={r.enabled}
+                            disabled={pending}
+                            onChange={(e) =>
+                              onUpdate(r.publisherId, { enabled: e.target.checked })
+                            }
+                          />
+                          <span className="text-muted">{r.enabled ? "Sí" : "No"}</span>
+                        </label>
+                      </td>
+                      <td className="px-5 py-2">
+                        <select
+                          value={r.agencyPays ? "agency" : "client"}
+                          disabled={pending}
+                          onChange={(e) =>
+                            onUpdate(r.publisherId, {
+                              agencyPays: e.target.value === "agency",
+                            })
+                          }
+                          className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs disabled:opacity-50"
+                        >
+                          <option value="agency">Agencia paga</option>
+                          <option value="client">Cliente paga directo</option>
+                        </select>
+                      </td>
+                      <td className="px-2 py-2">
+                        <button
+                          type="button"
+                          onClick={() => onDelete(r.publisherId, r.publisherName)}
+                          disabled={pending}
+                          className="text-muted hover:text-danger p-1"
+                          aria-label="Eliminar"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: tarjetas (sin scroll horizontal). Mantiene la edición inline. */}
+            <div className="lg:hidden divide-y divide-line-soft">
+              {rows.map((r) => (
+                <div key={r.publisherId} className="px-4 py-3.5 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <input
+                        type="text"
+                        defaultValue={r.publisherName}
+                        disabled={pending}
+                        onBlur={(e) =>
+                          e.target.value !== r.publisherName &&
+                          onUpdate(r.publisherId, { name: e.target.value })
+                        }
+                        className="w-full bg-transparent text-ink font-medium focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                      />
+                      <p className="font-mono text-[11px] text-muted mt-0.5 px-1">
+                        {r.publisherSlug}
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => onDelete(r.publisherId, r.publisherName)}
                       disabled={pending}
-                      className="text-muted hover:text-danger p-1"
+                      className="text-muted hover:text-danger p-1 shrink-0"
                       aria-label="Eliminar"
                     >
                       <Trash2 size={14} />
                     </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                        Habilitado
+                      </p>
+                      <label className="inline-flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={r.enabled}
+                          disabled={pending}
+                          onChange={(e) =>
+                            onUpdate(r.publisherId, { enabled: e.target.checked })
+                          }
+                        />
+                        <span className="text-muted">{r.enabled ? "Sí" : "No"}</span>
+                      </label>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                        Pago
+                      </p>
+                      <select
+                        value={r.agencyPays ? "agency" : "client"}
+                        disabled={pending}
+                        onChange={(e) =>
+                          onUpdate(r.publisherId, {
+                            agencyPays: e.target.value === "agency",
+                          })
+                        }
+                        className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs disabled:opacity-50"
+                      >
+                        <option value="agency">Agencia paga</option>
+                        <option value="client">Cliente paga directo</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
@@ -397,7 +469,8 @@ function MetricsSection({
       <p className="text-xs text-muted mb-3 max-w-2xl">
         Direct = el planner ingresa el valor. Calculated = se deriva con una
         fórmula a partir de directs + amount (ej. CTR = clicks / impressions).
-        Acá podés crear conversiones custom (ej. "Solicitudes de tarjeta").
+        Acá podés crear conversiones custom (ej. &quot;Solicitudes de
+        tarjeta&quot;).
       </p>
       {showAdd && (
         <div className="rounded-lg border border-line bg-paper-2 p-4 mb-3 space-y-2">
@@ -462,48 +535,137 @@ function MetricsSection({
         </div>
       )}
       <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-paper">
-            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-              <th className="text-left font-medium px-5 py-2.5">Nombre</th>
-              <th className="text-left font-medium px-5 py-2.5">Slug</th>
-              <th className="text-left font-medium px-5 py-2.5">Kind</th>
-              <th className="text-left font-medium px-5 py-2.5">Unit</th>
-              <th className="text-left font-medium px-5 py-2.5">Fórmula</th>
-              <th className="text-left font-medium px-5 py-2.5">Habilitada</th>
-              <th className="w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-5 py-8 text-center text-xs text-muted italic">
-                  Sin métricas. Agregá la primera con el botón de arriba.
-                </td>
-              </tr>
-            ) : (
-              rows.map((m) => (
-                <tr
-                  key={m.id}
-                  className="border-t border-line-soft hover:bg-paper-2/50"
-                >
-                  <td className="px-5 py-2">
-                    <input
-                      type="text"
-                      defaultValue={m.name}
-                      disabled={pending}
-                      onBlur={(e) =>
-                        e.target.value !== m.name &&
-                        onUpdate(m.id, { name: e.target.value })
-                      }
-                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
-                    />
-                  </td>
-                  <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
-                  <td className="px-5 py-2 font-mono text-xs text-muted">{m.kind}</td>
-                  <td className="px-5 py-2 font-mono text-xs text-muted">{m.unit ?? "—"}</td>
-                  <td className="px-5 py-2">
-                    {m.kind === "calculated" ? (
+        {rows.length === 0 ? (
+          <div className="px-5 py-8 text-center text-xs text-muted italic">
+            Sin métricas. Agregá la primera con el botón de arriba.
+          </div>
+        ) : (
+          <>
+            {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-paper">
+                  <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                    <th className="text-left font-medium px-5 py-2.5">Nombre</th>
+                    <th className="text-left font-medium px-5 py-2.5">Slug</th>
+                    <th className="text-left font-medium px-5 py-2.5">Kind</th>
+                    <th className="text-left font-medium px-5 py-2.5">Unit</th>
+                    <th className="text-left font-medium px-5 py-2.5">Fórmula</th>
+                    <th className="text-left font-medium px-5 py-2.5">Habilitada</th>
+                    <th className="w-10" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((m) => (
+                    <tr
+                      key={m.id}
+                      className="border-t border-line-soft hover:bg-paper-2/50"
+                    >
+                      <td className="px-5 py-2">
+                        <input
+                          type="text"
+                          defaultValue={m.name}
+                          disabled={pending}
+                          onBlur={(e) =>
+                            e.target.value !== m.name &&
+                            onUpdate(m.id, { name: e.target.value })
+                          }
+                          className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                        />
+                      </td>
+                      <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
+                      <td className="px-5 py-2 font-mono text-xs text-muted">{m.kind}</td>
+                      <td className="px-5 py-2 font-mono text-xs text-muted">{m.unit ?? "—"}</td>
+                      <td className="px-5 py-2">
+                        {m.kind === "calculated" ? (
+                          <input
+                            type="text"
+                            defaultValue={m.formula ?? ""}
+                            disabled={pending}
+                            onBlur={(e) =>
+                              e.target.value !== (m.formula ?? "") &&
+                              onUpdate(m.id, { formula: e.target.value || null })
+                            }
+                            className="w-full bg-transparent text-xs font-mono text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                          />
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-2">
+                        <input
+                          type="checkbox"
+                          checked={m.enabled}
+                          disabled={pending}
+                          onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <button
+                          type="button"
+                          onClick={() => onDelete(m.id, m.name)}
+                          disabled={pending}
+                          className="text-muted hover:text-danger p-1"
+                          aria-label="Eliminar"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: tarjetas (sin scroll horizontal). Mantiene la edición inline. */}
+            <div className="lg:hidden divide-y divide-line-soft">
+              {rows.map((m) => (
+                <div key={m.id} className="px-4 py-3.5 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <input
+                        type="text"
+                        defaultValue={m.name}
+                        disabled={pending}
+                        onBlur={(e) =>
+                          e.target.value !== m.name &&
+                          onUpdate(m.id, { name: e.target.value })
+                        }
+                        className="w-full bg-transparent text-ink font-medium focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                      />
+                      <p className="font-mono text-[11px] text-muted mt-0.5 px-1">
+                        {m.slug} · {m.kind}
+                        {m.unit ? ` · ${m.unit}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <label className="inline-flex items-center gap-1.5 text-xs text-muted">
+                        <input
+                          type="checkbox"
+                          checked={m.enabled}
+                          disabled={pending}
+                          onChange={(e) =>
+                            onUpdate(m.id, { enabled: e.target.checked })
+                          }
+                        />
+                        {m.enabled ? "Sí" : "No"}
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(m.id, m.name)}
+                        disabled={pending}
+                        className="text-muted hover:text-danger p-1"
+                        aria-label="Eliminar"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  {m.kind === "calculated" && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                        Fórmula
+                      </p>
                       <input
                         type="text"
                         defaultValue={m.formula ?? ""}
@@ -512,36 +674,15 @@ function MetricsSection({
                           e.target.value !== (m.formula ?? "") &&
                           onUpdate(m.id, { formula: e.target.value || null })
                         }
-                        className="w-full bg-transparent text-xs font-mono text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                        className="w-full bg-transparent text-xs font-mono text-ink border-b border-line focus:border-accent focus:outline-none rounded-sm px-1"
                       />
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-2">
-                    <input
-                      type="checkbox"
-                      checked={m.enabled}
-                      disabled={pending}
-                      onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <button
-                      type="button"
-                      onClick={() => onDelete(m.id, m.name)}
-                      disabled={pending}
-                      className="text-muted hover:text-danger p-1"
-                      aria-label="Eliminar"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
@@ -663,29 +804,75 @@ function MarketsSection({
         </div>
       )}
       <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-paper">
-            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-              <th className="text-left font-medium px-5 py-2.5">Nombre</th>
-              <th className="text-left font-medium px-5 py-2.5">Slug</th>
-              <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
-              <th className="w-10" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-5 py-8 text-center text-xs text-muted italic">
-                  Sin mercados. Agregá el primero con el botón de arriba.
-                </td>
-              </tr>
-            ) : (
-              rows.map((m) => (
-                <tr
+        {rows.length === 0 ? (
+          <div className="px-5 py-8 text-center text-xs text-muted italic">
+            Sin mercados. Agregá el primero con el botón de arriba.
+          </div>
+        ) : (
+          <>
+            {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-paper">
+                  <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                    <th className="text-left font-medium px-5 py-2.5">Nombre</th>
+                    <th className="text-left font-medium px-5 py-2.5">Slug</th>
+                    <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
+                    <th className="w-10" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((m) => (
+                    <tr
+                      key={m.id}
+                      className="border-t border-line-soft hover:bg-paper-2/50"
+                    >
+                      <td className="px-5 py-2">
+                        <input
+                          type="text"
+                          defaultValue={m.name}
+                          disabled={pending}
+                          onBlur={(e) =>
+                            e.target.value !== m.name &&
+                            onUpdate(m.id, { name: e.target.value })
+                          }
+                          className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                        />
+                      </td>
+                      <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
+                      <td className="px-5 py-2">
+                        <input
+                          type="checkbox"
+                          checked={m.enabled}
+                          disabled={pending}
+                          onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <button
+                          type="button"
+                          onClick={() => onDelete(m.id, m.name)}
+                          disabled={pending}
+                          className="text-muted hover:text-danger p-1"
+                          aria-label="Eliminar"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: tarjetas (sin scroll horizontal). Mantiene la edición inline. */}
+            <div className="lg:hidden divide-y divide-line-soft">
+              {rows.map((m) => (
+                <div
                   key={m.id}
-                  className="border-t border-line-soft hover:bg-paper-2/50"
+                  className="px-4 py-3 flex items-center justify-between gap-3"
                 >
-                  <td className="px-5 py-2">
+                  <div className="min-w-0 flex-1">
                     <input
                       type="text"
                       defaultValue={m.name}
@@ -694,34 +881,35 @@ function MarketsSection({
                         e.target.value !== m.name &&
                         onUpdate(m.id, { name: e.target.value })
                       }
-                      className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
+                      className="w-full bg-transparent text-ink font-medium focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
                     />
-                  </td>
-                  <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
-                  <td className="px-5 py-2">
+                    <p className="font-mono text-[11px] text-muted mt-0.5 px-1">
+                      {m.slug}
+                    </p>
+                  </div>
+                  <label className="inline-flex items-center gap-1.5 text-xs text-muted shrink-0">
                     <input
                       type="checkbox"
                       checked={m.enabled}
                       disabled={pending}
                       onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
                     />
-                  </td>
-                  <td className="px-2 py-2">
-                    <button
-                      type="button"
-                      onClick={() => onDelete(m.id, m.name)}
-                      disabled={pending}
-                      className="text-muted hover:text-danger p-1"
-                      aria-label="Eliminar"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                    {m.enabled ? "Sí" : "No"}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(m.id, m.name)}
+                    disabled={pending}
+                    className="text-muted hover:text-danger p-1 shrink-0"
+                    aria-label="Eliminar"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );

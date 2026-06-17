@@ -267,29 +267,88 @@ export function ReportingCalendarClient({
           </div>
         ) : (
           <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-paper-2 border-b border-line">
-                <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
-                  <th className="px-4 py-2.5">
-                    {lang === "es" ? "Proyecto" : "Project"}
-                  </th>
-                  <th className="px-4 py-2.5">
-                    {lang === "es" ? "Cliente" : "Client"}
-                  </th>
-                  <th className="px-4 py-2.5">Budget Origin</th>
-                  <th className="px-4 py-2.5">
-                    {lang === "es" ? "Cerrado el" : "Closed on"}
-                  </th>
-                  <th className="px-4 py-2.5 text-right" />
-                </tr>
-              </thead>
-              <tbody>
-                {fPending.map((r) => (
-                  <tr
-                    key={r.reportId}
-                    className="border-t border-line-soft hover:bg-paper-2 transition-colors"
-                  >
-                    <td className="px-4 py-2.5">
+            {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+            <div className="hidden lg:block">
+              <table className="w-full text-sm">
+                <thead className="bg-paper-2 border-b border-line">
+                  <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
+                    <th className="px-4 py-2.5">
+                      {lang === "es" ? "Proyecto" : "Project"}
+                    </th>
+                    <th className="px-4 py-2.5">
+                      {lang === "es" ? "Cliente" : "Client"}
+                    </th>
+                    <th className="px-4 py-2.5">Budget Origin</th>
+                    <th className="px-4 py-2.5">
+                      {lang === "es" ? "Cerrado el" : "Closed on"}
+                    </th>
+                    <th className="px-4 py-2.5 text-right" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {fPending.map((r) => (
+                    <tr
+                      key={r.reportId}
+                      className="border-t border-line-soft hover:bg-paper-2 transition-colors"
+                    >
+                      <td className="px-4 py-2.5">
+                        {r.projectCode ? (
+                          <Link
+                            href={`/proyectos/${r.projectCode}`}
+                            className="font-medium text-ink hover:text-accent"
+                          >
+                            {r.projectName}
+                          </Link>
+                        ) : (
+                          <span className="font-medium text-ink">
+                            {r.projectName}
+                          </span>
+                        )}
+                        {r.projectCode && (
+                          <p className="text-[11px] text-muted font-mono">
+                            {r.projectCode}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">{r.clientName}</td>
+                      <td className="px-4 py-2.5 text-muted">
+                        {r.budgetOriginName ?? "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted font-mono">
+                        {r.closedAt
+                          ? formatDate(r.closedAt.slice(0, 10), lang)
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className="inline-flex items-center gap-3">
+                          <ReportCommentsButton
+                            reportRef={{ kind: r.kind, reportId: r.reportId }}
+                            title={r.projectName}
+                            count={r.commentsCount}
+                            lang={lang}
+                          />
+                          <Button
+                            size="xs"
+                            onClick={() =>
+                              openAssign(r.reportId, r.kind, null, r.projectName)
+                            }
+                          >
+                            {lang === "es" ? "Asignar fecha" : "Assign date"}
+                          </Button>
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: tarjetas (sin scroll horizontal). */}
+            <div className="lg:hidden divide-y divide-line-soft">
+              {fPending.map((r) => (
+                <div key={r.reportId} className="px-4 py-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
                       {r.projectCode ? (
                         <Link
                           href={`/proyectos/${r.projectCode}`}
@@ -303,42 +362,52 @@ export function ReportingCalendarClient({
                         </span>
                       )}
                       {r.projectCode && (
-                        <p className="text-[11px] text-muted font-mono">
+                        <p className="text-[11px] text-muted font-mono mt-0.5">
                           {r.projectCode}
                         </p>
                       )}
-                    </td>
-                    <td className="px-4 py-2.5">{r.clientName}</td>
-                    <td className="px-4 py-2.5 text-muted">
-                      {r.budgetOriginName ?? "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-muted font-mono">
-                      {r.closedAt
-                        ? formatDate(r.closedAt.slice(0, 10), lang)
-                        : "—"}
-                    </td>
-                    <td className="px-4 py-2.5 text-right">
-                      <span className="inline-flex items-center gap-3">
-                        <ReportCommentsButton
-                          reportRef={{ kind: r.kind, reportId: r.reportId }}
-                          title={r.projectName}
-                          count={r.commentsCount}
-                          lang={lang}
-                        />
-                        <Button
-                          size="xs"
-                          onClick={() =>
-                            openAssign(r.reportId, r.kind, null, r.projectName)
-                          }
-                        >
-                          {lang === "es" ? "Asignar fecha" : "Assign date"}
-                        </Button>
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                    <span className="shrink-0">
+                      <ReportCommentsButton
+                        reportRef={{ kind: r.kind, reportId: r.reportId }}
+                        title={r.projectName}
+                        count={r.commentsCount}
+                        lang={lang}
+                      />
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <CalCardStat
+                      label={lang === "es" ? "Cliente" : "Client"}
+                      value={r.clientName}
+                    />
+                    <CalCardStat
+                      label="Budget Origin"
+                      value={r.budgetOriginName ?? "—"}
+                    />
+                    <CalCardStat
+                      label={lang === "es" ? "Cerrado el" : "Closed on"}
+                      value={
+                        r.closedAt
+                          ? formatDate(r.closedAt.slice(0, 10), lang)
+                          : "—"
+                      }
+                      mono
+                    />
+                  </div>
+                  <div className="mt-3">
+                    <Button
+                      size="xs"
+                      onClick={() =>
+                        openAssign(r.reportId, r.kind, null, r.projectName)
+                      }
+                    >
+                      {lang === "es" ? "Asignar fecha" : "Assign date"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>
@@ -646,37 +715,127 @@ function SentReportsSection({
         </div>
       ) : (
         <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-paper-2 border-b border-line">
-              <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
-                <th className="px-4 py-2.5">
-                  {lang === "es" ? "Reporte" : "Report"}
-                </th>
-                <th className="px-4 py-2.5">
-                  {lang === "es" ? "Cliente" : "Client"}
-                </th>
-                <th className="px-4 py-2.5">
-                  {lang === "es" ? "Campañas" : "Campaigns"}
-                </th>
-                <th className="px-4 py-2.5">
-                  {lang === "es" ? "Enviado el" : "Sent on"}
-                </th>
-                <th className="px-4 py-2.5">
-                  {lang === "es" ? "Fecha objetivo" : "Target date"}
-                </th>
-                <th className="px-4 py-2.5">
-                  {lang === "es" ? "Reporte (PPT)" : "Report (PPT)"}
-                </th>
-                <th className="px-4 py-2.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <tr
-                  key={r.reportId}
-                  className="border-t border-line-soft hover:bg-paper-2 transition-colors"
-                >
-                  <td className="px-4 py-2.5">
+          {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+          <div className="hidden lg:block">
+            <table className="w-full text-sm">
+              <thead className="bg-paper-2 border-b border-line">
+                <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
+                  <th className="px-4 py-2.5">
+                    {lang === "es" ? "Reporte" : "Report"}
+                  </th>
+                  <th className="px-4 py-2.5">
+                    {lang === "es" ? "Cliente" : "Client"}
+                  </th>
+                  <th className="px-4 py-2.5">
+                    {lang === "es" ? "Campañas" : "Campaigns"}
+                  </th>
+                  <th className="px-4 py-2.5">
+                    {lang === "es" ? "Enviado el" : "Sent on"}
+                  </th>
+                  <th className="px-4 py-2.5">
+                    {lang === "es" ? "Fecha objetivo" : "Target date"}
+                  </th>
+                  <th className="px-4 py-2.5">
+                    {lang === "es" ? "Reporte (PPT)" : "Report (PPT)"}
+                  </th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr
+                    key={r.reportId}
+                    className="border-t border-line-soft hover:bg-paper-2 transition-colors"
+                  >
+                    <td className="px-4 py-2.5">
+                      {r.projectCode ? (
+                        <Link
+                          href={`/proyectos/${r.projectCode}`}
+                          className="font-medium text-ink hover:text-accent"
+                        >
+                          {r.projectName}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-ink inline-flex items-center gap-2">
+                          {r.projectName}
+                          <span className="text-[9px] uppercase tracking-[0.08em] font-semibold text-muted bg-paper-2 border border-line rounded px-1.5 py-0.5">
+                            manual
+                          </span>
+                        </span>
+                      )}
+                      {r.projectCode && (
+                        <p className="text-[11px] text-muted font-mono">
+                          {r.projectCode}
+                        </p>
+                      )}
+                      {r.description && (
+                        <p className="text-[11px] text-muted line-clamp-1 mt-0.5">
+                          {r.description}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">{r.clientName}</td>
+                    <td className="px-4 py-2.5 text-muted">
+                      {r.planNames.length > 0 ? r.planNames.join(", ") : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-muted font-mono">
+                      {formatDate(r.deliveredAt.slice(0, 10), lang)}
+                    </td>
+                    <td className="px-4 py-2.5 text-muted font-mono">
+                      {r.deliveryDate ? formatDate(r.deliveryDate, lang) : "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {r.reportPptUrl ? (
+                        <span className="inline-flex items-center gap-2">
+                          <a
+                            href={r.reportPptUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-accent text-xs font-medium hover:underline"
+                          >
+                            <ExternalLink size={12} />
+                            {lang === "es" ? "Ver PPT" : "View PPT"}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => openLink(r)}
+                            title={lang === "es" ? "Editar link" : "Edit link"}
+                            className="text-muted hover:text-ink"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => openLink(r)}
+                          className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
+                        >
+                          <Link2 size={12} />
+                          {lang === "es" ? "Agregar link" : "Add link"}
+                        </button>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <ReportCommentsButton
+                        reportRef={{ kind: r.kind, reportId: r.reportId }}
+                        title={r.projectName}
+                        count={r.commentsCount}
+                        lang={lang}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: tarjetas (sin scroll horizontal). */}
+          <div className="lg:hidden divide-y divide-line-soft">
+            {filtered.map((r) => (
+              <div key={r.reportId} className="px-4 py-3.5">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
                     {r.projectCode ? (
                       <Link
                         href={`/proyectos/${r.projectCode}`}
@@ -693,7 +852,7 @@ function SentReportsSection({
                       </span>
                     )}
                     {r.projectCode && (
-                      <p className="text-[11px] text-muted font-mono">
+                      <p className="text-[11px] text-muted font-mono mt-0.5">
                         {r.projectCode}
                       </p>
                     )}
@@ -702,61 +861,72 @@ function SentReportsSection({
                         {r.description}
                       </p>
                     )}
-                  </td>
-                  <td className="px-4 py-2.5">{r.clientName}</td>
-                  <td className="px-4 py-2.5 text-muted">
-                    {r.planNames.length > 0 ? r.planNames.join(", ") : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted font-mono">
-                    {formatDate(r.deliveredAt.slice(0, 10), lang)}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted font-mono">
-                    {r.deliveryDate ? formatDate(r.deliveryDate, lang) : "—"}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    {r.reportPptUrl ? (
-                      <span className="inline-flex items-center gap-2">
-                        <a
-                          href={r.reportPptUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-accent text-xs font-medium hover:underline"
-                        >
-                          <ExternalLink size={12} />
-                          {lang === "es" ? "Ver PPT" : "View PPT"}
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => openLink(r)}
-                          title={lang === "es" ? "Editar link" : "Edit link"}
-                          className="text-muted hover:text-ink"
-                        >
-                          <Pencil size={12} />
-                        </button>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => openLink(r)}
-                        className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
-                      >
-                        <Link2 size={12} />
-                        {lang === "es" ? "Agregar link" : "Add link"}
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">
+                  </div>
+                  <span className="shrink-0">
                     <ReportCommentsButton
                       reportRef={{ kind: r.kind, reportId: r.reportId }}
                       title={r.projectName}
                       count={r.commentsCount}
                       lang={lang}
                     />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <CalCardStat
+                    label={lang === "es" ? "Cliente" : "Client"}
+                    value={r.clientName}
+                  />
+                  <CalCardStat
+                    label={lang === "es" ? "Campañas" : "Campaigns"}
+                    value={r.planNames.length > 0 ? r.planNames.join(", ") : "—"}
+                  />
+                  <CalCardStat
+                    label={lang === "es" ? "Enviado el" : "Sent on"}
+                    value={formatDate(r.deliveredAt.slice(0, 10), lang)}
+                    mono
+                  />
+                  <CalCardStat
+                    label={lang === "es" ? "Fecha objetivo" : "Target date"}
+                    value={r.deliveryDate ? formatDate(r.deliveryDate, lang) : "—"}
+                    mono
+                  />
+                </div>
+                <div className="mt-3">
+                  {r.reportPptUrl ? (
+                    <span className="inline-flex items-center gap-3">
+                      <a
+                        href={r.reportPptUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-accent text-xs font-medium hover:underline"
+                      >
+                        <ExternalLink size={12} />
+                        {lang === "es" ? "Ver PPT" : "View PPT"}
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => openLink(r)}
+                        title={lang === "es" ? "Editar link" : "Edit link"}
+                        className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
+                      >
+                        <Pencil size={12} />
+                        {lang === "es" ? "Editar link" : "Edit link"}
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openLink(r)}
+                      className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink"
+                    >
+                      <Link2 size={12} />
+                      {lang === "es" ? "Agregar link" : "Add link"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1123,6 +1293,30 @@ function defaultDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 14);
   return d.toISOString().slice(0, 10);
+}
+
+// Par label/valor para las tarjetas mobile (reemplazan a las tablas en <lg).
+function CalCardStat({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p
+        className={`text-xs text-ink-2 mt-0.5 truncate ${mono ? "font-mono tabular-nums" : ""}`}
+      >
+        {value}
+      </p>
+    </div>
+  );
 }
 
 // Silenciar warning si Trash2 quedara sin uso (lo deja para futuro icon

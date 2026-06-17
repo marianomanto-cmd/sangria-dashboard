@@ -119,7 +119,9 @@ export default async function PapeleraPage({ searchParams }: Props) {
           </p>
         </div>
       ) : (
-        <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+        <>
+        {/* Desktop: tabla. Mobile: tarjetas (abajo). */}
+        <section className="hidden lg:block rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-paper">
               <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -187,6 +189,53 @@ export default async function PapeleraPage({ searchParams }: Props) {
             </tbody>
           </table>
         </section>
+        {/* Mobile: tarjetas */}
+        <div className="lg:hidden rounded-lg border border-line bg-white dark:bg-paper-2 divide-y divide-line-soft overflow-hidden">
+          {rows.map((row) => {
+            const noun = entityNoun(row.entityType);
+            const label = entityLabel(
+              row.entityType,
+              row.beforeJson,
+              row.afterJson,
+            );
+            const actor = actorLabel(row.userEmail, row.userId);
+            const relative = formatRelativeDateTime(row.createdAt);
+            const absolute = formatAbsoluteDateTime(row.createdAt);
+            const detail = extractDetail(row.entityType, row.beforeJson);
+            return (
+              <div key={row.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink">
+                      {label ?? <span className="text-muted">— sin nombre —</span>}
+                    </p>
+                    <p className="font-mono text-[10px] text-muted">
+                      {noun.singular} · {row.entityId.slice(0, 8)}…
+                    </p>
+                  </div>
+                  <span
+                    className="font-mono text-[11px] text-ink-2 shrink-0"
+                    title={absolute}
+                  >
+                    {relative}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted mt-1">{actor}</p>
+                {detail.length > 0 && (
+                  <ul className="mt-2 space-y-0.5 text-xs">
+                    {detail.map((d) => (
+                      <li key={d.label}>
+                        <span className="text-muted">{d.label}:</span>{" "}
+                        <span className="text-ink-2">{d.value}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        </>
       )}
 
       <p className="mt-4 text-[11px] text-muted">
