@@ -46,7 +46,7 @@ export type PortalParams = {
   month: string;
   // Pacing expandido: lista de planIds separados por coma (varios a la vez).
   plan: string;
-  pstatus: string; // "" (abiertos, default) | "cerrados"
+  pstatus: string; // "" (abiertos, default) | "cerrados" | "todos"
   // Filtro multi-select de campañas (planIds separados por coma).
   camp: string;
 };
@@ -505,13 +505,14 @@ export async function ProjectsSection({
     params.plan ? params.plan.split(",").filter(Boolean) : [],
   );
 
-  // Filtro de estado: abiertos (default) o cerrados. Con campañas
-  // seleccionadas, ampliamos a todos los estados (la selección manda).
-  const STATUSES = selectedCampaigns
-    ? new Set(["planning", "active", "paused", "closed", "reportado"])
-    : params.pstatus === "cerrados"
-      ? new Set(["closed", "reportado"])
-      : new Set(["planning", "active", "paused"]);
+  // Filtro de estado: abiertos (default) / cerrados / todos. Con campañas
+  // seleccionadas (o estado "todos"), ampliamos a todos los estados.
+  const STATUSES =
+    selectedCampaigns || params.pstatus === "todos"
+      ? new Set(["planning", "active", "paused", "closed", "reportado"])
+      : params.pstatus === "cerrados"
+        ? new Set(["closed", "reportado"])
+        : new Set(["planning", "active", "paused"]);
 
   // Filtro de mes: dejamos proyectos con al menos un plan cuyo período cubre
   // el mes; dentro de cada proyecto mostramos solo esos planes. Se ignora si
