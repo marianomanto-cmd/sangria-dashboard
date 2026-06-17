@@ -77,10 +77,12 @@ export function ProjectsTableExpandable({
 
   const displayRows = searchable ? filtered : rows;
 
-  // overflow-x-auto + min-w-[820px] para que en pantallas chicas la tabla
-  // siga siendo legible (scroll horizontal) en vez de comprimirse.
+  // Desktop: overflow-x-auto + min-w-[980px] para que la tabla siga siendo
+  // legible (scroll horizontal) en vez de comprimirse. En mobile usamos
+  // tarjetas (mobileCards, abajo) para no forzar scroll horizontal — el
+  // drill-down de planes/breakdown queda sólo en la tabla de desktop.
   const table = (
-    <div className="overflow-x-auto">
+    <div className="hidden lg:block overflow-x-auto">
       <table className="w-full min-w-[980px] text-sm">
         <thead className="bg-paper-2/60">
           <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -118,7 +120,29 @@ export function ProjectsTableExpandable({
     </div>
   );
 
-  if (!searchable) return table;
+  // Mobile: tarjetas de proyecto de nivel superior (mismas filas que la tabla,
+  // vía displayRows). El drill-down de planes queda sólo en desktop.
+  const mobileCards = (
+    <div className="lg:hidden divide-y divide-line-soft">
+      {displayRows.map((p) => (
+        <ProjectCard
+          key={p.id}
+          project={p}
+          showClient={showClient}
+          lang={lang}
+        />
+      ))}
+    </div>
+  );
+
+  if (!searchable) {
+    return (
+      <>
+        {table}
+        {mobileCards}
+      </>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -149,8 +173,97 @@ export function ProjectsTableExpandable({
       ) : (
         <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
           {table}
+          {mobileCards}
         </section>
       )}
+    </div>
+  );
+}
+
+// ── Mobile card: proyecto de nivel superior (sin drill-down) ────────────────
+
+function ProjectCard({
+  project,
+  showClient,
+  lang,
+}: {
+  project: DashboardProjectRow;
+  showClient: boolean;
+  lang: Language;
+}) {
+  const overConsumed = project.consumptionPct > 100;
+  const barWidth = Math.min(project.consumptionPct, 100);
+
+  const period = projectPeriod(project.plans);
+  const endingDays = endingSoonDays(period.end);
+
+  return (
+    <Link
+      href={`/proyectos/${project.code}`}
+      className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-medium text-ink">{project.name}</span>
+        <span className="shrink-0">
+          <StatusBadge status={project.status} />
+        </span>
+      </div>
+      <p className="font-mono text-[11px] text-muted mt-0.5">
+        {project.code}
+        {showClient && (
+          <>
+            {" "}
+            <span className="text-line">·</span> {project.clientName}
+          </>
+        )}
+      </p>
+
+      <div className="mt-2.5 flex items-center gap-2">
+        <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
+          <div
+            className={`h-full rounded-full ${
+              overConsumed ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"
+            }`}
+            style={{ width: `${barWidth}%` }}
+          />
+        </div>
+        <span
+          className={`font-mono text-xs tabular-nums ${
+            overConsumed ? "text-warn font-medium" : "text-muted"
+          }`}
+        >
+          {formatPct(project.consumptionPct, 0)}
+        </span>
+      </div>
+
+      {endingDays !== null && (
+        <p className="text-[11px] font-medium text-warn mt-1">
+          {endingSoonLabel(endingDays, lang)}
+        </p>
+      )}
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <CardStat label="Budget" value={formatUsd(project.totalBudgetUsd)} />
+        <CardStat
+          label={lang === "es" ? "Gastado" : "Spent"}
+          value={project.spentUsd > 0 ? formatUsd(project.spentUsd) : "—"}
+        />
+        <CardStat
+          label={lang === "es" ? "Planes" : "Plans"}
+          value={String(project.planCount)}
+        />
+      </div>
+    </Link>
+  );
+}
+
+function CardStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">{value}</p>
     </div>
   );
 }

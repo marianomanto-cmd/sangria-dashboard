@@ -232,59 +232,126 @@ function EstimateMonthCard({
             : "No active plans this month."}
         </div>
       ) : hideProjectBreakdown ? null : (
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
-              <th className="text-left font-medium px-5 py-1.5">
-                {t("common.project", lang)}
-              </th>
-              <th className="text-right font-medium px-5 py-1.5">
-                {t("common.media", lang)}
-              </th>
-              <th className="text-right font-medium px-5 py-1.5">
-                {t("common.fees", lang)}
-              </th>
-              <th className="text-right font-medium px-5 py-1.5">
-                {t("common.invoiced", lang)}
-              </th>
-              <th className="text-right font-medium px-5 py-1.5">
-                {t("common.net", lang)}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
+        <>
+          {/* Desktop: tabla. En mobile, tarjetas (abajo) para no forzar
+              scroll horizontal. */}
+          <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="text-[10px] uppercase tracking-[0.06em] text-muted">
+                  <th className="text-left font-medium px-5 py-1.5">
+                    {t("common.project", lang)}
+                  </th>
+                  <th className="text-right font-medium px-5 py-1.5">
+                    {t("common.media", lang)}
+                  </th>
+                  <th className="text-right font-medium px-5 py-1.5">
+                    {t("common.fees", lang)}
+                  </th>
+                  <th className="text-right font-medium px-5 py-1.5">
+                    {t("common.invoiced", lang)}
+                  </th>
+                  <th className="text-right font-medium px-5 py-1.5">
+                    {t("common.net", lang)}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {estimate.byProject.map((p) => (
+                  <tr key={p.projectId} className="border-t border-line-soft">
+                    <td className="px-5 py-1.5">
+                      <Link
+                        href={`/proyectos/${p.projectCode}`}
+                        className="text-ink-2 hover:underline"
+                      >
+                        {p.projectName}
+                      </Link>
+                      <div className="font-mono text-[10px] text-muted">
+                        {p.projectCode} · {p.clientName}
+                      </div>
+                    </td>
+                    <td className="px-5 py-1.5 text-right font-mono text-ink-2 tabular-nums">
+                      {p.grossMediaUsd > 0 ? formatUsdCompact(p.grossMediaUsd) : "—"}
+                    </td>
+                    <td className="px-5 py-1.5 text-right font-mono text-ink-2 tabular-nums">
+                      {p.grossFeesUsd > 0 ? formatUsdCompact(p.grossFeesUsd) : "—"}
+                    </td>
+                    <td className="px-5 py-1.5 text-right font-mono text-success tabular-nums">
+                      {p.alreadyBilledUsd > 0
+                        ? formatUsdCompact(p.alreadyBilledUsd)
+                        : "—"}
+                    </td>
+                    <td className="px-5 py-1.5 text-right font-mono font-semibold text-ink tabular-nums">
+                      {formatUsdCompact(p.netUsd)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: tarjetas (sin scroll horizontal). */}
+          <div className="lg:hidden divide-y divide-line-soft">
             {estimate.byProject.map((p) => (
-              <tr key={p.projectId} className="border-t border-line-soft">
-                <td className="px-5 py-1.5">
-                  <Link
-                    href={`/proyectos/${p.projectCode}`}
-                    className="text-ink-2 hover:underline"
-                  >
-                    {p.projectName}
-                  </Link>
-                  <div className="font-mono text-[10px] text-muted">
-                    {p.projectCode} · {p.clientName}
-                  </div>
-                </td>
-                <td className="px-5 py-1.5 text-right font-mono text-ink-2 tabular-nums">
-                  {p.grossMediaUsd > 0 ? formatUsdCompact(p.grossMediaUsd) : "—"}
-                </td>
-                <td className="px-5 py-1.5 text-right font-mono text-ink-2 tabular-nums">
-                  {p.grossFeesUsd > 0 ? formatUsdCompact(p.grossFeesUsd) : "—"}
-                </td>
-                <td className="px-5 py-1.5 text-right font-mono text-success tabular-nums">
-                  {p.alreadyBilledUsd > 0
-                    ? formatUsdCompact(p.alreadyBilledUsd)
-                    : "—"}
-                </td>
-                <td className="px-5 py-1.5 text-right font-mono font-semibold text-ink tabular-nums">
-                  {formatUsdCompact(p.netUsd)}
-                </td>
-              </tr>
+              <Link
+                key={p.projectId}
+                href={`/proyectos/${p.projectCode}`}
+                className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <span className="text-ink-2">{p.projectName}</span>
+                  <span className="font-mono text-sm font-semibold text-ink tabular-nums shrink-0">
+                    {formatUsdCompact(p.netUsd)}
+                  </span>
+                </div>
+                <p className="font-mono text-[10px] text-muted mt-0.5">
+                  {p.projectCode} · {p.clientName}
+                </p>
+                <div className="mt-2.5 grid grid-cols-3 gap-2">
+                  <EstimateCardStat
+                    label={t("common.media", lang)}
+                    value={p.grossMediaUsd > 0 ? formatUsdCompact(p.grossMediaUsd) : "—"}
+                  />
+                  <EstimateCardStat
+                    label={t("common.fees", lang)}
+                    value={p.grossFeesUsd > 0 ? formatUsdCompact(p.grossFeesUsd) : "—"}
+                  />
+                  <EstimateCardStat
+                    label={t("common.invoiced", lang)}
+                    value={
+                      p.alreadyBilledUsd > 0
+                        ? formatUsdCompact(p.alreadyBilledUsd)
+                        : "—"
+                    }
+                    valueClassName="text-success"
+                  />
+                </div>
+              </Link>
             ))}
-          </tbody>
-        </table>
+          </div>
+        </>
       )}
+    </div>
+  );
+}
+
+function EstimateCardStat({
+  label,
+  value,
+  valueClassName = "text-ink-2",
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p className={`font-mono text-xs tabular-nums mt-0.5 ${valueClassName}`}>
+        {value}
+      </p>
     </div>
   );
 }

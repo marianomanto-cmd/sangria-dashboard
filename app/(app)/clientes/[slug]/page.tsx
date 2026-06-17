@@ -158,7 +158,10 @@ function ResumenTab({
               : "No projects match this selection."}
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <>
+          {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+          <div className="hidden lg:block overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
             <thead className="bg-paper">
               <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
                 <th className="text-left font-medium px-5 py-2.5">
@@ -236,6 +239,79 @@ function ResumenTab({
               })}
             </tbody>
           </table>
+          </div>
+
+          {/* Mobile: tarjetas (sin scroll horizontal). */}
+          <div className="lg:hidden divide-y divide-line-soft">
+            {projects.map((p) => {
+              const overConsumed = p.consumptionPct > 100;
+              const barWidth = Math.min(p.consumptionPct, 100);
+              return (
+                <Link
+                  key={p.id}
+                  href={`/proyectos/${p.code}`}
+                  className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="font-medium text-ink">{p.name}</span>
+                      <p className="font-mono text-[11px] text-muted">{p.code}</p>
+                    </div>
+                    <span className="shrink-0">
+                      <StatusBadge status={p.status} />
+                    </span>
+                  </div>
+
+                  <div className="mt-2.5 flex items-center gap-3">
+                    <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${
+                          overConsumed ? "bg-warn" : "bg-ink"
+                        }`}
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                    <span
+                      className={`font-mono text-xs tabular-nums ${
+                        overConsumed ? "text-warn font-medium" : "text-ink-2"
+                      }`}
+                    >
+                      {formatPct(p.consumptionPct, 0)}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                        Budget
+                      </p>
+                      <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">
+                        {formatUsd(p.totalBudgetUsd)}
+                      </p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                        {lang === "es" ? "Gastado" : "Spent"}
+                      </p>
+                      <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">
+                        {p.spentUsd > 0 ? formatUsd(p.spentUsd) : "—"}
+                      </p>
+                    </div>
+                    <div className="min-w-0 col-span-2 sm:col-span-1">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                        {lang === "es" ? "Período" : "Period"}
+                      </p>
+                      <p className="font-mono text-[11px] text-ink-2 mt-0.5">
+                        {formatDate(p.startDate, lang)} →{" "}
+                        {formatDate(p.endDate, lang)}
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+          </>
         )}
       </section>
     </>

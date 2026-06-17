@@ -26,7 +26,9 @@ export default async function PlanTrashPage({ searchParams }: Props) {
           No deleted plans yet.
         </div>
       ) : (
-        <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+        <>
+        {/* Desktop: tabla. Mobile: tarjetas (abajo). */}
+        <div className="hidden lg:block rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-paper-2 border-b border-line">
               <tr className="text-left text-[10px] uppercase tracking-[0.08em] text-muted font-medium">
@@ -75,6 +77,38 @@ export default async function PlanTrashPage({ searchParams }: Props) {
             </tbody>
           </table>
         </div>
+        {/* Mobile: tarjetas */}
+        <div className="lg:hidden rounded-lg border border-line bg-white dark:bg-paper-2 divide-y divide-line-soft overflow-hidden">
+          {plans.map((p) => (
+            <div key={p.planId} className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-ink">{p.planName}</p>
+                  <p className="text-[11px] text-muted font-mono">
+                    {p.projectCode}.{p.planName}
+                  </p>
+                </div>
+                <span className="font-mono text-[11px] text-muted shrink-0">
+                  {formatDate(p.deletedAt.slice(0, 10), "en")}
+                </span>
+              </div>
+              <p className="text-[13px] mt-1.5">
+                <Link
+                  href={`/proyectos/${p.projectCode}`}
+                  className="text-ink-2 hover:text-accent"
+                >
+                  {p.projectName}
+                </Link>
+                <span className="text-muted"> · {p.clientName}</span>
+              </p>
+              <div className="flex items-center gap-2 mt-3">
+                <RestorePlanButton planId={p.planId} />
+                <HardDeletePlanButton planId={p.planId} planName={p.planName} />
+              </div>
+            </div>
+          ))}
+        </div>
+        </>
       )}
     </PageShell>
   );

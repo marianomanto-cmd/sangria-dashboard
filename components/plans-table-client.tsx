@@ -313,56 +313,67 @@ function FlatTable({
   onSort: (col: SortCol) => void;
 }) {
   return (
-    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-x-auto">
-      <table className={`w-full min-w-[720px] ${compact ? "text-xs" : "text-sm"}`}>
-        <thead className="bg-paper">
-          <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-            <SortableTh col="name" sort={sort} onSort={onSort} label="Plan" compact={compact} />
-            <SortableTh
-              col="project"
-              sort={sort}
-              onSort={onSort}
-              label={lang === "es" ? "Proyecto" : "Project"}
-              compact={compact}
-            />
-            <SortableTh
-              col="client"
-              sort={sort}
-              onSort={onSort}
-              label={lang === "es" ? "Cliente" : "Client"}
-              compact={compact}
-            />
-            <Th compact={compact}>{lang === "es" ? "Origen" : "Origin"}</Th>
-            <SortableTh
-              col="status"
-              sort={sort}
-              onSort={onSort}
-              label={lang === "es" ? "Estado" : "Status"}
-              compact={compact}
-            />
-            <SortableTh
-              col="period"
-              sort={sort}
-              onSort={onSort}
-              label={lang === "es" ? "Período" : "Period"}
-              compact={compact}
-            />
-            <SortableTh
-              col="media"
-              sort={sort}
-              onSort={onSort}
-              label={lang === "es" ? "Media · Consumido" : "Media · Consumed"}
-              align="right"
-              compact={compact}
-            />
-          </tr>
-        </thead>
-        <tbody>
-          {plans.map((p) => (
-            <PlanRowCells key={p.id} plan={p} compact={compact} lang={lang} />
-          ))}
-        </tbody>
-      </table>
+    <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+      {/* Desktop: tabla con scroll horizontal. En mobile usamos tarjetas
+          (abajo) para no forzar scroll. */}
+      <div className="hidden lg:block overflow-x-auto">
+        <table className={`w-full min-w-[720px] ${compact ? "text-xs" : "text-sm"}`}>
+          <thead className="bg-paper">
+            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+              <SortableTh col="name" sort={sort} onSort={onSort} label="Plan" compact={compact} />
+              <SortableTh
+                col="project"
+                sort={sort}
+                onSort={onSort}
+                label={lang === "es" ? "Proyecto" : "Project"}
+                compact={compact}
+              />
+              <SortableTh
+                col="client"
+                sort={sort}
+                onSort={onSort}
+                label={lang === "es" ? "Cliente" : "Client"}
+                compact={compact}
+              />
+              <Th compact={compact}>{lang === "es" ? "Origen" : "Origin"}</Th>
+              <SortableTh
+                col="status"
+                sort={sort}
+                onSort={onSort}
+                label={lang === "es" ? "Estado" : "Status"}
+                compact={compact}
+              />
+              <SortableTh
+                col="period"
+                sort={sort}
+                onSort={onSort}
+                label={lang === "es" ? "Período" : "Period"}
+                compact={compact}
+              />
+              <SortableTh
+                col="media"
+                sort={sort}
+                onSort={onSort}
+                label={lang === "es" ? "Media · Consumido" : "Media · Consumed"}
+                align="right"
+                compact={compact}
+              />
+            </tr>
+          </thead>
+          <tbody>
+            {plans.map((p) => (
+              <PlanRowCells key={p.id} plan={p} compact={compact} lang={lang} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile: tarjetas (sin scroll horizontal). */}
+      <div className="lg:hidden divide-y divide-line-soft">
+        {plans.map((p) => (
+          <PlanCard key={p.id} plan={p} lang={lang} />
+        ))}
+      </div>
     </section>
   );
 }
@@ -449,7 +460,8 @@ function GroupedByProject({
                 </p>
               </div>
             </header>
-            <table className={`w-full ${compact ? "text-xs" : "text-sm"}`}>
+            {/* Desktop: tabla. En mobile, tarjetas apiladas. */}
+            <table className={`hidden lg:table w-full ${compact ? "text-xs" : "text-sm"}`}>
               <tbody>
                 {g.plans.map((p) => (
                   <PlanRowCells
@@ -462,6 +474,11 @@ function GroupedByProject({
                 ))}
               </tbody>
             </table>
+            <div className="lg:hidden divide-y divide-line-soft">
+              {g.plans.map((p) => (
+                <PlanCard key={p.id} plan={p} lang={lang} hideProject />
+              ))}
+            </div>
           </section>
         );
       })}
@@ -613,5 +630,94 @@ function PlanRowCells({
         )}
       </td>
     </tr>
+  );
+}
+
+// ── Mobile card (mismas filas/datos que PlanRowCells, apiladas) ─────────────
+
+function PlanCard({
+  plan: p,
+  lang,
+  hideProject,
+}: {
+  plan: PlanRow;
+  lang: Language;
+  hideProject?: boolean;
+}) {
+  const total = Number.parseFloat(p.totalMediaUsd);
+  const spent = Number.parseFloat(p.spentMediaUsd);
+  const pct = total > 0 ? Math.max(0, Math.min(100, (spent / total) * 100)) : 0;
+
+  return (
+    <Link
+      href={`/proyectos/${p.projectCode}/planes/${p.id}`}
+      className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="font-medium text-ink">
+          {p.name}
+          {p.currentVersion > 0 && (
+            <span className="ml-2 font-mono text-[10px] text-muted">
+              v{p.currentVersion}
+            </span>
+          )}
+        </span>
+        <span className="shrink-0">
+          <PlanStatusBadge status={p.status} />
+        </span>
+      </div>
+
+      {!hideProject && (
+        <p className="font-mono text-[11px] text-muted mt-0.5">
+          {p.projectCode} <span className="text-line">·</span> {p.clientName}
+        </p>
+      )}
+
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {!hideProject && (
+          <CardField label={lang === "es" ? "Origen" : "Origin"}>
+            <span className="text-ink-2">{p.budgetOriginName}</span>
+          </CardField>
+        )}
+        <CardField label={lang === "es" ? "Período" : "Period"}>
+          <span className="font-mono text-[11px] text-ink-2">
+            {formatDate(p.periodStart, lang)}
+            <span className="text-line"> → </span>
+            {formatDate(p.periodEnd, lang)}
+          </span>
+        </CardField>
+        <CardField
+          label={lang === "es" ? "Media · Consumido" : "Media · Consumed"}
+        >
+          {total > 0 ? (
+            <span className="font-mono text-ink-2 tabular-nums">
+              {formatUsd(total)}{" "}
+              <span className="text-muted">
+                · {formatUsdCompact(spent)} · {pct.toFixed(0)}%
+              </span>
+            </span>
+          ) : (
+            <span className="text-muted">—</span>
+          )}
+        </CardField>
+      </div>
+    </Link>
+  );
+}
+
+function CardField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <div className="text-xs mt-0.5">{children}</div>
+    </div>
   );
 }

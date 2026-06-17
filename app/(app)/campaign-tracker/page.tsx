@@ -155,7 +155,9 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
       ) : (
         <>
           <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-            <table className="w-full text-sm">
+            {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+            <div className="hidden lg:block overflow-x-auto">
+            <table className="w-full text-sm min-w-[900px]">
               <thead className="bg-paper">
                 <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
                   <th className="text-left font-medium px-5 py-2.5 w-[32%]">
@@ -187,6 +189,20 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
                 ))}
               </tbody>
             </table>
+            </div>
+
+            {/* Mobile: tarjetas (sin scroll horizontal). */}
+            <div className="lg:hidden">
+              {clients.map((group) => (
+                <ClientGroupCards
+                  key={group.clientId}
+                  group={group}
+                  clientSlug={client?.slug ?? null}
+                  lang={lang}
+                  filter={filter}
+                />
+              ))}
+            </div>
           </section>
 
           <div className="mt-3 flex flex-wrap items-center gap-4 text-[11px] text-muted">
@@ -381,6 +397,128 @@ function ClientGroup({
         );
       })}
     </>
+  );
+}
+
+// Versión mobile de ClientGroup: header del cliente + tarjetas por plan.
+// Mismos datos/labels que la tabla; preserva el fondo amarillo si está stale.
+function ClientGroupCards({
+  group,
+  clientSlug,
+  lang,
+  filter,
+}: {
+  group: CampaignHubClient;
+  clientSlug: string | null;
+  lang: "en" | "es";
+  filter: CampaignHubFilter;
+}) {
+  const headerNote =
+    filter === "concluido"
+      ? `${group.plans.length} plan${group.plans.length === 1 ? "" : "es"} concluido${group.plans.length === 1 ? "" : "s"}`
+      : filter === "todos"
+        ? `${group.plans.length} plan${group.plans.length === 1 ? "" : "es"} en total`
+        : `${group.plans.length} plan${group.plans.length === 1 ? "" : "es"} activo${group.plans.length === 1 ? "" : "s"}`;
+
+  return (
+    <div className="border-t border-line-soft first:border-t-0">
+      <div className="flex items-center gap-2 px-4 py-2 bg-paper-2">
+        <div className="w-5 h-5 rounded-full bg-white dark:bg-paper-2 border border-line flex items-center justify-center shrink-0">
+          <Building2 size={12} strokeWidth={2} className="text-ink-2" />
+        </div>
+        <span className="font-semibold text-ink">{group.clientName}</span>
+        <span className="text-xs text-muted">· {headerNote}</span>
+      </div>
+      <div className="divide-y divide-line-soft">
+        {group.plans.map((plan) => {
+          const href = buildHrefWithClient(
+            `/campaign-tracker/${plan.planId}`,
+            clientSlug,
+          );
+          const showConcluidoBadge =
+            plan.status === "concluido" && filter !== "concluido";
+          return (
+            <Link
+              key={plan.planId}
+              href={href}
+              data-stale={plan.isStale}
+              className="block px-4 py-3.5 hover:bg-paper-2 transition-colors data-[stale=true]:bg-warn-soft/40"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="font-medium text-ink">{plan.planName}</span>
+                  {plan.currentVersion > 0 && (
+                    <span className="ml-2 font-mono text-[10px] text-muted">
+                      v{plan.currentVersion}
+                    </span>
+                  )}
+                  {showConcluidoBadge && (
+                    <span className="ml-2 inline-flex items-center rounded-sm border border-line bg-paper-2 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                      concluido
+                    </span>
+                  )}
+                  <div className="text-xs text-muted mt-0.5">
+                    {plan.projectName} · {plan.budgetOriginName} ·{" "}
+                    {plan.placementsCount} placement
+                    {plan.placementsCount === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <span className="shrink-0">
+                  <PaceBadge status={plan.paceStatus} />
+                </span>
+              </div>
+
+              <div className="mt-2.5 flex items-center gap-2">
+                <div className="flex-1">
+                  <ConsumptionBar
+                    progressPct={plan.progressPct}
+                    pacePct={plan.pacePct}
+                    status={plan.paceStatus}
+                  />
+                </div>
+                <span className="font-mono text-[11px] text-ink-2 tabular-nums w-9 text-right">
+                  {plan.progressPct.toFixed(0)}%
+                </span>
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                    Inversión plan
+                  </p>
+                  <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">
+                    {plan.goalInvestmentUsd > 0
+                      ? formatUsd(plan.goalInvestmentUsd)
+                      : "—"}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                    Período
+                  </p>
+                  <p className="font-mono text-[11px] text-ink-2 mt-0.5">
+                    {formatDate(plan.periodStart, lang)}
+                    <span className="text-line"> → </span>
+                    {formatDate(plan.periodEnd, lang)}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                    Último update
+                  </p>
+                  <span className="mt-0.5 flex items-center gap-1.5">
+                    <FreshnessDots lastUpdateAt={plan.lastUpdateAt} />
+                    <span className="text-[11px] text-muted">
+                      {relativeUpdateLabel(plan.lastUpdateAt)}
+                    </span>
+                  </span>
+                </div>
+              </div>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

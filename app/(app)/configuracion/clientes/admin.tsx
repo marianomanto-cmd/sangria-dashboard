@@ -76,27 +76,129 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-paper">
-            <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-              <th className="text-left font-medium px-5 py-2.5">Nombre</th>
-              <th className="text-left font-medium px-5 py-2.5">Slug</th>
-              <th className="text-left font-medium px-5 py-2.5">Prefijo</th>
-              <th className="text-left font-medium px-5 py-2.5">Idioma</th>
-              <th className="text-left font-medium px-5 py-2.5">Estado</th>
-              <th className="text-left font-medium px-5 py-2.5">Portal cliente</th>
-              <th className="text-left font-medium px-5 py-2.5">Usuario</th>
-              <th className="text-left font-medium px-5 py-2.5">Contraseña</th>
-              <th className="w-10"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {initialRows.map((c) => (
-              <tr
-                key={c.id}
-                className="border-t border-line-soft hover:bg-paper-2 transition-colors"
-              >
-                <td className="px-5 py-2">
+        {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+        <div className="hidden lg:block overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-paper">
+              <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                <th className="text-left font-medium px-5 py-2.5">Nombre</th>
+                <th className="text-left font-medium px-5 py-2.5">Slug</th>
+                <th className="text-left font-medium px-5 py-2.5">Prefijo</th>
+                <th className="text-left font-medium px-5 py-2.5">Idioma</th>
+                <th className="text-left font-medium px-5 py-2.5">Estado</th>
+                <th className="text-left font-medium px-5 py-2.5">Portal cliente</th>
+                <th className="text-left font-medium px-5 py-2.5">Usuario</th>
+                <th className="text-left font-medium px-5 py-2.5">Contraseña</th>
+                <th className="w-10"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {initialRows.map((c) => (
+                <tr
+                  key={c.id}
+                  className="border-t border-line-soft hover:bg-paper-2 transition-colors"
+                >
+                  <td className="px-5 py-2">
+                    <input
+                      type="text"
+                      defaultValue={c.name}
+                      disabled={pending}
+                      onBlur={(e) =>
+                        e.target.value !== c.name &&
+                        onUpdate(c.id, { name: e.target.value })
+                      }
+                      className="font-medium bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 -mx-1 w-full"
+                    />
+                  </td>
+                  <td className="px-5 py-2 font-mono text-xs text-muted">
+                    {c.slug}
+                  </td>
+                  <td className="px-5 py-2">
+                    <input
+                      type="text"
+                      defaultValue={c.prefix ?? ""}
+                      disabled={pending}
+                      placeholder="—"
+                      onBlur={(e) => {
+                        const v = e.target.value;
+                        if (v !== (c.prefix ?? "")) {
+                          onUpdate(c.id, { prefix: v || null });
+                        }
+                      }}
+                      className="font-mono text-xs bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 -mx-1 w-20"
+                    />
+                  </td>
+                  <td className="px-5 py-2">
+                    <select
+                      value={c.language}
+                      disabled={pending}
+                      onChange={(e) =>
+                        onUpdate(c.id, { language: e.target.value as Language })
+                      }
+                      className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                    >
+                      {LANGUAGE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-5 py-2">
+                    <select
+                      value={c.status}
+                      disabled={pending}
+                      onChange={(e) =>
+                        onUpdate(c.id, { status: e.target.value as ClientStatus })
+                      }
+                      className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                    >
+                      {STATUS_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-5 py-2">
+                    <PortalLinkCell slug={c.slug} />
+                  </td>
+                  <td className="px-5 py-2">
+                    <CopyValue value={c.slug} mono />
+                  </td>
+                  <td className="px-5 py-2">
+                    <CopyValue value={CLIENT_PORTAL_PASSWORD} mono />
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <div className="inline-flex items-center gap-0.5">
+                      <Link
+                        href={`/configuracion/clientes/${c.slug}`}
+                        className="text-muted hover:text-accent inline-flex p-1"
+                        title="Publishers / métricas / mercados de este cliente"
+                      >
+                        <Settings size={14} />
+                      </Link>
+                      <Link
+                        href={`/clientes/${c.slug}`}
+                        className="text-muted hover:text-ink inline-flex p-1"
+                        title="Ver cliente"
+                      >
+                        <ArrowUpRight size={14} />
+                      </Link>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile: tarjetas (sin scroll horizontal). Mantiene la edición inline. */}
+        <div className="lg:hidden divide-y divide-line-soft">
+          {initialRows.map((c) => (
+            <div key={c.id} className="px-4 py-3.5 space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
                   <input
                     type="text"
                     defaultValue={c.name}
@@ -107,11 +209,33 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                     }
                     className="font-medium bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 -mx-1 w-full"
                   />
-                </td>
-                <td className="px-5 py-2 font-mono text-xs text-muted">
-                  {c.slug}
-                </td>
-                <td className="px-5 py-2">
+                  <p className="font-mono text-[11px] text-muted mt-0.5 px-1 -mx-1">
+                    {c.slug}
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-0.5 shrink-0">
+                  <Link
+                    href={`/configuracion/clientes/${c.slug}`}
+                    className="text-muted hover:text-accent inline-flex p-1"
+                    title="Publishers / métricas / mercados de este cliente"
+                  >
+                    <Settings size={14} />
+                  </Link>
+                  <Link
+                    href={`/clientes/${c.slug}`}
+                    className="text-muted hover:text-ink inline-flex p-1"
+                    title="Ver cliente"
+                  >
+                    <ArrowUpRight size={14} />
+                  </Link>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                    Prefijo
+                  </p>
                   <input
                     type="text"
                     defaultValue={c.prefix ?? ""}
@@ -123,17 +247,20 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                         onUpdate(c.id, { prefix: v || null });
                       }
                     }}
-                    className="font-mono text-xs bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 -mx-1 w-20"
+                    className="font-mono text-xs bg-transparent border-b border-line hover:border-accent focus:border-accent focus:outline-none px-1 -mx-1 w-full"
                   />
-                </td>
-                <td className="px-5 py-2">
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                    Idioma
+                  </p>
                   <select
                     value={c.language}
                     disabled={pending}
                     onChange={(e) =>
                       onUpdate(c.id, { language: e.target.value as Language })
                     }
-                    className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                    className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
                   >
                     {LANGUAGE_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -141,15 +268,18 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                       </option>
                     ))}
                   </select>
-                </td>
-                <td className="px-5 py-2">
+                </div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                    Estado
+                  </p>
                   <select
                     value={c.status}
                     disabled={pending}
                     onChange={(e) =>
                       onUpdate(c.id, { status: e.target.value as ClientStatus })
                     }
-                    className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+                    className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1 text-xs focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
                   >
                     {STATUS_OPTIONS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -157,38 +287,34 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                       </option>
                     ))}
                   </select>
-                </td>
-                <td className="px-5 py-2">
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                    Portal cliente
+                  </p>
                   <PortalLinkCell slug={c.slug} />
-                </td>
-                <td className="px-5 py-2">
-                  <CopyValue value={c.slug} mono />
-                </td>
-                <td className="px-5 py-2">
-                  <CopyValue value={CLIENT_PORTAL_PASSWORD} mono />
-                </td>
-                <td className="px-2 py-2 text-center">
-                  <div className="inline-flex items-center gap-0.5">
-                    <Link
-                      href={`/configuracion/clientes/${c.slug}`}
-                      className="text-muted hover:text-accent inline-flex p-1"
-                      title="Publishers / métricas / mercados de este cliente"
-                    >
-                      <Settings size={14} />
-                    </Link>
-                    <Link
-                      href={`/clientes/${c.slug}`}
-                      className="text-muted hover:text-ink inline-flex p-1"
-                      title="Ver cliente"
-                    >
-                      <ArrowUpRight size={14} />
-                    </Link>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                      Usuario
+                    </p>
+                    <CopyValue value={c.slug} mono />
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1">
+                      Contraseña
+                    </p>
+                    <CopyValue value={CLIENT_PORTAL_PASSWORD} mono />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
         <div className="border-t border-line-soft px-5 py-2">
           {!showAddForm ? (
             <button

@@ -162,7 +162,8 @@ export async function BillingSection({
               </p>
             </div>
           </header>
-          <div className="overflow-x-auto">
+          {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="w-full text-sm min-w-[640px]">
               <thead className="bg-paper-2">
                 <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
@@ -216,6 +217,35 @@ export async function BillingSection({
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile: tarjetas (sin scroll horizontal). */}
+          <div className="lg:hidden divide-y divide-line-soft">
+            {proj.plans.flatMap((plan) =>
+              plan.invoices.map((inv) => (
+                <div key={inv.id} className="px-5 py-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink truncate">{plan.name}</p>
+                      <p className="font-mono text-[11px] text-muted mt-0.5">
+                        {inv.invoiceNumber} · {formatMonth(inv.month, lang)}
+                      </p>
+                    </div>
+                    <span className="shrink-0">
+                      <BillingStatusBadge status={inv.status} lang={lang} size="sm" />
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <PortalCardStat
+                      label={lang === "es" ? "Medios" : "Media"}
+                      value={formatUsd(inv.mediaSubtotalUsd)}
+                    />
+                    <PortalCardStat label="Fees" value={formatUsd(inv.feeSubtotalUsd)} />
+                    <PortalCardStat label="Total" value={formatUsd(inv.totalUsd)} />
+                  </div>
+                </div>
+              )),
+            )}
           </div>
         </section>
       ))}
@@ -337,44 +367,77 @@ export async function ReportsSection({
           />
         ) : (
           <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-paper-2">
-                <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-                  <th className="text-left font-medium px-5 py-2">
-                    {lang === "es" ? "Reporte" : "Report"}
-                  </th>
-                  <th className="text-left font-medium px-5 py-2">
-                    {lang === "es" ? "Enviado" : "Sent"}
-                  </th>
-                  <th className="text-left font-medium px-5 py-2">PPT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sent.map((r) => (
-                  <tr key={r.reportId} className="border-t border-line-soft">
-                    <td className="px-5 py-2 text-ink">{r.projectName}</td>
-                    <td className="px-5 py-2 text-ink-2">
-                      {formatDate(r.deliveredAt, lang)}
-                    </td>
-                    <td className="px-5 py-2">
-                      {r.reportPptUrl ? (
-                        <a
-                          href={r.reportPptUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-accent hover:underline text-xs"
-                        >
-                          {lang === "es" ? "Ver reporte" : "View report"}
-                          <ChevronRight size={12} />
-                        </a>
-                      ) : (
-                        <span className="text-muted text-xs">—</span>
-                      )}
-                    </td>
+            {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+            <div className="hidden lg:block">
+              <table className="w-full text-sm">
+                <thead className="bg-paper-2">
+                  <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                    <th className="text-left font-medium px-5 py-2">
+                      {lang === "es" ? "Reporte" : "Report"}
+                    </th>
+                    <th className="text-left font-medium px-5 py-2">
+                      {lang === "es" ? "Enviado" : "Sent"}
+                    </th>
+                    <th className="text-left font-medium px-5 py-2">PPT</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sent.map((r) => (
+                    <tr key={r.reportId} className="border-t border-line-soft">
+                      <td className="px-5 py-2 text-ink">{r.projectName}</td>
+                      <td className="px-5 py-2 text-ink-2">
+                        {formatDate(r.deliveredAt, lang)}
+                      </td>
+                      <td className="px-5 py-2">
+                        {r.reportPptUrl ? (
+                          <a
+                            href={r.reportPptUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-accent hover:underline text-xs"
+                          >
+                            {lang === "es" ? "Ver reporte" : "View report"}
+                            <ChevronRight size={12} />
+                          </a>
+                        ) : (
+                          <span className="text-muted text-xs">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: tarjetas (sin scroll horizontal). */}
+            <div className="lg:hidden divide-y divide-line-soft">
+              {sent.map((r) => (
+                <div key={r.reportId} className="px-5 py-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-ink min-w-0">{r.projectName}</p>
+                    {r.reportPptUrl ? (
+                      <a
+                        href={r.reportPptUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1 text-accent hover:underline text-xs"
+                      >
+                        {lang === "es" ? "Ver reporte" : "View report"}
+                        <ChevronRight size={12} />
+                      </a>
+                    ) : (
+                      <span className="text-muted text-xs shrink-0">—</span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                    {lang === "es" ? "Enviado" : "Sent"}
+                  </p>
+                  <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">
+                    {formatDate(r.deliveredAt, lang)}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </section>
@@ -831,71 +894,135 @@ export async function BenchmarksSection({
           }
         />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-line bg-white dark:bg-paper-2">
-          <table className="w-full text-sm">
-            <thead className="text-[11px] uppercase tracking-wider text-muted bg-paper-2/60">
-              <tr className="border-b border-line">
-                <BTh className="text-left">Publisher</BTh>
-                <BTh className="text-left">Mercado</BTh>
-                <BTh>Cost method</BTh>
-                <BTh title="Cantidad de placements con data">N</BTh>
-                <BTh>Spend</BTh>
-                <BTh>Delivery</BTh>
-                <BTh colSpan={3} className="border-l border-line">CPM (p25·p50·p75)</BTh>
-                <BTh colSpan={3} className="border-l border-line">CPC</BTh>
-                <BTh colSpan={3} className="border-l border-line">CPV</BTh>
-                <BTh colSpan={3} className="border-l border-line">CTR %</BTh>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr
-                  key={`${r.publisherId}|${r.marketId ?? "_"}|${r.costMethod ?? "_"}`}
-                  className="border-b border-line/60"
-                >
-                  <BTd className="text-left font-medium text-ink">
-                    {r.publisherName}
-                  </BTd>
-                  <BTd className="text-left text-ink-2">
-                    {r.marketName ?? <span className="text-muted">—</span>}
-                  </BTd>
-                  <BTd>
-                    {r.costMethod ? (
-                      <span className="px-1.5 py-0.5 rounded bg-paper-2 border border-line text-[11px]">
-                        {r.costMethod}
-                      </span>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </BTd>
-                  <BTd className="tabular-nums">
-                    {r.placements < LOW_SAMPLE ? (
-                      <span className="text-amber-600 dark:text-amber-400">
-                        {r.placements}
-                      </span>
-                    ) : (
-                      <span className="text-ink-2">{r.placements}</span>
-                    )}
-                  </BTd>
-                  <BTd className="tabular-nums text-ink-2">
-                    {formatUsd(r.totalSpendUsd)}
-                  </BTd>
-                  <BTd className="tabular-nums">
-                    {r.deliveryPctMedian == null ? (
-                      <span className="text-muted">—</span>
-                    ) : (
-                      `${r.deliveryPctMedian.toFixed(0)}%`
-                    )}
-                  </BTd>
-                  <PCells bundle={r.cpm} prefix="$" />
-                  <PCells bundle={r.cpc} prefix="$" />
-                  <PCells bundle={r.cpv} prefix="$" />
-                  <PCells bundle={r.ctr} suffix="%" />
+        <>
+          {/* Desktop: tabla completa con percentiles p25·p50·p75. En mobile
+              usamos tarjetas (abajo) con solo la mediana (p50) de cada métrica. */}
+          <div className="hidden lg:block overflow-x-auto rounded-lg border border-line bg-white dark:bg-paper-2">
+            <table className="w-full text-sm">
+              <thead className="text-[11px] uppercase tracking-wider text-muted bg-paper-2/60">
+                <tr className="border-b border-line">
+                  <BTh className="text-left">Publisher</BTh>
+                  <BTh className="text-left">Mercado</BTh>
+                  <BTh>Cost method</BTh>
+                  <BTh title="Cantidad de placements con data">N</BTh>
+                  <BTh>Spend</BTh>
+                  <BTh>Delivery</BTh>
+                  <BTh colSpan={3} className="border-l border-line">CPM (p25·p50·p75)</BTh>
+                  <BTh colSpan={3} className="border-l border-line">CPC</BTh>
+                  <BTh colSpan={3} className="border-l border-line">CPV</BTh>
+                  <BTh colSpan={3} className="border-l border-line">CTR %</BTh>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr
+                    key={`${r.publisherId}|${r.marketId ?? "_"}|${r.costMethod ?? "_"}`}
+                    className="border-b border-line/60"
+                  >
+                    <BTd className="text-left font-medium text-ink">
+                      {r.publisherName}
+                    </BTd>
+                    <BTd className="text-left text-ink-2">
+                      {r.marketName ?? <span className="text-muted">—</span>}
+                    </BTd>
+                    <BTd>
+                      {r.costMethod ? (
+                        <span className="px-1.5 py-0.5 rounded bg-paper-2 border border-line text-[11px]">
+                          {r.costMethod}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </BTd>
+                    <BTd className="tabular-nums">
+                      {r.placements < LOW_SAMPLE ? (
+                        <span className="text-amber-600 dark:text-amber-400">
+                          {r.placements}
+                        </span>
+                      ) : (
+                        <span className="text-ink-2">{r.placements}</span>
+                      )}
+                    </BTd>
+                    <BTd className="tabular-nums text-ink-2">
+                      {formatUsd(r.totalSpendUsd)}
+                    </BTd>
+                    <BTd className="tabular-nums">
+                      {r.deliveryPctMedian == null ? (
+                        <span className="text-muted">—</span>
+                      ) : (
+                        `${r.deliveryPctMedian.toFixed(0)}%`
+                      )}
+                    </BTd>
+                    <PCells bundle={r.cpm} prefix="$" />
+                    <PCells bundle={r.cpc} prefix="$" />
+                    <PCells bundle={r.cpv} prefix="$" />
+                    <PCells bundle={r.ctr} suffix="%" />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile: tarjetas con lo esencial + mediana (p50) por métrica. */}
+          <div className="lg:hidden rounded-lg border border-line bg-white dark:bg-paper-2 divide-y divide-line-soft">
+            {rows.map((r) => (
+              <div
+                key={`${r.publisherId}|${r.marketId ?? "_"}|${r.costMethod ?? "_"}`}
+                className="px-5 py-3.5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink truncate">
+                      {r.publisherName}
+                    </p>
+                    <p className="text-[11px] text-muted mt-0.5">
+                      {r.marketName ?? "—"}
+                    </p>
+                  </div>
+                  {r.costMethod ? (
+                    <span className="shrink-0 px-1.5 py-0.5 rounded bg-paper-2 border border-line text-[11px]">
+                      {r.costMethod}
+                    </span>
+                  ) : (
+                    <span className="text-muted text-xs shrink-0">—</span>
+                  )}
+                </div>
+                <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                      N
+                    </p>
+                    <p
+                      className={`font-mono text-xs tabular-nums mt-0.5 ${
+                        r.placements < LOW_SAMPLE
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-ink-2"
+                      }`}
+                    >
+                      {r.placements}
+                    </p>
+                  </div>
+                  <PortalCardStat label="Spend" value={formatUsd(r.totalSpendUsd)} />
+                  <PortalCardStat
+                    label="Delivery"
+                    value={
+                      r.deliveryPctMedian == null
+                        ? "—"
+                        : `${r.deliveryPctMedian.toFixed(0)}%`
+                    }
+                  />
+                  <PortalCardStat label="CPM p50" value={fmtBench(r.cpm.p50, "$")} />
+                  <PortalCardStat label="CPC p50" value={fmtBench(r.cpc.p50, "$")} />
+                  <PortalCardStat label="CPV p50" value={fmtBench(r.cpv.p50, "$")} />
+                  <PortalCardStat
+                    label="CTR p50"
+                    value={fmtBench(r.ctr.p50, "", "%")}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
       <p className="mt-4 text-xs text-muted max-w-2xl">
         {lang === "es"
@@ -1006,6 +1133,25 @@ export async function AnalysisSection({
 }
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
+
+// Par label/valor para las tarjetas mobile (mismo patrón que view-operaciones).
+function PortalCardStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">{value}</p>
+    </div>
+  );
+}
+
+// Formato de un percentil de benchmark (mediana) para la tarjeta mobile. Mismo
+// criterio que PCells: 2 decimales para $, 1 para el resto.
+function fmtBench(v: number | null, prefix = "", suffix = ""): string {
+  if (v == null) return "—";
+  return `${prefix}${v.toFixed(prefix === "$" ? 2 : 1)}${suffix}`;
+}
 
 function EmptyPortal({ text }: { text: string }) {
   return (

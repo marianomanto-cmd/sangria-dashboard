@@ -226,48 +226,92 @@ export function MarketAnalysis({
               : "No activations for the current filters."}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[820px]">
-              <thead className="bg-paper-2">
-                <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-                  <th className="text-left font-medium px-5 py-2">{lang === "es" ? "Mercado" : "Market"}</th>
-                  <th className="text-left font-medium px-5 py-2">Publisher</th>
-                  <th className="text-left font-medium px-5 py-2">{lang === "es" ? "Proyecto" : "Project"}</th>
-                  <th className="text-left font-medium px-5 py-2">Plan</th>
-                  <th className="text-left font-medium px-5 py-2">{lang === "es" ? "Placement" : "Placement"}</th>
-                  <th className="text-left font-medium px-5 py-2">{lang === "es" ? "Período" : "Period"}</th>
-                  <th className="text-right font-medium px-5 py-2">{lang === "es" ? "Inversión" : "Spend"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-t border-line-soft hover:bg-paper-2/50">
-                    <td className="px-5 py-2 text-ink-2">
-                      {r.marketName ?? <span className="text-muted">—</span>}
-                    </td>
-                    <td className="px-5 py-2 text-ink font-medium">{r.publisherName}</td>
-                    <td className="px-5 py-2 text-ink-2">{r.projectName}</td>
-                    <td className="px-5 py-2 text-ink-2">{r.planName}</td>
-                    <td className="px-5 py-2 text-muted">
-                      {r.costMethod ? (
-                        <span className="font-mono text-[11px] uppercase">{r.costMethod}</span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-5 py-2 text-muted text-xs">
-                      {r.startDate && r.endDate
-                        ? `${formatDate(r.startDate, lang)} – ${formatDate(r.endDate, lang)}`
-                        : "—"}
-                    </td>
-                    <td className="px-5 py-2 text-right font-mono text-ink-2">
-                      {formatUsd(r.amountUsd)}
-                    </td>
+          <>
+            {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="w-full text-sm min-w-[820px]">
+                <thead className="bg-paper-2">
+                  <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                    <th className="text-left font-medium px-5 py-2">{lang === "es" ? "Mercado" : "Market"}</th>
+                    <th className="text-left font-medium px-5 py-2">Publisher</th>
+                    <th className="text-left font-medium px-5 py-2">{lang === "es" ? "Proyecto" : "Project"}</th>
+                    <th className="text-left font-medium px-5 py-2">Plan</th>
+                    <th className="text-left font-medium px-5 py-2">{lang === "es" ? "Placement" : "Placement"}</th>
+                    <th className="text-left font-medium px-5 py-2">{lang === "es" ? "Período" : "Period"}</th>
+                    <th className="text-right font-medium px-5 py-2">{lang === "es" ? "Inversión" : "Spend"}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.id} className="border-t border-line-soft hover:bg-paper-2/50">
+                      <td className="px-5 py-2 text-ink-2">
+                        {r.marketName ?? <span className="text-muted">—</span>}
+                      </td>
+                      <td className="px-5 py-2 text-ink font-medium">{r.publisherName}</td>
+                      <td className="px-5 py-2 text-ink-2">{r.projectName}</td>
+                      <td className="px-5 py-2 text-ink-2">{r.planName}</td>
+                      <td className="px-5 py-2 text-muted">
+                        {r.costMethod ? (
+                          <span className="font-mono text-[11px] uppercase">{r.costMethod}</span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-5 py-2 text-muted text-xs">
+                        {r.startDate && r.endDate
+                          ? `${formatDate(r.startDate, lang)} – ${formatDate(r.endDate, lang)}`
+                          : "—"}
+                      </td>
+                      <td className="px-5 py-2 text-right font-mono text-ink-2">
+                        {formatUsd(r.amountUsd)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile: tarjetas (sin scroll horizontal). */}
+            <div className="lg:hidden divide-y divide-line-soft">
+              {rows.map((r) => (
+                <div key={r.id} className="px-5 py-3.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-ink truncate">{r.publisherName}</p>
+                      <p className="text-[11px] text-muted mt-0.5">
+                        {r.marketName ?? "—"}
+                      </p>
+                    </div>
+                    <span className="shrink-0 font-mono text-sm text-ink-2 tabular-nums">
+                      {formatUsd(r.amountUsd)}
+                    </span>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    <AnalysisCardStat
+                      label={lang === "es" ? "Proyecto" : "Project"}
+                      value={r.projectName}
+                    />
+                    <AnalysisCardStat label="Plan" value={r.planName} />
+                    <AnalysisCardStat
+                      label={lang === "es" ? "Placement" : "Placement"}
+                      value={r.costMethod ?? "—"}
+                      mono
+                    />
+                    <div className="col-span-2 sm:col-span-3">
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+                        {lang === "es" ? "Período" : "Period"}
+                      </p>
+                      <p className="text-xs text-muted mt-0.5">
+                        {r.startDate && r.endDate
+                          ? `${formatDate(r.startDate, lang)} – ${formatDate(r.endDate, lang)}`
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </section>
     </div>
@@ -381,6 +425,30 @@ function Stat({ label, value, mono }: { label: string; value: string; mono?: boo
     <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-4 py-3">
       <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">{label}</p>
       <p className={`text-xl font-semibold mt-0.5 ${mono ? "font-mono tabular-nums" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+// Par label/valor para las tarjetas mobile de la tabla de activaciones.
+function AnalysisCardStat({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
+        {label}
+      </p>
+      <p
+        className={`text-xs text-ink-2 mt-0.5 truncate ${mono ? "font-mono uppercase tabular-nums" : ""}`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
