@@ -78,6 +78,7 @@ export function PortalFilters({
           >
             <option value="abiertos">{lang === "es" ? "Abiertos" : "Open"}</option>
             <option value="cerrados">{lang === "es" ? "Cerrados" : "Closed"}</option>
+            <option value="todos">{lang === "es" ? "Todos" : "All"}</option>
           </select>
         </Field>
       )}
