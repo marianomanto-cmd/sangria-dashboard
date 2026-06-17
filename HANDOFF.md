@@ -2,6 +2,28 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 16/jun/2026 — Mobile: listas/tablas → tarjetas (sin scroll horizontal) (#152)
+
+- **Patrón** (consistente en todo el sitio): cada tabla-lista que scrolleaba
+  horizontal en mobile pasa a tabla `hidden lg:block` (desktop) + bloque
+  `lg:hidden` de **tarjetas** (misma data, badges, links y acciones). Breakpoint
+  `lg`. Referencia: `components/dashboard/view-operaciones.tsx`.
+- **Convertidas**: `/planes` (plans-table-client: Lista + Por proyecto →
+  PlanCard), `/proyectos` + tab Proyectos de `/clientes` (projects-table-
+  expandable: tarjeta de proyecto nivel-superior con link al detalle; drill-down
+  queda desktop-only), `/billing`, `/billing-tracker` (tabla interna de
+  facturas), `/campaign-tracker` (grupos cliente→planes), `/clientes/[slug]`
+  (tab Resumen), estimación (billing-estimate-card), **portal** (Billing
+  Tracker / Reportes enviados / Benchmarks —mobile muestra la mediana p50—),
+  reporting-calendar-client, market-analysis (tabla de activaciones; mapa/ranking
+  intactos), config de clientes (admin + sections: publishers/métricas/mercados,
+  edición inline preservada), y las **papeleras** (planes borrados + auditoría).
+- **Dejadas como tabla a propósito**: preview del generador de reportes (espeja
+  el Excel), tablas analíticas del simulador, y matrices/resúmenes fijos que ya
+  entran en mobile (budget origins de config, matriz del mes previo en billing).
+- Hecho en paralelo con 3 subagentes + integración/build local. **Sin cambios de
+  schema.** `tsc` + `eslint` + `next build` en verde.
+
 ### Cambios de la sesión 16/jun/2026 — Rediseño Sangria OS: shell + dashboard de 3 vistas (mergeado a main)
 
 Rediseño completo del look & feel (identidad sangria.agency) + dashboard nuevo
