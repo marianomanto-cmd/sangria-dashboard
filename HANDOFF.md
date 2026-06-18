@@ -1,6 +1,26 @@
-# Handoff — martes 16/jun/2026
+# Handoff — jueves 18/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 18/jun/2026 — Filtro de año en Planes, Proyectos y Calendario (#156, #157)
+
+- Las tabs de **Planes** (`/planes`), **Proyectos** (`/proyectos`) y
+  **Calendario de reportes** (`/reportes/calendario`) ahora filtran por **año**,
+  con default **año actual**.
+- **Semántica**: en planes/proyectos un ítem pertenece a un año si su **período
+  de placements lo intersecta** (una campaña 2024→2025 aparece en ambos); filas
+  sin fechas cuentan como año actual. En el calendario, cada reporte se ubica por
+  su **fecha representativa** (entrega programada/real; si no tiene, el cierre del
+  proyecto). En los tres, opción **"Todos"**.
+- **Reutilizable**: `lib/year-filter.ts` — helpers puros `periodMatchesYear`,
+  `availableYears`, `resolveYearParam`. Planes/Proyectos usan
+  `components/year-selector.tsx` (pills URL-based; el año actual usa URL limpia
+  sin param). El Calendario lo hace **client-side** (useState + useMemo, mismo
+  patrón que su filtro de budget origin) con pills propias.
+- Filtrado **en memoria** sobre filas ya traídas (sin tocar queries); en
+  planes/proyectos cross-preserva con los filtros de origin/estado/cliente y los
+  KPIs/counts/subtítulo reflejan el set filtrado. **Sin cambios de schema.**
+  `next build` en verde.
 
 ### Cambios de la sesión 16/jun/2026 — Mobile: listas/tablas → tarjetas (sin scroll horizontal) (#152)
 
@@ -1999,6 +2019,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+3541a91  Add year filter to the reporting calendar (#157)
+1749bf0  Add year filter (default current year) to plans and projects tabs (#156)
 d1681f4  Rediseño Sangria OS: shell + dashboard de 3 vistas + confiabilidad (cache) + mobile cards (#150)
 ec0f750  Portal Proyectos: filtro de campañas + multi-pacing + export ejecutivo + fix "Ver pacing" (#149)
 f8be898  Dashboard: aislar cada sección con error boundary + fallbacks por query (#148)
