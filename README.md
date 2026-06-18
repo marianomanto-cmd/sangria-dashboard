@@ -266,6 +266,19 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   tabla es `ProjectsTableExpandable` con el prop `searchable` (el dashboard la
   usa con `searchable=false` → sin buscador y con el orden de la query).
 
+### Filtro de año (Planes, Proyectos, Calendario)
+- Las tabs `/planes`, `/proyectos` y `/reportes/calendario` filtran por **año**,
+  con **default = año actual**. Un plan/proyecto pertenece a un año si su
+  **período de placements lo intersecta** (una campaña 2024→2025 cae en ambos);
+  las filas sin fechas cuentan como año actual. En el calendario el reporte se
+  ubica por su **fecha de entrega** (o el cierre del proyecto si todavía no la
+  tiene). Opción **"Todos"** en los tres.
+- Helpers puros en `lib/year-filter.ts` (`periodMatchesYear`, `availableYears`,
+  `resolveYearParam`). Planes/Proyectos usan `components/year-selector.tsx`
+  (pills URL-based vía `?year=`; el año actual va sin param). El Calendario lo
+  resuelve client-side (useState, mismo patrón que su filtro de budget origin).
+  Todo el filtrado es en memoria sobre las filas ya cargadas.
+
 ### `/planes`: vista panel (KPIs + sort + density + agrupado + consumido)
 - **Strip de KPIs** arriba del listado: total media + consumido (con barra
   accent) + planes vigentes (approved + ready) + drafts. Computado server-side
