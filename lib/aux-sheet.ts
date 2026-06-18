@@ -412,6 +412,8 @@ export function evalAuxFormula(
   try {
     const src = raw.trimStart().slice(1);
     if (!src.trim()) return { ok: false, error: "#ERROR!" };
+    // Una ref que quedó colgada de un insert/delete se serializa como "#REF!".
+    if (src.includes("#REF!")) return { ok: false, error: "#REF!" };
     const visiting = new Set<string>();
     if (self) visiting.add(`${self.r}:${self.c}`);
     const value = evalTokens(tokenize(src), grid, visiting);
@@ -423,4 +425,240 @@ export function evalAuxFormula(
       error: e instanceof AuxFormulaError ? e.message : "#ERROR!",
     };
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Insertar / eliminar filas y columnas (estilo Excel)
+// ════════════════════════════════════════════════════════════════════════════
+// Operaciones PURAS sobre {grid, merges}: corren la data, mueven/encogen las
+// uniones y —como hace Excel— reescriben TODAS las referencias de las fórmulas
+// para que sigan apuntando a las mismas celdas. Las usa el editor (con su
+// undo/redo + autosave); el export no las necesita (lee el estado ya resuelto).
+
+// Parsea un token de referencia A1 ("$A$5", "A5", …). Solo una letra (cap A–Z);
+// multi-letra → null (se deja la ref tal cual). gridRow es 0-based (descuenta
+// AUX_SHEET_GRID_ROW_OFFSET, la numeración visible).
+function parseAuxRef(
+  token: string,
+): { dCol: string; col: number; dRow: string; gridRow: number } | null {
+  const m = /^(\$?)([A-Za-z]+)(\$?)(\d+)$/.exec(token);
+  if (!m || m[2].length !== 1) return null;
+  return {
+    dCol: m[1],
+    col: m[2].toUpperCase().charCodeAt(0) - 65,
+    dRow: m[3],
+    gridRow: Number.parseInt(m[4], 10) - AUX_SHEET_GRID_ROW_OFFSET,
+  };
+}
+
+// Reconstruye una ref; fuera del rango válido (col fuera de A–Z, fila negativa)
+// devuelve "#REF!" como hace Excel.
+function buildAuxRef(
+  dCol: string,
+  col: number,
+  dRow: string,
+  gridRow: number,
+): string {
+  if (col < 0 || col >= AUX_SHEET_MAX_COLS || gridRow < 0) return "#REF!";
+  return `${dCol}${String.fromCharCode(65 + col)}${dRow}${gridRow + AUX_SHEET_GRID_ROW_OFFSET}`;
+}
+
+// Reescribe cada referencia A1 de una fórmula cruda mapeando sus coords de
+// GRILLA (0-based). `mapRow`/`mapCol` devuelven la nueva coord o null (→ #REF!).
+// Útil para transformaciones por-ref simples; las ops de fila/columna usan la
+// variante con conciencia de rangos (shiftAuxFormula). Nuestro lenguaje no
+// tiene strings literales, así que un replace por regex es seguro: los nombres
+// de función (SUM, …) no llevan dígitos y no matchean.
+export function rewriteAuxFormulaRefs(
+  raw: string,
+  mapRow: (gridRow: number) => number | null,
+  mapCol: (col: number) => number | null,
+): string {
+  return raw.replace(/\$?[A-Za-z]+\$?\d+/g, (token) => {
+    const p = parseAuxRef(token);
+    if (!p) return token;
+    const nc = mapCol(p.col);
+    const nr = mapRow(p.gridRow);
+    if (nc == null || nr == null) return "#REF!";
+    return buildAuxRef(p.dCol, nc, p.dRow, nr);
+  });
+}
+
+// Una operación de línea: insertar/eliminar una fila o columna en el índice
+// `at` (coord de GRILLA, 0-based).
+type AuxLineOp = { axis: "row" | "col"; mode: "insert" | "delete"; at: number };
+
+// Mapea una coord SUELTA del eje afectado. Borrar la línea exacta que la ref
+// apunta → null (#REF!), igual que Excel con una celda referenciada borrada.
+function mapAuxCoord(coord: number, op: AuxLineOp): number | null {
+  if (op.mode === "insert") return coord >= op.at ? coord + 1 : coord;
+  if (coord === op.at) return null;
+  return coord > op.at ? coord - 1 : coord;
+}
+
+// Mapea el SPAN [lo..hi] de un rango sobre el eje afectado. Insertar adentro lo
+// agranda; borrar adentro lo encoge (reusa shrinkSpan). null = el rango entero
+// era la línea borrada (#REF!).
+function mapAuxSpan(lo: number, hi: number, op: AuxLineOp): [number, number] | null {
+  if (op.mode === "insert") {
+    return [lo >= op.at ? lo + 1 : lo, hi >= op.at ? hi + 1 : hi];
+  }
+  return shrinkSpan(lo, hi, op.at);
+}
+
+const AUX_REF_SRC = "\\$?[A-Za-z]+\\$?\\d+";
+const AUX_REF_OR_RANGE = new RegExp(
+  `(${AUX_REF_SRC}):(${AUX_REF_SRC})|(${AUX_REF_SRC})`,
+  "g",
+);
+
+// Reescribe una fórmula para una op de fila/columna, con conciencia de rangos:
+// un rango (A5:A10) se encoge/agranda como una unidad (como en Excel), una ref
+// suelta a la línea borrada queda #REF!. El eje NO afectado no se toca.
+function shiftAuxFormula(raw: string, op: AuxLineOp): string {
+  return raw.replace(
+    AUX_REF_OR_RANGE,
+    (whole, aTok: string, bTok: string, single: string | undefined) => {
+      if (single !== undefined) {
+        const p = parseAuxRef(single);
+        if (!p) return whole;
+        if (op.axis === "row") {
+          const nr = mapAuxCoord(p.gridRow, op);
+          return nr == null ? "#REF!" : buildAuxRef(p.dCol, p.col, p.dRow, nr);
+        }
+        const nc = mapAuxCoord(p.col, op);
+        return nc == null ? "#REF!" : buildAuxRef(p.dCol, nc, p.dRow, p.gridRow);
+      }
+      const pa = parseAuxRef(aTok);
+      const pb = parseAuxRef(bTok);
+      if (!pa || !pb) return whole;
+      if (op.axis === "row") {
+        const span = mapAuxSpan(
+          Math.min(pa.gridRow, pb.gridRow),
+          Math.max(pa.gridRow, pb.gridRow),
+          op,
+        );
+        if (!span) return "#REF!";
+        const [aRow, bRow] = pa.gridRow <= pb.gridRow ? span : [span[1], span[0]];
+        return `${buildAuxRef(pa.dCol, pa.col, pa.dRow, aRow)}:${buildAuxRef(pb.dCol, pb.col, pb.dRow, bRow)}`;
+      }
+      const span = mapAuxSpan(
+        Math.min(pa.col, pb.col),
+        Math.max(pa.col, pb.col),
+        op,
+      );
+      if (!span) return "#REF!";
+      const [aCol, bCol] = pa.col <= pb.col ? span : [span[1], span[0]];
+      return `${buildAuxRef(pa.dCol, aCol, pa.dRow, pa.gridRow)}:${buildAuxRef(pb.dCol, bCol, pb.dRow, pb.gridRow)}`;
+    },
+  );
+}
+
+function remapAuxFormulas(grid: AuxSheetGrid, op: AuxLineOp): AuxSheetGrid {
+  return grid.map((row) =>
+    row.map((cell) => (isAuxFormula(cell) ? shiftAuxFormula(cell, op) : cell)),
+  );
+}
+
+export type AuxStructural = { grid: AuxSheetGrid; merges: AuxMerge[] };
+
+// Inserta una fila en blanco en el índice `at` (0-based): lo que estaba en `at`
+// baja una posición. Una unión que la fila atraviesa se estira; las de abajo
+// bajan. Insertar nunca rompe fórmulas (sólo corre refs hacia abajo).
+export function insertAuxRow(
+  grid: AuxSheetGrid,
+  merges: AuxMerge[],
+  at: number,
+): AuxStructural {
+  const cols = Math.max(0, ...grid.map((r) => r.length));
+  const remapped = remapAuxFormulas(grid, { axis: "row", mode: "insert", at });
+  const blank = Array<string>(cols).fill("");
+  const nextGrid = [...remapped.slice(0, at), blank, ...remapped.slice(at)];
+  const nextMerges = merges.map((m) => ({
+    r0: m.r0 >= at ? m.r0 + 1 : m.r0,
+    r1: m.r1 >= at ? m.r1 + 1 : m.r1,
+    c0: m.c0,
+    c1: m.c1,
+  }));
+  return { grid: nextGrid, merges: nextMerges };
+}
+
+// Inserta una columna en blanco en el índice `at` (0-based).
+export function insertAuxCol(
+  grid: AuxSheetGrid,
+  merges: AuxMerge[],
+  at: number,
+): AuxStructural {
+  const remapped = remapAuxFormulas(grid, { axis: "col", mode: "insert", at });
+  const nextGrid = remapped.map((row) => {
+    const r = [...row];
+    r.splice(at, 0, "");
+    return r;
+  });
+  const nextMerges = merges.map((m) => ({
+    r0: m.r0,
+    r1: m.r1,
+    c0: m.c0 >= at ? m.c0 + 1 : m.c0,
+    c1: m.c1 >= at ? m.c1 + 1 : m.c1,
+  }));
+  return { grid: nextGrid, merges: nextMerges };
+}
+
+// Encoge una unión [a..b] de un eje tras borrar la línea `at`. Devuelve el nuevo
+// par [a',b'] o null si la unión desaparece (era sólo la línea borrada).
+function shrinkSpan(
+  a: number,
+  b: number,
+  at: number,
+): [number, number] | null {
+  const top = a === at ? a + 1 : a;
+  const bot = b === at ? b - 1 : b;
+  if (top > bot) return null; // la unión era exactamente la línea borrada
+  return [top > at ? top - 1 : top, bot > at ? bot - 1 : bot];
+}
+
+// Elimina la fila `at`. Como en Excel: los rangos (SUM A5:A10) se encogen, y
+// una ref suelta a la fila borrada queda #REF!. No borra la última fila.
+export function deleteAuxRow(
+  grid: AuxSheetGrid,
+  merges: AuxMerge[],
+  at: number,
+): AuxStructural {
+  if (grid.length <= 1) return { grid, merges };
+  const remapped = remapAuxFormulas(grid, { axis: "row", mode: "delete", at });
+  const nextGrid = [...remapped.slice(0, at), ...remapped.slice(at + 1)];
+  const nextMerges: AuxMerge[] = [];
+  for (const m of merges) {
+    const span = shrinkSpan(m.r0, m.r1, at);
+    if (!span) continue;
+    const cand = { r0: span[0], c0: m.c0, r1: span[1], c1: m.c1 };
+    if (cand.r0 === cand.r1 && cand.c0 === cand.c1) continue; // ya no es unión
+    nextMerges.push(cand);
+  }
+  return { grid: nextGrid, merges: nextMerges };
+}
+
+// Elimina la columna `at` (misma semántica que deleteAuxRow). No borra la última.
+export function deleteAuxCol(
+  grid: AuxSheetGrid,
+  merges: AuxMerge[],
+  at: number,
+): AuxStructural {
+  const cols = Math.max(0, ...grid.map((r) => r.length));
+  if (cols <= 1) return { grid, merges };
+  const remapped = remapAuxFormulas(grid, { axis: "col", mode: "delete", at });
+  const nextGrid = remapped.map((row) => {
+    const r = [...row];
+    if (at < r.length) r.splice(at, 1);
+    return r;
+  });
+  const nextMerges: AuxMerge[] = [];
+  for (const m of merges) {
+    const span = shrinkSpan(m.c0, m.c1, at);
+    if (!span) continue;
+    const cand = { r0: m.r0, c0: span[0], r1: m.r1, c1: span[1] };
+    if (cand.r0 === cand.r1 && cand.c0 === cand.c1) continue;
+    nextMerges.push(cand);
+  }
+  return { grid: nextGrid, merges: nextMerges };
 }

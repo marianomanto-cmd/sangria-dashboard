@@ -85,7 +85,7 @@ app/
   auth/
     callback/route.ts       # OAuth callback: exchange + valida @sangria.agency
     signout/route.ts        # POST → cierra sesión
-  (app)/                    # layout principal (Sidebar + Topbar) — todo requiere login
+  (app)/                    # layout principal (TopNav en el header ≥lg + Sidebar drawer <lg + Topbar) — todo requiere login
     layout.tsx              # async, llama getCurrentUser() una vez, monta AppProviders + MobileNavProvider
     loading.tsx             # skeleton de página durante la navegación del router (usa PageSkeleton)
     error.tsx               # error boundary recuperable (retry) — captura errores de server components
@@ -95,7 +95,7 @@ app/
     proyectos/              # /proyectos, /proyectos/[code]/*, /proyectos/nuevo
       [code]/planes/[planId]/
         editor.tsx          # editor del plan (publishers + placements + fees)
-        aux-sheet.tsx       # tabs auxiliares del plan: grillas libres tipo Excel con fórmulas (tabs extra del export)
+        aux-sheet.tsx       # tabs auxiliares del plan: grillas libres tipo Excel con fórmulas, insertar/eliminar filas y columnas en cualquier posición (menú click-derecho) (tabs extra del export)
         plan-history.tsx    # chip "Última edición" + modal read-only con los cambios de la versión vigente (audit_log)
         billing/            # editor de facturación mensual
     planes/                 # /planes — vista cross-proyectos
@@ -146,7 +146,8 @@ components/                 # UI compartida
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
-  topbar-nav.tsx            # título de sección (Archivo) + toggle de 3 vistas del dashboard (client, URL-based ?view=)
+  topbar-nav.tsx            # título de sección (Archivo), SOLO mobile (<lg) — en desktop manda la TopNav del header
+  top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; reemplaza al sidebar vertical para liberar el ancho al contenido
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates
   billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
@@ -162,6 +163,7 @@ components/                 # UI compartida
   app-providers.tsx         # monta ToastProvider + ConfirmProvider — en el layout, envuelve el contenido de la app
   audit-entry.tsx           # render de un evento del audit_log (oración + diff de campos) — lo usan /auditoria y el modal de cambios del plan
   mobile-nav.tsx            # MobileNavProvider + MobileNavToggle + useMobileNav() — sidebar drawer en mobile (< lg)
+  sidebar.tsx               # navegación como DRAWER mobile (< lg); en ≥lg no se renderiza (la nav vive en top-nav.tsx)
 db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
@@ -184,7 +186,8 @@ lib/
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
   brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
   plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns + placementsPeriod + sumDirectMetrics (compartido PDF/Excel/preview)
-  aux-sheet.ts              # tabs auxiliares del plan: límites + sanitize/normalize + evaluador de fórmulas (refs A1 + SUM/AVERAGE/…) compartido editor/actions/export
+  aux-sheet.ts              # tabs auxiliares del plan: límites + sanitize/normalize + evaluador de fórmulas (refs A1 + SUM/AVERAGE/…) + insert/delete fila/columna con reescritura de refs (estilo Excel) — compartido editor/actions/export
+  nav.ts                    # entradas de navegación compartidas (PRIMARY_NAV/FOOTER_NAV + isNavActive) entre top-nav.tsx (desktop) y sidebar.tsx (drawer mobile)
   budget-split.ts           # prorrateo por días + agregación mercado × mes — compartido por el Tab 2 del Excel y el preview del editor
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
@@ -352,6 +355,15 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     rinde con `rowSpan/colSpan` y el export con `ws.mergeCells` (mismas coords).
     Helpers (`sanitizeMerges`, `findMerge`, `rectsIntersect`) en `lib/aux-sheet.ts`,
     saneadas server-side en `updateAuxSheet`.
+  - **Insertar / eliminar filas y columnas en cualquier posición** (no solo al
+    final): **click derecho** en el N° de fila o la letra de columna abre un
+    menú estilo Excel (insertar arriba/abajo, izquierda/derecha, eliminar);
+    click izquierdo selecciona la línea entera. Las ops puras viven en
+    `lib/aux-sheet.ts` (`insertAuxRow/Col`, `deleteAuxRow/Col`): corren la data,
+    mueven/encogen las **uniones** y —como Excel— **reescriben las referencias
+    de las fórmulas** (`shiftAuxFormula`) para que sigan apuntando a lo mismo.
+    Un **rango** (`SUM(A5:A10)`) se encoge/agranda como unidad; una ref **suelta**
+    a una línea borrada queda `#REF!`. Pasan por el mismo historial + autosave.
   - **Deshacer / rehacer**: `Ctrl/Cmd+Z` y `Ctrl/Cmd+Shift+Z` (o `Ctrl+Y`, o los
     botones Deshacer/Rehacer). Historial **por tab** de hasta `HISTORY_MAX` (50)
     snapshots `{grid, merges}`: cada mutación apila el estado previo y una
@@ -933,6 +945,15 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
   `(2)` si colisiona con otro tab). Las celdas numéricas (US format) van como
   número y las fórmulas (`=…`) como **fórmulas reales de Excel**. Ver "Tabs
   auxiliares del plan" en convenciones.
+  - **Formato parecido al Tab 1** (`buildAuxSheet`): se da estilo solo al
+    rectángulo con contenido (incluyendo lo que cubre una unión). La 1ra fila si
+    es todo texto → **header** (fondo ACCENT, blanco, centrado); filas cuya
+    **etiqueta** (1ra celda) arranca con `total/totales` → fondo ACCENT blanco,
+    `subtotal/subtotales` → ACCENT_SOFT, `grand total/total general` → INK
+    blanco; el resto, **banding** suave en filas alternas. Todo en **negrita** en
+    subtotales/totales/header, bordes finos, alto de fila (interlineado) 20/22 y
+    **ancho de columna auto-ajustado** al contenido (col de etiquetas ≥16). Los
+    números se alinean a la derecha y se **congela** la metadata + el header.
 
 ### i18n y decisiones
 
@@ -1007,10 +1028,14 @@ datos históricos cargados (billing + campaign tracker), filtrando por scope.
 - **Errores de formulario**: el contenedor del mensaje lleva `role="alert"`
   para que se anuncie.
 
-### Responsive: sidebar drawer en mobile
+### Responsive: nav en el header (desktop) + drawer (mobile)
+- En `≥ lg` la **navegación principal vive en el header** (`components/top-nav.tsx`,
+  tira horizontal ícono+label) para liberar todo el ancho de la ventana al
+  contenido; el `<aside>` lateral ya no se renderiza. La marca y la `TopNav`
+  van en el `Topbar`; el `topbar-nav.tsx` (título de sección) queda solo mobile.
 - En `< lg` el sidebar (`components/sidebar.tsx`) es un drawer deslizable
   controlado por `components/mobile-nav.tsx` (`MobileNavProvider` +
-  `MobileNavToggle` en el topbar); en `≥ lg` es sticky/colapsable como siempre.
+  `MobileNavToggle` en el topbar). Las entradas de ambos salen de `lib/nav.ts`.
 - Tablas anchas: envolver en un contenedor `overflow-x-auto` (+ `min-w-[...]`
   en la `<table>`) para que scrolleen en vez de aplastarse (ver
   `projects-table-expandable` y la lista de `plans-table-client`).

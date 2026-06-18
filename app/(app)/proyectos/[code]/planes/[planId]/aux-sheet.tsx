@@ -37,9 +37,14 @@ import {
   AUX_SHEET_MAX_COLS,
   AUX_SHEET_MAX_ROWS,
   type AuxMerge,
+  type AuxStructural,
   auxColLetter,
+  deleteAuxCol,
+  deleteAuxRow,
   evalAuxFormula,
   findMerge,
+  insertAuxCol,
+  insertAuxRow,
   isAuxFormula,
   normalizeAuxGrid,
   rectsIntersect,
@@ -188,6 +193,11 @@ function AuxSheetEditor({
   // estado previo {grid, merges}; una edición nueva limpia el redo.
   const [undoStack, setUndoStack] = useState<AuxSnapshot[]>([]);
   const [redoStack, setRedoStack] = useState<AuxSnapshot[]>([]);
+  // Menú contextual (click derecho en el N° de fila / letra de columna) para
+  // insertar/eliminar filas y columnas en cualquier posición, estilo Excel.
+  const [menu, setMenu] = useState<
+    { x: number; y: number; kind: "row" | "col"; index: number } | null
+  >(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
@@ -208,6 +218,25 @@ function AuxSheetEditor({
     window.addEventListener("mouseup", up);
     return () => window.removeEventListener("mouseup", up);
   }, []);
+
+  // Cerrar el menú contextual al clickear afuera, scrollear o apretar Escape.
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(null);
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [menu]);
 
   // Valores de display: fórmulas evaluadas (o su código de error), el resto
   // tal cual. Las uniones no cambian el cálculo (las celdas tapadas van vacías).
@@ -478,6 +507,71 @@ function AuxSheetEditor({
     save({ grid: next });
   };
 
+  // ─── Insertar / eliminar filas y columnas en cualquier posición ───────────
+  // Las ops puras (lib/aux-sheet) corren la data, ajustan las uniones y
+  // reescriben las referencias de las fórmulas; acá las envolvemos con el
+  // historial, el autosave y la nueva selección.
+  const applyStructural = (next: AuxStructural, nextSel: Sel) => {
+    pushHistory();
+    setEditing(null);
+    const safeMerges = sanitizeMerges(next.merges, next.grid);
+    setGrid(next.grid);
+    setMerges(safeMerges);
+    setSel(clampSel(nextSel, next.grid));
+    save({ grid: next.grid, merges: safeMerges });
+    focusContainer();
+  };
+
+  const insertRowAt = (at: number) => {
+    if (!editable || rows >= AUX_SHEET_MAX_ROWS) return;
+    applyStructural(insertAuxRow(grid, merges, at), {
+      ar: at,
+      ac: 0,
+      fr: at,
+      fc: cols - 1,
+    });
+  };
+
+  const deleteRowAt = (at: number) => {
+    if (!editable || rows <= 1) return;
+    const next = deleteAuxRow(grid, merges, at);
+    const nr = clamp(at, 0, next.grid.length - 1);
+    applyStructural(next, { ar: nr, ac: 0, fr: nr, fc: cols - 1 });
+  };
+
+  const insertColAt = (at: number) => {
+    if (!editable || cols >= AUX_SHEET_MAX_COLS) return;
+    applyStructural(insertAuxCol(grid, merges, at), {
+      ar: 0,
+      ac: at,
+      fr: rows - 1,
+      fc: at,
+    });
+  };
+
+  const deleteColAt = (at: number) => {
+    if (!editable || cols <= 1) return;
+    const next = deleteAuxCol(grid, merges, at);
+    const nc = clamp(at, 0, (next.grid[0]?.length ?? 1) - 1);
+    applyStructural(next, { ar: 0, ac: nc, fr: rows - 1, fc: nc });
+  };
+
+  // Click derecho en una cabecera (N° de fila o letra de columna): selecciona
+  // la línea entera y abre el menú contextual.
+  const openRowMenu = (e: React.MouseEvent, r: number) => {
+    if (!editable) return;
+    e.preventDefault();
+    setSel({ ar: r, ac: 0, fr: r, fc: Math.max(0, cols - 1) });
+    setMenu({ x: e.clientX, y: e.clientY, kind: "row", index: r });
+  };
+
+  const openColMenu = (e: React.MouseEvent, c: number) => {
+    if (!editable) return;
+    e.preventDefault();
+    setSel({ ar: 0, ac: c, fr: Math.max(0, rows - 1), fc: c });
+    setMenu({ x: e.clientX, y: e.clientY, kind: "col", index: c });
+  };
+
   const undo = () => {
     if (!editable || undoStack.length === 0) return;
     const prev = undoStack[undoStack.length - 1];
@@ -687,7 +781,20 @@ function AuxSheetEditor({
                     return (
                       <th
                         key={c}
+                        onMouseDown={(e) => {
+                          if (e.button !== 0) return;
+                          containerRef.current?.focus();
+                          setSel({ ar: 0, ac: c, fr: Math.max(0, rows - 1), fc: c });
+                        }}
+                        onContextMenu={(e) => openColMenu(e, c)}
+                        title={
+                          editable
+                            ? "Click: seleccionar columna · Click derecho: insertar/eliminar"
+                            : undefined
+                        }
                         className={`border border-line-soft px-2 py-1 text-[10px] font-medium min-w-[7.5rem] ${
+                          editable ? "cursor-pointer" : ""
+                        } ${
                           colSel ? "bg-accent-soft/60 text-accent" : "bg-paper text-muted"
                         }`}
                       >
@@ -725,7 +832,20 @@ function AuxSheetEditor({
                   return (
                     <tr key={r}>
                       <td
+                        onMouseDown={(e) => {
+                          if (e.button !== 0) return;
+                          containerRef.current?.focus();
+                          setSel({ ar: r, ac: 0, fr: r, fc: Math.max(0, cols - 1) });
+                        }}
+                        onContextMenu={(e) => openRowMenu(e, r)}
+                        title={
+                          editable
+                            ? "Click: seleccionar fila · Click derecho: insertar/eliminar"
+                            : undefined
+                        }
                         className={`border border-line-soft text-center text-[10px] ${
+                          editable ? "cursor-pointer" : ""
+                        } ${
                           rowSel ? "bg-accent-soft/60 text-accent" : "bg-paper text-muted"
                         }`}
                       >
@@ -879,7 +999,8 @@ function AuxSheetEditor({
                   Borrar
                 </Button>
                 <span className="text-[11px] text-muted hidden md:inline">
-                  Ctrl/Cmd+C/V/Z · doble click o Enter para editar ·{" "}
+                  Ctrl/Cmd+C/V/Z · doble click o Enter para editar · click derecho
+                  en N°/letra para insertar o eliminar ·{" "}
                   <code>=SUM(A{AUX_SHEET_GRID_ROW_OFFSET}:A{AUX_SHEET_GRID_ROW_OFFSET + 5})</code>
                 </span>
               </>
@@ -900,9 +1021,109 @@ function AuxSheetEditor({
               </button>
             )}
           </div>
+
+          {menu && (
+            // Menú contextual estilo Excel. Posición fija al cursor; se cierra
+            // solo (efecto global). stopPropagation evita que el click que
+            // dispara una acción lo cierre antes de tiempo.
+            <div
+              role="menu"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+              style={{ top: menu.y, left: menu.x }}
+              className="fixed z-50 min-w-[15rem] rounded-md border border-line bg-surface dark:bg-paper-2 py-1 shadow-lg text-xs"
+            >
+              {menu.kind === "row" ? (
+                <>
+                  <AuxMenuItem
+                    label="Insertar fila arriba"
+                    onClick={() => {
+                      insertRowAt(menu.index);
+                      setMenu(null);
+                    }}
+                    disabled={rows >= AUX_SHEET_MAX_ROWS}
+                  />
+                  <AuxMenuItem
+                    label="Insertar fila abajo"
+                    onClick={() => {
+                      insertRowAt(menu.index + 1);
+                      setMenu(null);
+                    }}
+                    disabled={rows >= AUX_SHEET_MAX_ROWS}
+                  />
+                  <div className="my-1 border-t border-line-soft" />
+                  <AuxMenuItem
+                    label="Eliminar fila"
+                    danger
+                    onClick={() => {
+                      deleteRowAt(menu.index);
+                      setMenu(null);
+                    }}
+                    disabled={rows <= 1}
+                  />
+                </>
+              ) : (
+                <>
+                  <AuxMenuItem
+                    label="Insertar columna a la izquierda"
+                    onClick={() => {
+                      insertColAt(menu.index);
+                      setMenu(null);
+                    }}
+                    disabled={cols >= AUX_SHEET_MAX_COLS}
+                  />
+                  <AuxMenuItem
+                    label="Insertar columna a la derecha"
+                    onClick={() => {
+                      insertColAt(menu.index + 1);
+                      setMenu(null);
+                    }}
+                    disabled={cols >= AUX_SHEET_MAX_COLS}
+                  />
+                  <div className="my-1 border-t border-line-soft" />
+                  <AuxMenuItem
+                    label="Eliminar columna"
+                    danger
+                    onClick={() => {
+                      deleteColAt(menu.index);
+                      setMenu(null);
+                    }}
+                    disabled={cols <= 1}
+                  />
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
     </section>
+  );
+}
+
+// Ítem del menú contextual (insertar / eliminar fila o columna).
+function AuxMenuItem({
+  label,
+  onClick,
+  disabled,
+  danger,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      className={`block w-full px-3 py-1.5 text-left hover:bg-accent-soft/50 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed ${
+        danger ? "text-danger" : ""
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 

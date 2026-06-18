@@ -2,6 +2,32 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 18/jun/2026 — MP: formato de tabs auxiliares en el Excel + insert/delete filas/columnas + nav al header (desktop)
+
+- **Excel — tabs auxiliares con formato parecido al Tab 1** (`app/api/plans/[planId]/export.xlsx/route.ts`,
+  `buildAuxSheet`): antes salían sin estilo. Ahora se formatea solo el
+  rectángulo con contenido: 1ra fila de texto → **header** (fondo ACCENT),
+  filas cuya etiqueta arranca con `total`/`subtotal`/`grand total` → fondos
+  ACCENT/ACCENT_SOFT/INK con **negrita**, resto con **banding** alterno; bordes
+  finos, alto de fila (interlineado) 20/22, **ancho de columna auto-ajustado**,
+  números a la derecha y metadata + header congelados. Heurística por la 1ra
+  celda (no confunde un header con columnas tipo "Total impresiones").
+- **Editor de tabs auxiliares — insertar/eliminar filas y columnas en cualquier
+  posición** (`aux-sheet.tsx` + helpers puros en `lib/aux-sheet.ts`): **click
+  derecho** en el N° de fila / letra de columna abre un menú estilo Excel
+  (insertar arriba/abajo, izquierda/derecha, eliminar); click izquierdo
+  selecciona la línea. `insertAuxRow/Col` y `deleteAuxRow/Col` corren la data,
+  mueven/encogen las uniones y **reescriben las refs de las fórmulas**
+  (`shiftAuxFormula`, con conciencia de rangos: `SUM(A5:A10)` se encoge/agranda,
+  una ref suelta a una línea borrada queda `#REF!`). Pasa por el historial +
+  autosave. **Sin cambios de schema.**
+- **Navegación al header en desktop** (`components/top-nav.tsx` nuevo +
+  `lib/nav.ts` nuevo): en `≥ lg` la nav vive en el header (tira horizontal
+  ícono+label) para liberar el ancho de la ventana al contenido; el `<aside>`
+  lateral ya no se renderiza ahí. En `< lg` **no cambia**: sigue el drawer
+  (`sidebar.tsx`) + hamburguesa. Entradas compartidas en `lib/nav.ts`
+  (`PRIMARY_NAV`/`FOOTER_NAV`/`isNavActive`). `tsc` + `eslint` + `next build` en verde.
+
 ### Cambios de la sesión 18/jun/2026 — Filtro de año en Planes, Proyectos y Calendario (#156, #157)
 
 - Las tabs de **Planes** (`/planes`), **Proyectos** (`/proyectos`) y
@@ -2641,15 +2667,16 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el schema                      | `db/schema.ts`                                            |
 | Agregar una query                      | `db/queries/<dominio>.ts`                                 |
 | Agregar una server action              | `app/actions/<dominio>.ts`                                |
-| Cambiar la sidebar                     | `components/sidebar.tsx`                                  |
-| Cambiar el topbar                      | `components/topbar.tsx`                                   |
+| Cambiar la navegación (desktop ≥lg)    | `components/top-nav.tsx` (tira horizontal en el header). Entradas compartidas en `lib/nav.ts` (`PRIMARY_NAV`/`FOOTER_NAV`/`isNavActive`). |
+| Cambiar la navegación (drawer mobile <lg) | `components/sidebar.tsx` (mismo `lib/nav.ts`). En ≥lg el `<aside>` no se renderiza. |
+| Cambiar el topbar                      | `components/topbar.tsx` (marca + `TopNav` desktop; `topbar-nav.tsx` = título de sección solo mobile). |
 | Cambiar la tabla expandible (Proyectos) | `components/projects-table-expandable.tsx` — el prop `searchable` activa buscador (nombre/código) + orden A-Z; el dashboard la usa SIN `searchable` (sin buscador, orden de la query). |
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
 | Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + tabs 3+ auxiliares si el plan tiene). |
-| Tocar los tabs auxiliares del plan (grillas libres con fórmulas / tabs extra del Excel) | UI: `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx` (botón "Crear tab auxiliar" + una sección colapsable por tab en el editor). CRUD: `app/actions/aux-sheets.ts`. Límites + helpers + **evaluador de fórmulas** (refs A1, SUM/AVERAGE/MIN/MAX/COUNT, errores `#REF!`/`#CIRC!`/…): `lib/aux-sheet.ts` (`evalAuxFormula`). Schema: `media_plan_aux_sheets` (N por plan, `sort_order`). Los tabs del export: `buildAuxSheet` en `export.xlsx/route.ts` (fórmulas → fórmulas reales de Excel). |
+| Tocar los tabs auxiliares del plan (grillas libres con fórmulas / tabs extra del Excel) | UI: `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx` (botón "Crear tab auxiliar" + una sección colapsable por tab en el editor). CRUD: `app/actions/aux-sheets.ts`. Límites + helpers + **evaluador de fórmulas** (refs A1, SUM/AVERAGE/MIN/MAX/COUNT, errores `#REF!`/`#CIRC!`/…): `lib/aux-sheet.ts` (`evalAuxFormula`). Schema: `media_plan_aux_sheets` (N por plan, `sort_order`). **Insertar/eliminar filas y columnas en cualquier posición**: menú click-derecho en el editor → `insertAuxRow/Col` + `deleteAuxRow/Col` en `lib/aux-sheet.ts` (mueven data + uniones y reescriben refs con `shiftAuxFormula`). Los tabs del export: `buildAuxSheet` en `export.xlsx/route.ts` (fórmulas → fórmulas reales de Excel; **formato** header/subtotal/total/banding + anchos auto + congelado, parecido al Tab 1). |
 | Qué métricas se muestran / cómo se computan en los exports | `lib/plan-metrics.ts` — `resolveMetricColumns` (qué columnas: directs presentes + calculated que resuelven), `placementMetricValue` (valor por placement: guardado o computado), `evalFormula`. Lo usan **PDF y Excel**. Las calculated NO están en `metrics_json`. |
 | Cambiar el logo de los exports         | Reemplazar `public/sangria-logo.png` (o `.jpg`). Lo carga `lib/brand-logo.ts`; el tracing está en `next.config.ts` (`outputFileTracingIncludes`). Posición/tamaño: PDF en `lib/plan-pdf.ts`, XLSX en `export.xlsx/route.ts`. |
 | Cambiar el nombre de archivo del export | `filename` en cada ruta `export.{pdf,xlsx}/route.ts`: hoy `{plan.name}-V{currentVersion}`. |

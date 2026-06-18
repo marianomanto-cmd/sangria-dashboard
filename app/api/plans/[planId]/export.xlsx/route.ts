@@ -13,6 +13,7 @@ import { DEFAULT_LANGUAGE, formatDate, formatMonth, type Language, t } from "@/l
 import {
   AUX_SHEET_DEFAULT_NAME,
   AUX_SHEET_GRID_ROW_OFFSET,
+  AUX_SHEET_INFO_ROWS,
   auxCellNumber,
   evalAuxFormula,
   isAuxFormula,
@@ -28,6 +29,7 @@ const INK = "FF1C1917";          // grand total
 const WHITE = "FFFFFFFF";
 const BORDER = "FFD6D3D1";       // --color-line
 const MUTED = "FF78716C";        // --color-muted
+const ZEBRA = "FFFBF4F7";        // banding suave de filas de datos (tabs aux)
 
 const thin = { style: "thin" as const, color: { argb: BORDER } };
 const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
@@ -670,11 +672,54 @@ function buildAuxSheet(
   }
   const ws = wb.addWorksheet(title);
 
-  const gridCols = Math.max(1, ...aux.grid.map((r) => r.length));
-  const totalCols = Math.max(2, gridCols);
-  ws.columns = Array.from({ length: totalCols }, (_, c) => ({
-    width: c === 0 ? 24 : 16,
-  }));
+  const grid = aux.grid;
+
+  // ─── Caja con contenido ───────────────────────────────────────────────────
+  // Solo damos formato (bordes / fondos / alto de fila) al rectángulo que tiene
+  // datos —o que cubre una unión—, para no pintar de color toda la grilla
+  // vacía. `tableCols` fija el ancho del bloque (metadata + tabla) de modo que
+  // ambos queden alineados, igual que en el Tab 1.
+  let firstContentRow = -1;
+  let lastContentRow = -1;
+  let lastContentCol = -1;
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      if (!grid[r][c].trim()) continue;
+      if (firstContentRow === -1) firstContentRow = r;
+      lastContentRow = r;
+      if (c > lastContentCol) lastContentCol = c;
+    }
+  }
+  // Las uniones también forman parte del bloque a formatear (un título
+  // combinado a lo ancho, p.ej., puede pasarse del último dato).
+  for (const m of aux.merges) {
+    if (firstContentRow === -1 || m.r0 < firstContentRow) firstContentRow = m.r0;
+    if (m.r1 > lastContentRow) lastContentRow = m.r1;
+    if (m.c1 > lastContentCol) lastContentCol = m.c1;
+  }
+  const tableCols = Math.max(2, lastContentCol + 1);
+
+  // Valor que se VE en una celda (para estimar el ancho de columna): el texto
+  // tal cual, el número como lo escribe Excel, o el resultado de la fórmula.
+  const cellDisplay = (r: number, c: number): string => {
+    const raw = (grid[r]?.[c] ?? "").trim();
+    if (!raw) return "";
+    if (isAuxFormula(raw)) {
+      const res = evalAuxFormula(grid[r][c], grid, { r, c });
+      return res.ok ? String(res.value) : raw;
+    }
+    const n = auxCellNumber(raw);
+    return n != null ? String(n) : raw;
+  };
+
+  // ¿La celda es numérica (número suelto o fórmula que resuelve)? → se alinea a
+  // la derecha, como las columnas de plata de la hoja principal.
+  const isNumericCell = (r: number, c: number): boolean => {
+    const raw = (grid[r]?.[c] ?? "").trim();
+    if (!raw) return false;
+    if (isAuxFormula(raw)) return evalAuxFormula(grid[r][c], grid, { r, c }).ok;
+    return auxCellNumber(raw) != null;
+  };
 
   // Metadata del plan, mismo estilo que el Tab 1.
   const allPlacements = detail.publishers.flatMap((g) => g.placements);
@@ -688,6 +733,26 @@ function buildAuxSheet(
     [t("common.period", lang), periodFormatted],
     [t("common.budgetOrigin", lang), detail.budgetOrigin.name],
   ];
+
+  // ─── Anchos de columna ajustados al contenido ─────────────────────────────
+  // Por columna, el texto más largo de la grilla (la col 0 también considera
+  // las etiquetas de metadata). Acotado a [10..48]; 16 mínimo en la col de
+  // etiquetas para que respiren.
+  ws.columns = Array.from({ length: tableCols }, (_, c) => {
+    let maxLen = 0;
+    for (let r = 0; r < grid.length; r++) {
+      const len = cellDisplay(r, c).length;
+      if (len > maxLen) maxLen = len;
+    }
+    if (c === 0) {
+      for (const [label] of infoPairs) {
+        if (label.length > maxLen) maxLen = label.length;
+      }
+    }
+    const min = c === 0 ? 16 : 10;
+    return { width: Math.min(48, Math.max(min, maxLen + 2)) };
+  });
+
   infoPairs.forEach(([label, value], i) => {
     const row = ws.getRow(i + 1);
     row.getCell(1).value = label;
@@ -701,30 +766,98 @@ function buildAuxSheet(
     row.getCell(2).value = value;
     row.getCell(2).font = { bold: true };
     row.getCell(2).alignment = { vertical: "middle", horizontal: "left" };
-    ws.mergeCells(i + 1, 2, i + 1, totalCols);
+    ws.mergeCells(i + 1, 2, i + 1, tableCols);
     row.height = 20;
   });
 
-  // Grilla libre (una fila de aire después de la metadata; AUX_SHEET_GRID_ROW_
-  // OFFSET es la misma numeración que muestra el editor).
-  aux.grid.forEach((cells, r) => {
+  // Grilla vacía → queda solo la metadata.
+  if (firstContentRow === -1) return;
+
+  // La primera fila con contenido, si son todo etiquetas de texto, se trata
+  // como header (fondo ACCENT). Subtotales/totales se detectan por su etiqueta.
+  const headerRowIdx = detectAuxHeaderRow(grid, firstContentRow);
+
+  // Congelamos la metadata (+ el header de la grilla, si lo hay), como hace el
+  // Tab 1 con su encabezado.
+  ws.views = [
+    {
+      state: "frozen",
+      ySplit:
+        headerRowIdx >= 0
+          ? AUX_SHEET_GRID_ROW_OFFSET + headerRowIdx
+          : AUX_SHEET_INFO_ROWS,
+    },
+  ];
+
+  // ─── Grilla con formato (una fila de aire después de la metadata; AUX_SHEET_
+  // GRID_ROW_OFFSET es la misma numeración que muestra el editor) ────────────
+  let zebra = 0; // alterna el banding SOLO entre filas de datos
+  for (let r = firstContentRow; r <= lastContentRow; r++) {
+    const cells = grid[r] ?? [];
+    if (!cells.some((x) => x.trim())) continue; // respeta las filas en blanco
+
     const row = ws.getRow(AUX_SHEET_GRID_ROW_OFFSET + r);
-    cells.forEach((cell, c) => {
-      if (!cell.trim()) return;
-      if (isAuxFormula(cell)) {
-        // Solo va como fórmula si nuestro evaluador la resuelve (garantiza
-        // sintaxis válida); si no, va el texto crudo para que se vea el error.
-        const res = evalAuxFormula(cell, aux.grid, { r, c });
-        // Uppercase: Excel guarda refs y funciones en mayúsculas; nuestro
-        // lenguaje no tiene strings literales, así que es seguro.
-        row.getCell(c + 1).value = res.ok
-          ? { formula: cell.trimStart().slice(1).toUpperCase(), result: res.value }
-          : cell;
-        return;
+    const kind = r === headerRowIdx ? "header" : classifyAuxRow(cells);
+
+    let fill: string | null = null;
+    let fontColor: string | null = null;
+    let bold = false;
+    switch (kind) {
+      case "header":
+      case "total":
+        fill = ACCENT;
+        fontColor = WHITE;
+        bold = true;
+        break;
+      case "grand":
+        fill = INK;
+        fontColor = WHITE;
+        bold = true;
+        break;
+      case "subtotal":
+        fill = ACCENT_SOFT;
+        bold = true;
+        break;
+      default:
+        if (zebra % 2 === 1) fill = ZEBRA; // datos: banding en filas alternas
+        zebra++;
+    }
+
+    for (let c = 0; c < tableCols; c++) {
+      const cell = row.getCell(c + 1);
+      const raw = (cells[c] ?? "").trim();
+      if (raw) {
+        if (isAuxFormula(raw)) {
+          // Solo va como fórmula si nuestro evaluador la resuelve (garantiza
+          // sintaxis válida); si no, va el texto crudo para que se vea el error.
+          const res = evalAuxFormula(grid[r][c], grid, { r, c });
+          // Uppercase: Excel guarda refs y funciones en mayúsculas; nuestro
+          // lenguaje no tiene strings literales, así que es seguro.
+          cell.value = res.ok
+            ? { formula: raw.slice(1).toUpperCase(), result: res.value }
+            : grid[r][c];
+        } else {
+          cell.value = auxCellNumber(raw) ?? grid[r][c];
+        }
       }
-      row.getCell(c + 1).value = auxCellNumber(cell) ?? cell;
-    });
-  });
+      cell.border = allBorders;
+      if (fill) {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
+      }
+      if (bold || fontColor) {
+        cell.font = {
+          bold,
+          ...(fontColor ? { color: { argb: fontColor } } : {}),
+        };
+      }
+      cell.alignment = {
+        vertical: "middle",
+        horizontal:
+          kind === "header" ? "center" : isNumericCell(r, c) ? "right" : "left",
+      };
+    }
+    row.height = kind ? 22 : 20; // subtotales/totales/header un poco más altos
+  }
 
   // Celdas combinadas: mismas coords que la grilla (fila +AUX_SHEET_GRID_ROW_
   // OFFSET, columna +1). Centramos la master. try/catch por las dudas: nuestras
@@ -745,4 +878,44 @@ function buildAuxSheet(
       // unión inválida → se ignora, el resto del tab sale igual
     }
   }
+}
+
+// Primera celda no vacía de una fila (donde suele ir la etiqueta).
+function firstAuxLabel(cells: string[]): string {
+  for (const cell of cells) {
+    const v = cell.trim();
+    if (v) return v;
+  }
+  return "";
+}
+
+// Clasifica una fila como total / subtotal mirando SOLO su etiqueta (primera
+// celda con contenido), igual que "TOTAL MEDIA" / "GRAND TOTAL" en el Tab 1.
+// Mirar solo la etiqueta evita confundir un header con columnas tipo "Total
+// impresiones". null = fila de datos común.
+function classifyAuxRow(
+  cells: string[],
+): "grand" | "total" | "subtotal" | null {
+  const label = firstAuxLabel(cells).toLowerCase();
+  if (!label) return null;
+  if (/^(grand\s*total|gran\s*total|total\s*general)\b/.test(label)) return "grand";
+  if (/^sub\s*-?\s*totals?\b/.test(label) || /^subtotales?\b/.test(label))
+    return "subtotal";
+  if (/^totals?\b/.test(label) || /^totales?\b/.test(label)) return "total";
+  return null;
+}
+
+// La primera fila con contenido es "header" si son todo etiquetas de texto
+// (sin números ni fórmulas) y no es ya un total/subtotal. Si no, -1.
+function detectAuxHeaderRow(grid: string[][], firstContentRow: number): number {
+  const cells = grid[firstContentRow];
+  if (!cells || classifyAuxRow(cells)) return -1;
+  let hasText = false;
+  for (const cell of cells) {
+    const v = cell.trim();
+    if (!v) continue;
+    if (isAuxFormula(v) || auxCellNumber(v) != null) return -1;
+    hasText = true;
+  }
+  return hasText ? firstContentRow : -1;
 }
