@@ -147,7 +147,7 @@ components/                 # UI compartida
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
   topbar-nav.tsx            # título de sección (Archivo), SOLO mobile (<lg) — en desktop manda la TopNav del header
-  top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; reemplaza al sidebar vertical para liberar el ancho al contenido
+  top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; mide el ancho y mete lo que no entra en un menú "Más ▾" (nunca scrollea, ResizeObserver). Reemplaza al sidebar vertical para liberar el ancho al contenido
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates
   billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
@@ -1033,6 +1033,9 @@ datos históricos cargados (billing + campaign tracker), filtrando por scope.
   tira horizontal ícono+label) para liberar todo el ancho de la ventana al
   contenido; el `<aside>` lateral ya no se renderiza. La marca y la `TopNav`
   van en el `Topbar`; el `topbar-nav.tsx` (título de sección) queda solo mobile.
+  La `TopNav` **nunca scrollea**: mide el ancho disponible (`ResizeObserver`) y
+  manda lo que no entra a un menú **"Más ▾"** al final. El wordmark de la marca
+  solo aparece en `2xl` para dejarle lugar a los items.
 - En `< lg` el sidebar (`components/sidebar.tsx`) es un drawer deslizable
   controlado por `components/mobile-nav.tsx` (`MobileNavProvider` +
   `MobileNavToggle` en el topbar). Las entradas de ambos salen de `lib/nav.ts`.
