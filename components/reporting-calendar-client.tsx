@@ -18,8 +18,19 @@ import {
 } from "@/components/report-comments";
 import type { CalendarReport, SentReport } from "@/db/queries/reports";
 import { formatDate, type Language } from "@/lib/i18n";
+import { availableYears, periodMatchesYear } from "@/lib/year-filter";
 
 type ReportKind = CalendarReport["kind"];
+
+// Fecha que representa al reporte para el filtro de año: la de entrega
+// (programada o real) y, si todavía no tiene, la del cierre del proyecto.
+function reportDate(r: {
+  deliveryDate: string | null;
+  closedAt: string | null;
+  deliveredAt?: string;
+}): string | null {
+  return r.deliveryDate ?? r.deliveredAt ?? r.closedAt ?? null;
+}
 
 type DialogState =
   | { kind: "closed" }
@@ -62,6 +73,9 @@ export function ReportingCalendarClient({
   const [pendingAction, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [budgetOrigin, setBudgetOrigin] = useState<string>("");
+  // Filtro de año (default: año actual). Client-side, igual que budget origin.
+  const currentYear = new Date().getFullYear();
+  const [year, setYear] = useState<number | null>(currentYear);
   // Tablerito de comentarios abierto desde una fila del Gantt.
   const [commentsFor, setCommentsFor] = useState<{
     reportId: string;
@@ -82,27 +96,56 @@ export function ReportingCalendarClient({
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [pending, inProgress, sent]);
 
+  // Años disponibles (desc) según la fecha representativa de cada reporte.
+  const years = useMemo(
+    () =>
+      availableYears(
+        [...pending, ...inProgress, ...sent].map((r) => {
+          const d = reportDate(r);
+          return { start: d, end: d };
+        }),
+        currentYear,
+      ),
+    [pending, inProgress, sent, currentYear],
+  );
+
+  const matchYear = (r: {
+    deliveryDate: string | null;
+    closedAt: string | null;
+    deliveredAt?: string;
+  }) => {
+    if (year == null) return true;
+    const d = reportDate(r);
+    return periodMatchesYear({ start: d, end: d }, year, currentYear);
+  };
+
+  // Al filtrar por origen, los manuales (sin origen) se excluyen.
   const fPending = useMemo(
     () =>
-      budgetOrigin
-        ? pending.filter((r) => r.budgetOriginName === budgetOrigin)
-        : pending,
-    [pending, budgetOrigin],
+      pending.filter(
+        (r) =>
+          (!budgetOrigin || r.budgetOriginName === budgetOrigin) && matchYear(r),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pending, budgetOrigin, year, currentYear],
   );
-  // Al filtrar por origen, los manuales (sin origen) se excluyen.
   const fInProgress = useMemo(
     () =>
-      budgetOrigin
-        ? inProgress.filter((r) => r.budgetOriginName === budgetOrigin)
-        : inProgress,
-    [inProgress, budgetOrigin],
+      inProgress.filter(
+        (r) =>
+          (!budgetOrigin || r.budgetOriginName === budgetOrigin) && matchYear(r),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inProgress, budgetOrigin, year, currentYear],
   );
   const fSent = useMemo(
     () =>
-      budgetOrigin
-        ? sent.filter((r) => r.budgetOriginName === budgetOrigin)
-        : sent,
-    [sent, budgetOrigin],
+      sent.filter(
+        (r) =>
+          (!budgetOrigin || r.budgetOriginName === budgetOrigin) && matchYear(r),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sent, budgetOrigin, year, currentYear],
   );
 
   const openAssign = (
@@ -204,31 +247,57 @@ export function ReportingCalendarClient({
   return (
     <>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        {budgetOrigins.length > 1 ? (
-          <div className="flex items-center gap-2">
-            <label
-              htmlFor="bo-filter"
-              className="text-[10px] uppercase tracking-[0.08em] text-muted font-medium"
-            >
-              Budget Origin
-            </label>
-            <select
-              id="bo-filter"
-              value={budgetOrigin}
-              onChange={(e) => setBudgetOrigin(e.target.value)}
-              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="">{lang === "es" ? "Todos" : "All"}</option>
-              {budgetOrigins.map((o) => (
-                <option key={o} value={o}>
-                  {o}
-                </option>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-paper-2 border border-line">
+            <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted mr-1">
+              {lang === "es" ? "Año" : "Year"}
+            </span>
+            <div className="flex items-center gap-0.5">
+              {years.map((y) => (
+                <button
+                  key={y}
+                  type="button"
+                  onClick={() => setYear(y)}
+                  data-active={year === y}
+                  className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+                >
+                  {y}
+                </button>
               ))}
-            </select>
+              <button
+                type="button"
+                onClick={() => setYear(null)}
+                data-active={year === null}
+                className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+              >
+                {lang === "es" ? "Todos" : "All"}
+              </button>
+            </div>
           </div>
-        ) : (
-          <div />
-        )}
+          {budgetOrigins.length > 1 && (
+            <div className="flex items-center gap-2">
+              <label
+                htmlFor="bo-filter"
+                className="text-[10px] uppercase tracking-[0.08em] text-muted font-medium"
+              >
+                Budget Origin
+              </label>
+              <select
+                id="bo-filter"
+                value={budgetOrigin}
+                onChange={(e) => setBudgetOrigin(e.target.value)}
+                className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                <option value="">{lang === "es" ? "Todos" : "All"}</option>
+                {budgetOrigins.map((o) => (
+                  <option key={o} value={o}>
+                    {o}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
         <Button
           onClick={openCreateManual}
           disabled={clientOptions.length === 0}
