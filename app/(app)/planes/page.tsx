@@ -14,13 +14,15 @@ import {
 import { BudgetOriginSelector } from "@/components/budget-origin-selector";
 import { PageShell } from "@/components/page-shell";
 import { PlansTableClient } from "@/components/plans-table-client";
+import { YearSelector } from "@/components/year-selector";
 import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { DEFAULT_LANGUAGE } from "@/lib/i18n";
+import { availableYears, periodMatchesYear, resolveYearParam } from "@/lib/year-filter";
 
 type Props = {
-  searchParams: Promise<{ status?: string; origin?: string; client?: string }>;
+  searchParams: Promise<{ status?: string; origin?: string; client?: string; year?: string }>;
 };
 
 export default async function PlanesPage({ searchParams }: Props) {
@@ -123,13 +125,27 @@ export default async function PlanesPage({ searchParams }: Props) {
       spentByPlan.set(s.mediaPlanId, Number.parseFloat(s.spent));
   }
 
-  const allPlans = basePlans.map((p) => ({
+  const allPlansUnfiltered = basePlans.map((p) => ({
     ...p,
     totalMediaUsd: (totalsByPlan.get(p.id) ?? 0).toFixed(2),
     spentMediaUsd: (spentByPlan.get(p.id) ?? 0).toFixed(2),
     periodStart: periodsByPlan.get(p.id)?.start ?? null,
     periodEnd: periodsByPlan.get(p.id)?.end ?? null,
   }));
+
+  // Filtro de año (default: año actual) en memoria, sobre el período del plan.
+  const currentYear = new Date().getFullYear();
+  const selectedYear = resolveYearParam(sp.year, currentYear);
+  const years = availableYears(
+    allPlansUnfiltered.map((p) => ({ start: p.periodStart, end: p.periodEnd })),
+    currentYear,
+  );
+  const allPlans =
+    selectedYear == null
+      ? allPlansUnfiltered
+      : allPlansUnfiltered.filter((p) =>
+          periodMatchesYear({ start: p.periodStart, end: p.periodEnd }, selectedYear, currentYear),
+        );
 
   const counts = {
     draft: allPlans.filter((p) => p.status === "draft").length,
@@ -175,8 +191,23 @@ export default async function PlanesPage({ searchParams }: Props) {
         origins={allOrigins}
         current={validOrigin}
         basePath="/planes"
-        preserveParams={{ status: filter, client: client?.slug }}
+        preserveParams={{ status: filter, client: client?.slug, year: sp.year }}
       />
+
+      <div className="mb-4">
+        <YearSelector
+          years={years}
+          current={selectedYear}
+          currentYear={currentYear}
+          basePath="/planes"
+          preserveParams={{
+            status: filter,
+            origin: validOrigin ?? undefined,
+            client: client?.slug,
+          }}
+          lang={lang}
+        />
+      </div>
 
       {allPlans.length > 0 && (
         <section
@@ -219,6 +250,7 @@ export default async function PlanesPage({ searchParams }: Props) {
             label={`${lang === "es" ? "Todos" : "All"} (${allPlans.length})`}
             originId={validOrigin}
             clientSlug={client?.slug ?? null}
+            yearParam={sp.year}
           />
           <FilterChoice
             current={filter}
@@ -226,6 +258,7 @@ export default async function PlanesPage({ searchParams }: Props) {
             label={`Draft (${counts.draft})`}
             originId={validOrigin}
             clientSlug={client?.slug ?? null}
+            yearParam={sp.year}
           />
           <FilterChoice
             current={filter}
@@ -233,6 +266,7 @@ export default async function PlanesPage({ searchParams }: Props) {
             label={`Ready (${counts.ready_to_send})`}
             originId={validOrigin}
             clientSlug={client?.slug ?? null}
+            yearParam={sp.year}
           />
           <FilterChoice
             current={filter}
@@ -240,6 +274,7 @@ export default async function PlanesPage({ searchParams }: Props) {
             label={`Approved (${counts.approved})`}
             originId={validOrigin}
             clientSlug={client?.slug ?? null}
+            yearParam={sp.year}
           />
         </FilterPill>
       </div>
@@ -310,18 +345,21 @@ function FilterChoice({
   label,
   originId,
   clientSlug,
+  yearParam,
 }: {
   current: string | undefined;
   value: string | undefined;
   label: string;
   originId: string | null;
   clientSlug: string | null;
+  yearParam: string | undefined;
 }) {
   const isActive = (current ?? null) === (value ?? null);
   const params = new URLSearchParams();
   if (value) params.set("status", value);
   if (originId) params.set("origin", originId);
   if (clientSlug) params.set("client", clientSlug);
+  if (yearParam) params.set("year", yearParam);
   const qs = params.toString();
   const href = qs ? `/planes?${qs}` : "/planes";
   return (
