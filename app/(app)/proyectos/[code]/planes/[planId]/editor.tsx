@@ -2024,6 +2024,7 @@ function ExcelPreview({
 
   const L = {
     title: lang === "es" ? "Vista previa (como el Excel)" : "Preview (like Excel)",
+    market: lang === "es" ? "Mercado" : "Market",
     start: lang === "es" ? "Inicio" : "Start",
     end: lang === "es" ? "Fin" : "End",
     method: lang === "es" ? "Método" : "Method",
@@ -2089,6 +2090,7 @@ function ExcelPreview({
                   <th className="text-left font-medium px-3 py-1.5">
                     Publisher / Placement
                   </th>
+                  <th className="text-left font-medium px-3 py-1.5">{L.market}</th>
                   <th className="text-left font-medium px-3 py-1.5">{L.start}</th>
                   <th className="text-left font-medium px-3 py-1.5">{L.end}</th>
                   <th className="text-left font-medium px-3 py-1.5">{L.method}</th>
@@ -2110,6 +2112,7 @@ function ExcelPreview({
                     <Fragment key={grp.id}>
                       <tr className="bg-accent-soft/60 font-semibold border-t border-line">
                         <td className="px-3 py-1.5">{grp.publisherName}</td>
+                        <td className="px-3 py-1.5" />
                         <td className="px-3 py-1.5 text-ink-2 font-normal">
                           {formatDate(pubPeriod.start, lang)}
                         </td>
@@ -2128,7 +2131,7 @@ function ExcelPreview({
                         <tr className="border-t border-line-soft">
                           <td
                             className="px-3 py-1.5 pl-7 text-muted italic"
-                            colSpan={5 + metricCols.length}
+                            colSpan={6 + metricCols.length}
                           >
                             {L.noPlacements}
                           </td>
@@ -2139,11 +2142,9 @@ function ExcelPreview({
                             key={pl.id}
                             className="border-t border-line-soft hover:bg-paper-2/40"
                           >
-                            <td className="px-3 py-1.5 pl-7">
-                              {pl.placementName}
-                              {pl.marketName ? (
-                                <span className="text-muted"> · {pl.marketName}</span>
-                              ) : null}
+                            <td className="px-3 py-1.5 pl-7">{pl.placementName}</td>
+                            <td className="px-3 py-1.5 text-muted">
+                              {pl.marketName ?? ""}
                             </td>
                             <td className="px-3 py-1.5 text-muted">
                               {formatDate(pl.startDate, lang)}
@@ -2168,6 +2169,7 @@ function ExcelPreview({
                 })}
                 <tr className="bg-accent text-white font-semibold border-t-2 border-accent">
                   <td className="px-3 py-1.5">{L.totalMedia}</td>
+                  <td className="px-3 py-1.5" />
                   <td className="px-3 py-1.5" />
                   <td className="px-3 py-1.5" />
                   <td className="px-3 py-1.5" />

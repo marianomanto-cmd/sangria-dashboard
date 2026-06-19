@@ -122,7 +122,7 @@ app/
       portal-filters.tsx      # filtros URL-based del portal + multi-select de campañas CON BUSCADOR (CampaignMultiSelect)
   api/
     plans/[planId]/
-      export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + fechas por publisher/placement)
+      export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + mercado + fechas por publisher/placement)
       export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). Acceso: sesión interna O cookie de portal del cliente dueño
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
@@ -824,9 +824,9 @@ disclaimer; difieren en el layout.
 (pills "Plan de medios" / "Budget por mercado") que replica los dos tabs del
 Excel:
 
-- **Plan de medios** (Tab 1): cada placement con todas las métricas en
-  columnas, subtotal por publisher (fechas + montos + métricas) y fila
-  `TOTAL MEDIA`. Usa los **mismos helpers** que los exports
+- **Plan de medios** (Tab 1): cada placement con su **mercado** en columna
+  propia + todas las métricas en columnas, subtotal por publisher (fechas +
+  montos + métricas) y fila `TOTAL MEDIA`. Usa los **mismos helpers** que los exports
   (`resolveMetricColumns`, `placementMetricValue`, `evalFormula`,
   `sumDirectMetrics`, `placementsPeriod` en `lib/plan-metrics.ts`) para no
   divergir.
@@ -924,8 +924,10 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
 ### Excel (`export.xlsx/route.ts`, ExcelJS)
 
 - **Tab 1 "Media plan"**: banner de título + metadata (incluye `Período` general
-  del plan); tabla con columnas base (publisher/placement, start, end, audience,
-  notes, cost method, investment) + una por métrica. Filas: subtotal por
+  del plan); tabla con columnas base (publisher/placement, market, start, end,
+  audience, notes, cost method, investment) + una por métrica. El **mercado** de
+  cada placement va en su propia columna (antes se anexaba al nombre con ` · `).
+  Filas: subtotal por
   publisher (colapsable vía outline, con **start/end del publisher** =
   más temprana/más tardía de sus placements en las columnas de fecha), placements
   (indentados, con sus start/end), `TOTAL MEDIA`, sección `Fees`,
