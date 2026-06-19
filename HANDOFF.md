@@ -1,6 +1,23 @@
-# Handoff — jueves 18/jun/2026
+# Handoff — viernes 19/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 19/jun/2026 — MP Excel: mercado de cada placement en columna propia (Tab 1)
+
+- **Excel del plan (Tab 1 "Plan de medios")**: el mercado de cada placement
+  ahora va en una **columna dedicada** ("Mercado"/"Market", entre "Publisher /
+  Placement" e "Inicio"), en vez de anexarse al nombre del placement con ` · `.
+  En `app/api/plans/[planId]/export.xlsx/route.ts` se sube `baseCols` 7→8, se
+  inserta la columna y se corren los índices de las columnas siguientes
+  (start/end/audience/notes/cost method/investment) y de los montos en las filas
+  de subtotal por publisher, `TOTAL MEDIA` y `GRAND TOTAL`. Las columnas de
+  métricas siguen al final vía `baseCols`, así que se reubican solas.
+- **Preview en espejo**: el `ExcelPreview` del editor del plan (`editor.tsx`) se
+  actualizó con la misma columna para no divergir del archivo descargado.
+- **Docs**: README — enumeración de columnas del Tab 1 + nota del preview +
+  descripción de la ruta `export.xlsx`.
+- **Sin cambios de schema.** **No requiere acción en prod.** `tsc` + `eslint` +
+  `next build` en verde.
 
 ### Cambios de la sesión 18/jun/2026 — MP: formato de tabs auxiliares en el Excel + insert/delete filas/columnas + nav al header (desktop)
 
