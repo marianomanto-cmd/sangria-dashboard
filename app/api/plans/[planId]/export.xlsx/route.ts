@@ -94,10 +94,11 @@ export async function GET(
   // Columnas + anchos. Sin columna dedicada de "Primary metric": cada métrica
   // usada en el plan tiene su propia columna, lo cual permite subtotalear y
   // totalear de forma consistente.
-  const baseCols = 7;
+  const baseCols = 8;
   const totalCols = baseCols + metricHeaders.length;
   ws.columns = [
     { width: 28 }, // Publisher / Placement
+    { width: 22 }, // Market
     { width: 14 }, // Start
     { width: 14 }, // End
     { width: 36 }, // Audience
@@ -198,6 +199,7 @@ export async function GET(
   // ─── Header de la tabla principal ───────────────────────────────────────
   const tableHeader = [
     t("common.publisherPlacement", lang),
+    t("common.market", lang),
     t("common.startDate", lang),
     t("common.endDate", lang),
     t("common.audience", lang),
@@ -252,10 +254,10 @@ export async function GET(
     subRow.getCell(1).value = grp.publisherName;
     // Fechas del publisher = más temprana / más tardía de sus placements.
     const pubPeriod = placementsPeriod(grp.placements);
-    subRow.getCell(2).value = formatDate(pubPeriod.start, lang);
-    subRow.getCell(3).value = formatDate(pubPeriod.end, lang);
-    subRow.getCell(7).value = grp.totalPlannedUsd;
-    subRow.getCell(7).numFmt = '"$"#,##0.00';
+    subRow.getCell(3).value = formatDate(pubPeriod.start, lang);
+    subRow.getCell(4).value = formatDate(pubPeriod.end, lang);
+    subRow.getCell(8).value = grp.totalPlannedUsd;
+    subRow.getCell(8).numFmt = '"$"#,##0.00';
     directSlugs.forEach((slug, i) => {
       const cell = subRow.getCell(baseCols + 1 + i);
       applyMetricFormat(cell, slug, pubDirects[slug] ?? null);
@@ -297,14 +299,15 @@ export async function GET(
 
     for (const pl of grp.placements) {
       const row = ws.getRow(currentRow);
-      row.getCell(1).value = `${pl.placementName}${pl.marketName ? ` · ${pl.marketName}` : ""}`;
-      row.getCell(2).value = formatDate(pl.startDate, lang);
-      row.getCell(3).value = formatDate(pl.endDate, lang);
-      row.getCell(4).value = pl.audience ?? "";
-      row.getCell(5).value = pl.notesMd ?? "";
-      row.getCell(6).value = pl.costMethod ?? "";
-      row.getCell(7).value = pl.amountUsd;
-      row.getCell(7).numFmt = '"$"#,##0.00';
+      row.getCell(1).value = pl.placementName;
+      row.getCell(2).value = pl.marketName ?? "";
+      row.getCell(3).value = formatDate(pl.startDate, lang);
+      row.getCell(4).value = formatDate(pl.endDate, lang);
+      row.getCell(5).value = pl.audience ?? "";
+      row.getCell(6).value = pl.notesMd ?? "";
+      row.getCell(7).value = pl.costMethod ?? "";
+      row.getCell(8).value = pl.amountUsd;
+      row.getCell(8).numFmt = '"$"#,##0.00';
 
       metricSlugs.forEach((slug, i) => {
         const cell = row.getCell(baseCols + 1 + i);
@@ -315,9 +318,10 @@ export async function GET(
       // Indentación real (no espacios) para anidar el placement bajo su
       // publisher, y outline level para que el grupo sea colapsable.
       row.getCell(1).alignment = { indent: 2, vertical: "top", wrapText: true };
-      row.getCell(4).alignment = { wrapText: true, vertical: "top" };
+      row.getCell(2).alignment = { wrapText: true, vertical: "top" };
       row.getCell(5).alignment = { wrapText: true, vertical: "top" };
-      row.getCell(6).alignment = { horizontal: "center" };
+      row.getCell(6).alignment = { wrapText: true, vertical: "top" };
+      row.getCell(7).alignment = { horizontal: "center" };
       row.outlineLevel = 1;
 
       for (let c = 1; c <= totalCols; c++) row.getCell(c).border = allBorders;
@@ -331,8 +335,8 @@ export async function GET(
   const totalMediaRow = ws.getRow(currentRow);
   totalMediaRow.getCell(1).value =
     lang === "es" ? "TOTAL MEDIA" : "MEDIA TOTAL";
-  totalMediaRow.getCell(7).value = detail.totals.media;
-  totalMediaRow.getCell(7).numFmt = '"$"#,##0.00';
+  totalMediaRow.getCell(8).value = detail.totals.media;
+  totalMediaRow.getCell(8).numFmt = '"$"#,##0.00';
   directSlugs.forEach((slug, i) => {
     const cell = totalMediaRow.getCell(baseCols + 1 + i);
     applyMetricFormat(cell, slug, planDirects[slug] ?? null);
@@ -446,8 +450,8 @@ export async function GET(
   // ─── GRAND TOTAL ────────────────────────────────────────────────────────
   const grandRow = ws.getRow(currentRow);
   grandRow.getCell(1).value = "GRAND TOTAL";
-  grandRow.getCell(7).value = detail.totals.grand;
-  grandRow.getCell(7).numFmt = '"$"#,##0.00';
+  grandRow.getCell(8).value = detail.totals.grand;
+  grandRow.getCell(8).numFmt = '"$"#,##0.00';
   for (let c = 1; c <= totalCols; c++) {
     const cell = grandRow.getCell(c);
     cell.fill = {
