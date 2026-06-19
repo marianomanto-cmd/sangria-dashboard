@@ -2062,6 +2062,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+e981f37  MP Excel: mercado de cada placement en columna propia (Tab 1) (#161)
 3541a91  Add year filter to the reporting calendar (#157)
 1749bf0  Add year filter (default current year) to plans and projects tabs (#156)
 d1681f4  Rediseño Sangria OS: shell + dashboard de 3 vistas + confiabilidad (cache) + mobile cards (#150)
