@@ -662,3 +662,78 @@ export function deleteAuxCol(
   }
   return { grid: nextGrid, merges: nextMerges };
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// Layout / clasificación para los exports (Excel + PDF)
+// ════════════════════════════════════════════════════════════════════════════
+// Helpers PUROS compartidos por el export Excel (export.xlsx/route.ts) y el PDF
+// (lib/plan-pdf.ts) para que ambos formateen el tab auxiliar igual: detectan el
+// rectángulo con contenido, la fila de header y clasifican subtotales/totales.
+
+// Rectángulo (en coords de grilla) que abarca todo el contenido del tab —datos
+// + uniones—. `firstContentRow === -1` cuando el tab está vacío.
+export function auxContentBounds(
+  grid: AuxSheetGrid,
+  merges: AuxMerge[],
+): { firstContentRow: number; lastContentRow: number; lastContentCol: number } {
+  let firstContentRow = -1;
+  let lastContentRow = -1;
+  let lastContentCol = -1;
+  for (let r = 0; r < grid.length; r++) {
+    for (let c = 0; c < grid[r].length; c++) {
+      if (!grid[r][c].trim()) continue;
+      if (firstContentRow === -1) firstContentRow = r;
+      lastContentRow = r;
+      if (c > lastContentCol) lastContentCol = c;
+    }
+  }
+  for (const m of merges) {
+    if (firstContentRow === -1 || m.r0 < firstContentRow) firstContentRow = m.r0;
+    if (m.r1 > lastContentRow) lastContentRow = m.r1;
+    if (m.c1 > lastContentCol) lastContentCol = m.c1;
+  }
+  return { firstContentRow, lastContentRow, lastContentCol };
+}
+
+// Primera celda no vacía de una fila (donde suele ir la etiqueta).
+export function firstAuxLabel(cells: string[]): string {
+  for (const cell of cells) {
+    const v = cell.trim();
+    if (v) return v;
+  }
+  return "";
+}
+
+// Clasifica una fila como total / subtotal / grand total mirando SOLO su
+// etiqueta (primera celda con contenido), igual que "TOTAL MEDIA" / "GRAND
+// TOTAL" en el Tab 1. Mirar solo la etiqueta evita confundir un header con
+// columnas tipo "Total impresiones". null = fila de datos común.
+export function classifyAuxRow(
+  cells: string[],
+): "grand" | "total" | "subtotal" | null {
+  const label = firstAuxLabel(cells).toLowerCase();
+  if (!label) return null;
+  if (/^(grand\s*total|gran\s*total|total\s*general)\b/.test(label)) return "grand";
+  if (/^sub\s*-?\s*totals?\b/.test(label) || /^subtotales?\b/.test(label))
+    return "subtotal";
+  if (/^totals?\b/.test(label) || /^totales?\b/.test(label)) return "total";
+  return null;
+}
+
+// La primera fila con contenido es "header" si son todo etiquetas de texto (sin
+// números ni fórmulas) y no es ya un total/subtotal. Si no, -1.
+export function detectAuxHeaderRow(
+  grid: AuxSheetGrid,
+  firstContentRow: number,
+): number {
+  const cells = grid[firstContentRow];
+  if (!cells || classifyAuxRow(cells)) return -1;
+  let hasText = false;
+  for (const cell of cells) {
+    const v = cell.trim();
+    if (!v) continue;
+    if (isAuxFormula(v) || auxCellNumber(v) != null) return -1;
+    hasText = true;
+  }
+  return hasText ? firstContentRow : -1;
+}
