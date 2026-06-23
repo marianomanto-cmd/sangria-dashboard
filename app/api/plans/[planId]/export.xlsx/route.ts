@@ -20,6 +20,7 @@ import {
   detectAuxHeaderRow,
   evalAuxFormula,
   isAuxFormula,
+  isProtectedAuxLabel,
 } from "@/lib/aux-sheet";
 import { canAccessClientExport } from "@/lib/client-portal.server";
 import { buildBudgetSplit, NO_DATE_KEY } from "@/lib/budget-split";
@@ -731,7 +732,14 @@ function buildAuxSheet(
   // ─── Anchos de columna ajustados al contenido ─────────────────────────────
   // Por columna, el texto más largo de la grilla (la col 0 también considera
   // las etiquetas de metadata). Acotado a [10..48]; 16 mínimo en la col de
-  // etiquetas para que respiren.
+  // etiquetas para que respiren. REGLA DE NEGOCIO: una columna de monto de
+  // inversión ("NET TOTAL") nunca se trunca → se le sube el tope de ancho.
+  const protectedCol: boolean[] = Array.from({ length: tableCols }, (_, c) => {
+    for (let r = 0; r < grid.length; r++) {
+      if (isProtectedAuxLabel(grid[r]?.[c] ?? "")) return true;
+    }
+    return false;
+  });
   ws.columns = Array.from({ length: tableCols }, (_, c) => {
     let maxLen = 0;
     for (let r = 0; r < grid.length; r++) {
@@ -744,7 +752,8 @@ function buildAuxSheet(
       }
     }
     const min = c === 0 ? 16 : 10;
-    return { width: Math.min(48, Math.max(min, maxLen + 2)) };
+    const cap = protectedCol[c] ? 80 : 48;
+    return { width: Math.min(cap, Math.max(min, maxLen + 2)) };
   });
 
   infoPairs.forEach(([label, value], i) => {

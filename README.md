@@ -932,6 +932,15 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
   se firma por separado (el cliente puede aprobar las hojas auxiliares además del
   plan). Comparte con el Excel los helpers de `lib/aux-sheet.ts`
   (`auxContentBounds`, `classifyAuxRow`, `detectAuxHeaderRow`) para no divergir.
+  - **Columnas-monto siempre legibles (regla)**: una columna cuyo encabezado sea
+    un monto de inversión —hoy **`NET TOTAL`** (o `TOTAL NETO`),
+    `isProtectedAuxLabel` en `lib/aux-sheet.ts`— **nunca se trunca con `…`**. Al
+    repartir el ancho usable de la tabla, esas columnas "protegidas" toman su
+    ancho **completo** (el que necesita su celda más ancha, medido con la fuente
+    real de cada fila) y el resto del ancho se reparte entre las demás. Sin
+    columnas protegidas, el comportamiento es el de antes (todo escala a llenar
+    el ancho, pudiendo truncar). Para sumar otra columna-monto que deba quedar
+    siempre completa, agregá su etiqueta a `isProtectedAuxLabel`.
 - **Iniciales por página**: en docs **multipágina**, cada página que **no** lleva
   un bloque de firma completa lleva `Client initials: ___` abajo a la derecha
   (las páginas firmadas —última del plan + cada hoja auxiliar— se saltean). Se
@@ -970,8 +979,10 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
     `subtotal/subtotales` → ACCENT_SOFT, `grand total/total general` → INK
     blanco; el resto, **banding** suave en filas alternas. Todo en **negrita** en
     subtotales/totales/header, bordes finos, alto de fila (interlineado) 20/22 y
-    **ancho de columna auto-ajustado** al contenido (col de etiquetas ≥16). Los
-    números se alinean a la derecha y se **congela** la metadata + el header.
+    **ancho de columna auto-ajustado** al contenido (col de etiquetas ≥16, tope
+    48 chars; las **columnas-monto** `NET TOTAL`/`TOTAL NETO`, `isProtectedAuxLabel`,
+    suben el tope a 80 para que el monto nunca se corte — misma regla que el PDF).
+    Los números se alinean a la derecha y se **congela** la metadata + el header.
 
 ### i18n y decisiones
 
