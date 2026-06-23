@@ -2,6 +2,32 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 23/jun/2026 — Hojas auxiliares: la columna "NET TOTAL" nunca se trunca (regla)
+
+- **Pedido**: en las hojas auxiliares, una columna llamada **`NET TOTAL`** (la
+  que tiene el monto de inversión) **siempre tiene que quedar legible** — muchas
+  veces el número era largo y se truncaba con `…`. **Agregado como regla.**
+- **Implementación**:
+  - `lib/aux-sheet.ts`: nuevo helper **`isProtectedAuxLabel(raw)`** (reconoce
+    `NET TOTAL` / `TOTAL NETO`) como fuente única de la regla, compartido por
+    PDF y Excel.
+  - `lib/plan-pdf.ts` (`drawAuxTable`): el reparto de ancho de columnas pasó a
+    distinguir **columnas protegidas**: toman su ancho **completo** (el que
+    necesita su celda más ancha, medido con la fuente real de cada fila —bold en
+    header/subtotal/total/grand) y el resto del ancho usable se reparte entre las
+    demás. Sin columnas protegidas, el comportamiento es el de antes (todo escala
+    a llenar el ancho). Edge case: si las protegidas solas no entran, se escala
+    todo (best-effort).
+  - `app/api/plans/[planId]/export.xlsx/route.ts` (`buildAuxSheet`): a las
+    columnas protegidas se les sube el tope de ancho de 48→80 chars (misma regla,
+    consistencia con el PDF).
+- **Verificación**: `tsc` + `eslint` + `next build` en verde; render real a PNG
+  de una hoja con 9 columnas (forzando el escalado) + columna `NET TOTAL` con
+  `1,234,567.89` → se muestra **completa, sin `…`**, mientras las demás absorben
+  el ancho. **Sin cambios de schema. No requiere acción en prod.**
+- Archivos: `lib/aux-sheet.ts`, `lib/plan-pdf.ts`,
+  `app/api/plans/[planId]/export.xlsx/route.ts`, README.
+
 ### Cambios de la sesión 23/jun/2026 — PDF del plan: incluir las hojas auxiliares (formato del plan + firma/fecha)
 
 - **Pedido**: el PDF imprimible del plan de medios debía **también incluir las

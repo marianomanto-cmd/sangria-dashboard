@@ -23,6 +23,7 @@ import {
   evalAuxFormula,
   findMerge,
   isAuxFormula,
+  isProtectedAuxLabel,
 } from "@/lib/aux-sheet";
 import {
   DEFAULT_LANGUAGE,
@@ -717,26 +718,93 @@ export async function renderPlanPdf(
     const padX = 4;
     const padY = 3;
 
-    // ── Anchos de columna: naturales (del contenido) escalados a llenar el
-    // ancho usable, así la tabla queda full-width como la del plan ──
-    const natural: number[] = new Array(tableCols).fill(0);
+    const headerRowIdx = detectAuxHeaderRow(grid, firstContentRow);
+
+    // ── Anchos de columna ─────────────────────────────────────────────────────
+    // Por default cada columna toma el ancho de su contenido (acotado) y todo se
+    // escala para llenar el ancho usable (la tabla queda full-width como la del
+    // plan); al escalar hacia abajo, una columna angosta puede truncar con "…".
+    //
+    // REGLA DE NEGOCIO: una columna de monto de inversión (etiqueta "NET TOTAL")
+    // SIEMPRE tiene que quedar legible → esas columnas se marcan "protegidas":
+    // toman su ancho COMPLETO (el que necesita su celda más ancha, sin truncar) y
+    // el resto del ancho usable se reparte entre las demás.
+    const minColW = 40;
+    const maxColW = 220;
+
+    // ¿Una fila se dibuja en negrita? (header / subtotal / total / grand). Se
+    // mide con la fuente real para que el ancho reservado alcance.
+    const rowIsBold = (r: number) =>
+      r === headerRowIdx || classifyAuxRow(grid[r] ?? []) != null;
+
+    // Columnas protegidas: las que tienen en alguna fila una etiqueta de monto.
+    const protectedCol: boolean[] = new Array(tableCols).fill(false);
+    for (let c = 0; c < tableCols; c++) {
+      for (let r = firstContentRow; r <= lastContentRow; r++) {
+        if (isProtectedAuxLabel(grid[r]?.[c] ?? "")) {
+          protectedCol[c] = true;
+          break;
+        }
+      }
+    }
+
+    // Ancho que necesita cada columna para mostrar su celda más ancha SIN
+    // truncar (mide con la fuente real de cada fila).
+    const required: number[] = new Array(tableCols).fill(0);
     for (let c = 0; c < tableCols; c++) {
       let maxW = 0;
       for (let r = firstContentRow; r <= lastContentRow; r++) {
         const m = findMerge(merges, r, c);
-        // Para el sizing por columna ignoramos las celdas combinadas a lo ancho
-        // (su texto se reparte entre varias columnas).
+        // Ignoramos celdas combinadas a lo ancho (su texto se reparte).
         if (m && (m.r0 !== r || m.c0 !== c || m.c1 !== m.c0)) continue;
         const txt = auxCellDisplay(grid, r, c);
         if (!txt) continue;
-        const w = font.widthOfTextAtSize(sanitize(txt), bodyFont);
+        const f = rowIsBold(r) ? fontBold : font;
+        const w = f.widthOfTextAtSize(sanitize(txt), bodyFont);
         if (w > maxW) maxW = w;
       }
-      natural[c] = Math.min(220, Math.max(40, maxW + padX * 2));
+      required[c] = maxW + padX * 2;
     }
-    const totalNatural = natural.reduce((s, w) => s + w, 0) || usableW;
-    const scale = usableW / totalNatural;
-    const colW = natural.map((w) => w * scale);
+
+    // Objetivo por columna: protegida = required completo (mín. minColW);
+    // normal = required acotado a [minColW, maxColW].
+    const protTarget = (c: number) => Math.max(minColW, required[c]);
+    const normTarget = (c: number) =>
+      Math.min(maxColW, Math.max(minColW, required[c]));
+
+    let protectedWidth = 0;
+    let otherNatural = 0;
+    for (let c = 0; c < tableCols; c++) {
+      if (protectedCol[c]) protectedWidth += protTarget(c);
+      else otherNatural += normTarget(c);
+    }
+
+    const colW: number[] = new Array(tableCols).fill(0);
+    if (protectedWidth >= usableW) {
+      // Caso extremo: ni las columnas protegidas entran en el ancho usable.
+      // Escalamos todo proporcional (best-effort; podría truncar, muy raro).
+      const total = protectedWidth + otherNatural || usableW;
+      const sc = usableW / total;
+      for (let c = 0; c < tableCols; c++) {
+        colW[c] = (protectedCol[c] ? protTarget(c) : normTarget(c)) * sc;
+      }
+    } else {
+      const remaining = usableW - protectedWidth;
+      if (otherNatural > 0) {
+        // Protegidas con su ancho completo; el resto se escala (arriba o abajo)
+        // para llenar el ancho usable restante.
+        const sc = remaining / otherNatural;
+        for (let c = 0; c < tableCols; c++) {
+          colW[c] = protectedCol[c] ? protTarget(c) : normTarget(c) * sc;
+        }
+      } else {
+        // Solo columnas protegidas: reparten todo el ancho (>= target → nunca
+        // truncan).
+        const sc = usableW / protectedWidth;
+        for (let c = 0; c < tableCols; c++) colW[c] = protTarget(c) * sc;
+      }
+    }
+
     const colX: number[] = [];
     let acc = MARGIN;
     for (let c = 0; c < tableCols; c++) {
@@ -748,8 +816,6 @@ export async function renderPlanPdf(
       for (let c = c0; c <= c1; c++) w += colW[c] ?? 0;
       return w;
     };
-
-    const headerRowIdx = detectAuxHeaderRow(grid, firstContentRow);
 
     // ── Altura de cada fila (según el wrap del contenido por celda) ──
     const rowH: Record<number, number> = {};

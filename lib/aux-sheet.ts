@@ -737,3 +737,14 @@ export function detectAuxHeaderRow(
   }
   return hasText ? firstContentRow : -1;
 }
+
+// REGLA DE NEGOCIO: una columna de MONTO de inversión (su etiqueta es
+// "NET TOTAL" / "TOTAL NETO") SIEMPRE tiene que quedar legible en los exports —
+// nunca truncada con "…". Este helper reconoce esas etiquetas de columna; los
+// exports usan eso para darle a esa columna el ancho que necesita (el PDF le
+// reserva su ancho completo; el Excel le sube el tope de ancho). Si aparecen
+// otras columnas-monto que deban quedar siempre completas, sumá su etiqueta acá.
+export function isProtectedAuxLabel(raw: string): boolean {
+  const v = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  return /^net total\b/.test(v) || /^total neto\b/.test(v);
+}
