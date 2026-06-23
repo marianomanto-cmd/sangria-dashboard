@@ -2117,6 +2117,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+42264e2  Hojas auxiliares: la columna NET TOTAL nunca se trunca (regla) (#165)
 3ba6288  PDF del plan: incluir las hojas auxiliares (formato del plan + firma/fecha) (#163)
 e981f37  MP Excel: mercado de cada placement en columna propia (Tab 1) (#161)
 3541a91  Add year filter to the reporting calendar (#157)
