@@ -186,10 +186,10 @@ lib/
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
   brand-logo.ts             # carga el logo de marca (public/sangria-logo.png|jpg) + dimensiones, para los exports
   plan-metrics.ts           # evalFormula + placementMetricValue + resolveMetricColumns + placementsPeriod + sumDirectMetrics (compartido PDF/Excel/preview)
-  aux-sheet.ts              # tabs auxiliares del plan: límites + sanitize/normalize + evaluador de fórmulas (refs A1 + SUM/AVERAGE/…) + insert/delete fila/columna con reescritura de refs (estilo Excel) — compartido editor/actions/export
+  aux-sheet.ts              # tabs auxiliares del plan: límites + sanitize/normalize + evaluador de fórmulas (refs A1 + SUM/AVERAGE/…) + insert/delete fila/columna con reescritura de refs (estilo Excel) + helpers de layout para los exports (auxContentBounds/classifyAuxRow/detectAuxHeaderRow) — compartido editor/actions/export PDF+Excel
   nav.ts                    # entradas de navegación compartidas (PRIMARY_NAV/FOOTER_NAV + isNavActive) entre top-nav.tsx (desktop) y sidebar.tsx (drawer mobile)
   budget-split.ts           # prorrateo por días + agregación mercado × mes — compartido por el Tab 2 del Excel y el preview del editor
-  plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas
+  plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas + una página por hoja auxiliar (formato del plan + firma/fecha)
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
@@ -385,7 +385,14 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   celdas que parsean limpio (US format), escribe las fórmulas que resuelven como
   **fórmulas reales de Excel** (con resultado cacheado; las que no parsean van
   como texto crudo) y aplica las uniones con `ws.mergeCells`. El nombre del tab
-  es el del planner (sanitizado a nombre válido). El PDF no los incluye.
+  es el del planner (sanitizado a nombre válido). El **PDF imprimible también los
+  incluye**: cada tab va en su propia página (después del plan principal), con el
+  formato del plan (header accent, subtotales/totales, banding, uniones, fórmulas
+  resueltas) + su propio bloque de **firma del cliente + fecha** y disclaimer, así
+  cada anexo se firma por separado. La clasificación de filas (header / subtotal /
+  total / grand) y el rectángulo con contenido salen de helpers compartidos en
+  `lib/aux-sheet.ts` (`classifyAuxRow`, `detectAuxHeaderRow`, `auxContentBounds`)
+  para que Excel y PDF formateen igual.
 - **Defensivo deploy→migración**: `getPlanDetail` lee los tabs aunque la columna
   `merges_json` todavía no exista en prod (cae a una lectura sin esa columna,
   con `merges: []`), así no desaparecen los tabs hasta correr el SQL.
@@ -901,7 +908,7 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
 - Estructura: header (label `MEDIA PLAN` + nombre del plan, truncado al ancho
   libre a la izquierda del logo + project code + metadata, **incluye `Período`
   general del plan**) → Totales → **tabla** → Fees → **GRAND TOTAL** → firma +
-  disclaimer → footer.
+  disclaimer → footer → **una página por hoja auxiliar** (ver abajo).
 - Tabla: columnas = Publisher/Placement (flexible) + Invest (USD) + una por
   métrica (ancho y fuente 7–8pt según cantidad). Filas: subtotal por publisher
   (fondo accent-soft, **sin** tag de quién paga, con **sub-línea gris de fechas**
@@ -916,10 +923,19 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
 - **GRAND TOTAL**: barra oscura con `(Media + Fees)` y el total, debajo de Fees.
 - **Firma**: `Signature: ___` / `Date: ___` + disclaimer legal
   (`export.signatureDisclaimer`).
-- **Iniciales por página**: en planes **multipágina**, cada página menos la
-  última lleva `Client initials: ___` abajo a la derecha (la última conserva la
-  firma completa). Se dibuja al final iterando `pdf.getPages()`, cuando ya se
-  conoce el total de páginas.
+- **Hojas auxiliares**: después del plan principal, cada tab auxiliar va en
+  **su propia página** con el formato del plan: label `PLAN DE MEDIOS · Hoja
+  auxiliar` + nombre del tab + metadata (proyecto / período / budget origin) →
+  **tabla** de la grilla a todo el ancho (header accent, filas subtotal/total/
+  grand resaltadas, banding, números a la derecha, **uniones** y **fórmulas
+  resueltas**) → **firma del cliente + fecha** + disclaimer + footer. Cada anexo
+  se firma por separado (el cliente puede aprobar las hojas auxiliares además del
+  plan). Comparte con el Excel los helpers de `lib/aux-sheet.ts`
+  (`auxContentBounds`, `classifyAuxRow`, `detectAuxHeaderRow`) para no divergir.
+- **Iniciales por página**: en docs **multipágina**, cada página que **no** lleva
+  un bloque de firma completa lleva `Client initials: ___` abajo a la derecha
+  (las páginas firmadas —última del plan + cada hoja auxiliar— se saltean). Se
+  dibuja al final iterando `pdf.getPages()` contra el set de páginas firmadas.
 
 ### Excel (`export.xlsx/route.ts`, ExcelJS)
 
@@ -1236,8 +1252,9 @@ Idempotente: limpia las tablas antes de insertar.
 - **Exports (PDF / Excel)**: resueltos y documentados en detalle en la sección
   "Exports del plan (PDF / Excel)" arriba. Resumen: logo de marca, todas las
   métricas (incl. calculated recomputadas) por placement, firma + disclaimer
-  legal, GRAND TOTAL, PDF apaisado con tabla + iniciales por página, nombre de
-  archivo `{plan}-V{versión}`.
+  legal, GRAND TOTAL, PDF apaisado con tabla + iniciales por página + **una
+  página por hoja auxiliar** (formato del plan + firma/fecha), nombre de archivo
+  `{plan}-V{versión}`.
 - **Reporting Calendar** (`/reportes/calendario`): listado de proyectos
   closed pendientes de reporte + Gantt de 60 días (-30/+30 desde hoy). Una
   fila por reporte en curso con símbolos para closed/assigned/delivery y

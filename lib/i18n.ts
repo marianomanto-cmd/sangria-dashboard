@@ -213,6 +213,7 @@ const DICT: Record<string, Record<Language, string>> = {
     en: "Publishers & Placements",
     es: "Publishers y Placements",
   },
+  "export.auxSheet": { en: "Auxiliary sheet", es: "Hoja auxiliar" },
   "export.signaturePrompt": {
     en: "Signature: ____________________",
     es: "Firma: ____________________",

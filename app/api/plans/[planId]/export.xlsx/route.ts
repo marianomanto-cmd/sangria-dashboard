@@ -15,6 +15,9 @@ import {
   AUX_SHEET_GRID_ROW_OFFSET,
   AUX_SHEET_INFO_ROWS,
   auxCellNumber,
+  auxContentBounds,
+  classifyAuxRow,
+  detectAuxHeaderRow,
   evalAuxFormula,
   isAuxFormula,
 } from "@/lib/aux-sheet";
@@ -683,24 +686,11 @@ function buildAuxSheet(
   // datos —o que cubre una unión—, para no pintar de color toda la grilla
   // vacía. `tableCols` fija el ancho del bloque (metadata + tabla) de modo que
   // ambos queden alineados, igual que en el Tab 1.
-  let firstContentRow = -1;
-  let lastContentRow = -1;
-  let lastContentCol = -1;
-  for (let r = 0; r < grid.length; r++) {
-    for (let c = 0; c < grid[r].length; c++) {
-      if (!grid[r][c].trim()) continue;
-      if (firstContentRow === -1) firstContentRow = r;
-      lastContentRow = r;
-      if (c > lastContentCol) lastContentCol = c;
-    }
-  }
-  // Las uniones también forman parte del bloque a formatear (un título
-  // combinado a lo ancho, p.ej., puede pasarse del último dato).
-  for (const m of aux.merges) {
-    if (firstContentRow === -1 || m.r0 < firstContentRow) firstContentRow = m.r0;
-    if (m.r1 > lastContentRow) lastContentRow = m.r1;
-    if (m.c1 > lastContentCol) lastContentCol = m.c1;
-  }
+  // Rectángulo con contenido (datos + uniones). Helper compartido con el PDF.
+  const { firstContentRow, lastContentRow, lastContentCol } = auxContentBounds(
+    grid,
+    aux.merges,
+  );
   const tableCols = Math.max(2, lastContentCol + 1);
 
   // Valor que se VE en una celda (para estimar el ancho de columna): el texto
@@ -882,44 +872,4 @@ function buildAuxSheet(
       // unión inválida → se ignora, el resto del tab sale igual
     }
   }
-}
-
-// Primera celda no vacía de una fila (donde suele ir la etiqueta).
-function firstAuxLabel(cells: string[]): string {
-  for (const cell of cells) {
-    const v = cell.trim();
-    if (v) return v;
-  }
-  return "";
-}
-
-// Clasifica una fila como total / subtotal mirando SOLO su etiqueta (primera
-// celda con contenido), igual que "TOTAL MEDIA" / "GRAND TOTAL" en el Tab 1.
-// Mirar solo la etiqueta evita confundir un header con columnas tipo "Total
-// impresiones". null = fila de datos común.
-function classifyAuxRow(
-  cells: string[],
-): "grand" | "total" | "subtotal" | null {
-  const label = firstAuxLabel(cells).toLowerCase();
-  if (!label) return null;
-  if (/^(grand\s*total|gran\s*total|total\s*general)\b/.test(label)) return "grand";
-  if (/^sub\s*-?\s*totals?\b/.test(label) || /^subtotales?\b/.test(label))
-    return "subtotal";
-  if (/^totals?\b/.test(label) || /^totales?\b/.test(label)) return "total";
-  return null;
-}
-
-// La primera fila con contenido es "header" si son todo etiquetas de texto
-// (sin números ni fórmulas) y no es ya un total/subtotal. Si no, -1.
-function detectAuxHeaderRow(grid: string[][], firstContentRow: number): number {
-  const cells = grid[firstContentRow];
-  if (!cells || classifyAuxRow(cells)) return -1;
-  let hasText = false;
-  for (const cell of cells) {
-    const v = cell.trim();
-    if (!v) continue;
-    if (isAuxFormula(v) || auxCellNumber(v) != null) return -1;
-    hasText = true;
-  }
-  return hasText ? firstContentRow : -1;
 }

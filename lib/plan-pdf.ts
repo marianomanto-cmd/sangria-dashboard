@@ -1,6 +1,7 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, type PDFPage, StandardFonts, rgb } from "pdf-lib";
 import { getBrandLogo } from "@/lib/brand-logo";
 import type {
+  PlanAuxSheet,
   PlanDetail,
   PlanPlacement,
   PlanPublisherGroup,
@@ -13,6 +14,16 @@ import {
   resolveMetricColumns,
   sumDirectMetrics,
 } from "@/lib/plan-metrics";
+import {
+  auxCellNumber,
+  auxContentBounds,
+  type AuxMerge,
+  classifyAuxRow,
+  detectAuxHeaderRow,
+  evalAuxFormula,
+  findMerge,
+  isAuxFormula,
+} from "@/lib/aux-sheet";
 import {
   DEFAULT_LANGUAGE,
   formatDate,
@@ -31,6 +42,9 @@ const LINE_GAP = 14;
 const ACCENT: [number, number, number] = [0.478, 0.122, 0.239]; // #7A1F3D
 const ACCENT_SOFT: [number, number, number] = [0.961, 0.902, 0.925]; // #F5E6EC
 const WHITE: [number, number, number] = [1, 1, 1];
+const INK: [number, number, number] = [0.11, 0.098, 0.09]; // #1C1917 (grand total)
+const ZEBRA: [number, number, number] = [0.984, 0.957, 0.969]; // #FBF4F7 banding
+const CELL_LINE: [number, number, number] = [0.839, 0.827, 0.82]; // #D6D3D1 borders
 
 export async function renderPlanPdf(
   detail: PlanDetail,
@@ -237,7 +251,11 @@ export async function renderPlanPdf(
   }
 
   // ─── Logo de marca (esquina superior derecha) ────────────────────────────
+  // Lo embebemos una sola vez y lo redibujamos en cada página que abre sección
+  // (la 1ra del plan + cada hoja auxiliar), vía drawLogo().
+  let logoImg: Awaited<ReturnType<typeof pdf.embedPng>> | null = null;
   let logoW = 0;
+  let logoH = 0;
   const logo = getBrandLogo();
   if (logo) {
     try {
@@ -248,19 +266,27 @@ export async function renderPlanPdf(
       const boxW = 150;
       const boxH = 58;
       const scale = Math.min(boxW / img.width, boxH / img.height);
-      const w = img.width * scale;
-      const h = img.height * scale;
-      logoW = w;
-      page.drawImage(img, {
-        x: PAGE_W - MARGIN - w,
-        y: PAGE_H - MARGIN - h,
-        width: w,
-        height: h,
-      });
+      logoImg = img;
+      logoW = img.width * scale;
+      logoH = img.height * scale;
     } catch {
       // imagen inválida o no embebible: seguimos sin logo
     }
   }
+  function drawLogo(p: PDFPage) {
+    if (!logoImg) return;
+    p.drawImage(logoImg, {
+      x: PAGE_W - MARGIN - logoW,
+      y: PAGE_H - MARGIN - logoH,
+      width: logoW,
+      height: logoH,
+    });
+  }
+  drawLogo(page);
+
+  // Páginas que ya llevan un bloque de firma/fecha (la última del plan y cada
+  // hoja auxiliar). Las usa la pasada final de "iniciales por página".
+  const signedPages = new Set<PDFPage>();
 
   // ─── Header ──────────────────────────────────────────────────────────────
   // El título se trunca al ancho disponible a la izquierda del logo para no
@@ -534,34 +560,27 @@ export async function renderPlanPdf(
   textRight(fmtUsd(detail.totals.grand), PAGE_W - MARGIN - 6, y - 13, { size: 11, bold: true, color: WHITE });
   y -= gtH;
 
-  // ─── Firma + disclaimer ──────────────────────────────────────────────────
-  writeSeparator();
-  y -= 6;
-  writeLine(t("export.signaturePrompt", lang), { size: 10 });
-  y -= 2;
-  writeLine(t("export.dateLabel", lang), { size: 10 });
-  y -= 8;
-  writeWrapped(t("export.signatureDisclaimer", lang), { size: 8 });
+  // ─── Firma + disclaimer + footer del plan ────────────────────────────────
+  drawSignatureBlock();
+  drawFooterLine();
 
-  // ─── Footer ──────────────────────────────────────────────────────────────
-  writeSeparator();
-  const generatedDate = formatDateLong(new Date().toISOString().slice(0, 10), lang);
-  const timeUtc = new Date().toISOString().slice(11, 19);
-  writeLine(
-    `${t("common.generated", lang)}: ${generatedDate} ${timeUtc} UTC   ·   Sangria Media OS`,
-    { size: 8, color: [0.55, 0.55, 0.55], mono: true },
-  );
+  // ─── Hojas auxiliares (una por página, con el formato del plan + firma) ───
+  // El cliente firma cada hoja por separado, así que cada una lleva su propio
+  // bloque de firma/fecha + disclaimer, igual que el plan principal.
+  for (const aux of detail.auxSheets) renderAuxSheet(aux);
 
-  // ─── Iniciales por página (solo multipágina) ─────────────────────────────
-  // En planes largos el cliente inicializa cada página; la última lleva la
-  // firma completa, así que la línea de iniciales va en todas menos la última.
+  // ─── Iniciales por página ────────────────────────────────────────────────
+  // En docs multipágina el cliente inicializa cada página que NO lleva firma
+  // completa (las páginas con bloque de firma —última del plan + cada hoja
+  // auxiliar— ya quedan firmadas, así que se saltean).
   const pages = pdf.getPages();
   if (pages.length > 1) {
     const initials = sanitize(t("export.initials", lang));
     const size = 8;
     const w = font.widthOfTextAtSize(initials, size);
-    for (let i = 0; i < pages.length - 1; i++) {
-      pages[i].drawText(initials, {
+    for (const p of pages) {
+      if (signedPages.has(p)) continue;
+      p.drawText(initials, {
         x: PAGE_W - MARGIN - w,
         y: 20,
         size,
@@ -572,4 +591,300 @@ export async function renderPlanPdf(
   }
 
   return await pdf.save();
+
+  // ──────────────────────────────────────────────────────────────────────────
+  // Helpers de sección (firma / footer / hojas auxiliares). Declarados como
+  // function para hoistearse; cierran sobre page/y/lang/fuentes/helpers.
+  // ──────────────────────────────────────────────────────────────────────────
+
+  function drawSignatureBlock() {
+    writeSeparator();
+    y -= 6;
+    writeLine(t("export.signaturePrompt", lang), { size: 10 });
+    y -= 2;
+    writeLine(t("export.dateLabel", lang), { size: 10 });
+    y -= 8;
+    writeWrapped(t("export.signatureDisclaimer", lang), { size: 8 });
+    // La firma cae en la página actual (writeLine/writeWrapped pueden haber
+    // saltado de página); la marcamos como firmada para la pasada de iniciales.
+    signedPages.add(page);
+  }
+
+  function drawFooterLine() {
+    writeSeparator();
+    const generatedDate = formatDateLong(
+      new Date().toISOString().slice(0, 10),
+      lang,
+    );
+    const timeUtc = new Date().toISOString().slice(11, 19);
+    writeLine(
+      `${t("common.generated", lang)}: ${generatedDate} ${timeUtc} UTC   ·   Sangria Media OS`,
+      { size: 8, color: [0.55, 0.55, 0.55], mono: true },
+    );
+  }
+
+  // Número formateado para mostrar el RESULTADO de una fórmula del tab aux
+  // (las celdas de texto/número planas se muestran tal cual las cargó el planner).
+  function fmtAuxNumber(v: number): string {
+    if (Number.isInteger(v)) return v.toLocaleString(numberLocale);
+    return v.toLocaleString(numberLocale, {
+      maximumFractionDigits: Math.abs(v) < 1 ? 4 : 2,
+    });
+  }
+
+  // Texto visible de una celda del tab auxiliar: fórmula → su resultado (o el
+  // texto crudo si no resuelve, como hace el Excel), número/texto → tal cual.
+  function auxCellDisplay(grid: string[][], r: number, c: number): string {
+    const raw = (grid[r]?.[c] ?? "").trim();
+    if (!raw) return "";
+    if (isAuxFormula(raw)) {
+      const res = evalAuxFormula(grid[r][c], grid, { r, c });
+      return res.ok ? fmtAuxNumber(res.value) : raw;
+    }
+    return raw;
+  }
+
+  // ¿La celda es numérica (número suelto o fórmula que resuelve)? → se alinea a
+  // la derecha, como las columnas de plata del plan.
+  function auxIsNumeric(grid: string[][], r: number, c: number): boolean {
+    const raw = (grid[r]?.[c] ?? "").trim();
+    if (!raw) return false;
+    if (isAuxFormula(raw)) return evalAuxFormula(grid[r][c], grid, { r, c }).ok;
+    return auxCellNumber(raw) != null;
+  }
+
+  // Renderiza una hoja auxiliar en una página nueva: metadata del plan + la
+  // grilla con el formato del plan (header accent, subtotales/totales, banding,
+  // uniones) + bloque de firma/fecha.
+  function renderAuxSheet(aux: PlanAuxSheet) {
+    page = pdf.addPage([PAGE_W, PAGE_H]);
+    y = PAGE_H - MARGIN;
+    drawLogo(page);
+
+    const auxHeaderMaxW = PAGE_W - MARGIN * 2 - (logoW > 0 ? logoW + 18 : 0);
+    writeLine(`${t("export.mediaPlan", lang)}  ·  ${t("export.auxSheet", lang)}`, {
+      size: 8,
+      bold: true,
+      color: ACCENT,
+    });
+    y -= 5;
+    writeLine(truncate(aux.name, fontBold, 17, auxHeaderMaxW), {
+      size: 17,
+      bold: true,
+    });
+    writeLine(truncate(detail.plan.name, fontMono, 10, auxHeaderMaxW), {
+      size: 10,
+      mono: true,
+      color: [0.45, 0.45, 0.45],
+    });
+    y -= 4;
+
+    // Metadata read-only (misma que el tab auxiliar del Excel: proyecto /
+    // período / budget origin).
+    writeLine(`${t("common.project", lang)}: ${detail.project.code} - ${detail.project.name}`);
+    writeLine(`${t("common.period", lang)}: ${planPeriodStr}`);
+    writeLine(`${t("common.budgetOrigin", lang)}: ${detail.budgetOrigin.name}`);
+
+    writeSeparator();
+
+    const grid = aux.grid;
+    const merges = aux.merges;
+    const bounds = auxContentBounds(grid, merges);
+    if (bounds.firstContentRow === -1) {
+      writeLine(lang === "es" ? "(hoja vacía)" : "(empty sheet)", {
+        size: 9,
+        color: [0.6, 0.6, 0.6],
+      });
+    } else {
+      drawAuxTable(grid, merges, bounds);
+    }
+
+    drawSignatureBlock();
+    drawFooterLine();
+  }
+
+  // Dibuja la grilla de un tab auxiliar como tabla a todo el ancho usable.
+  function drawAuxTable(
+    grid: string[][],
+    merges: AuxMerge[],
+    bounds: { firstContentRow: number; lastContentRow: number; lastContentCol: number },
+  ) {
+    const { firstContentRow, lastContentRow, lastContentCol } = bounds;
+    const tableCols = Math.max(1, lastContentCol + 1);
+    const usableW = PAGE_W - MARGIN * 2;
+    const bodyFont = tableCols > 12 ? 7 : 8;
+    const lineH = bodyFont + 2;
+    const padX = 4;
+    const padY = 3;
+
+    // ── Anchos de columna: naturales (del contenido) escalados a llenar el
+    // ancho usable, así la tabla queda full-width como la del plan ──
+    const natural: number[] = new Array(tableCols).fill(0);
+    for (let c = 0; c < tableCols; c++) {
+      let maxW = 0;
+      for (let r = firstContentRow; r <= lastContentRow; r++) {
+        const m = findMerge(merges, r, c);
+        // Para el sizing por columna ignoramos las celdas combinadas a lo ancho
+        // (su texto se reparte entre varias columnas).
+        if (m && (m.r0 !== r || m.c0 !== c || m.c1 !== m.c0)) continue;
+        const txt = auxCellDisplay(grid, r, c);
+        if (!txt) continue;
+        const w = font.widthOfTextAtSize(sanitize(txt), bodyFont);
+        if (w > maxW) maxW = w;
+      }
+      natural[c] = Math.min(220, Math.max(40, maxW + padX * 2));
+    }
+    const totalNatural = natural.reduce((s, w) => s + w, 0) || usableW;
+    const scale = usableW / totalNatural;
+    const colW = natural.map((w) => w * scale);
+    const colX: number[] = [];
+    let acc = MARGIN;
+    for (let c = 0; c < tableCols; c++) {
+      colX[c] = acc;
+      acc += colW[c];
+    }
+    const mergedW = (c0: number, c1: number) => {
+      let w = 0;
+      for (let c = c0; c <= c1; c++) w += colW[c] ?? 0;
+      return w;
+    };
+
+    const headerRowIdx = detectAuxHeaderRow(grid, firstContentRow);
+
+    // ── Altura de cada fila (según el wrap del contenido por celda) ──
+    const rowH: Record<number, number> = {};
+    for (let r = firstContentRow; r <= lastContentRow; r++) {
+      let maxLines = 1;
+      for (let c = 0; c < tableCols; c++) {
+        const m = findMerge(merges, r, c);
+        if (m && (m.r0 !== r || m.c0 !== c)) continue; // no es la master
+        const availW = (m ? mergedW(m.c0, m.c1) : colW[c]) - padX * 2;
+        const txt = auxCellDisplay(grid, r, c);
+        if (!txt) continue;
+        const lines = wrap(txt, font, bodyFont, availW).length;
+        if (lines > maxLines) maxLines = lines;
+      }
+      rowH[r] = maxLines * lineH + padY * 2;
+    }
+    const mergedH = (r0: number, r1: number) => {
+      let h = 0;
+      for (let r = r0; r <= r1; r++) h += rowH[r] ?? lineH + padY * 2;
+      return h;
+    };
+
+    type RowKind = "header" | "grand" | "total" | "subtotal" | null;
+    const styleFor = (
+      kind: RowKind,
+    ): { fill: [number, number, number] | null; text: [number, number, number]; bold: boolean } | null => {
+      switch (kind) {
+        case "header":
+        case "total":
+          return { fill: ACCENT, text: WHITE, bold: true };
+        case "grand":
+          return { fill: INK, text: WHITE, bold: true };
+        case "subtotal":
+          return { fill: ACCENT_SOFT, text: [0.1, 0.1, 0.1], bold: true };
+        default:
+          return null;
+      }
+    };
+
+    let zebra = 0; // banding solo entre filas de datos
+
+    function drawAuxRow(r: number) {
+      const cells = grid[r] ?? [];
+      const isHeader = r === headerRowIdx;
+      const kind: RowKind = isHeader ? "header" : classifyAuxRow(cells);
+      const style = styleFor(kind);
+      let band = false;
+      if (!style) {
+        band = zebra % 2 === 1;
+        zebra++;
+      }
+      const rowTop = y;
+      for (let c = 0; c < tableCols; c++) {
+        const m = findMerge(merges, r, c);
+        if (m && (m.r0 !== r || m.c0 !== c)) continue; // celda tapada
+        const cx = colX[m ? m.c0 : c];
+        const cw = m ? mergedW(m.c0, m.c1) : colW[c];
+        const ch = m ? mergedH(m.r0, m.r1) : rowH[r];
+        const fill = style ? style.fill : band ? ZEBRA : null;
+        if (fill) {
+          page.drawRectangle({
+            x: cx,
+            y: rowTop - ch,
+            width: cw,
+            height: ch,
+            color: rgb(...fill),
+          });
+        }
+        page.drawRectangle({
+          x: cx,
+          y: rowTop - ch,
+          width: cw,
+          height: ch,
+          borderColor: rgb(...CELL_LINE),
+          borderWidth: 0.5,
+        });
+        const txt = auxCellDisplay(grid, r, c);
+        if (txt) {
+          const lines = wrap(txt, font, bodyFont, cw - padX * 2);
+          const f = style?.bold ? fontBold : font;
+          const color = style ? style.text : [0.1, 0.1, 0.1];
+          const numeric = auxIsNumeric(grid, r, c);
+          const blockH = lines.length * lineH;
+          let ty = rowTop - (ch - blockH) / 2 - bodyFont;
+          for (const ln of lines) {
+            const sln = truncate(ln, f, bodyFont, cw - padX * 2);
+            if (isHeader) {
+              const w = f.widthOfTextAtSize(sln, bodyFont);
+              page.drawText(sln, {
+                x: cx + (cw - w) / 2,
+                y: ty,
+                size: bodyFont,
+                font: f,
+                color: rgb(color[0], color[1], color[2]),
+              });
+            } else if (numeric) {
+              const w = f.widthOfTextAtSize(sln, bodyFont);
+              page.drawText(sln, {
+                x: cx + cw - padX - w,
+                y: ty,
+                size: bodyFont,
+                font: f,
+                color: rgb(color[0], color[1], color[2]),
+              });
+            } else {
+              page.drawText(sln, {
+                x: cx + padX,
+                y: ty,
+                size: bodyFont,
+                font: f,
+                color: rgb(color[0], color[1], color[2]),
+              });
+            }
+            ty -= lineH;
+          }
+        }
+      }
+      y -= rowH[r];
+    }
+
+    for (let r = firstContentRow; r <= lastContentRow; r++) {
+      const cells = grid[r] ?? [];
+      const hasContent = cells.some((x) => x.trim());
+      const coveredByMerge = merges.some((m) => r >= m.r0 && r <= m.r1);
+      // Filas en blanco fuera de toda unión se saltean (como el Excel); las
+      // cubiertas por una unión NO, para que el alto vertical de la unión cuadre.
+      if (!hasContent && !coveredByMerge) continue;
+      if (y - rowH[r] < MARGIN) {
+        page = pdf.addPage([PAGE_W, PAGE_H]);
+        y = PAGE_H - MARGIN;
+        drawLogo(page);
+        if (headerRowIdx >= 0 && r > headerRowIdx) drawAuxRow(headerRowIdx);
+      }
+      drawAuxRow(r);
+    }
+    y -= 10;
+  }
 }

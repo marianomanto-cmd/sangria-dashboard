@@ -1,6 +1,35 @@
-# Handoff — viernes 19/jun/2026
+# Handoff — martes 23/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 23/jun/2026 — PDF del plan: incluir las hojas auxiliares (formato del plan + firma/fecha)
+
+- **Pedido**: el PDF imprimible del plan de medios debía **también incluir las
+  hojas auxiliares**, con el formato del plan y con espacio para **firma del
+  cliente + fecha**. Hasta ahora el PDF NO las incluía (solo el Excel).
+- **Implementación** (`lib/plan-pdf.ts`): después del plan principal,
+  `renderPlanPdf` agrega **una página por tab auxiliar** (`detail.auxSheets`, en
+  orden). Cada página lleva: label `PLAN DE MEDIOS · Hoja auxiliar` + nombre del
+  tab + metadata (proyecto / período / budget origin) → la grilla como **tabla a
+  todo el ancho** con el formato del plan (header accent, filas subtotal/total/
+  grand resaltadas, banding alterno, números a la derecha, **uniones** vía
+  rowSpan/colSpan y **fórmulas resueltas** con `evalAuxFormula`) → **bloque de
+  firma del cliente + fecha + disclaimer** + footer. Así cada anexo se firma por
+  separado.
+- **DRY con el Excel**: se extrajeron a `lib/aux-sheet.ts` los helpers de layout
+  que estaban locales en `export.xlsx/route.ts` —`auxContentBounds`,
+  `classifyAuxRow`, `detectAuxHeaderRow` (+ `firstAuxLabel`)— y ahora los usan
+  **PDF y Excel** para clasificar filas y detectar el rectángulo con contenido
+  igual. El route Excel se actualizó para importarlos (borró sus copias).
+- **Iniciales por página**: la pasada final pasó de "todas menos la última" a
+  "todas las que **no** tienen bloque de firma" (set `signedPages`), porque ahora
+  hay varias páginas firmadas (la última del plan + cada hoja auxiliar).
+- **i18n**: nueva clave `export.auxSheet` ("Auxiliary sheet" / "Hoja auxiliar").
+- **Verificación**: `tsc` + `eslint` (archivos tocados) en verde + render real a
+  PNG (pypdfium2) de un plan con 2 tabs (fórmulas + uniones), edge cases de tab
+  vacío y plan sin tabs. **Sin cambios de schema. No requiere acción en prod.**
+- Archivos: `lib/plan-pdf.ts`, `lib/aux-sheet.ts`, `lib/i18n.ts`,
+  `app/api/plans/[planId]/export.xlsx/route.ts`, README.
 
 ### Cambios de la sesión 19/jun/2026 — MP Excel: mercado de cada placement en columna propia (Tab 1)
 
