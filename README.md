@@ -119,7 +119,7 @@ app/
       page.tsx              # gate por cookie → login o tabs; lookup por slug (404 si no existe/reservado)
       portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
       portal-login.tsx, portal-logout.tsx, portal-benchmarks-filters.tsx
-      portal-filters.tsx      # filtros URL-based del portal + multi-select de campañas CON BUSCADOR (CampaignMultiSelect)
+      portal-filters.tsx      # filtros URL-based del portal + multi-select de campañas CON BUSCADOR (CampaignMultiSelect) + rango de fechas Desde/Hasta (Proyectos, ?pfrom/?pto)
   api/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + mercado + fechas por publisher/placement)
@@ -671,7 +671,9 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   planeado vs real** + **facturado acumulado vs estimado YTD**), **Billing
   Tracker**, **Estimación**, **Proyectos**
   (filtros: estado **Abiertos/Cerrados/Todos** (default abiertos) + **multi-select de
-  campañas con buscador** + budget origin + mes; descarga PDF/Excel del plan +
+  campañas con buscador** + budget origin + **rango de fechas Desde/Hasta**
+  (`?pfrom=`/`?pto=`, YYYY-MM-DD: deja los planes cuyo período **intersecta** el
+  rango); descarga PDF/Excel del plan +
   **pacing por placement** agrupado por publisher, expandible para **varias
   campañas a la vez**, con **export Excel consolidado** del pacing —reporte
   ejecutivo—), **Análisis**
@@ -708,10 +710,10 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (URL-based vía `?plan=<ids>` separados por coma → **varios expandidos a la
   vez**). El filtro **multi-select de campañas** (`?camp=<ids>`,
   `components`/`portal-filters.tsx`) busca por nombre y, cuando hay campañas
-  elegidas, **la selección manda** (ignora estado/origin/mes para que no las
-  esconda). El bug del "Ver pacing" que perdía `pstatus` (volvía a Abiertos y
-  no mostraba el pacing de campañas cerradas) se arregló en `hrefWith`
-  (preserva `pstatus` + `camp`).
+  elegidas, **la selección manda** (ignora estado/origin/rango de fechas para que
+  no las esconda). El bug del "Ver pacing" que perdía `pstatus` (volvía a Abiertos
+  y no mostraba el pacing de campañas cerradas) se arregló en `hrefWith`
+  (preserva `pstatus` + `camp` + el rango de fechas `pfrom`/`pto`).
 - **Export consolidado de pacing**
   (`GET /api/portal/pacing.xlsx?client=<slug>&plans=<ids>`): baja en un solo
   Excel el pacing de **varias campañas a la vez** (las visibles/seleccionadas),

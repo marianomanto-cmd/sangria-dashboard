@@ -44,6 +44,10 @@ export type PortalParams = {
   bo: string;
   proj: string;
   month: string;
+  // Rango de fechas (Proyectos): pfrom / pto en formato YYYY-MM-DD. Un proyecto
+  // entra si alguno de sus planes tiene un período que INTERSECTA el rango.
+  dateFrom: string;
+  dateTo: string;
   // Pacing expandido: lista de planIds separados por coma (varios a la vez).
   plan: string;
   pstatus: string; // "" (abiertos, default) | "cerrados" | "todos"
@@ -447,30 +451,41 @@ export async function ReportsSection({
 
 // ─── Proyectos (planes + export + pacing) ────────────────────────────────────
 
-function monthInRange(
-  month: string,
+// ¿El período [start, end] de un plan intersecta el rango [from, to]? El rango
+// puede ser abierto de un lado (solo desde, o solo hasta). Un plan sin fechas
+// no se puede ubicar → queda fuera cuando hay rango. Fechas comparadas como
+// YYYY-MM-DD (orden lexicográfico = cronológico).
+function periodIntersectsRange(
   start: string | null,
   end: string | null,
+  from: string | null,
+  to: string | null,
 ): boolean {
+  if (!from && !to) return true;
   if (!start || !end) return false;
-  const s = start.slice(0, 7);
-  const e = end.slice(0, 7);
-  return month >= s && month <= e;
+  const s = start.slice(0, 10);
+  const e = end.slice(0, 10);
+  if (from && e < from) return false; // el plan termina antes del inicio del rango
+  if (to && s > to) return false; // el plan empieza después del fin del rango
+  return true;
 }
 
 function hrefWith(params: PortalParams, changes: Partial<PortalParams>): string {
   const merged = { ...params, ...changes };
   const qs = new URLSearchParams();
   if (merged.tab) qs.set("tab", merged.tab);
-  // IMPORTANTE: preservar pstatus y camp. Antes faltaba pstatus, así que al
-  // expandir el pacing de una campaña cerrada la URL perdía pstatus=cerrados,
-  // volvía a "abiertos" (default) y el proyecto cerrado desaparecía → no se
-  // veía el pacing. (Bug reportado.)
+  // IMPORTANTE: preservar pstatus, camp y el rango de fechas. Antes faltaba
+  // pstatus, así que al expandir el pacing de una campaña cerrada la URL perdía
+  // pstatus=cerrados, volvía a "abiertos" (default) y el proyecto cerrado
+  // desaparecía → no se veía el pacing. (Bug reportado.) Mismo riesgo con el
+  // rango de fechas: si no se preservara, expandir el pacing reabriría el set.
   if (merged.pstatus) qs.set("pstatus", merged.pstatus);
   if (merged.bo) qs.set("bo", merged.bo);
   if (merged.proj) qs.set("proj", merged.proj);
   if (merged.camp) qs.set("camp", merged.camp);
   if (merged.month) qs.set("month", merged.month);
+  if (merged.dateFrom) qs.set("pfrom", merged.dateFrom);
+  if (merged.dateTo) qs.set("pto", merged.dateTo);
   if (merged.plan) qs.set("plan", merged.plan);
   const s = qs.toString();
   return s ? `?${s}` : "?";
@@ -514,11 +529,13 @@ export async function ProjectsSection({
         ? new Set(["closed", "reportado"])
         : new Set(["planning", "active", "paused"]);
 
-  // Filtro de mes: dejamos proyectos con al menos un plan cuyo período cubre
-  // el mes; dentro de cada proyecto mostramos solo esos planes. Se ignora si
-  // hay campañas elegidas. Solo planes APROBADOS: el portal es para el cliente,
-  // no mostramos borradores ni versiones viejas (draft/ready/archived).
-  const monthFilter = selectedCampaigns ? null : params.month || null;
+  // Filtro de rango de fechas: dejamos proyectos con al menos un plan cuyo
+  // período INTERSECTA el rango [pfrom, pto]; dentro de cada proyecto mostramos
+  // solo esos planes. Se ignora si hay campañas elegidas. Solo planes APROBADOS:
+  // el portal es para el cliente, no mostramos borradores ni versiones viejas
+  // (draft/ready/archived).
+  const dateFrom = selectedCampaigns ? null : params.dateFrom || null;
+  const dateTo = selectedCampaigns ? null : params.dateTo || null;
   const visible = rows
     .filter((proj) => STATUSES.has(proj.status))
     .map((proj) => {
@@ -526,9 +543,9 @@ export async function ProjectsSection({
       if (selectedCampaigns) {
         plans = plans.filter((p) => selectedCampaigns.has(p.id));
       }
-      if (monthFilter) {
+      if (dateFrom || dateTo) {
         plans = plans.filter((p) =>
-          monthInRange(monthFilter, p.periodStart, p.periodEnd),
+          periodIntersectsRange(p.periodStart, p.periodEnd, dateFrom, dateTo),
         );
       }
       return { ...proj, plans };
