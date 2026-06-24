@@ -267,7 +267,7 @@ function AuxSheetEditor({
   const save = (payload: { grid?: string[][]; merges?: AuxMerge[] }) => {
     startTransition(async () => {
       const r = await updateAuxSheet({ sheetId: sheet.id, ...payload });
-      if (!r.ok) toast.error(r.error);
+      if (!r.ok) toast.error(`No se pudo guardar el cambio: ${r.error}`);
     });
   };
 
@@ -402,11 +402,15 @@ function AuxSheetEditor({
     const next = Array.from({ length: needRows }, (_, r) =>
       Array.from({ length: needCols }, (_, c) => grid[r]?.[c] ?? ""),
     );
+    // Recorre el ancho completo `w` (no matrix[i].length) y rellena con "" las
+    // filas más cortas: un bloque "dentado" (típico al pegar de Excel/Sheets un
+    // rango con celdas finales vacías) limpia TODAS las columnas del rect escrito,
+    // así `written` coincide con lo realmente pisado y las uniones no se borran de más.
     for (let i = 0; i < h; i++) {
       if (r0 + i >= needRows) break;
-      for (let j = 0; j < matrix[i].length; j++) {
+      for (let j = 0; j < w; j++) {
         if (c0 + j >= needCols) break;
-        next[r0 + i][c0 + j] = matrix[i][j].slice(0, AUX_SHEET_MAX_CELL_LEN);
+        next[r0 + i][c0 + j] = (matrix[i][j] ?? "").slice(0, AUX_SHEET_MAX_CELL_LEN);
       }
     }
     const written: Rect = {
@@ -688,7 +692,9 @@ function AuxSheetEditor({
       case "Escape":
         return;
     }
-    if (!e.altKey && k.length === 1) {
+    // Ignora la composición IME/acentos en curso (e.key intermedio) para no
+    // abrir la edición con un caracter "muerto".
+    if (!e.altKey && k.length === 1 && !e.nativeEvent.isComposing) {
       e.preventDefault();
       beginEdit(k);
     }
@@ -699,6 +705,9 @@ function AuxSheetEditor({
     e.preventDefault(); // evita selección de texto + conserva el foco del grid
     const ed = editingRef.current;
     if (ed) {
+      // Evita el doble commit: al desmontarse, el input dispara su onBlur que
+      // también commitearía (con coords viejas). skipBlurRef lo neutraliza.
+      skipBlurRef.current = true;
       writeCell(ed.r, ed.c, ed.draft);
       setEditing(null);
     }

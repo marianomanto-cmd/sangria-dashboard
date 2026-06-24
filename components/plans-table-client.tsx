@@ -71,34 +71,34 @@ function sortPlans(plans: PlanRow[], col: SortCol, dir: SortDir): PlanRow[] {
   const cmpStr = (a: string, b: string) =>
     a.localeCompare(b, undefined, { sensitivity: "base" });
   const cmpNum = (a: number, b: number) => a - b;
-  return [...plans].sort((a, b) => {
+  // Tie-breaker determinístico por id: localeCompare con sensitivity "base" no
+  // es estable ante empates (mismo nombre/estado), así que sin esto el orden de
+  // las filas empatadas cambiaba entre renders.
+  const byCol = (a: PlanRow, b: PlanRow): number => {
     switch (col) {
       case "name":
-        return cmpStr(a.name, b.name) * sign;
+        return cmpStr(a.name, b.name);
       case "project":
-        return cmpStr(a.projectName, b.projectName) * sign;
+        return cmpStr(a.projectName, b.projectName);
       case "client":
-        return cmpStr(a.clientName, b.clientName) * sign;
+        return cmpStr(a.clientName, b.clientName);
       case "status":
-        return cmpStr(a.status, b.status) * sign;
+        return cmpStr(a.status, b.status);
       case "period":
-        return cmpStr(a.periodStart ?? "", b.periodStart ?? "") * sign;
+        return cmpStr(a.periodStart ?? "", b.periodStart ?? "");
       case "media":
-        return (
-          cmpNum(
-            Number.parseFloat(a.totalMediaUsd),
-            Number.parseFloat(b.totalMediaUsd),
-          ) * sign
+        return cmpNum(
+          Number.parseFloat(a.totalMediaUsd),
+          Number.parseFloat(b.totalMediaUsd),
         );
       case "spent":
-        return (
-          cmpNum(
-            Number.parseFloat(a.spentMediaUsd),
-            Number.parseFloat(b.spentMediaUsd),
-          ) * sign
+        return cmpNum(
+          Number.parseFloat(a.spentMediaUsd),
+          Number.parseFloat(b.spentMediaUsd),
         );
     }
-  });
+  };
+  return [...plans].sort((a, b) => byCol(a, b) * sign || a.id.localeCompare(b.id));
 }
 
 export function PlansTableClient({ plans, lang }: { plans: PlanRow[]; lang: Language }) {
@@ -404,8 +404,10 @@ function GroupedByProject({
       clientSlug: planList[0].clientSlug,
       plans: planList,
     }));
-    list.sort((a, b) =>
-      a.projectName.localeCompare(b.projectName, undefined, { sensitivity: "base" }),
+    list.sort(
+      (a, b) =>
+        a.projectName.localeCompare(b.projectName, undefined, { sensitivity: "base" }) ||
+        a.projectId.localeCompare(b.projectId),
     );
     return list;
   }, [plans]);
@@ -560,6 +562,7 @@ function PlanRowCells({
   const total = Number.parseFloat(p.totalMediaUsd);
   const spent = Number.parseFloat(p.spentMediaUsd);
   const pct = total > 0 ? Math.max(0, Math.min(100, (spent / total) * 100)) : 0;
+  const overConsumed = total > 0 && spent > total;
   const cellPad = compact ? "px-3 py-1.5" : "px-5 py-2.5";
 
   return (
@@ -617,12 +620,14 @@ function PlanRowCells({
             </div>
             <div className="w-full h-1.5 rounded-full bg-paper overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-accent to-accent-2"
+                className={`h-full ${overConsumed ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"}`}
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <div className="font-mono text-[10px] text-muted tabular-nums">
-              {formatUsdCompact(spent)} · {pct.toFixed(0)}%
+            <div className="font-mono text-[10px] tabular-nums">
+              <span className={overConsumed ? "text-warn" : "text-muted"}>
+                {formatUsdCompact(spent)} · {pct.toFixed(0)}%
+              </span>
             </div>
           </div>
         ) : (
@@ -647,6 +652,7 @@ function PlanCard({
   const total = Number.parseFloat(p.totalMediaUsd);
   const spent = Number.parseFloat(p.spentMediaUsd);
   const pct = total > 0 ? Math.max(0, Math.min(100, (spent / total) * 100)) : 0;
+  const overConsumed = total > 0 && spent > total;
 
   return (
     <Link
@@ -692,7 +698,7 @@ function PlanCard({
           {total > 0 ? (
             <span className="font-mono text-ink-2 tabular-nums">
               {formatUsd(total)}{" "}
-              <span className="text-muted">
+              <span className={overConsumed ? "text-warn" : "text-muted"}>
                 · {formatUsdCompact(spent)} · {pct.toFixed(0)}%
               </span>
             </span>

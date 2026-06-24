@@ -225,7 +225,7 @@ export function ReportGeneratorForm({
       </div>
 
       {/* Column picker (collapsible) */}
-      <details className="border-t border-line-soft pt-3">
+      <details className="group border-t border-line-soft pt-3">
         <summary className="cursor-pointer text-sm font-medium text-ink-2 hover:text-ink inline-flex items-center gap-1.5 list-none">
           <ChevronDown
             size={14}

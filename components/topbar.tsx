@@ -11,6 +11,7 @@ import { TopbarNav } from "@/components/topbar-nav";
 import { TopNav } from "@/components/top-nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNavToggle } from "@/components/mobile-nav";
+import { SangriaMark } from "@/components/sangria-mark";
 
 export async function Topbar({ user }: { user: AppUser | null }) {
   const year = new Date().getFullYear();
@@ -25,14 +26,7 @@ export async function Topbar({ user }: { user: AppUser | null }) {
           aria-label="Inicio"
           className="hidden lg:flex items-center gap-2.5 shrink-0"
         >
-          <span
-            aria-hidden
-            className="w-[20px] h-[20px] rounded-full shrink-0"
-            style={{
-              background:
-                "radial-gradient(circle at 38% 32%, #d8587e, #a8345f 55%, #5e1730)",
-            }}
-          />
+          <SangriaMark size={20} />
           <span className="hidden 2xl:inline font-display font-black text-[14px] tracking-[0.1em] text-ink leading-none">
             SANGRIA{" "}
             <span className="align-middle text-[10px] font-semibold tracking-[0.18em] text-muted">

@@ -87,7 +87,7 @@ export function DashboardEjecutivo({
             className="absolute -right-12 -bottom-12 w-60 h-60 rounded-full blur-2xl"
             style={{
               background:
-                "radial-gradient(circle, rgba(168,52,95,.55), transparent 70%)",
+                "radial-gradient(circle, color-mix(in srgb, var(--color-accent-2) 55%, transparent), transparent 70%)",
             }}
           />
           <p className="relative text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
@@ -106,7 +106,7 @@ export function DashboardEjecutivo({
           {formatPct(kpis.consumptionPct)}
           <div className="mt-3 h-1.5 rounded-full bg-paper-2 overflow-hidden">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2 animate-sng-grow"
+              className={`h-full rounded-full animate-sng-grow ${kpis.consumptionPct > 100 ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"}`}
               style={{ width: `${Math.min(100, Math.max(0, kpis.consumptionPct))}%` }}
             />
           </div>

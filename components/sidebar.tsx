@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { buildHrefWithClient } from "@/lib/client-filter";
 import { FOOTER_NAV, isNavActive, type NavEntry, PRIMARY_NAV } from "@/lib/nav";
 import { useMobileNav } from "@/components/mobile-nav";
+import { SangriaMark } from "@/components/sangria-mark";
 
 // Subset serializable del user logueado (lo pasa el layout server-side desde
 // getCurrentUser). Tipado estructural para no importar lib/auth — que tira de
@@ -37,19 +38,15 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
         // Drawer fijo que se desliza (translate-x) controlado por useMobileNav.
         // En ≥ lg desaparece: la navegación pasa al header. bg-rail nunca
         // swappea en dark mode.
+        // inert cuando está cerrado: el drawer queda fuera de pantalla pero en
+        // el DOM; sin inert sus links siguen siendo tabulables (foco fantasma).
+        inert={!mobileOpen}
         className={`lg:hidden bg-gradient-to-b from-rail-2 to-rail text-white flex flex-col h-screen border-r border-black/40 fixed inset-y-0 left-0 z-40 w-[228px] transition-transform duration-200 ease-out ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="flex items-center gap-2.5 px-3.5 pt-4 pb-3">
-          <span
-            aria-hidden
-            className="w-[22px] h-[22px] rounded-full shrink-0"
-            style={{
-              background:
-                "radial-gradient(circle at 38% 32%, #d8587e, #a8345f 55%, #5e1730)",
-            }}
-          />
+          <SangriaMark size={22} />
           <span className="font-display font-black text-[15px] tracking-[0.1em] text-white leading-none">
             SANGRIA{" "}
             <span className="align-middle text-[10px] font-semibold tracking-[0.18em] text-white/45">
@@ -88,7 +85,7 @@ export function Sidebar({ user = null }: { user?: SidebarUser }) {
         </div>
 
         <div className="px-2 pb-3 pt-2 flex items-center gap-2">
-          <div className="w-7 h-7 rounded-full overflow-hidden bg-gradient-to-br from-stone-500 to-stone-700 ring-1 ring-white/10 shrink-0 flex items-center justify-center text-[10px] font-semibold text-white">
+          <div className="w-7 h-7 rounded-full overflow-hidden bg-gradient-to-br from-accent-2 to-accent ring-1 ring-white/10 shrink-0 flex items-center justify-center text-[10px] font-semibold text-white">
             {user?.avatarUrl ? (
               // Avatar de Google. <img> directo: su dominio no está en la
               // allowlist de next/image y no vale la pena por 28px (mismo

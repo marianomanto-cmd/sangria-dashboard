@@ -259,7 +259,7 @@ export function ReportingCalendarClient({
                   type="button"
                   onClick={() => setYear(y)}
                   data-active={year === y}
-                  className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+                  className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
                 >
                   {y}
                 </button>
@@ -268,7 +268,7 @@ export function ReportingCalendarClient({
                 type="button"
                 onClick={() => setYear(null)}
                 data-active={year === null}
-                className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+                className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
               >
                 {lang === "es" ? "Todos" : "All"}
               </button>

@@ -1,6 +1,80 @@
-# Handoff — martes 23/jun/2026
+# Handoff — miércoles 24/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 24/jun/2026 — Revisión estética/cosmética + bugs (varios)
+
+Revisión completa del sitio (shell, dashboard, tablas, editor de plan, portal,
+reportes/config/auditoría) buscando mejoras cosméticas y bugs. Se aplicaron los
+arreglos de alto valor y bajo riesgo; quedan recomendaciones de mayor alcance
+documentadas abajo (no implementadas en esta sesión).
+
+- **Bug (crash): `StatusBadge` sin fallback** (`components/status-badge.tsx`): un
+  `status` fuera del enum tiraba `TypeError` y, sin boundary granular en la tabla
+  de Operaciones, tumbaba toda la vista. Se agregó `STYLES[status] ?? STYLES.closed`
+  (mismo patrón que `PlanStatusBadge`/`BillingStatusBadge`).
+- **Bug: timers de toast sin cleanup** (`components/toast.tsx`): el `setTimeout`
+  de auto-cierre nunca se limpiaba (leak + `setState` tras desmontar + timers
+  huérfanos al cerrar a mano). Ahora se trackean por id en un `useRef<Map>`, se
+  limpian en `remove()` y en el unmount del provider.
+- **Bug cosmético: chevron del column-picker no rotaba** (`components/report-generator-form.tsx`):
+  `group-open:rotate-180` sin la clase `group` en el `<details>`. Agregada.
+- **Bug: sort no estable** (`plans-table-client.tsx`, `projects-table-expandable.tsx`):
+  `localeCompare` con `sensitivity:"base"` dejaba indefinido el orden de empates
+  (reordenamientos entre renders). Tie-breaker determinístico por `id`/`code`.
+- **Dark mode (sistémico): pill activa invisible**: el patrón
+  `dark:data-[active=true]:bg-paper-2 dark:bg-paper-2` dejaba la opción activa con
+  el mismo fondo que el contenedor en dark. Corregido a
+  `dark:data-[active=true]:bg-paper` en: `year-selector`, `/planes` (FilterChoice),
+  `/clientes/[slug]` (OriginTab), `/campaign-tracker`, `reporting-calendar-client`
+  (2), `/auditoria`, `/auditoria/papelera`.
+- **Cosmético: barras de progreso consistentes**: `/planes` ahora marca
+  sobre-consumo en `bg-warn` (antes se veía igual que 100%); `/clientes/[slug]`
+  pasó de `bg-ink` (negro) al gradiente de marca `from-accent to-accent-2` (tabla,
+  tarjetas mobile y Gantt); el dashboard ("Avance promedio") vira a `bg-warn`
+  cuando supera 100% para no contradecir el número.
+- **Cosmético: tokens en vez de hardcode**: glow del dashboard
+  (`rgba(168,52,95,.55)` → `color-mix(... var(--color-accent-2) ...)`, dark-aware);
+  muestra baja del portal (`text-amber-*` → `text-warn`).
+- **Cosmético/legibilidad**: `tabular-nums` + `whitespace-nowrap` en las celdas
+  numéricas/período de `/clientes/[slug]`; track de la barra por mercado en
+  `market-analysis` (`bg-paper-2` → `bg-line`, visible en dark) + guard de
+  división por cero.
+- **a11y menores**: `KpiCard` de `/campaign-tracker` (label/hint legibles sobre
+  fondo `bg-ink`, antes `text-muted` ilegible); `focus-visible` en las tarjetas de
+  `/clientes`; `transition-colors` + `aria-label` dinámico en la hamburguesa mobile.
+- **Lint (pre-existente, arreglado)**: `setState` síncrono en effect en
+  `proyectos/nuevo/form.tsx` → derivado en render (`effectiveOriginId`, sin
+  cascading renders); `LABELS` muerto en `project-status-changer.tsx` eliminado.
+- **Verificación**: `tsc` + `eslint` + `next build` en verde. **Sin cambios de
+  schema. No requiere acción en prod.**
+
+**Recomendaciones — implementadas en esta sesión (2da tanda)**:
+- **Hojas auxiliares (`aux-sheet.tsx`)**: `writeMatrixAt` ahora normaliza la matriz
+  pegada a `w` columnas (rellena `""`), así un bloque "dentado" de Excel/Sheets
+  limpia todas las columnas del rect y no borra uniones de más; `onCellMouseDown`
+  setea `skipBlurRef` para no comitear dos veces (mousedown + onBlur del input);
+  guard de composición IME al empezar a editar (no abre con un caracter muerto);
+  el toast de fallo de `save` es explícito ("No se pudo guardar el cambio: …").
+- **Editor de plan**: `NumberInput`/`RateInput`/`DeliveryInput` rechazan negativos
+  (restauran el previo, como una fórmula inválida); `RatePctInput` además rechaza
+  `≥100` (rompería la fórmula del fee `TM×r/(100−r)`).
+- **Portal Estimación**: el filtro "Mes" se desacopló del de Billing — ahora ofrece
+  meses **futuros** (mes anterior + próximos 6) vía `estimationMonthOptions()`, así
+  elegir un mes ya no cae siempre al estado vacío.
+- **Marca**: `topbar` y `sidebar` reusan `<SangriaMark>` (tokenizado) en vez de
+  re-pegar el `radial-gradient` con hex; avatar del sidebar unificado al gradiente
+  accent; el drawer mobile cerrado lleva `inert` (sus links ya no son tabulables).
+
+**Pendiente intencional (no implementado, con motivo)**:
+- Refactor stale-closure del estado del grid de `aux-sheet.tsx` (updaters
+  funcionales / `stateRef`): evaluado de **bajo impacto real** (una sola mutación
+  por evento del usuario, con re-render entre medio → no se encadenan lecturas
+  obsoletas) y **alto riesgo** sin poder testear el grid a mano. Mejor abordarlo
+  con cobertura de tests.
+- Migración masiva `bg-white dark:bg-paper-2` → `bg-surface` (226 usos, 62
+  archivos): **visualmente idéntico** (mismo `#fff`/`#15100e`), mejor como cambio
+  mecánico aparte para no inflar este diff.
 
 ### Cambios de la sesión 23/jun/2026 — Portal (Proyectos): filtro de rango de fechas Desde/Hasta
 

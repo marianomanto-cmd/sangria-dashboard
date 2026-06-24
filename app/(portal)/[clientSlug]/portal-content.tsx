@@ -286,6 +286,13 @@ function previousMonth(): string {
   return `${y}-${String(m).padStart(2, "0")}`;
 }
 
+// Opciones del filtro de Mes de la tab Estimación: la estimación apunta a meses
+// FUTUROS (mes anterior + próximos), así que no puede reusar los meses históricos
+// del billing (elegir un mes pasado caía siempre al estado vacío).
+export function estimationMonthOptions(): string[] {
+  return [previousMonth(), ...nextMonths(6)];
+}
+
 export async function EstimateSection({
   clientId,
   lang,
@@ -954,7 +961,7 @@ export async function BenchmarksSection({
                     </BTd>
                     <BTd className="tabular-nums">
                       {r.placements < LOW_SAMPLE ? (
-                        <span className="text-amber-600 dark:text-amber-400">
+                        <span className="text-warn">
                           {r.placements}
                         </span>
                       ) : (
@@ -1012,9 +1019,7 @@ export async function BenchmarksSection({
                     </p>
                     <p
                       className={`font-mono text-xs tabular-nums mt-0.5 ${
-                        r.placements < LOW_SAMPLE
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-ink-2"
+                        r.placements < LOW_SAMPLE ? "text-warn" : "text-ink-2"
                       }`}
                     >
                       {r.placements}

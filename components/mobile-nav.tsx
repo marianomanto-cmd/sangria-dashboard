@@ -47,9 +47,9 @@ export function MobileNavToggle() {
     <button
       type="button"
       onClick={() => setOpen(!open)}
-      aria-label="Abrir menú"
+      aria-label={open ? "Cerrar menú" : "Abrir menú"}
       aria-expanded={open}
-      className="lg:hidden inline-flex items-center justify-center w-8 h-8 rounded-md text-ink-2 hover:bg-paper-2 -ml-1"
+      className="lg:hidden inline-flex items-center justify-center w-8 h-8 rounded-md text-ink-2 hover:bg-paper-2 transition-colors -ml-1"
     >
       <Menu size={18} strokeWidth={2} />
     </button>

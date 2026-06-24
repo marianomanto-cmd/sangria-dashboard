@@ -26,6 +26,7 @@ import {
   BenchmarksSection,
   BillingSection,
   EstimateSection,
+  estimationMonthOptions,
   type PortalParams,
   ProjectsSection,
   ReportsSection,
@@ -153,12 +154,21 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
 
       {/* Content */}
       <main className="max-w-[1400px] mx-auto px-6 py-6">
-        {(tab === "billing" || tab === "estimacion") && (
+        {tab === "billing" && (
           <PortalFilters
             fields={["origin", "project", "month"]}
             budgetOrigins={opts.budgetOrigins}
             projects={opts.projects}
             months={opts.months}
+            lang={lang}
+          />
+        )}
+        {tab === "estimacion" && (
+          <PortalFilters
+            fields={["origin", "project", "month"]}
+            budgetOrigins={opts.budgetOrigins}
+            projects={opts.projects}
+            months={estimationMonthOptions()}
             lang={lang}
           />
         )}

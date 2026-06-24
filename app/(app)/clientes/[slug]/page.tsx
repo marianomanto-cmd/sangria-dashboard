@@ -205,14 +205,14 @@ function ResumenTab({
                     <td className="px-5 py-3">
                       <StatusBadge status={p.status} />
                     </td>
-                    <td className="px-5 py-3 text-ink-2 font-mono text-xs">
+                    <td className="px-5 py-3 text-ink-2 font-mono text-xs whitespace-nowrap">
                       {formatDate(p.startDate, lang)} →{" "}
                       {formatDate(p.endDate, lang)}
                     </td>
-                    <td className="px-5 py-3 text-right font-mono text-ink-2">
+                    <td className="px-5 py-3 text-right font-mono text-ink-2 tabular-nums">
                       {formatUsd(p.totalBudgetUsd)}
                     </td>
-                    <td className="px-5 py-3 text-right font-mono text-ink-2">
+                    <td className="px-5 py-3 text-right font-mono text-ink-2 tabular-nums">
                       {p.spentUsd > 0 ? formatUsd(p.spentUsd) : "—"}
                     </td>
                     <td className="px-5 py-3">
@@ -220,7 +220,7 @@ function ResumenTab({
                         <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
                           <div
                             className={`h-full rounded-full ${
-                              overConsumed ? "bg-warn" : "bg-ink"
+                              overConsumed ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"
                             }`}
                             style={{ width: `${barWidth}%` }}
                           />
@@ -266,7 +266,7 @@ function ResumenTab({
                     <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
                       <div
                         className={`h-full rounded-full ${
-                          overConsumed ? "bg-warn" : "bg-ink"
+                          overConsumed ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"
                         }`}
                         style={{ width: `${barWidth}%` }}
                       />
@@ -460,7 +460,7 @@ function TimelineTab({
                 >
                   <div
                     className={`absolute inset-y-0 left-0 ${
-                      overConsumed ? "bg-warn" : "bg-ink"
+                      overConsumed ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"
                     }`}
                     style={{ width: `${fillPct}%` }}
                   />
@@ -518,7 +518,7 @@ function OriginTab({
     <Link
       href={buildHref(slug, originId, tab)}
       data-active={isActive}
-      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
     >
       {label}
     </Link>

@@ -78,7 +78,7 @@ export function DashboardCuentas({
             className="absolute -right-12 -top-12 w-56 h-56 rounded-full blur-2xl"
             style={{
               background:
-                "radial-gradient(circle, rgba(168,52,95,.55), transparent 70%)",
+                "radial-gradient(circle, color-mix(in srgb, var(--color-accent-2) 55%, transparent), transparent 70%)",
             }}
           />
           <p className="relative text-[11px] font-semibold uppercase tracking-[0.18em] text-white/55">
@@ -188,10 +188,13 @@ function KpiBox({ label, children }: { label: string; children: React.ReactNode 
 }
 
 function Progress({ pct }: { pct: number }) {
+  // Sobre-ejecución (>100%): la barra se llena al tope, así que la coloreamos
+  // warn para que el número >100% y la barra no se contradigan visualmente.
+  const over = pct > 100;
   return (
     <div className="mt-3 h-1.5 rounded-full bg-paper-2 overflow-hidden">
       <div
-        className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2 animate-sng-grow"
+        className={`h-full rounded-full animate-sng-grow ${over ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"}`}
         style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
       />
     </div>

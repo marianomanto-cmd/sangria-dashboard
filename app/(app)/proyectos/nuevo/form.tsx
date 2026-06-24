@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createProject } from "@/app/actions/projects";
 import { Button } from "@/components/button";
 
@@ -27,15 +27,12 @@ export function NewProjectForm({
     [origins, clientId],
   );
 
-  // Auto-set first origin when client changes
-  useEffect(() => {
-    if (
-      filteredOrigins.length > 0 &&
-      !filteredOrigins.some((o) => o.id === budgetOriginId)
-    ) {
-      setBudgetOriginId(filteredOrigins[0].id);
-    }
-  }, [filteredOrigins, budgetOriginId]);
+  // Origin efectivo: si la selección actual no pertenece al cliente elegido
+  // (p. ej. recién cambió de cliente), cae al primero disponible. Se deriva en
+  // render en vez de un setState-en-effect (evita cascading renders).
+  const effectiveOriginId = filteredOrigins.some((o) => o.id === budgetOriginId)
+    ? budgetOriginId
+    : (filteredOrigins[0]?.id ?? "");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +41,7 @@ export function NewProjectForm({
     setSubmitting(true);
     const r = await createProject({
       clientId,
-      budgetOriginId,
+      budgetOriginId: effectiveOriginId,
       name: name.trim(),
       totalGrossBudgetUsd: totalGrossBudget
         ? Number.parseFloat(totalGrossBudget)
@@ -82,7 +79,7 @@ export function NewProjectForm({
         </Field>
         <Field label="Budget Origin">
           <select
-            value={budgetOriginId}
+            value={effectiveOriginId}
             onChange={(e) => setBudgetOriginId(e.target.value)}
             className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
             required
@@ -152,7 +149,7 @@ export function NewProjectForm({
         <Button
           type="submit"
           size="lg"
-          disabled={submitting || !name.trim() || !budgetOriginId}
+          disabled={submitting || !name.trim() || !effectiveOriginId}
         >
           {submitting ? "Creando…" : "Crear proyecto"}
         </Button>

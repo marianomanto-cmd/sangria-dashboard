@@ -264,7 +264,7 @@ function FilterChoice({
     <Link
       href={href}
       data-active={isActive}
-      className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper-2 dark:bg-paper-2 data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+      className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
     >
       {label}
     </Link>
@@ -543,7 +543,7 @@ function KpiCard({
     >
       <p
         className={`text-[11px] font-medium uppercase tracking-[0.08em] ${
-          ink ? "text-muted" : "text-muted"
+          ink ? "text-white/70" : "text-muted"
         }`}
       >
         {label}
@@ -555,7 +555,7 @@ function KpiCard({
         <p
           className={`text-xs mt-0.5 ${
             ink
-              ? "text-muted"
+              ? "text-white/60"
               : tone === "warn"
                 ? "text-warn"
                 : "text-muted"
