@@ -1,6 +1,64 @@
-# Handoff — martes 23/jun/2026
+# Handoff — miércoles 24/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 24/jun/2026 — Revisión estética/cosmética + bugs (varios)
+
+Revisión completa del sitio (shell, dashboard, tablas, editor de plan, portal,
+reportes/config/auditoría) buscando mejoras cosméticas y bugs. Se aplicaron los
+arreglos de alto valor y bajo riesgo; quedan recomendaciones de mayor alcance
+documentadas abajo (no implementadas en esta sesión).
+
+- **Bug (crash): `StatusBadge` sin fallback** (`components/status-badge.tsx`): un
+  `status` fuera del enum tiraba `TypeError` y, sin boundary granular en la tabla
+  de Operaciones, tumbaba toda la vista. Se agregó `STYLES[status] ?? STYLES.closed`
+  (mismo patrón que `PlanStatusBadge`/`BillingStatusBadge`).
+- **Bug: timers de toast sin cleanup** (`components/toast.tsx`): el `setTimeout`
+  de auto-cierre nunca se limpiaba (leak + `setState` tras desmontar + timers
+  huérfanos al cerrar a mano). Ahora se trackean por id en un `useRef<Map>`, se
+  limpian en `remove()` y en el unmount del provider.
+- **Bug cosmético: chevron del column-picker no rotaba** (`components/report-generator-form.tsx`):
+  `group-open:rotate-180` sin la clase `group` en el `<details>`. Agregada.
+- **Bug: sort no estable** (`plans-table-client.tsx`, `projects-table-expandable.tsx`):
+  `localeCompare` con `sensitivity:"base"` dejaba indefinido el orden de empates
+  (reordenamientos entre renders). Tie-breaker determinístico por `id`/`code`.
+- **Dark mode (sistémico): pill activa invisible**: el patrón
+  `dark:data-[active=true]:bg-paper-2 dark:bg-paper-2` dejaba la opción activa con
+  el mismo fondo que el contenedor en dark. Corregido a
+  `dark:data-[active=true]:bg-paper` en: `year-selector`, `/planes` (FilterChoice),
+  `/clientes/[slug]` (OriginTab), `/campaign-tracker`, `reporting-calendar-client`
+  (2), `/auditoria`, `/auditoria/papelera`.
+- **Cosmético: barras de progreso consistentes**: `/planes` ahora marca
+  sobre-consumo en `bg-warn` (antes se veía igual que 100%); `/clientes/[slug]`
+  pasó de `bg-ink` (negro) al gradiente de marca `from-accent to-accent-2` (tabla,
+  tarjetas mobile y Gantt); el dashboard ("Avance promedio") vira a `bg-warn`
+  cuando supera 100% para no contradecir el número.
+- **Cosmético: tokens en vez de hardcode**: glow del dashboard
+  (`rgba(168,52,95,.55)` → `color-mix(... var(--color-accent-2) ...)`, dark-aware);
+  muestra baja del portal (`text-amber-*` → `text-warn`).
+- **Cosmético/legibilidad**: `tabular-nums` + `whitespace-nowrap` en las celdas
+  numéricas/período de `/clientes/[slug]`; track de la barra por mercado en
+  `market-analysis` (`bg-paper-2` → `bg-line`, visible en dark) + guard de
+  división por cero.
+- **a11y menores**: `KpiCard` de `/campaign-tracker` (label/hint legibles sobre
+  fondo `bg-ink`, antes `text-muted` ilegible); `focus-visible` en las tarjetas de
+  `/clientes`; `transition-colors` + `aria-label` dinámico en la hamburguesa mobile.
+- **Lint (pre-existente, arreglado)**: `setState` síncrono en effect en
+  `proyectos/nuevo/form.tsx` → derivado en render (`effectiveOriginId`, sin
+  cascading renders); `LABELS` muerto en `project-status-changer.tsx` eliminado.
+- **Verificación**: `tsc` + `eslint` + `next build` en verde. **Sin cambios de
+  schema. No requiere acción en prod.**
+
+**Recomendaciones pendientes (no implementadas, mayor alcance/riesgo)**:
+- Editor de hojas auxiliares (`aux-sheet.tsx`): posibles pérdidas de cambios por
+  closures stale en el autosave (usar updaters funcionales / serializar saves) y
+  `writeMatrixAt` con bloques "dentados" al pegar de Excel (normalizar a `w`
+  columnas). Revertir el estado local si el `save` server falla.
+- Inputs numéricos del editor de plan: clamear negativos en montos/rate.
+- Portal Estimación: el filtro "Mes" ofrece meses históricos pero la estimación
+  es de meses futuros (decisión de producto).
+- Refactor de `bg-white dark:bg-paper-2` → token `bg-surface` y reuso de
+  `<SangriaMark>` en topbar/sidebar (limpieza de duplicación).
 
 ### Cambios de la sesión 23/jun/2026 — Portal (Proyectos): filtro de rango de fechas Desde/Hasta
 

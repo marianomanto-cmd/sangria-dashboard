@@ -54,8 +54,10 @@ export function ProjectsTableExpandable({
   // Orden A-Z por nombre del proyecto como default (locale-aware para acentos).
   const sorted = useMemo(
     () =>
-      [...rows].sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      [...rows].sort(
+        (a, b) =>
+          a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) ||
+          a.code.localeCompare(b.code),
       ),
     [rows],
   );

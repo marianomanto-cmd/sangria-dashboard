@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
 } from "react";
@@ -48,8 +49,17 @@ const STYLES: Record<ToastKind, string> = {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(0);
+  // Handles de los timers de auto-cierre, por id, para poder limpiarlos al
+  // cerrar a mano y al desmontar el provider (evita setState sobre componente
+  // desmontado + timers huérfanos).
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   const remove = useCallback((id: number) => {
+    const timer = timersRef.current.get(id);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timersRef.current.delete(id);
+    }
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
@@ -57,10 +67,20 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (kind: ToastKind, message: string) => {
       const id = ++idRef.current;
       setToasts((prev) => [...prev, { id, kind, message }]);
-      window.setTimeout(() => remove(id), kind === "error" ? 6000 : 3500);
+      const timer = setTimeout(() => remove(id), kind === "error" ? 6000 : 3500);
+      timersRef.current.set(id, timer);
     },
     [remove],
   );
+
+  // Limpia cualquier timer pendiente si el provider se desmonta.
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      timers.clear();
+    };
+  }, []);
 
   const api: ToastApi = {
     success: (m) => push("success", m),

@@ -32,7 +32,10 @@ const STYLES: Record<ProjectStatus, { label: string; className: string; dot: str
 };
 
 export function StatusBadge({ status }: { status: ProjectStatus }) {
-  const style = STYLES[status];
+  // Fallback defensivo: un status fuera del enum (dato legacy o un valor nuevo
+  // que todavía no se mapeó) no debe tirar TypeError y tumbar la vista entera.
+  // Mismo patrón que PlanStatusBadge / BillingStatusBadge.
+  const style = STYLES[status] ?? STYLES.closed;
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-sm border px-2 py-0.5 text-[11px] font-medium ${style.className}`}

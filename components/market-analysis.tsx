@@ -191,10 +191,10 @@ export function MarketAnalysis({
                           {formatUsdCompact(m.plannedUsd)} · {m.count}
                         </span>
                       </div>
-                      <div className="mt-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
+                      <div className="mt-1 h-1.5 rounded-full bg-line overflow-hidden">
                         <div
                           className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2"
-                          style={{ width: `${(m.plannedUsd / maxMarket) * 100}%` }}
+                          style={{ width: `${maxMarket > 0 ? (m.plannedUsd / maxMarket) * 100 : 0}%` }}
                         />
                       </div>
                     </button>

@@ -954,7 +954,7 @@ export async function BenchmarksSection({
                     </BTd>
                     <BTd className="tabular-nums">
                       {r.placements < LOW_SAMPLE ? (
-                        <span className="text-amber-600 dark:text-amber-400">
+                        <span className="text-warn">
                           {r.placements}
                         </span>
                       ) : (
@@ -1012,9 +1012,7 @@ export async function BenchmarksSection({
                     </p>
                     <p
                       className={`font-mono text-xs tabular-nums mt-0.5 ${
-                        r.placements < LOW_SAMPLE
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-ink-2"
+                        r.placements < LOW_SAMPLE ? "text-warn" : "text-ink-2"
                       }`}
                     >
                       {r.placements}

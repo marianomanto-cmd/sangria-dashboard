@@ -6,14 +6,6 @@ import type { Language } from "@/lib/i18n";
 
 type Status = "planning" | "active" | "paused" | "closed" | "reportado";
 
-const LABELS: Record<Status, Record<Language, string>> = {
-  planning: { en: "planning", es: "planificación" },
-  active: { en: "active", es: "activo" },
-  paused: { en: "paused", es: "pausado" },
-  closed: { en: "closed", es: "cerrado" },
-  reportado: { en: "reported", es: "reportado" },
-};
-
 const PROMPTS: Record<Status, Record<Language, string>> = {
   planning: { en: "Set to planning", es: "Marcar como planificación" },
   active: { en: "Set to active", es: "Marcar como activo" },
