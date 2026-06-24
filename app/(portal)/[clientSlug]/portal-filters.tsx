@@ -10,11 +10,12 @@ export type PortalFilterField =
   | "origin"
   | "project"
   | "campaign"
+  | "daterange"
   | "month";
 
 // Filtros URL-based del portal (read-only). Preserva el ?tab= y solo toca los
-// params de filtro (bo / proj / camp / month / pstatus). Mismo patrón que los
-// filtros internos pero scopeado al portal.
+// params de filtro (bo / proj / camp / month / pstatus / pfrom / pto). Mismo
+// patrón que los filtros internos pero scopeado al portal.
 export function PortalFilters({
   fields,
   budgetOrigins,
@@ -50,6 +51,8 @@ export function PortalFilters({
     next.delete("proj");
     next.delete("camp");
     next.delete("month");
+    next.delete("pfrom");
+    next.delete("pto");
     next.delete("pstatus");
     next.delete("plan"); // colapsa también el pacing expandido
     const qs = next.toString();
@@ -63,6 +66,7 @@ export function PortalFilters({
     (fields.includes("origin") && !!cur("bo")) ||
     (fields.includes("project") && !!cur("proj")) ||
     (fields.includes("campaign") && campValues.length > 0) ||
+    (fields.includes("daterange") && (!!cur("pfrom") || !!cur("pto"))) ||
     (fields.includes("month") && !!cur("month"));
 
   return (
@@ -126,6 +130,29 @@ export function PortalFilters({
             ))}
           </select>
         </Field>
+      )}
+
+      {fields.includes("daterange") && (
+        <>
+          <Field label={lang === "es" ? "Desde" : "From"}>
+            <input
+              type="date"
+              value={cur("pfrom")}
+              max={cur("pto") || undefined}
+              onChange={(e) => update("pfrom", e.target.value)}
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </Field>
+          <Field label={lang === "es" ? "Hasta" : "To"}>
+            <input
+              type="date"
+              value={cur("pto")}
+              min={cur("pfrom") || undefined}
+              onChange={(e) => update("pto", e.target.value)}
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </Field>
+        </>
       )}
 
       {fields.includes("month") && (

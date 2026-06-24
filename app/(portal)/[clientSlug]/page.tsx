@@ -76,6 +76,8 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
     bo: one(sp.bo),
     proj: one(sp.proj),
     month: one(sp.month),
+    dateFrom: one(sp.pfrom),
+    dateTo: one(sp.pto),
     plan: one(sp.plan),
     pstatus: one(sp.pstatus),
     camp: one(sp.camp),
@@ -162,7 +164,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
         )}
         {tab === "proyectos" && (
           <PortalFilters
-            fields={["pstatus", "campaign", "origin", "month"]}
+            fields={["pstatus", "campaign", "origin", "daterange"]}
             budgetOrigins={opts.budgetOrigins}
             projects={opts.projects}
             campaigns={opts.campaigns}

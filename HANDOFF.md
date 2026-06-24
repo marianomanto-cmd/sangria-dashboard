@@ -2,6 +2,31 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 23/jun/2026 — Portal (Proyectos): filtro de rango de fechas Desde/Hasta
+
+- **Pedido**: en la vista de cliente, sección **Proyectos**, poder filtrar por un
+  **rango específico de fechas** (no solo un mes suelto).
+- **Implementación**: el filtro **"Mes"** de la tab Proyectos se reemplazó por un
+  **rango Desde/Hasta** (dos `<input type="date">`, params URL `?pfrom=`/`?pto=`
+  en `YYYY-MM-DD`). Un proyecto queda visible si **alguno de sus planes aprobados
+  tiene un período que INTERSECTA** el rango (intersección de intervalos, con
+  rango abierto de un lado soportado). El filtro **"Mes"** sigue igual en las tabs
+  **Billing Tracker** y **Estimación** (no se tocaron).
+  - `portal-filters.tsx`: nuevo field `"daterange"` (dos date inputs con
+    `min`/`max` cruzados); `reset()` e `isFiltered` contemplan `pfrom`/`pto`.
+  - `portal-content.tsx`: `PortalParams` suma `dateFrom`/`dateTo`; helper
+    `periodIntersectsRange` (reemplaza `monthInRange`); `ProjectsSection` filtra
+    por intersección; `hrefWith` **preserva** `pfrom`/`pto` (mismo cuidado que con
+    `pstatus`/`camp` para no perder el filtro al expandir el pacing). Con campañas
+    seleccionadas, la selección sigue mandando (ignora el rango).
+  - `page.tsx`: lee `sp.pfrom`/`sp.pto` en `portalParams` y la tab Proyectos usa
+    `fields=["pstatus","campaign","origin","daterange"]`.
+- **Verificación**: `tsc` + `eslint` + `next build` en verde; test unitario de
+  `periodIntersectsRange` (10 casos: dentro, antes, después, rangos abiertos,
+  sin fechas, borde) todos OK. **Sin cambios de schema. No requiere acción en prod.**
+- Archivos: `app/(portal)/[clientSlug]/{portal-filters,portal-content,page}.tsx`,
+  README.
+
 ### Cambios de la sesión 23/jun/2026 — Hojas auxiliares: la columna "NET TOTAL" nunca se trunca (regla)
 
 - **Pedido**: en las hojas auxiliares, una columna llamada **`NET TOTAL`** (la
