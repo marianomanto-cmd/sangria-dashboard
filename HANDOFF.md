@@ -49,16 +49,32 @@ documentadas abajo (no implementadas en esta sesión).
 - **Verificación**: `tsc` + `eslint` + `next build` en verde. **Sin cambios de
   schema. No requiere acción en prod.**
 
-**Recomendaciones pendientes (no implementadas, mayor alcance/riesgo)**:
-- Editor de hojas auxiliares (`aux-sheet.tsx`): posibles pérdidas de cambios por
-  closures stale en el autosave (usar updaters funcionales / serializar saves) y
-  `writeMatrixAt` con bloques "dentados" al pegar de Excel (normalizar a `w`
-  columnas). Revertir el estado local si el `save` server falla.
-- Inputs numéricos del editor de plan: clamear negativos en montos/rate.
-- Portal Estimación: el filtro "Mes" ofrece meses históricos pero la estimación
-  es de meses futuros (decisión de producto).
-- Refactor de `bg-white dark:bg-paper-2` → token `bg-surface` y reuso de
-  `<SangriaMark>` en topbar/sidebar (limpieza de duplicación).
+**Recomendaciones — implementadas en esta sesión (2da tanda)**:
+- **Hojas auxiliares (`aux-sheet.tsx`)**: `writeMatrixAt` ahora normaliza la matriz
+  pegada a `w` columnas (rellena `""`), así un bloque "dentado" de Excel/Sheets
+  limpia todas las columnas del rect y no borra uniones de más; `onCellMouseDown`
+  setea `skipBlurRef` para no comitear dos veces (mousedown + onBlur del input);
+  guard de composición IME al empezar a editar (no abre con un caracter muerto);
+  el toast de fallo de `save` es explícito ("No se pudo guardar el cambio: …").
+- **Editor de plan**: `NumberInput`/`RateInput`/`DeliveryInput` rechazan negativos
+  (restauran el previo, como una fórmula inválida); `RatePctInput` además rechaza
+  `≥100` (rompería la fórmula del fee `TM×r/(100−r)`).
+- **Portal Estimación**: el filtro "Mes" se desacopló del de Billing — ahora ofrece
+  meses **futuros** (mes anterior + próximos 6) vía `estimationMonthOptions()`, así
+  elegir un mes ya no cae siempre al estado vacío.
+- **Marca**: `topbar` y `sidebar` reusan `<SangriaMark>` (tokenizado) en vez de
+  re-pegar el `radial-gradient` con hex; avatar del sidebar unificado al gradiente
+  accent; el drawer mobile cerrado lleva `inert` (sus links ya no son tabulables).
+
+**Pendiente intencional (no implementado, con motivo)**:
+- Refactor stale-closure del estado del grid de `aux-sheet.tsx` (updaters
+  funcionales / `stateRef`): evaluado de **bajo impacto real** (una sola mutación
+  por evento del usuario, con re-render entre medio → no se encadenan lecturas
+  obsoletas) y **alto riesgo** sin poder testear el grid a mano. Mejor abordarlo
+  con cobertura de tests.
+- Migración masiva `bg-white dark:bg-paper-2` → `bg-surface` (226 usos, 62
+  archivos): **visualmente idéntico** (mismo `#fff`/`#15100e`), mejor como cambio
+  mecánico aparte para no inflar este diff.
 
 ### Cambios de la sesión 23/jun/2026 — Portal (Proyectos): filtro de rango de fechas Desde/Hasta
 

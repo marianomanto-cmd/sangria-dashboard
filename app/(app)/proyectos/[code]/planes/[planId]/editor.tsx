@@ -1421,7 +1421,7 @@ function RateInput({
       v = 0;
     } else {
       const parsed = evalNumberInput(raw);
-      if (!Number.isFinite(parsed)) {
+      if (!Number.isFinite(parsed) || parsed < 0) {
         el.value = display;
         return;
       }
@@ -1470,7 +1470,7 @@ function DeliveryInput({
       v = 0;
     } else {
       const parsed = evalNumberInput(raw);
-      if (!Number.isFinite(parsed)) {
+      if (!Number.isFinite(parsed) || parsed < 0) {
         el.value = display;
         return;
       }
@@ -2342,8 +2342,8 @@ function NumberInput({
       v = 0;
     } else {
       const parsed = evalNumberInput(raw);
-      if (!Number.isFinite(parsed)) {
-        el.value = display; // fórmula inválida → restaura el valor previo
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        el.value = display; // fórmula inválida o negativa → restaura el previo
         return;
       }
       v = parsed;
@@ -2389,8 +2389,9 @@ function RatePctInput({
       return;
     }
     const v = evalNumberInput(el.value);
-    if (!Number.isFinite(v)) {
-      el.value = display; // fórmula inválida → restaura el valor previo
+    // rate_pct: negativo o ≥100 rompe la fórmula del fee (TM×r/(100−r)).
+    if (!Number.isFinite(v) || v < 0 || v >= 100) {
+      el.value = display; // inválido → restaura el valor previo
       return;
     }
     el.value = v > 0 ? v.toFixed(2) : "";
