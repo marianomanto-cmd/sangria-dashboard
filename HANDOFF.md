@@ -35,10 +35,15 @@ HANDOFF.)
   y dos issues menores. `tsc` + `eslint` + `next build` en verde.
 - **Sin cambios de schema. No requiere acción en prod** — la persistencia
   (`campaign_placement_actuals.metric_key`, snapshots) ya guardaba por slug.
-- **Pendiente (data, del lado del usuario)**: varias calculadas custom de Copa
-  (`CPT`, `CPT LC`, `CPT STO`, `cpa_cc_*`, `roas`) tienen `unit = null` en el
-  catálogo, así que se muestran como entero en vez de `$`/`x` (igual que ya pasa
-  en el editor/exports). Setear la unidad en Configuración → Métricas.
+- **Data fix aplicado en prod (26/jun)**: varias calculadas custom de Copa
+  (`CPT`, `CPT LC`, `CPT STO`, `cpa_cc_mexico`, `cpa_cc_destino_san_diego`,
+  `roas`) tenían `unit = null`, así que se mostraban como entero en vez de
+  `$`/`x` (igual que ya pasaba en el editor/exports). Se corrigió con un UPDATE
+  manual sobre `metrics_catalog` del cliente Copa: `unit = '$'` para las
+  "amount / X" y `'x'` para `roas`. Solo display — el formato se deriva del
+  catálogo en runtime, sin redeploy. (Si se crean nuevas calculadas sin unidad
+  vuelve a pasar: `createMetric`/`updateMetric` no la exigen; follow-up abierto
+  agregar validación/default de unidad.)
 
 ### Cambios de la sesión 24/jun/2026 — Revisión estética/cosmética + bugs (varios)
 
