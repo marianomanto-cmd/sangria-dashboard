@@ -221,11 +221,12 @@ export function buildMetricRows(
   directGoals: DirectGoal[],
   actuals: Record<string, number>,
   labelFor: (key: string, fallback: string) => string,
-  // Métricas calculadas del catálogo del cliente. Cuando se pasan, las filas
-  // calculated se derivan con sus fórmulas (incluye métricas custom). Si se
-  // omite, se cae al set built-in CALC_METRICS (CPM/CTR/…) — lo usa el export
-  // de pacing del portal, que no resuelve el catálogo por plan.
-  calcDefs?: CatalogMetricDef[],
+  // Métricas calculadas del catálogo del cliente: cada fila calculated se
+  // deriva con su fórmula (incluye custom como ROAS/CPT). Una calculada solo
+  // aparece si su fórmula es parseable y todos sus inputs direct están en el
+  // plan. Todos los consumidores (tracker server+client, pacing.xlsx) pasan
+  // las defs del catálogo — no hay fallback a una lista hardcodeada.
+  calcDefs: CatalogMetricDef[],
 ): MetricRow[] {
   const directKeys = directGoals.map((d) => d.key);
   const goalByKey: Record<string, number> = {};
@@ -251,58 +252,36 @@ export function buildMetricRows(
     });
   }
 
-  if (calcDefs) {
-    // Catálogo del cliente: derivamos cada calculada con su fórmula. Una
-    // calculada aplica si TODOS sus inputs direct están presentes en el plan.
-    const goalAmount = goalByKey.amount ?? 0;
-    const actualAmount = actuals.amount ?? 0;
-    for (const def of calcDefs) {
-      const inputs = formulaDirectInputs(def.formula);
-      if (!inputs.every((i) => directKeys.includes(i))) continue;
-      const unit = catalogUnitToMetricUnit(def.unit);
-      // Las "%" del catálogo son fracciones (0.02); el tracker las muestra ×100.
-      const scale = unit === "%" ? 100 : 1;
-      const goalRaw = evalFormula(def.formula, goalAmount, goalByKey);
-      const actualRaw = evalFormula(def.formula, actualAmount, actuals);
-      const goal = goalRaw != null && goalRaw > 0 ? goalRaw * scale : null;
-      const actual = actualRaw != null ? actualRaw * scale : 0;
-      rows.push({
-        key: def.slug,
-        label: labelFor(def.slug, def.name),
-        kind: "calculated",
-        unit,
-        goal,
-        actual,
-        goalPct: goal != null ? (actual / goal) * 100 : null,
-        // Para los "costo por X" (en $) consumir por debajo del goal es bueno;
-        // para ratios (%/x) más alto suele ser mejor.
-        lowerIsBetter: unit === "$",
-      });
-    }
-  } else {
-    for (const def of CALC_METRICS) {
-      if (!def.inputs.every((i) => directKeys.includes(i))) continue;
-      const goalInputs: Record<string, number> = {};
-      const actualInputs: Record<string, number> = {};
-      for (const i of def.inputs) {
-        goalInputs[i] = goalByKey[i] ?? 0;
-        actualInputs[i] = actuals[i] ?? 0;
-      }
-      const goalRaw = def.compute(goalInputs);
-      const actualRaw = def.compute(actualInputs);
-      const goal = goalRaw != null && goalRaw > 0 ? goalRaw : null;
-      rows.push({
-        key: def.key,
-        label: labelFor(def.key, def.name),
-        kind: "calculated",
-        unit: def.unit,
-        goal,
-        actual: actualRaw ?? 0,
-        goalPct:
-          goal != null && actualRaw != null ? (actualRaw / goal) * 100 : null,
-        lowerIsBetter: def.lowerIsBetter,
-      });
-    }
+  // Catálogo del cliente: derivamos cada calculada con su fórmula.
+  const goalAmount = goalByKey.amount ?? 0;
+  const actualAmount = actuals.amount ?? 0;
+  for (const def of calcDefs) {
+    const inputs = formulaDirectInputs(def.formula);
+    // Fórmula no soportada (no es num/den ×N) → no derivable: la saltamos para
+    // no mostrar una fila fantasma (consistente con resolveMetricColumns en
+    // los exports). Una calculada aplica si todos sus inputs direct están en
+    // el plan.
+    if (inputs == null) continue;
+    if (!inputs.every((i) => directKeys.includes(i))) continue;
+    const unit = catalogUnitToMetricUnit(def.unit);
+    // Las "%" del catálogo son fracciones (0.02); el tracker las muestra ×100.
+    const scale = unit === "%" ? 100 : 1;
+    const goalRaw = evalFormula(def.formula, goalAmount, goalByKey);
+    const actualRaw = evalFormula(def.formula, actualAmount, actuals);
+    const goal = goalRaw != null && goalRaw > 0 ? goalRaw * scale : null;
+    const actual = actualRaw != null ? actualRaw * scale : 0;
+    rows.push({
+      key: def.slug,
+      label: labelFor(def.slug, def.name),
+      kind: "calculated",
+      unit,
+      goal,
+      actual,
+      goalPct: goal != null ? (actual / goal) * 100 : null,
+      // Para los "costo por X" (en $) consumir por debajo del goal es bueno;
+      // para ratios (%/x) más alto suele ser mejor.
+      lowerIsBetter: unit === "$",
+    });
   }
 
   return rows;
