@@ -2291,7 +2291,8 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-0154ed0  Billing Tracker (Estimación): filtro multi-select de clientes (#174)
+cd59a06  Portal: filtros multi-select (Budget Origin / Proyecto / Mes) + revert #174 (#176)
+0154ed0  Billing Tracker (Estimación): filtro multi-select de clientes (#174) — revertido por #176 (vista equivocada)
 f9551f9  Campaign Tracker: cargar todas las métricas del plan desde el catálogo (#171)
 78d11b5  Revisión estética/cosmética + bugs + recomendaciones (#169)
 0ff1348  Portal (Proyectos): filtro de rango de fechas Desde/Hasta (#167)
