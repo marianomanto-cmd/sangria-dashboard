@@ -59,6 +59,11 @@ export type BillingTrackerFilters = {
   projectId?: string | null;
   fromMonth?: string | null;
   toMonth?: string | null;
+  // Filtros multi (portal): tienen prioridad sobre los single homónimos.
+  // `months` filtra por set exacto (inArray) en vez del rango from/to.
+  budgetOriginIds?: string[] | null;
+  projectIds?: string[] | null;
+  months?: string[] | null;
 };
 
 export async function getBillingTracker(
@@ -70,11 +75,24 @@ export async function getBillingTracker(
     sql`${planBillings.invoiceNumber} is not null`,
   ];
   if (filters.clientId) conds.push(eq(projects.clientId, filters.clientId));
-  if (filters.budgetOriginId)
+
+  const originIds = (filters.budgetOriginIds ?? []).filter(Boolean);
+  if (originIds.length)
+    conds.push(inArray(projects.budgetOriginId, originIds));
+  else if (filters.budgetOriginId)
     conds.push(eq(projects.budgetOriginId, filters.budgetOriginId));
-  if (filters.projectId) conds.push(eq(projects.id, filters.projectId));
-  if (filters.fromMonth) conds.push(gte(planBillings.month, filters.fromMonth));
-  if (filters.toMonth) conds.push(lte(planBillings.month, filters.toMonth));
+
+  const projectIds = (filters.projectIds ?? []).filter(Boolean);
+  if (projectIds.length) conds.push(inArray(projects.id, projectIds));
+  else if (filters.projectId) conds.push(eq(projects.id, filters.projectId));
+
+  const months = (filters.months ?? []).filter(Boolean);
+  if (months.length) {
+    conds.push(inArray(planBillings.month, months));
+  } else {
+    if (filters.fromMonth) conds.push(gte(planBillings.month, filters.fromMonth));
+    if (filters.toMonth) conds.push(lte(planBillings.month, filters.toMonth));
+  }
 
   const rows = await db
     .select({

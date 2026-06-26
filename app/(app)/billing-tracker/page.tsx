@@ -4,12 +4,10 @@ import { EmptyState, PageShell } from "@/components/page-shell";
 import { BillingTrackerFilters } from "@/components/billing-tracker-filters";
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
 import { BillingStatusBadge } from "@/components/billing-status-badge";
-import { EstimateClientsFilter } from "@/components/estimate-clients-filter";
 import {
   getBillingTracker,
   getBillingTrackerFilterOptions,
 } from "@/db/queries/billing-tracker";
-import { getClientsList } from "@/db/queries/clients";
 import { getBillingEstimate } from "@/db/queries/dashboard";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { formatUsd } from "@/lib/format";
@@ -19,7 +17,6 @@ type Tab = "tracker" | "estimates";
 
 type SearchParams = {
   client?: string;
-  clients?: string; // multi-select de clientes (tab Estimación): "slug1,slug2"
   project?: string;
   from?: string;
   to?: string;
@@ -95,27 +92,9 @@ export default async function BillingTrackerPage({ searchParams }: Props) {
   if (tab === "estimates") {
     const months = nextMonths(2);
     const prevMonth = previousMonth();
-
-    // Filtro multi-cliente propio de esta tab (?clients=slug1,slug2). Si hay
-    // clientes seleccionados, tienen prioridad sobre el cliente único del
-    // topbar; vacío → cae al cliente global / todos.
-    const clientRows = await getClientsList();
-    const clientFilterOptions = clientRows.map((c) => ({
-      slug: c.slug,
-      name: c.name,
-    }));
-    const slugToId = new Map(clientRows.map((c) => [c.slug, c.id]));
-    const selectedClientIds = (sp.clients ?? "")
-      .split(",")
-      .map((s) => s.trim())
-      .map((s) => slugToId.get(s))
-      .filter((id): id is string => !!id);
-
     const allEstimates = await getBillingEstimate({
       months: [prevMonth, ...months],
-      ...(selectedClientIds.length > 0
-        ? { clientIds: selectedClientIds }
-        : { clientId: client?.id ?? null }),
+      clientId: client?.id ?? null,
     });
     const previousEstimate =
       allEstimates.find((e) => e.month === prevMonth) ?? null;
@@ -133,7 +112,6 @@ export default async function BillingTrackerPage({ searchParams }: Props) {
         subtitle={subtitle}
       >
         <TabsNav current={tab} lang={lang} search={sp} />
-        <EstimateClientsFilter clients={clientFilterOptions} lang={lang} />
         {estimates.length === 0 && !previousEstimate ? (
           <EmptyState
             title={
@@ -242,7 +220,6 @@ function TabsNav({
 
   const estimateParams = new URLSearchParams();
   if (search.client) estimateParams.set("client", search.client);
-  if (search.clients) estimateParams.set("clients", search.clients);
   estimateParams.set("tab", "estimates");
   const estimateHref = `/billing-tracker?${estimateParams.toString()}`;
 

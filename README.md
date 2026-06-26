@@ -119,7 +119,7 @@ app/
       page.tsx              # gate por cookie → login o tabs; lookup por slug (404 si no existe/reservado)
       portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
       portal-login.tsx, portal-logout.tsx, portal-benchmarks-filters.tsx
-      portal-filters.tsx      # filtros URL-based del portal + multi-select de campañas CON BUSCADOR (CampaignMultiSelect) + rango de fechas Desde/Hasta (Proyectos, ?pfrom/?pto)
+      portal-filters.tsx      # filtros URL-based del portal: multi-select genérico (MultiSelect, búsqueda opcional) para Budget Origin (?bo) / Proyecto (?proj) / Mes (?month) / Campañas (?camp) — todos listas separadas por coma — + rango de fechas Desde/Hasta (Proyectos, ?pfrom/?pto)
   api/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + mercado + fechas por publisher/placement)
@@ -151,7 +151,6 @@ components/                 # UI compartida
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates
   billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
-  estimate-clients-filter.tsx    # tab Estimación: filtro multi-select de clientes (?clients=slug1,slug2), URL-based
   reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
   reporting-gantt.tsx       # Gantt diario -30/+30 días para reporting calendar
   report-comments.tsx       # tablerito de comentarios por reporte del calendario (botón + modal con autor/fecha/hora)
@@ -578,16 +577,13 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   facturado (`alreadyBilledMediaUsd` viene de `plan_billing_publishers`;
   `alreadyBilledFeesUsd` de `plan_billing_fees`). Los totales `grossUsd` y
   `alreadyBilledUsd` se siguen exportando como sumas.
-- Acepta filtros opcionales: `months[]`, `budgetOriginId`, `projectId`,
-  `clientId` (single) y `clientIds[]` (multi — tiene prioridad sobre
-  `clientId`; se usa `inArray` en las 3 subqueries).
+- Acepta filtros opcionales: `months[]`, `budgetOriginId`/`budgetOriginIds[]`,
+  `projectId`/`projectIds[]`, `clientId`. Los `*Ids[]` (multi) tienen prioridad
+  sobre los single homónimos (`inArray` en las 3 subqueries) — los usan los
+  **filtros multi-select del portal**.
 - **Dónde vive**: en `/billing-tracker?tab=estimates`. Las cards se renderean
   con `components/billing-estimate-card.tsx` — 2 meses adelante + 1 card del
   **mes anterior** con "Real vs Estimado recomputado" y variación coloreada.
-- **Filtro multi-cliente** (tab Estimación): `components/estimate-clients-filter.tsx`
-  persiste `?clients=slug1,slug2` y la página resuelve los slugs a IDs y los
-  pasa como `clientIds` a `getBillingEstimate` (override del cliente único del
-  topbar; vacío → cae al cliente global / todos).
   El estimado del mes anterior se recomputa contra los planes actuales — no
   es snapshot histórico; sirve como sanity check para detectar planes
   modificados después de facturar.
