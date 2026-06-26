@@ -2,30 +2,33 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 26/jun/2026 — Billing Tracker (Estimación): filtro multi-select de clientes (#174)
+### Cambios de la sesión 26/jun/2026 — Portal: filtros multi-select (Budget Origin / Proyecto / Mes)
 
-La tab **Estimación** del Billing Tracker solo se podía acotar al cliente único
-del topbar. Ahora tiene un filtro propio **multi-select de clientes** para ver
-la estimación de varias cuentas juntas.
+En el **portal del cliente**, los filtros de las tabs **Estimación**, **Billing
+Tracker** y **Proyectos** (Budget Origin, Proyecto, Mes) eran `<select>` de un
+solo valor. Ahora son **multi-select** (popover con checkboxes), para acotar a
+varias cuentas/proyectos/meses a la vez.
 
-- **`db/queries/dashboard.ts`** — `getBillingEstimate` acepta `clientIds?: string[]`.
-  Se arma un único `clientCond` (`inArray(projects.clientId, clientIds)` si hay
-  multi, `eq(...)` si hay single, `[]` si ninguno) y se spreadea en las **3**
-  subqueries de cliente (placements + ya facturado media/fees). Tiene prioridad
-  sobre `clientId`; vacío → cae al cliente global / todos.
-- **`components/estimate-clients-filter.tsx`** (nuevo) — popover con checkboxes,
-  URL-based (`?clients=slug1,slug2`), portal-safe vía GET. Cierra con click-afuera
-  / Escape.
-- **`app/(app)/billing-tracker/page.tsx`** — la tab estimates trae
-  `getClientsList()`, resuelve los slugs del filtro a IDs y los pasa como
-  `clientIds` (override) o `clientId` (fallback global). `TabsNav` preserva
-  `?clients` al cambiar de tab.
-- **Decisión de diseño**: el filtro local y el picker global del topbar
-  coexisten; el local manda en esta vista. El título/idioma de la página siguen
-  derivando del cliente global (cosmético, consistente con el resto de la app).
-- **Revisión**: diff revisado adversarialmente (workflow) antes de mergear — 0
-  hallazgos confirmados. `tsc` + `eslint` + `next build` en verde. **Sin cambios
-  de schema. No requiere acción en prod.**
+- **`components/.../portal-filters.tsx`** — se generalizó el `CampaignMultiSelect`
+  a un `MultiSelect` reutilizable (búsqueda opcional vía `searchable`). Los
+  filtros `origin` (`?bo=`), `project` (`?proj=`) y `month` (`?month=`) pasan a
+  ser listas separadas por coma (igual que `?camp=`). La campaña sigue con
+  buscador; proyecto también.
+- **`portal-content.tsx`** — las secciones parten los params con `splitList()` y
+  pasan listas: `BillingSection`→`getBillingTracker({budgetOriginIds, projectIds,
+  months})`, `EstimateSection`→`getBillingEstimate({budgetOriginIds, projectIds,
+  months})` (sin selección de mes usa el default prev+2; con selección usa esos
+  meses), `ProjectsSection`→`getDashboardProjects({budgetOriginIds})`.
+- **Queries** (`db/queries/dashboard.ts` + `billing-tracker.ts`) — `getBillingEstimate`,
+  `getBillingTracker` y `getDashboardProjects` aceptan los `*Ids` / `months`
+  multi (cláusula `inArray`), con **prioridad sobre** los single homónimos, que
+  se mantienen para los callers internos (el `BillingTracker` interno sigue
+  usando `fromMonth`/`toMonth` del slider).
+- **Revert**: este cambio **revierte el #174** (filtro multi-cliente del Billing
+  Tracker *interno*) — era la vista equivocada; el pedido era para el portal.
+- **Revisión**: diff revisado adversarialmente (workflow) antes de mergear.
+  `tsc` + `eslint` + `next build` en verde. **Sin cambios de schema. No requiere
+  acción en prod.**
 
 ### Cambios de la sesión 26/jun/2026 — Campaign Tracker: cargar todas las métricas del plan desde el catálogo (#171)
 

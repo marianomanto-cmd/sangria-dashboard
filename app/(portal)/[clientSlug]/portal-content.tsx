@@ -116,6 +116,12 @@ function KpiCard({ label, value }: { label: string; value: string }) {
 
 // ─── Billing Tracker ──────────────────────────────────────────────────────────
 
+// Filtros multi-select del portal: los params bo/proj/month son listas
+// separadas por coma ("id1,id2"). Devuelve [] si está vacío.
+function splitList(v: string | null | undefined): string[] {
+  return (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export async function BillingSection({
   clientId,
   lang,
@@ -127,10 +133,9 @@ export async function BillingSection({
 }) {
   const projects = await getBillingTracker({
     clientId,
-    budgetOriginId: params.bo || null,
-    projectId: params.proj || null,
-    fromMonth: params.month || null,
-    toMonth: params.month || null,
+    budgetOriginIds: splitList(params.bo),
+    projectIds: splitList(params.proj),
+    months: splitList(params.month),
   });
 
   if (projects.length === 0) {
@@ -302,19 +307,19 @@ export async function EstimateSection({
   lang: Language;
   params: PortalParams;
 }) {
-  const singleMonth = params.month || null;
-  const months = singleMonth
-    ? [singleMonth]
+  const selectedMonths = splitList(params.month);
+  const months = selectedMonths.length
+    ? selectedMonths
     : [previousMonth(), ...nextMonths(2)];
 
   const all = await getBillingEstimate({
     clientId,
-    budgetOriginId: params.bo || null,
-    projectId: params.proj || null,
+    budgetOriginIds: splitList(params.bo),
+    projectIds: splitList(params.proj),
     months,
   });
 
-  const prev = singleMonth ? null : previousMonth();
+  const prev = selectedMonths.length ? null : previousMonth();
   const previousEstimate = prev
     ? all.find((e) => e.month === prev) ?? null
     : null;
@@ -519,7 +524,7 @@ export async function ProjectsSection({
 
   const { rows } = await getDashboardProjects({
     clientId,
-    budgetOriginId: selectedCampaigns ? null : params.bo || null,
+    budgetOriginIds: selectedCampaigns ? null : splitList(params.bo),
   });
 
   // Pacing expandido: varios planes a la vez (planIds separados por coma).

@@ -59,15 +59,23 @@ export function PortalFilters({
     router.push(qs ? `${pathname}?${qs}` : pathname);
   };
 
-  const campValues = cur("camp") ? cur("camp").split(",").filter(Boolean) : [];
+  // Todos los filtros de selección del portal son multi (listas separadas por
+  // coma). El parent las consume con split.
+  const list = (k: string) =>
+    cur(k) ? cur(k).split(",").filter(Boolean) : [];
+  const campValues = list("camp");
+  const boValues = list("bo");
+  const projValues = list("proj");
+  const monthValues = list("month");
+  const allLabel = lang === "es" ? "Todos" : "All";
 
   const isFiltered =
     (fields.includes("pstatus") && !!cur("pstatus")) ||
-    (fields.includes("origin") && !!cur("bo")) ||
-    (fields.includes("project") && !!cur("proj")) ||
+    (fields.includes("origin") && boValues.length > 0) ||
+    (fields.includes("project") && projValues.length > 0) ||
     (fields.includes("campaign") && campValues.length > 0) ||
     (fields.includes("daterange") && (!!cur("pfrom") || !!cur("pto"))) ||
-    (fields.includes("month") && !!cur("month"));
+    (fields.includes("month") && monthValues.length > 0);
 
   return (
     <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-4 py-3 mb-5 flex items-end gap-3 flex-wrap">
@@ -89,46 +97,48 @@ export function PortalFilters({
 
       {fields.includes("campaign") && (
         <Field label={lang === "es" ? "Campañas" : "Campaigns"}>
-          <CampaignMultiSelect
+          <MultiSelect
             options={campaigns}
             values={campValues}
             onChange={(arr) => update("camp", arr.join(","))}
             lang={lang}
+            allLabel={lang === "es" ? "Todas" : "All"}
+            searchable
+            searchPlaceholder={
+              lang === "es" ? "Buscar campaña…" : "Search campaign…"
+            }
+            widthClass="min-w-[220px] max-w-[320px]"
           />
         </Field>
       )}
 
       {fields.includes("origin") && (
         <Field label="Budget Origin">
-          <select
-            value={cur("bo")}
-            onChange={(e) => update("bo", e.target.value)}
-            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[160px]"
-          >
-            <option value="">{lang === "es" ? "Todos" : "All"}</option>
-            {budgetOrigins.map((o) => (
-              <option key={o.id} value={o.id}>
-                {o.name}
-              </option>
-            ))}
-          </select>
+          <MultiSelect
+            options={budgetOrigins}
+            values={boValues}
+            onChange={(arr) => update("bo", arr.join(","))}
+            lang={lang}
+            allLabel={allLabel}
+            widthClass="min-w-[160px] max-w-[260px]"
+          />
         </Field>
       )}
 
       {fields.includes("project") && (
         <Field label={lang === "es" ? "Proyecto" : "Project"}>
-          <select
-            value={cur("proj")}
-            onChange={(e) => update("proj", e.target.value)}
-            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[220px] max-w-[320px]"
-          >
-            <option value="">{lang === "es" ? "Todos" : "All"}</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+          <MultiSelect
+            options={projects.map((p) => ({ id: p.id, name: p.name }))}
+            values={projValues}
+            onChange={(arr) => update("proj", arr.join(","))}
+            lang={lang}
+            allLabel={allLabel}
+            searchable
+            searchPlaceholder={
+              lang === "es" ? "Buscar proyecto…" : "Search project…"
+            }
+            widthClass="min-w-[220px] max-w-[320px]"
+          />
         </Field>
       )}
 
@@ -157,18 +167,14 @@ export function PortalFilters({
 
       {fields.includes("month") && (
         <Field label={lang === "es" ? "Mes" : "Month"}>
-          <select
-            value={cur("month")}
-            onChange={(e) => update("month", e.target.value)}
-            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[150px]"
-          >
-            <option value="">{lang === "es" ? "Todos" : "All"}</option>
-            {months.map((m) => (
-              <option key={m} value={m}>
-                {formatMonth(m, lang)}
-              </option>
-            ))}
-          </select>
+          <MultiSelect
+            options={months.map((m) => ({ id: m, name: formatMonth(m, lang) }))}
+            values={monthValues}
+            onChange={(arr) => update("month", arr.join(","))}
+            lang={lang}
+            allLabel={allLabel}
+            widthClass="min-w-[150px] max-w-[240px]"
+          />
         </Field>
       )}
 
@@ -203,19 +209,27 @@ function Field({
   );
 }
 
-// Multi-select con buscador (popover de checkboxes). URL-based vía onChange del
-// parent (GET, portal-safe). Cierra al hacer click afuera. Permite buscar las
-// campañas por nombre y seleccionar varias a la vez.
-function CampaignMultiSelect({
+// Multi-select genérico (popover de checkboxes). URL-based vía onChange del
+// parent (GET, portal-safe). Cierra al hacer click afuera. `searchable` agrega
+// un buscador por nombre (útil para listas largas como campañas/proyectos).
+function MultiSelect({
   options,
   values,
   onChange,
   lang,
+  allLabel,
+  searchable = false,
+  searchPlaceholder,
+  widthClass = "min-w-[160px]",
 }: {
   options: { id: string; name: string }[];
   values: string[];
   onChange: (next: string[]) => void;
   lang: Language;
+  allLabel: string;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  widthClass?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -236,24 +250,24 @@ function CampaignMultiSelect({
     );
 
   const q = query.trim().toLowerCase();
-  const filtered = q
-    ? options.filter((o) => o.name.toLowerCase().includes(q))
-    : options;
+  const filtered =
+    searchable && q
+      ? options.filter((o) => o.name.toLowerCase().includes(q))
+      : options;
 
-  const allLabel = lang === "es" ? "Todas" : "All";
   const summary =
     values.length === 0
       ? allLabel
       : values.length === 1
         ? (options.find((o) => o.id === values[0])?.name ?? "1")
-        : `${values.length} ${lang === "es" ? "seleccionadas" : "selected"}`;
+        : `${values.length} ${lang === "es" ? "seleccionados" : "selected"}`;
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="min-w-[220px] max-w-[320px] flex items-center justify-between gap-2 rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        className={`${widthClass} flex items-center justify-between gap-2 rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent`}
       >
         <span className={`truncate ${values.length ? "text-ink" : "text-muted"}`}>
           {summary}
@@ -262,23 +276,23 @@ function CampaignMultiSelect({
       </button>
       {open && (
         <div className="absolute z-30 mt-1 w-[min(320px,90vw)] rounded-md border border-line bg-white dark:bg-paper-2 shadow-lg">
-          <div className="p-2 border-b border-line-soft">
-            <div className="relative">
-              <Search
-                size={13}
-                className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted"
-              />
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={
-                  lang === "es" ? "Buscar campaña…" : "Search campaign…"
-                }
-                className="w-full rounded-md border border-line bg-white dark:bg-paper-2 pl-7 pr-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-              />
+          {searchable && (
+            <div className="p-2 border-b border-line-soft">
+              <div className="relative">
+                <Search
+                  size={13}
+                  className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted"
+                />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="w-full rounded-md border border-line bg-white dark:bg-paper-2 pl-7 pr-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
             </div>
-          </div>
+          )}
           <div className="max-h-60 overflow-auto py-1">
             {filtered.length === 0 ? (
               <p className="px-2.5 py-1.5 text-xs text-muted">

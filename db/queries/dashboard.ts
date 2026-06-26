@@ -187,12 +187,21 @@ export type DashboardProjects = {
 };
 
 export async function getDashboardProjects(
-  options: { budgetOriginId?: string | null; clientId?: string | null } = {},
+  options: {
+    budgetOriginId?: string | null;
+    clientId?: string | null;
+    budgetOriginIds?: string[] | null; // multi (portal): prioridad sobre single
+  } = {},
 ): Promise<DashboardProjects> {
   const filterOrigin = options.budgetOriginId ?? null;
   const filterClient = options.clientId ?? null;
+  const filterOriginIds = (options.budgetOriginIds ?? []).filter(Boolean);
   const conds = [
-    ...(filterOrigin ? [eq(projects.budgetOriginId, filterOrigin)] : []),
+    ...(filterOriginIds.length
+      ? [inArray(projects.budgetOriginId, filterOriginIds)]
+      : filterOrigin
+        ? [eq(projects.budgetOriginId, filterOrigin)]
+        : []),
     ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
   ];
   const totalsWhere =
@@ -690,11 +699,31 @@ export async function getBillingEstimate(options: {
   budgetOriginId?: string | null;
   projectId?: string | null;
   clientId?: string | null;
+  // Filtros multi (portal): tienen prioridad sobre los single homónimos.
+  budgetOriginIds?: string[] | null;
+  projectIds?: string[] | null;
 }): Promise<MonthlyBillingEstimate[]> {
   const targetMonths = new Set(options.months);
   const filterOrigin = options.budgetOriginId ?? null;
   const filterProject = options.projectId ?? null;
   const filterClient = options.clientId ?? null;
+  const filterOriginIds = (options.budgetOriginIds ?? []).filter(Boolean);
+  const filterProjectIds = (options.projectIds ?? []).filter(Boolean);
+  // Condiciones de scope reutilizadas en las 3 subqueries (placements + ya
+  // facturado media/fees). Multi (inArray) tiene prioridad sobre single (eq).
+  const scopeConds = [
+    ...(filterOriginIds.length
+      ? [inArray(projects.budgetOriginId, filterOriginIds)]
+      : filterOrigin
+        ? [eq(projects.budgetOriginId, filterOrigin)]
+        : []),
+    ...(filterProjectIds.length
+      ? [inArray(projects.id, filterProjectIds)]
+      : filterProject
+        ? [eq(projects.id, filterProject)]
+        : []),
+    ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
+  ];
 
   const planStatusFilter = inArray(mediaPlans.status, [
     "approved",
@@ -724,9 +753,7 @@ export async function getBillingEstimate(options: {
 
   const placementWhere = and(
     planStatusFilter,
-    ...(filterOrigin ? [eq(projects.budgetOriginId, filterOrigin)] : []),
-    ...(filterProject ? [eq(projects.id, filterProject)] : []),
-    ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
+    ...scopeConds,
   );
   const placements = await placementsBase.where(placementWhere);
 
@@ -906,11 +933,7 @@ export async function getBillingEstimate(options: {
       and(
         inArray(planBillings.month, options.months),
         inArray(planBillings.status, ["invoiced", "paid"]),
-        ...(filterOrigin
-          ? [eq(projects.budgetOriginId, filterOrigin)]
-          : []),
-        ...(filterProject ? [eq(projects.id, filterProject)] : []),
-        ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
+        ...scopeConds,
       ),
     )
     .groupBy(planBillings.month, projects.id);
@@ -932,11 +955,7 @@ export async function getBillingEstimate(options: {
       and(
         inArray(planBillings.month, options.months),
         inArray(planBillings.status, ["invoiced", "paid"]),
-        ...(filterOrigin
-          ? [eq(projects.budgetOriginId, filterOrigin)]
-          : []),
-        ...(filterProject ? [eq(projects.id, filterProject)] : []),
-        ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
+        ...scopeConds,
       ),
     )
     .groupBy(planBillings.month, projects.id);
