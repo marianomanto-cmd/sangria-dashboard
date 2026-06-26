@@ -2,6 +2,31 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 26/jun/2026 — Billing Tracker (Estimación): filtro multi-select de clientes (#174)
+
+La tab **Estimación** del Billing Tracker solo se podía acotar al cliente único
+del topbar. Ahora tiene un filtro propio **multi-select de clientes** para ver
+la estimación de varias cuentas juntas.
+
+- **`db/queries/dashboard.ts`** — `getBillingEstimate` acepta `clientIds?: string[]`.
+  Se arma un único `clientCond` (`inArray(projects.clientId, clientIds)` si hay
+  multi, `eq(...)` si hay single, `[]` si ninguno) y se spreadea en las **3**
+  subqueries de cliente (placements + ya facturado media/fees). Tiene prioridad
+  sobre `clientId`; vacío → cae al cliente global / todos.
+- **`components/estimate-clients-filter.tsx`** (nuevo) — popover con checkboxes,
+  URL-based (`?clients=slug1,slug2`), portal-safe vía GET. Cierra con click-afuera
+  / Escape.
+- **`app/(app)/billing-tracker/page.tsx`** — la tab estimates trae
+  `getClientsList()`, resuelve los slugs del filtro a IDs y los pasa como
+  `clientIds` (override) o `clientId` (fallback global). `TabsNav` preserva
+  `?clients` al cambiar de tab.
+- **Decisión de diseño**: el filtro local y el picker global del topbar
+  coexisten; el local manda en esta vista. El título/idioma de la página siguen
+  derivando del cliente global (cosmético, consistente con el resto de la app).
+- **Revisión**: diff revisado adversarialmente (workflow) antes de mergear — 0
+  hallazgos confirmados. `tsc` + `eslint` + `next build` en verde. **Sin cambios
+  de schema. No requiere acción en prod.**
+
 ### Cambios de la sesión 26/jun/2026 — Campaign Tracker: cargar todas las métricas del plan desde el catálogo (#171)
 
 El Campaign Tracker clasificaba las métricas direct (cargables) vs calculated
@@ -2263,6 +2288,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+0154ed0  Billing Tracker (Estimación): filtro multi-select de clientes (#174)
 f9551f9  Campaign Tracker: cargar todas las métricas del plan desde el catálogo (#171)
 78d11b5  Revisión estética/cosmética + bugs + recomendaciones (#169)
 0ff1348  Portal (Proyectos): filtro de rango de fechas Desde/Hasta (#167)
