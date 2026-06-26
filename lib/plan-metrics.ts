@@ -44,6 +44,28 @@ export function evalFormula(
   return (n / d) * multiplier;
 }
 
+// Slugs de métricas direct que una fórmula necesita como inputs (excluye
+// "amount", que siempre está disponible vía el monto del placement). Mismo
+// parseo que `evalFormula`: "num / den ×N".
+//
+// Devuelve `null` si la fórmula NO es del patrón soportado (no derivable) —
+// distinto de `[]`, que significa "parseable pero sin inputs direct" (p. ej.
+// "amount / amount"). El Campaign Tracker usa esto para decidir si una métrica
+// calculada del catálogo aplica a un placement: `null` → no se muestra (evita
+// filas fantasma), `[]`/lista → aplica si todos sus inputs están en el plan.
+export function formulaDirectInputs(
+  formula: string | null | undefined,
+): string[] | null {
+  if (!formula) return null;
+  const f = formula
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/×\d+/, "");
+  const m = f.match(/^([a-z_]+)\/([a-z_]+)$/);
+  if (!m) return null;
+  return [m[1], m[2]].filter((s) => s !== "amount");
+}
+
 // Valor de una métrica para un placement: el guardado en metrics_json si es un
 // número finito (honra lo cargado a mano), o el computado por su fórmula a
 // partir de los directs + amount del placement (para calculated como CTR, CPM,

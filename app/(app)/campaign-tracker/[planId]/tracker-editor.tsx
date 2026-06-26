@@ -19,6 +19,7 @@ import {
   formatMetricValue,
   parseCellValue,
   parseLocalDate,
+  type CatalogMetricDef,
   type DirectGoal,
   type MetricUnit,
 } from "@/lib/campaign-metrics";
@@ -53,11 +54,15 @@ export function CampaignTrackerEditor({
   pacePct,
   publishers,
   lastCloseDate,
+  calcDefs,
 }: {
   planId: string;
   pacePct: number;
   publishers: TrackerPublisherGroup[];
   lastCloseDate: string | null;
+  // Calculadas del catálogo del cliente: para re-derivar las filas calculated
+  // client-side a partir de las direct editadas (misma lógica que el server).
+  calcDefs: CatalogMetricDef[];
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -199,12 +204,13 @@ export function CampaignTrackerEditor({
             pl.directGoals,
             actuals[pl.id] ?? {},
             (k, fb) => pl.labelByKey[k] ?? fb,
+            calcDefs,
           ),
         );
       }
     }
     return map;
-  }, [editorPublishers, actuals]);
+  }, [editorPublishers, actuals, calcDefs]);
 
   // Filas de la última carga cerrada, por placement → métrica. Para el modo
   // "Comparar con última carga".
@@ -216,12 +222,13 @@ export function CampaignTrackerEditor({
           pl.directGoals,
           pl.previousActuals,
           (k, fb) => pl.labelByKey[k] ?? fb,
+          calcDefs,
         );
         map.set(pl.id, new Map(rows.map((r) => [r.key, r])));
       }
     }
     return map;
-  }, [editorPublishers]);
+  }, [editorPublishers, calcDefs]);
 
   // Datos del chart: % de consumo de inversión por placement.
   const chartData = useMemo(() => {

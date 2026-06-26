@@ -12,6 +12,7 @@ import {
   CALC_METRICS,
   computePaceStatus,
   DIRECT_METRIC_LABELS,
+  type CatalogMetricDef,
   type DirectGoal,
   type MetricUnit,
   type PaceStatus,
@@ -149,12 +150,24 @@ function placementMetricMap(
   return new Map(pl.metrics.map((m) => [m.key, { goal: m.goal, actual: m.actual }]));
 }
 
+// Unión de las defs de métricas calculadas de todos los planes (todos del
+// mismo cliente), deduplicada por slug. Los agregados las usan para derivar las
+// MISMAS calculadas que las filas de detalle (si no, los subtotales/totales
+// quedarían en blanco para las calculadas custom del catálogo).
+function unionCalcDefs(plans: CampaignTrackerPlan[]): CatalogMetricDef[] {
+  const bySlug = new Map<string, CatalogMetricDef>();
+  for (const p of plans)
+    for (const d of p.calcDefs) if (!bySlug.has(d.slug)) bySlug.set(d.slug, d);
+  return Array.from(bySlug.values());
+}
+
 // Agregado de métricas sobre un set de placements: suma las directas y RE-DERIVA
-// las calculadas (CPM/CTR/…) desde las sumas (igual que los subtotales de la app;
-// promediar tarifas estaría mal). Incluye "amount" para poder derivar las que lo
-// necesitan.
+// las calculadas (CPM/CTR/ROAS/CPT/…) desde las sumas con las fórmulas del
+// catálogo (igual que los subtotales de la app; promediar tarifas estaría mal).
+// Incluye "amount" para poder derivar las que lo necesitan.
 function aggregateMetricMap(
   placements: TrackerPlacement[],
+  calcDefs: CatalogMetricDef[],
 ): Map<string, { goal: number | null; actual: number }> {
   const goalByKey: Record<string, number> = {};
   const actualByKey: Record<string, number> = {};
@@ -168,7 +181,7 @@ function aggregateMetricMap(
     key: k,
     goal: goalByKey[k],
   }));
-  const rows = buildMetricRows(directGoals, actualByKey, (_k, f) => f);
+  const rows = buildMetricRows(directGoals, actualByKey, (_k, f) => f, calcDefs);
   return new Map(rows.map((r) => [r.key, { goal: r.goal, actual: r.actual }]));
 }
 
@@ -398,6 +411,7 @@ function buildDetalleSheet(
   metricCols: MetricCol[],
 ) {
   const es = lang === "es";
+  const calcDefs = unionCalcDefs(plans);
   const ws = wb.addWorksheet(es ? "Detalle" : "Detail");
   // Base: label · mercado · goal · real · avance · pace. Luego goal/real por
   // cada métrica.
@@ -473,7 +487,7 @@ function buildDetalleSheet(
       subRow.getCell(4).numFmt = USD_FMT;
       subRow.getCell(5).value = pub.progressPct;
       subRow.getCell(5).numFmt = PCT_FMT;
-      writeMetricCells(subRow, aggregateMetricMap(pub.placements));
+      writeMetricCells(subRow, aggregateMetricMap(pub.placements, calcDefs));
       fillRow(subRow, totalCols, ACCENT_SOFT);
       subRow.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
       subRow.height = 20;
@@ -519,7 +533,7 @@ function buildDetalleSheet(
     totRow.getCell(5).numFmt = PCT_FMT;
     writeMetricCells(
       totRow,
-      aggregateMetricMap(p.publishers.flatMap((g) => g.placements)),
+      aggregateMetricMap(p.publishers.flatMap((g) => g.placements), calcDefs),
     );
     fillRow(totRow, totalCols, INK, true);
     totRow.height = 20;
@@ -536,6 +550,7 @@ function buildPorMercadoSheet(
   metricCols: MetricCol[],
 ) {
   const es = lang === "es";
+  const calcDefs = unionCalcDefs(plans);
   const ws = wb.addWorksheet(es ? "Por mercado" : "By market");
   const noMarket = es ? "(sin mercado)" : "(no market)";
 
@@ -611,7 +626,7 @@ function buildPorMercadoSheet(
     row.getCell(3).numFmt = USD_FMT;
     row.getCell(4).value = progressOf(m.goal, m.actual);
     row.getCell(4).numFmt = PCT_FMT;
-    writeMetricCells(row, aggregateMetricMap(m.placements));
+    writeMetricCells(row, aggregateMetricMap(m.placements, calcDefs));
     for (let c = 1; c <= totalCols; c++) row.getCell(c).border = allBorders;
     goalSum += m.goal;
     actualSum += m.actual;
@@ -636,7 +651,7 @@ function buildPorMercadoSheet(
   totalRow.getCell(4).numFmt = PCT_FMT;
   writeMetricCells(
     totalRow,
-    aggregateMetricMap(rows.flatMap((m) => m.placements)),
+    aggregateMetricMap(rows.flatMap((m) => m.placements), calcDefs),
   );
   fillRow(totalRow, totalCols, INK, true);
   totalRow.height = 22;

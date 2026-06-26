@@ -11,12 +11,9 @@ import {
   mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlans,
+  metricsCatalog,
   projects,
 } from "@/db/schema";
-import {
-  directKeysFromMetricsJson,
-  isDirectMetricKey,
-} from "@/lib/campaign-metrics";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -37,29 +34,50 @@ export async function setPlacementActual(input: {
 }): Promise<Result> {
   if (!Number.isFinite(input.value) || input.value < 0)
     return { ok: false, error: "Valor inválido" };
-  if (!isDirectMetricKey(input.metricKey))
-    return {
-      ok: false,
-      error: `La métrica "${input.metricKey}" no es editable (es calculada o desconocida)`,
-    };
 
-  // El placement tiene que existir y pertenecer al plan indicado.
+  // El placement tiene que existir y pertenecer al plan indicado. Traemos
+  // también el cliente del plan para validar la métrica contra su catálogo.
   const [placement] = await db
     .select({
       id: mediaPlanPlacements.id,
       planId: mediaPlanPublishers.mediaPlanId,
+      clientId: projects.clientId,
     })
     .from(mediaPlanPlacements)
     .innerJoin(
       mediaPlanPublishers,
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
+    .innerJoin(mediaPlans, eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id))
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(eq(mediaPlanPlacements.id, input.placementId))
     .limit(1);
 
   if (!placement) return { ok: false, error: "Placement no encontrado" };
   if (placement.planId !== input.planId)
     return { ok: false, error: "El placement no pertenece a este plan" };
+
+  // Solo se cargan métricas direct: `amount` (inversión) o un slug del catálogo
+  // del cliente marcado como direct y habilitado. Las calculadas se derivan.
+  if (input.metricKey !== "amount") {
+    const [metric] = await db
+      .select({ id: metricsCatalog.id })
+      .from(metricsCatalog)
+      .where(
+        and(
+          eq(metricsCatalog.clientId, placement.clientId),
+          eq(metricsCatalog.slug, input.metricKey),
+          eq(metricsCatalog.kind, "direct"),
+          eq(metricsCatalog.enabled, true),
+        ),
+      )
+      .limit(1);
+    if (!metric)
+      return {
+        ok: false,
+        error: `La métrica "${input.metricKey}" no es editable (no es una métrica direct del cliente)`,
+      };
+  }
 
   const [existing] = await db
     .select()
@@ -171,12 +189,29 @@ export async function closeDailyLoad(input: {
     m.set(r.metricKey, Number.parseFloat(r.valueActual));
   }
 
+  // Slugs direct habilitados del catálogo del cliente: definen qué métricas se
+  // snapshotean (mismo criterio que la vista de carga). Un plan = un cliente.
+  const catRows = await db
+    .select({ slug: metricsCatalog.slug })
+    .from(metricsCatalog)
+    .where(
+      and(
+        eq(metricsCatalog.clientId, rows[0].clientId),
+        eq(metricsCatalog.kind, "direct"),
+        eq(metricsCatalog.enabled, true),
+      ),
+    );
+  const directSlugs = new Set(catRows.map((c) => c.slug));
+
   const snapshotDate = new Date().toISOString().slice(0, 10);
 
   const values: (typeof campaignActualSnapshots.$inferInsert)[] = [];
   for (const r of rows) {
     const metricsJson = (r.metricsJson ?? {}) as Record<string, number>;
-    const directKeys = ["amount", ...directKeysFromMetricsJson(metricsJson)];
+    const directKeys = [
+      "amount",
+      ...Object.keys(metricsJson).filter((k) => directSlugs.has(k)),
+    ];
     const live = liveByPlacement.get(r.placementId);
     for (const key of directKeys) {
       const goal =
