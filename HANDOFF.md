@@ -1,6 +1,44 @@
-# Handoff — miércoles 24/jun/2026
+# Handoff — viernes 26/jun/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 26/jun/2026 — Campaign Tracker: cargar todas las métricas del plan desde el catálogo (#171)
+
+El Campaign Tracker clasificaba las métricas direct (cargables) vs calculated
+(derivadas) contra una **lista hardcodeada** (`DIRECT_METRIC_RATES` en
+`lib/cost-methods.ts`), así que solo se podían cargar `amount`/`impressions`/
+`clicks`/etc. y las métricas custom del cliente quedaban invisibles. En Copa,
+`tickets`, `tickets_stopover`, `lc_tickets` y `revenue` están en el catálogo
+como `direct` pero no eran cargables. (Era la deuda técnica anotada en este
+HANDOFF.)
+
+- **Clasificación catalog-driven**: ahora sale del `metrics_catalog` de cada
+  cliente — la misma fuente que el editor de planes y los exports. Toda métrica
+  `direct` habilitada presente en el `metrics_json` del placement es cargable;
+  las `calculated` se derivan con su fórmula (incl. custom como ROAS / CPT /
+  CPT STO). Aplica a **todos** los planes de **todos** los clientes.
+- **`lib/campaign-metrics.ts`**: `buildMetricRows` recibe `calcDefs` (requerido,
+  del catálogo) — sin fallback hardcodeado. Las `%` del catálogo (fracción) se
+  escalan ×100 para el display. `formulaDirectInputs` (en `lib/plan-metrics.ts`)
+  devuelve `null` para fórmulas no parseables (evita filas fantasma). Se
+  eliminan `isDirectMetricKey` / `directKeysFromMetricsJson`.
+- **`db/queries/campaign-tracker.ts`**: clasifica direct/calc por catálogo
+  (`directSlugs` / `calcDefs`) y expone `calcDefs` en `CampaignTrackerPlan`.
+- **`app/actions/campaign-tracker.ts`**: `setPlacementActual` valida la métrica
+  contra el catálogo del cliente (`amount` o slug `direct` habilitado);
+  `closeDailyLoad` snapshotea todas las direct del catálogo.
+- **`pacing.xlsx` del portal** (consumidor de `getCampaignTrackerPlan`): los
+  subtotales/totales/por-mercado agregan las calculadas del catálogo
+  (`unionCalcDefs`) para no quedar en blanco bajo columnas con datos.
+- **Revisión**: el diff se revisó adversarialmente (workflow multi-agente) antes
+  de mergear; se detectaron y corrigieron una regresión (alta) en `pacing.xlsx`
+  y dos issues menores. `tsc` + `eslint` + `next build` en verde.
+- **Sin cambios de schema. No requiere acción en prod** — la persistencia
+  (`campaign_placement_actuals.metric_key`, snapshots) ya guardaba por slug.
+- **Pendiente (data, del lado del usuario)**: varias calculadas custom de Copa
+  (`CPT`, `CPT LC`, `CPT STO`, `cpa_cc_*`, `roas`) tienen `unit = null` en el
+  catálogo, así que se muestran como entero en vez de `$`/`x` (igual que ya pasa
+  en el editor/exports). Setear la unidad en Configuración → Métricas.
 
 ### Cambios de la sesión 24/jun/2026 — Revisión estética/cosmética + bugs (varios)
 
@@ -2220,6 +2258,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+f9551f9  Campaign Tracker: cargar todas las métricas del plan desde el catálogo (#171)
 78d11b5  Revisión estética/cosmética + bugs + recomendaciones (#169)
 0ff1348  Portal (Proyectos): filtro de rango de fechas Desde/Hasta (#167)
 42264e2  Hojas auxiliares: la columna NET TOTAL nunca se trunca (regla) (#165)
