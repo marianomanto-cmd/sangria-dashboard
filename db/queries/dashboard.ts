@@ -690,23 +690,11 @@ export async function getBillingEstimate(options: {
   budgetOriginId?: string | null;
   projectId?: string | null;
   clientId?: string | null;
-  // Filtro multi-cliente (tab Estimación del Billing Tracker). Si trae IDs,
-  // tiene prioridad sobre clientId (single). Vacío → cae a clientId / sin filtro.
-  clientIds?: string[] | null;
 }): Promise<MonthlyBillingEstimate[]> {
   const targetMonths = new Set(options.months);
   const filterOrigin = options.budgetOriginId ?? null;
   const filterProject = options.projectId ?? null;
   const filterClient = options.clientId ?? null;
-  const filterClientIds = (options.clientIds ?? []).filter(Boolean);
-  // Condición de cliente reutilizada en las 3 subqueries (placements + ya
-  // facturado media/fees): IN si hay multi-selección, eq si hay uno solo.
-  const clientCond =
-    filterClientIds.length > 0
-      ? [inArray(projects.clientId, filterClientIds)]
-      : filterClient
-        ? [eq(projects.clientId, filterClient)]
-        : [];
 
   const planStatusFilter = inArray(mediaPlans.status, [
     "approved",
@@ -738,7 +726,7 @@ export async function getBillingEstimate(options: {
     planStatusFilter,
     ...(filterOrigin ? [eq(projects.budgetOriginId, filterOrigin)] : []),
     ...(filterProject ? [eq(projects.id, filterProject)] : []),
-    ...clientCond,
+    ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
   );
   const placements = await placementsBase.where(placementWhere);
 
@@ -922,7 +910,7 @@ export async function getBillingEstimate(options: {
           ? [eq(projects.budgetOriginId, filterOrigin)]
           : []),
         ...(filterProject ? [eq(projects.id, filterProject)] : []),
-        ...clientCond,
+        ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
       ),
     )
     .groupBy(planBillings.month, projects.id);
@@ -948,7 +936,7 @@ export async function getBillingEstimate(options: {
           ? [eq(projects.budgetOriginId, filterOrigin)]
           : []),
         ...(filterProject ? [eq(projects.id, filterProject)] : []),
-        ...clientCond,
+        ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
       ),
     )
     .groupBy(planBillings.month, projects.id);
