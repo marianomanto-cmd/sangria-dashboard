@@ -3,28 +3,39 @@
 // Los GOALS salen del plan vigente: `amount` = placement.amountUsd y cada
 // métrica delivery (impressions, views, clicks…) = placement.metricsJson[key].
 // La trafficker carga el valor REAL acumulado de esas mismas métricas direct.
-// Las métricas calculadas (CPM, CTR, CPV, CPA, frequency) NO se cargan ni se
-// persisten: se derivan on-the-fly tanto para el goal como para el real, con
-// las mismas fórmulas que usa el resto de la app (ver lib/cost-methods.ts).
+// Las métricas calculadas (CPM, CTR, ROAS, CPT…) NO se cargan ni se persisten:
+// se derivan on-the-fly tanto para el goal como para el real con las fórmulas
+// del metrics_catalog del cliente (evalFormula en lib/plan-metrics.ts). Qué
+// métricas son direct vs calculated sale del catálogo per-cliente, no de una
+// lista hardcodeada.
 
-import { DIRECT_METRIC_RATES } from "@/lib/cost-methods";
+import { evalFormula, formulaDirectInputs } from "@/lib/plan-metrics";
 
 export type MetricUnit = "$" | "%" | "x" | "count";
 
-// Una métrica direct es editable en el tracker si la trafficker puede leer su
-// valor acumulado en la consola del publisher. `amount` siempre lo es; el
-// resto son las claves de DIRECT_METRIC_RATES (impressions, clicks, views,
-// conversions, reach, engagements, followers, leads, installs, visits).
-export function isDirectMetricKey(key: string): boolean {
-  return key === "amount" || key in DIRECT_METRIC_RATES;
-}
+// Definición mínima de una métrica del catálogo del cliente (metrics_catalog)
+// que el tracker necesita para construir filas: las direct se cargan a mano;
+// las calculated se derivan con su fórmula. La clasificación direct vs
+// calculated sale del catálogo per-cliente (NO de una lista hardcodeada), así
+// el tracker muestra TODAS las métricas que el plan realmente usa — incluidas
+// las custom del cliente (tickets, reservas, etc.).
+export type CatalogMetricDef = {
+  slug: string;
+  name: string;
+  kind: "direct" | "calculated";
+  unit: string | null;
+  formula: string | null;
+};
 
-// Extrae las claves direct de un metrics_json de placement (descarta rates
-// como cpm/cpc que se guardan junto a las delivery pero son calculadas).
-export function directKeysFromMetricsJson(
-  metricsJson: Record<string, number>,
-): string[] {
-  return Object.keys(metricsJson).filter((k) => k in DIRECT_METRIC_RATES);
+// Mapea la unidad descriptiva del catálogo ("$", "%", "x", "imp"…) a la unidad
+// de formato del tracker. Las calculadas en "%" se guardan como fracción en el
+// resto de la app (CTR = clicks/impressions = 0.02); el tracker las muestra
+// ×100, así que el builder escala ese caso (ver buildMetricRows).
+function catalogUnitToMetricUnit(unit: string | null): MetricUnit {
+  if (unit === "$") return "$";
+  if (unit === "%") return "%";
+  if (unit === "x") return "x";
+  return "count";
 }
 
 // Labels fallback en español para las métricas direct. Si el cliente tiene
@@ -210,6 +221,11 @@ export function buildMetricRows(
   directGoals: DirectGoal[],
   actuals: Record<string, number>,
   labelFor: (key: string, fallback: string) => string,
+  // Métricas calculadas del catálogo del cliente. Cuando se pasan, las filas
+  // calculated se derivan con sus fórmulas (incluye métricas custom). Si se
+  // omite, se cae al set built-in CALC_METRICS (CPM/CTR/…) — lo usa el export
+  // de pacing del portal, que no resuelve el catálogo por plan.
+  calcDefs?: CatalogMetricDef[],
 ): MetricRow[] {
   const directKeys = directGoals.map((d) => d.key);
   const goalByKey: Record<string, number> = {};
@@ -235,27 +251,58 @@ export function buildMetricRows(
     });
   }
 
-  for (const def of CALC_METRICS) {
-    if (!def.inputs.every((i) => directKeys.includes(i))) continue;
-    const goalInputs: Record<string, number> = {};
-    const actualInputs: Record<string, number> = {};
-    for (const i of def.inputs) {
-      goalInputs[i] = goalByKey[i] ?? 0;
-      actualInputs[i] = actuals[i] ?? 0;
+  if (calcDefs) {
+    // Catálogo del cliente: derivamos cada calculada con su fórmula. Una
+    // calculada aplica si TODOS sus inputs direct están presentes en el plan.
+    const goalAmount = goalByKey.amount ?? 0;
+    const actualAmount = actuals.amount ?? 0;
+    for (const def of calcDefs) {
+      const inputs = formulaDirectInputs(def.formula);
+      if (!inputs.every((i) => directKeys.includes(i))) continue;
+      const unit = catalogUnitToMetricUnit(def.unit);
+      // Las "%" del catálogo son fracciones (0.02); el tracker las muestra ×100.
+      const scale = unit === "%" ? 100 : 1;
+      const goalRaw = evalFormula(def.formula, goalAmount, goalByKey);
+      const actualRaw = evalFormula(def.formula, actualAmount, actuals);
+      const goal = goalRaw != null && goalRaw > 0 ? goalRaw * scale : null;
+      const actual = actualRaw != null ? actualRaw * scale : 0;
+      rows.push({
+        key: def.slug,
+        label: labelFor(def.slug, def.name),
+        kind: "calculated",
+        unit,
+        goal,
+        actual,
+        goalPct: goal != null ? (actual / goal) * 100 : null,
+        // Para los "costo por X" (en $) consumir por debajo del goal es bueno;
+        // para ratios (%/x) más alto suele ser mejor.
+        lowerIsBetter: unit === "$",
+      });
     }
-    const goalRaw = def.compute(goalInputs);
-    const actualRaw = def.compute(actualInputs);
-    const goal = goalRaw != null && goalRaw > 0 ? goalRaw : null;
-    rows.push({
-      key: def.key,
-      label: labelFor(def.key, def.name),
-      kind: "calculated",
-      unit: def.unit,
-      goal,
-      actual: actualRaw ?? 0,
-      goalPct: goal != null && actualRaw != null ? (actualRaw / goal) * 100 : null,
-      lowerIsBetter: def.lowerIsBetter,
-    });
+  } else {
+    for (const def of CALC_METRICS) {
+      if (!def.inputs.every((i) => directKeys.includes(i))) continue;
+      const goalInputs: Record<string, number> = {};
+      const actualInputs: Record<string, number> = {};
+      for (const i of def.inputs) {
+        goalInputs[i] = goalByKey[i] ?? 0;
+        actualInputs[i] = actuals[i] ?? 0;
+      }
+      const goalRaw = def.compute(goalInputs);
+      const actualRaw = def.compute(actualInputs);
+      const goal = goalRaw != null && goalRaw > 0 ? goalRaw : null;
+      rows.push({
+        key: def.key,
+        label: labelFor(def.key, def.name),
+        kind: "calculated",
+        unit: def.unit,
+        goal,
+        actual: actualRaw ?? 0,
+        goalPct:
+          goal != null && actualRaw != null ? (actualRaw / goal) * 100 : null,
+        lowerIsBetter: def.lowerIsBetter,
+      });
+    }
   }
 
   return rows;

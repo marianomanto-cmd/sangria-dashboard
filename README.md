@@ -555,14 +555,18 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   estructura viva del plan y el histórico quede intacto ante ediciones.
 - Los **goals NO se persisten** (en la capa viva): salen del plan vigente —
   `amount_usd` y `metrics_json` de cada `media_plan_placement` ya son los
-  goals. Las métricas calculadas (CPM, CTR, CPV, CPA, frequency) se derivan
-  on-the-fly para goal y real con las fórmulas de `lib/campaign-metrics.ts`.
+  goals. Las métricas calculadas (CPM, CTR, ROAS, CPT, …) se derivan
+  on-the-fly para goal y real con las fórmulas del `metrics_catalog` del
+  cliente (vía `buildMetricRows` en `lib/campaign-metrics.ts`).
 - "Plan vigente" en el hub = `status='approved'` Y la fecha de hoy cae
   dentro del período derivado (min/max de fechas de placements).
-- Solo se persisten métricas direct (`amount` + claves de
-  `DIRECT_METRIC_RATES`), tanto en la capa viva como en los snapshots. El
-  sistema es independiente de Billing / Gastos Reales aunque haya
-  solapamiento conceptual con la inversión.
+- Solo se persisten métricas direct (`amount` + las métricas `direct`
+  habilitadas del `metrics_catalog` del cliente, p. ej. `tickets`,
+  `tickets_stopover`, `revenue`), tanto en la capa viva como en los
+  snapshots. La clasificación direct/calculated sale del catálogo per-cliente
+  (NO de una lista hardcodeada), así el tracker muestra **todas** las métricas
+  que el plan realmente usa. El sistema es independiente de Billing / Gastos
+  Reales aunque haya solapamiento conceptual con la inversión.
 
 ### Estimación de facturación
 - `getBillingEstimate` en `db/queries/dashboard.ts` prorratea linealmente

@@ -2087,10 +2087,14 @@ sin schema ni migraciones.
   columnas (Última carga + Δ) comparando el estado actual contra el último
   snapshot. Las calculadas se derivan también del snapshot anterior. Se
   deshabilita si el plan nunca se cerró.
-- **Deuda técnica**: la clasificación direct vs calculated de métricas usa
-  `DIRECT_METRIC_RATES` (`lib/cost-methods.ts`) como fuente — si el
-  `metrics_json` de un placement trae keys que no están ahí, se ignoran
-  para la carga. La query de snapshots trae todo el histórico del plan;
+- **Clasificación direct/calculated**: sale del `metrics_catalog` del cliente,
+  resuelto por plan en `getCampaignTrackerPlan` / `setPlacementActual` /
+  `closeDailyLoad`. Toda métrica `direct` habilitada del catálogo presente en
+  el `metrics_json` del placement es cargable; las `calculated` se derivan con
+  su fórmula (`buildMetricRows(..., calcDefs)`). Antes usaba la lista
+  hardcodeada `DIRECT_METRIC_RATES` y se perdían las métricas custom del
+  cliente (tickets, tickets_stopover, revenue…) — **resuelto**.
+- **Deuda técnica**: la query de snapshots trae todo el histórico del plan;
   si crece mucho, conviene un subquery por `max(snapshot_date)`.
 
 **Acciones requeridas en prod**: `npm run db:push` para crear las tablas
@@ -2867,7 +2871,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
 | Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave + cerrar día + comparar) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Actions: `setPlacementActual`, `closeDailyLoad` en `app/actions/campaign-tracker.ts`. |
 | Tocar el histórico de cargas / "Cerrar día" | Tabla `campaign_actual_snapshots` (`db/schema.ts`), action `closeDailyLoad`. La query `getCampaignTrackerPlan` arma `lastCloseDate` + `previousActuals` por placement leyendo el snapshot más reciente. |
-| Cambiar la lógica de métricas del tracker (calculadas, pace, labels) | `lib/campaign-metrics.ts` — `CALC_METRICS` (CPM/CTR/…), `buildMetricRows` (compartido server+client), `computePacePct` / `computePaceStatus`. Piezas visuales (barras, badges, freshness dots) en `components/campaign-tracker-bits.tsx`. |
+| Cambiar la lógica de métricas del tracker (calculadas, pace, labels) | `lib/campaign-metrics.ts` — `buildMetricRows` (compartido server+client; recibe `calcDefs` del `metrics_catalog` del cliente para derivar calculadas, incl. custom como ROAS/CPT), `computePacePct` / `computePaceStatus`. Clasificación direct/calc por catálogo: `db/queries/campaign-tracker.ts` (`directSlugs`/`calcDefs`) + validación en `setPlacementActual`. `CALC_METRICS` queda como fallback built-in (lo usa `pacing.xlsx`). Piezas visuales en `components/campaign-tracker-bits.tsx`. |
 | Cambiar qué planes aparecen como "vigentes" | `getCampaignTrackerHub` en `db/queries/campaign-tracker.ts` — filtra `status='approved'` + período (min/max de placements) incluye hoy. |
 | Ocultar/mostrar un cliente en el filtro global | `clients.status` — `archived` lo saca del topbar picker y de `/clientes`. Se sigue gestionando desde `/configuracion/clientes`. |
 | Cambiar el destino del click en una fila de /billing | `app/(app)/billing/page.tsx` — variable `detailHref` por row. Apunta a `/proyectos/[code]/planes/[planId]/billing?month=YYYY-MM`. |

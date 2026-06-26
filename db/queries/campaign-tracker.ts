@@ -17,8 +17,8 @@ import {
   buildMetricRows,
   computePacePct,
   computePaceStatus,
-  directKeysFromMetricsJson,
   parseLocalDate,
+  type CatalogMetricDef,
   type DirectGoal,
   type MetricRow,
   type PaceStatus,
@@ -365,6 +365,9 @@ export type CampaignTrackerPlan = {
   // null si nunca se cerró.
   lastCloseDate: string | null;
   hasGoals: boolean;
+  // Métricas calculadas del catálogo del cliente, para que el editor (client
+  // component) re-derive las filas calculated cuando la trafficker edita.
+  calcDefs: CatalogMetricDef[];
 };
 
 export async function getCampaignTrackerPlan(
@@ -475,15 +478,39 @@ export async function getCampaignTrackerPlan(
     }
   }
 
-  // Catálogo de métricas del cliente para los labels.
+  // Catálogo de métricas del cliente: fuente de verdad para labels y para
+  // clasificar direct (cargables) vs calculated (derivadas). El tracker ya NO
+  // usa una lista hardcodeada — muestra todas las métricas que el plan usa,
+  // incluidas las custom del cliente (tickets, reservas, etc.).
   const catalogRows = await db
     .select({
       slug: metricsCatalog.slug,
       name: metricsCatalog.name,
+      kind: metricsCatalog.kind,
+      unit: metricsCatalog.unit,
+      formula: metricsCatalog.formula,
+      enabled: metricsCatalog.enabled,
     })
     .from(metricsCatalog)
     .where(eq(metricsCatalog.clientId, planRow.clientId));
   const labelBySlug = new Map(catalogRows.map((r) => [r.slug, r.name]));
+  // Slugs direct habilitados → editables en el tracker (igual criterio que el
+  // editor/exports, que solo muestran métricas enabled).
+  const directSlugs = new Set(
+    catalogRows
+      .filter((r) => r.kind === "direct" && r.enabled)
+      .map((r) => r.slug),
+  );
+  // Defs de calculadas habilitadas → se derivan por placement con su fórmula.
+  const calcDefs: CatalogMetricDef[] = catalogRows
+    .filter((r) => r.kind === "calculated" && r.enabled)
+    .map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      kind: "calculated" as const,
+      unit: r.unit,
+      formula: r.formula,
+    }));
 
   // Período derivado del plan (min/max de fechas de placements).
   let periodStart: string | null = null;
@@ -504,7 +531,10 @@ export async function getCampaignTrackerPlan(
     const p = r.placement;
     const metricsJson = (p.metricsJson ?? {}) as Record<string, number>;
     const goalAmount = Number.parseFloat(p.amountUsd);
-    const directKeys = ["amount", ...directKeysFromMetricsJson(metricsJson)];
+    const directKeys = [
+      "amount",
+      ...Object.keys(metricsJson).filter((k) => directSlugs.has(k)),
+    ];
     const actuals = actualsByPlacement.get(p.id) ?? new Map<string, number>();
 
     const directGoals: DirectGoal[] = directKeys.map((k) => ({
@@ -520,6 +550,7 @@ export async function getCampaignTrackerPlan(
       directGoals,
       actualsRecord,
       (key, fallback) => labelBySlug.get(key) ?? fallback,
+      calcDefs,
     );
 
     const actualInvestmentUsd = actuals.get("amount") ?? 0;
@@ -612,5 +643,6 @@ export async function getCampaignTrackerPlan(
     lastUpdateAt,
     lastCloseDate,
     hasGoals,
+    calcDefs,
   };
 }

@@ -196,6 +196,7 @@ export default async function CampaignTrackerPlanPage({
         pacePct={data.pacePct}
         publishers={data.publishers}
         lastCloseDate={data.lastCloseDate}
+        calcDefs={data.calcDefs}
       />
 
       <div className="mt-5">
