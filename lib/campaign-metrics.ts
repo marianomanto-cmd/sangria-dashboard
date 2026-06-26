@@ -277,7 +277,10 @@ export function buildMetricRows(
       unit,
       goal,
       actual,
-      goalPct: goal != null ? (actual / goal) * 100 : null,
+      // Sin actual derivable todavía (denominador 0, ej. CPM antes de cargar
+      // delivery) → "—", no "-100%". Se gatea en actualRaw, no en actual (que
+      // colapsa a 0).
+      goalPct: goal != null && actualRaw != null ? (actual / goal) * 100 : null,
       // Para los "costo por X" (en $) consumir por debajo del goal es bueno;
       // para ratios (%/x) más alto suele ser mejor.
       lowerIsBetter: unit === "$",
