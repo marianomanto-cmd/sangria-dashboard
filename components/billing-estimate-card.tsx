@@ -11,6 +11,7 @@ import type {
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { formatMonth, formatMonthShort, type Language, t } from "@/lib/i18n";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
+import { BillingStatusBadge } from "@/components/billing-status-badge";
 
 type ByProjectRow = MonthlyBillingEstimate["byProject"][number];
 
@@ -571,6 +572,39 @@ function PlanBillingBlock({
           valueClassName="text-ink font-semibold"
         />
       </div>
+
+      {/* Histórico de facturas emitidas: número + mes + valor de cada una. La
+          suma reconcilia exacto con "Facturado". */}
+      {plan.invoices.length > 0 && (
+        <div className="mt-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted mb-1.5">
+            {lang === "es" ? "Facturas emitidas" : "Issued invoices"}
+          </p>
+          <div className="space-y-1">
+            {plan.invoices.map((inv) => (
+              <div
+                key={`${inv.invoiceNumber}-${inv.month}`}
+                className="flex items-center justify-between gap-2"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-mono text-[11px] text-ink-2 truncate">
+                    {inv.invoiceNumber}
+                  </span>
+                  <span className="text-[10px] text-muted shrink-0">
+                    {formatMonthShort(inv.month, lang)}
+                  </span>
+                  <span className="shrink-0">
+                    <BillingStatusBadge status={inv.status} lang={lang} size="sm" />
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] text-ink tabular-nums shrink-0">
+                  {formatUsd(inv.totalUsd)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Proyección de lo que falta, prorrateada por cada mes restante: barra
           por mes con el monto a la derecha (etiquetado directo). */}

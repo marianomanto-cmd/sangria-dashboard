@@ -148,7 +148,7 @@ components/                 # UI compartida
   dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
   topbar-nav.tsx            # título de sección (Archivo), SOLO mobile (<lg) — en desktop manda la TopNav del header
   top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; mide el ancho y mete lo que no entra en un menú "Más ▾" (nunca scrollea, ResizeObserver). Reemplaza al sidebar vertical para liberar el ancho al contenido
-  billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates y en el portal. Con `projectionsById` (portal) cada fila de proyecto se DESPLIEGA in situ → billing de cada plan + cronograma de lo que falta facturar por mes restante (getClientBillingProjections)
+  billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates y en el portal. Con `projectionsById` (portal) cada fila de proyecto se DESPLIEGA in situ → billing de cada plan + facturas emitidas (histórico: número + mes + valor) + cronograma de lo que falta facturar por mes restante (getClientBillingProjections)
   billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
   reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
@@ -603,13 +603,19 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   proyecto se expande igual. Patrón de *disclosure / master-detail* (fila de
   detalle a todo el ancho en desktop; bloque debajo en mobile). El gráfico de
   barras lleva el valor **etiquetado al lado** (no depende solo del color).
+- **Histórico de facturas emitidas**: además del resumen (total / facturado /
+  falta), cada plan lista sus **facturas emitidas** (número de factura + mes +
+  estado + valor de cada una), con el mismo criterio que el Billing Tracker
+  (`invoiced`/`paid` con `invoice_number` no-null). El "Facturado" del plan es la
+  **suma exacta** de esas facturas (reconcilia con la lista).
 - Query: `getClientBillingProjections` en `db/queries/dashboard.ts`. A diferencia
   de `getBillingEstimate` (agrega al nivel proyecto, solo para meses puntuales),
   baja hasta el **plan** y arma todos los meses que le quedan. Reusa el **mismo
   prorrateo** (`enumerateMonths`): media = monto del placement / meses de su
   `[start, end]`; fees = total del fee / meses del período del plan; management
-  fee = `TM × rate/(100 − rate)`. `gross = media + fees`; `billed` = facturas
-  `invoiced`/`paid` (publishers billable + `plan_billing_fees`); `remaining =
+  fee = `TM × rate/(100 − rate)`. `gross = media + fees`; `billed` = **suma de las
+  facturas emitidas** (`plan_billings.total_usd` de las `invoiced`/`paid` con
+  número), las mismas que se listan en el detalle; `remaining =
   max(0, gross − billed)`. Lo que falta facturar se reparte por mes **ponderado
   por el bruto programado** de cada mes restante (suma exactamente `remaining`).
   Un plan ya finalizado con saldo imputa el remanente al mes actual.

@@ -2,6 +2,27 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 30/jun/2026 (3) — Portal (Estimación): histórico de facturas emitidas en el detalle del plan
+
+- **Pedido**: en el detalle desplegado de cada plan deben aparecer también los
+  **números de factura** y **el valor de cada una** — o sea el **histórico** de
+  facturas emitidas.
+- `getClientBillingProjections` (`db/queries/dashboard.ts`): se reemplazó el
+  cálculo de "ya facturado" (que sumaba publishers billable + fees imputados) por
+  la **suma de las facturas emitidas** del plan (`plan_billings` en `invoiced`/
+  `paid` con `invoice_number` no-null — mismo criterio que el Billing Tracker), y
+  se expone la lista `invoices[]` (`invoiceNumber`, `month`, `status`, `totalUsd`)
+  ordenada por mes. Así `billed` reconcilia **exacto** con la lista mostrada.
+  Nuevo tipo `PlanInvoice`; `PlanBillingProjection.invoices`.
+- UI (`components/billing-estimate-card.tsx`): en cada bloque de plan, entre el
+  resumen (Total / Facturado / Falta) y el cronograma, se agregó **"Facturas
+  emitidas"**: una fila por factura con número (mono), mes, `BillingStatusBadge`
+  (facturado/pagado, lang-aware) y el monto a la derecha. Solo aparece si el plan
+  tiene facturas.
+- Verificado en desktop y mobile (390px) con render real; sin scroll horizontal.
+  `tsc` + `eslint` + `next build` en verde. **Sin cambios de schema. No requiere
+  acción en prod.**
+
 ### Cambios de la sesión 30/jun/2026 (2) — Portal (Estimación): el despliegue va EN CADA FILA de las cards mensuales (no un listado aparte) + UX investigada
 
 - **Feedback del cliente**: la primera versión agregaba un **listado separado**

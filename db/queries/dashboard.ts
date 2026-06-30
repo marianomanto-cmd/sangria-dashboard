@@ -1064,6 +1064,14 @@ export type PlanProjectionMonth = {
   projectedUsd: number; // parte de "lo que falta facturar" asignada a este mes
 };
 
+// Factura emitida del plan (histórico): número + mes + valor.
+export type PlanInvoice = {
+  invoiceNumber: string;
+  month: string; // YYYY-MM
+  status: "invoiced" | "paid";
+  totalUsd: number;
+};
+
 export type PlanBillingProjection = {
   planId: string;
   planName: string;
@@ -1073,9 +1081,10 @@ export type PlanBillingProjection = {
   grossUsd: number; // total a facturar del plan (media + fees prorrateados)
   grossMediaUsd: number;
   grossFeesUsd: number;
-  billedUsd: number; // ya facturado (invoiced/paid), media + fees
+  billedUsd: number; // ya facturado = suma de las facturas emitidas (invoiced/paid)
   remainingUsd: number; // falta facturar = max(0, gross − billed)
   months: PlanProjectionMonth[]; // solo los meses que le quedan al plan
+  invoices: PlanInvoice[]; // histórico de facturas emitidas (número + mes + valor)
 };
 
 export type ProjectBillingProjection = {
@@ -1242,50 +1251,41 @@ export async function getClientBillingProjections(options: {
     for (const m of months) m2.set(m, (m2.get(m) ?? 0) + monthly);
   }
 
-  // 4. Ya facturado por (plan, mes) en facturas invoiced/paid — media + fees.
-  const [billedMediaRows, billedFeeRows] = await Promise.all([
-    db
-      .select({
-        planId: planBillings.mediaPlanId,
-        billed: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}) filter (where ${planBillingPublishers.isBillable}), 0)`,
-      })
-      .from(planBillings)
-      .leftJoin(
-        planBillingPublishers,
-        eq(planBillingPublishers.planBillingId, planBillings.id),
-      )
-      .where(
-        and(
-          inArray(planBillings.mediaPlanId, planIds),
-          inArray(planBillings.status, ["invoiced", "paid"]),
-        ),
-      )
-      .groupBy(planBillings.mediaPlanId),
-    db
-      .select({
-        planId: planBillings.mediaPlanId,
-        billed: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
-      })
-      .from(planBillings)
-      .leftJoin(
-        planBillingFees,
-        eq(planBillingFees.planBillingId, planBillings.id),
-      )
-      .where(
-        and(
-          inArray(planBillings.mediaPlanId, planIds),
-          inArray(planBillings.status, ["invoiced", "paid"]),
-        ),
-      )
-      .groupBy(planBillings.mediaPlanId),
-  ]);
+  // 4. Facturas emitidas por plan (histórico): facturas en estado invoiced/paid
+  // con número de factura cargado — mismo criterio que el Billing Tracker. El
+  // "ya facturado" del plan es la suma de sus totales (así reconcilia exacto con
+  // la lista que se muestra), y se exponen número + mes + valor de cada una.
+  const invoiceRows = await db
+    .select({
+      planId: planBillings.mediaPlanId,
+      invoiceNumber: planBillings.invoiceNumber,
+      month: planBillings.month,
+      status: planBillings.status,
+      totalUsd: planBillings.totalUsd,
+    })
+    .from(planBillings)
+    .where(
+      and(
+        inArray(planBillings.mediaPlanId, planIds),
+        inArray(planBillings.status, ["invoiced", "paid"]),
+        sql`${planBillings.invoiceNumber} is not null`,
+      ),
+    )
+    .orderBy(asc(planBillings.month));
 
+  const invoicesByPlan = new Map<string, PlanInvoice[]>();
   const billedByPlan = new Map<string, number>();
-  for (const r of [...billedMediaRows, ...billedFeeRows]) {
-    billedByPlan.set(
-      r.planId,
-      (billedByPlan.get(r.planId) ?? 0) + Number.parseFloat(r.billed),
-    );
+  for (const r of invoiceRows) {
+    const total = Number.parseFloat(r.totalUsd);
+    const list = invoicesByPlan.get(r.planId) ?? [];
+    list.push({
+      invoiceNumber: r.invoiceNumber!,
+      month: r.month,
+      status: r.status as "invoiced" | "paid",
+      totalUsd: total,
+    });
+    invoicesByPlan.set(r.planId, list);
+    billedByPlan.set(r.planId, (billedByPlan.get(r.planId) ?? 0) + total);
   }
 
   // 5. Armar la proyección por plan y agrupar por proyecto. Solo se incluyen
@@ -1356,6 +1356,7 @@ export async function getClientBillingProjections(options: {
       billedUsd,
       remainingUsd,
       months,
+      invoices: invoicesByPlan.get(agg.planId) ?? [],
     };
 
     let proj = projectMap.get(agg.projectId);
