@@ -2,6 +2,35 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 30/jun/2026 — Portal (Estimación): proyección por proyecto desplegable + lo que falta facturar prorrateado por mes restante
+
+- **Pedido**: en la **vista de cliente** (portal), tab **Estimación**, cada
+  proyecto tiene que tener un **botón para desplegar** y ver el **billing de cada
+  uno de sus planes** y la **proyección de lo que falta facturar prorrateada para
+  cada mes que le queda al plan**.
+- **Query nueva** `getClientBillingProjections` en `db/queries/dashboard.ts`:
+  baja hasta el **plan** (a diferencia de `getBillingEstimate`, que agrega al
+  nivel proyecto y solo para meses puntuales) y arma, por plan, `gross` (media +
+  fees prorrateados con el **mismo** `enumerateMonths`), `billed` (facturas
+  `invoiced`/`paid`: publishers billable + `plan_billing_fees`), `remaining =
+  max(0, gross − billed)` y la proyección de ese `remaining` repartida en cada
+  **mes restante** (`>=` mes actual), **ponderada por el bruto programado** del
+  mes (suma exactamente `remaining`). Filtra `deleted_at IS NULL`; billed media y
+  fees van en **dos queries separadas** para no inflar por cartesiano. Solo
+  planes con meses por venir + proyectos con `remaining > 0`.
+- **UI** `components/billing-projection-by-project.tsx` (client, read-only): por
+  proyecto un header con "Falta facturar" + chevron; desplegado lista cada plan
+  con Total / Facturado / Falta + chips de proyección por mes. El despliegue es
+  **estado local** (sin POST/Server Actions → respeta el portal GET-only).
+  `EstimateSection` (`portal-content.tsx`) ahora trae ambas cosas en paralelo y
+  rinde el bloque debajo de las cards mensuales; respeta los filtros Budget
+  Origin / Proyecto (ignora el de Mes a propósito).
+- **Verificación**: `tsc` + `eslint` + `next build` en verde; diff revisado con
+  un workflow multi-agente (proración/SQL/portal/edge) con verificación
+  adversarial. **Sin cambios de schema. No requiere acción en prod.**
+- Archivos: `db/queries/dashboard.ts`, `components/billing-projection-by-project.tsx`,
+  `app/(portal)/[clientSlug]/portal-content.tsx`, README.
+
 ### Cambios de la sesión 26/jun/2026 — Portal: filtros multi-select (Budget Origin / Proyecto / Mes)
 
 En el **portal del cliente**, los filtros de las tabs **Estimación**, **Billing

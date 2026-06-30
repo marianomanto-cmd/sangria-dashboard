@@ -1039,3 +1039,363 @@ export async function getBillingEstimate(options: {
     };
   });
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Proyección de facturación por proyecto → plan, para el portal del cliente.
+//
+// A diferencia de getBillingEstimate (que agrega al nivel proyecto y solo para
+// una lista de meses puntuales), esta query baja hasta el PLAN y arma, para cada
+// uno, "lo que falta facturar" (bruto − ya facturado) prorrateado a lo largo de
+// TODOS los meses que le quedan al plan (desde el mes actual hasta su fin).
+//
+// Reusa exactamente el mismo prorrateo que getBillingEstimate:
+//   - media: el monto de cada placement repartido en partes iguales sobre los
+//     meses de su [start, end];
+//   - fees: el total del fee repartido sobre el período del plan (min start /
+//     max end de sus placements). El management fee con ratePct se deriva con
+//     TM × rate/(100 − rate).
+// Lo ya facturado sale de facturas en estado invoiced/paid (media de
+// plan_billing_publishers billable + fees de plan_billing_fees), como el resto
+// de la estimación, para que los números reconcilien con las cards mensuales.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type PlanProjectionMonth = {
+  month: string; // YYYY-MM
+  projectedUsd: number; // parte de "lo que falta facturar" asignada a este mes
+};
+
+export type PlanBillingProjection = {
+  planId: string;
+  planName: string;
+  status: (typeof mediaPlans.$inferSelect)["status"];
+  periodStart: string | null; // YYYY-MM-DD (min start de los placements)
+  periodEnd: string | null; // YYYY-MM-DD (max end de los placements)
+  grossUsd: number; // total a facturar del plan (media + fees prorrateados)
+  grossMediaUsd: number;
+  grossFeesUsd: number;
+  billedUsd: number; // ya facturado (invoiced/paid), media + fees
+  remainingUsd: number; // falta facturar = max(0, gross − billed)
+  months: PlanProjectionMonth[]; // solo los meses que le quedan al plan
+};
+
+export type ProjectBillingProjection = {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  status: (typeof projects.$inferSelect)["status"];
+  periodStart: string | null;
+  periodEnd: string | null;
+  grossUsd: number;
+  billedUsd: number;
+  remainingUsd: number;
+  plans: PlanBillingProjection[];
+};
+
+function currentYearMonth(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export async function getClientBillingProjections(options: {
+  clientId: string;
+  budgetOriginIds?: string[] | null;
+  projectIds?: string[] | null;
+}): Promise<ProjectBillingProjection[]> {
+  const filterOriginIds = (options.budgetOriginIds ?? []).filter(Boolean);
+  const filterProjectIds = (options.projectIds ?? []).filter(Boolean);
+  const scopeConds = [
+    eq(projects.clientId, options.clientId),
+    ...(filterOriginIds.length
+      ? [inArray(projects.budgetOriginId, filterOriginIds)]
+      : []),
+    ...(filterProjectIds.length ? [inArray(projects.id, filterProjectIds)] : []),
+  ];
+
+  // 1. Placements de planes approved / ready_to_send del cliente.
+  const placements = await db
+    .select({
+      planId: mediaPlans.id,
+      planName: mediaPlans.name,
+      planStatus: mediaPlans.status,
+      projectId: projects.id,
+      projectCode: projects.code,
+      projectName: projects.name,
+      projectStatus: projects.status,
+      startDate: mediaPlanPlacements.startDate,
+      endDate: mediaPlanPlacements.endDate,
+      amount: mediaPlanPlacements.amountUsd,
+    })
+    .from(mediaPlanPlacements)
+    .innerJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .innerJoin(
+      mediaPlans,
+      and(
+        eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+        isNull(mediaPlans.deletedAt),
+      ),
+    )
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .where(
+      and(
+        inArray(mediaPlans.status, ["approved", "ready_to_send"]),
+        ...scopeConds,
+      ),
+    );
+
+  if (placements.length === 0) return [];
+
+  // 2. Acumular por plan: período (min start / max end), total media y media
+  // prorrateada por mes.
+  type PlanAgg = {
+    planId: string;
+    planName: string;
+    planStatus: (typeof mediaPlans.$inferSelect)["status"];
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    projectStatus: (typeof projects.$inferSelect)["status"];
+    startMonth: string;
+    endMonth: string;
+    startDate: string;
+    endDate: string;
+    totalMedia: number;
+    scheduledMedia: Map<string, number>;
+  };
+  const planMap = new Map<string, PlanAgg>();
+  for (const p of placements) {
+    if (!p.startDate || !p.endDate) continue;
+    const sd = p.startDate.slice(0, 10);
+    const ed = p.endDate.slice(0, 10);
+    const sm = sd.slice(0, 7);
+    const em = ed.slice(0, 7);
+    let agg = planMap.get(p.planId);
+    if (!agg) {
+      agg = {
+        planId: p.planId,
+        planName: p.planName,
+        planStatus: p.planStatus,
+        projectId: p.projectId,
+        projectCode: p.projectCode,
+        projectName: p.projectName,
+        projectStatus: p.projectStatus,
+        startMonth: sm,
+        endMonth: em,
+        startDate: sd,
+        endDate: ed,
+        totalMedia: 0,
+        scheduledMedia: new Map(),
+      };
+      planMap.set(p.planId, agg);
+    } else {
+      if (sm < agg.startMonth) agg.startMonth = sm;
+      if (em > agg.endMonth) agg.endMonth = em;
+      if (sd < agg.startDate) agg.startDate = sd;
+      if (ed > agg.endDate) agg.endDate = ed;
+    }
+    const amt = Number.parseFloat(p.amount);
+    agg.totalMedia += amt;
+    const months = enumerateMonths(sm, em);
+    if (months.length === 0) continue;
+    const monthly = amt / months.length;
+    for (const m of months) {
+      agg.scheduledMedia.set(m, (agg.scheduledMedia.get(m) ?? 0) + monthly);
+    }
+  }
+
+  const planIds = Array.from(planMap.keys());
+  if (planIds.length === 0) return [];
+
+  // 3. Fees de esos planes → prorrateados sobre el período del plan.
+  const feeRows = await db
+    .select()
+    .from(mediaPlanFees)
+    .where(inArray(mediaPlanFees.mediaPlanId, planIds));
+
+  const scheduledFeesByPlan = new Map<string, Map<string, number>>();
+  for (const f of feeRows) {
+    const agg = planMap.get(f.mediaPlanId);
+    if (!agg) continue;
+    const months = enumerateMonths(agg.startMonth, agg.endMonth);
+    if (months.length === 0) continue;
+    const ratePct = f.ratePct ? Number.parseFloat(f.ratePct) : null;
+    let totalFee: number;
+    if (
+      f.feeType === "management" &&
+      ratePct != null &&
+      ratePct > 0 &&
+      ratePct < 100
+    ) {
+      totalFee = (agg.totalMedia * ratePct) / (100 - ratePct);
+    } else {
+      totalFee = Number.parseFloat(f.amountUsd);
+    }
+    if (totalFee <= 0) continue;
+    const monthly = totalFee / months.length;
+    let m2 = scheduledFeesByPlan.get(f.mediaPlanId);
+    if (!m2) {
+      m2 = new Map();
+      scheduledFeesByPlan.set(f.mediaPlanId, m2);
+    }
+    for (const m of months) m2.set(m, (m2.get(m) ?? 0) + monthly);
+  }
+
+  // 4. Ya facturado por (plan, mes) en facturas invoiced/paid — media + fees.
+  const [billedMediaRows, billedFeeRows] = await Promise.all([
+    db
+      .select({
+        planId: planBillings.mediaPlanId,
+        billed: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}) filter (where ${planBillingPublishers.isBillable}), 0)`,
+      })
+      .from(planBillings)
+      .leftJoin(
+        planBillingPublishers,
+        eq(planBillingPublishers.planBillingId, planBillings.id),
+      )
+      .where(
+        and(
+          inArray(planBillings.mediaPlanId, planIds),
+          inArray(planBillings.status, ["invoiced", "paid"]),
+        ),
+      )
+      .groupBy(planBillings.mediaPlanId),
+    db
+      .select({
+        planId: planBillings.mediaPlanId,
+        billed: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
+      })
+      .from(planBillings)
+      .leftJoin(
+        planBillingFees,
+        eq(planBillingFees.planBillingId, planBillings.id),
+      )
+      .where(
+        and(
+          inArray(planBillings.mediaPlanId, planIds),
+          inArray(planBillings.status, ["invoiced", "paid"]),
+        ),
+      )
+      .groupBy(planBillings.mediaPlanId),
+  ]);
+
+  const billedByPlan = new Map<string, number>();
+  for (const r of [...billedMediaRows, ...billedFeeRows]) {
+    billedByPlan.set(
+      r.planId,
+      (billedByPlan.get(r.planId) ?? 0) + Number.parseFloat(r.billed),
+    );
+  }
+
+  // 5. Armar la proyección por plan y agrupar por proyecto. Solo se incluyen
+  // planes con meses por venir (período que llega al mes actual o más allá): la
+  // proyección es de "lo que falta facturar prorrateado por cada mes que le
+  // queda al plan".
+  const nowMonth = currentYearMonth();
+  const projectMap = new Map<string, ProjectBillingProjection>();
+
+  for (const agg of planMap.values()) {
+    const schedFees = scheduledFeesByPlan.get(agg.planId);
+    const grossMediaUsd = [...agg.scheduledMedia.values()].reduce(
+      (s, v) => s + v,
+      0,
+    );
+    const grossFeesUsd = schedFees
+      ? [...schedFees.values()].reduce((s, v) => s + v, 0)
+      : 0;
+    const grossUsd = grossMediaUsd + grossFeesUsd;
+    const billedUsd = billedByPlan.get(agg.planId) ?? 0;
+    const remainingUsd = Math.max(0, grossUsd - billedUsd);
+    // Sin saldo pendiente → el plan no aporta a la proyección (evita filas en
+    // $0 y planes ya facturados por completo).
+    if (remainingUsd <= 0.005) continue;
+
+    // Meses que le quedan al plan (>= mes actual) dentro de su período.
+    const remainingMonths = enumerateMonths(
+      agg.startMonth,
+      agg.endMonth,
+    ).filter((m) => m >= nowMonth);
+
+    let months: PlanProjectionMonth[];
+    if (remainingMonths.length === 0) {
+      // El plan ya terminó pero quedó saldo sin facturar: no hay meses por venir
+      // para prorratear, así que imputamos el remanente al mes ACTUAL como "a
+      // facturar ahora". Si lo descartáramos, ese dinero real pendiente
+      // desaparecería de la vista (y de la card mensual hermana, que sí lo
+      // muestra en el mes anterior).
+      months = [{ month: nowMonth, projectedUsd: remainingUsd }];
+    } else {
+      // Prorrateo de lo que falta facturar, ponderado por el bruto programado de
+      // cada mes restante (sigue la forma del cronograma). Si todos los meses
+      // restantes tienen bruto 0 (caso degenerado), reparte en partes iguales.
+      const remScheduled = remainingMonths.map(
+        (m) =>
+          (agg.scheduledMedia.get(m) ?? 0) +
+          (schedFees ? (schedFees.get(m) ?? 0) : 0),
+      );
+      const remScheduledTotal = remScheduled.reduce((s, v) => s + v, 0);
+      months = remainingMonths.map((m, i) => {
+        const weight =
+          remScheduledTotal > 0
+            ? remScheduled[i] / remScheduledTotal
+            : 1 / remainingMonths.length;
+        return { month: m, projectedUsd: remainingUsd * weight };
+      });
+    }
+
+    const planProjection: PlanBillingProjection = {
+      planId: agg.planId,
+      planName: agg.planName,
+      status: agg.planStatus,
+      periodStart: agg.startDate,
+      periodEnd: agg.endDate,
+      grossUsd,
+      grossMediaUsd,
+      grossFeesUsd,
+      billedUsd,
+      remainingUsd,
+      months,
+    };
+
+    let proj = projectMap.get(agg.projectId);
+    if (!proj) {
+      proj = {
+        projectId: agg.projectId,
+        projectCode: agg.projectCode,
+        projectName: agg.projectName,
+        status: agg.projectStatus,
+        periodStart: agg.startDate,
+        periodEnd: agg.endDate,
+        grossUsd: 0,
+        billedUsd: 0,
+        remainingUsd: 0,
+        plans: [],
+      };
+      projectMap.set(agg.projectId, proj);
+    }
+    proj.plans.push(planProjection);
+    proj.grossUsd += grossUsd;
+    proj.billedUsd += billedUsd;
+    proj.remainingUsd += remainingUsd;
+    if (agg.startDate < (proj.periodStart ?? agg.startDate))
+      proj.periodStart = agg.startDate;
+    if (agg.endDate > (proj.periodEnd ?? agg.endDate)) proj.periodEnd = agg.endDate;
+  }
+
+  // 6. Solo proyectos con algo por facturar; planes ordenados por inicio y
+  // proyectos por monto pendiente (lo más urgente primero).
+  const result = Array.from(projectMap.values()).filter(
+    (p) => p.remainingUsd > 0.005,
+  );
+  for (const p of result) {
+    p.plans.sort((a, b) => {
+      const as = a.periodStart ?? "";
+      const bs = b.periodStart ?? "";
+      if (as !== bs) return as < bs ? -1 : 1;
+      return a.planName.localeCompare(b.planName);
+    });
+  }
+  result.sort((a, b) => b.remainingUsd - a.remainingUsd);
+  return result;
+}

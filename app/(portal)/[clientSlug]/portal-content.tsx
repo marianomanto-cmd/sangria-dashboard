@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronRight, Download, FileSpreadsheet } from "lucide-react";
 import {
   getBillingEstimate,
+  getClientBillingProjections,
   getDashboardKpis,
   getDashboardProjects,
   getMonthlyTotals,
@@ -22,6 +23,7 @@ import {
   SpendByPublisherChart,
 } from "@/components/portal-charts";
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
+import { BillingProjectionByProject } from "@/components/billing-projection-by-project";
 import { BillingStatusBadge } from "@/components/billing-status-badge";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { ReportingGantt } from "@/components/reporting-gantt";
@@ -312,12 +314,23 @@ export async function EstimateSection({
     ? selectedMonths
     : [previousMonth(), ...nextMonths(2)];
 
-  const all = await getBillingEstimate({
-    clientId,
-    budgetOriginIds: splitList(params.bo),
-    projectIds: splitList(params.proj),
-    months,
-  });
+  // Estimación mensual (cards por mes) + proyección por proyecto/plan (despliegue
+  // con el billing de cada plan y lo que falta facturar prorrateado por cada mes
+  // restante). La proyección respeta los filtros de origin/proyecto pero ignora
+  // el de mes: su horizonte es "los meses que le quedan a cada plan".
+  const [all, projections] = await Promise.all([
+    getBillingEstimate({
+      clientId,
+      budgetOriginIds: splitList(params.bo),
+      projectIds: splitList(params.proj),
+      months,
+    }),
+    getClientBillingProjections({
+      clientId,
+      budgetOriginIds: splitList(params.bo),
+      projectIds: splitList(params.proj),
+    }),
+  ]);
 
   const prev = selectedMonths.length ? null : previousMonth();
   const previousEstimate = prev
@@ -325,7 +338,7 @@ export async function EstimateSection({
     : null;
   const estimates = prev ? all.filter((e) => e.month !== prev) : all;
 
-  if (estimates.length === 0 && !previousEstimate) {
+  if (estimates.length === 0 && !previousEstimate && projections.length === 0) {
     return (
       <EmptyPortal
         text={
@@ -338,11 +351,14 @@ export async function EstimateSection({
   }
 
   return (
-    <BillingEstimateCard
-      estimates={estimates}
-      previousMonth={previousEstimate}
-      lang={lang}
-    />
+    <>
+      <BillingEstimateCard
+        estimates={estimates}
+        previousMonth={previousEstimate}
+        lang={lang}
+      />
+      <BillingProjectionByProject projects={projections} lang={lang} />
+    </>
   );
 }
 
