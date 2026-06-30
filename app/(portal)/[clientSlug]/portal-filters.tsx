@@ -7,6 +7,7 @@ import { formatMonth, type Language } from "@/lib/i18n";
 
 export type PortalFilterField =
   | "pstatus"
+  | "year"
   | "origin"
   | "project"
   | "campaign"
@@ -22,6 +23,7 @@ export function PortalFilters({
   projects,
   campaigns = [],
   months,
+  years = [],
   lang,
 }: {
   fields: PortalFilterField[];
@@ -29,6 +31,7 @@ export function PortalFilters({
   projects: { id: string; code: string; name: string }[];
   campaigns?: { id: string; name: string }[];
   months: string[];
+  years?: string[];
   lang: Language;
 }) {
   const router = useRouter();
@@ -36,6 +39,13 @@ export function PortalFilters({
   const searchParams = useSearchParams();
 
   const cur = (k: string) => searchParams?.get(k) ?? "";
+
+  // Año actual = default del filtro de año (sin param). Las opciones combinan el
+  // año actual con los años que efectivamente tienen reportes.
+  const currentYear = String(new Date().getFullYear());
+  const yearOpts = Array.from(new Set([currentYear, ...years]))
+    .sort()
+    .reverse();
 
   const update = (k: string, v: string) => {
     const next = new URLSearchParams(searchParams?.toString() ?? "");
@@ -51,6 +61,7 @@ export function PortalFilters({
     next.delete("proj");
     next.delete("camp");
     next.delete("month");
+    next.delete("year"); // vuelve al default (año actual)
     next.delete("pfrom");
     next.delete("pto");
     next.delete("pstatus");
@@ -71,6 +82,7 @@ export function PortalFilters({
 
   const isFiltered =
     (fields.includes("pstatus") && !!cur("pstatus")) ||
+    (fields.includes("year") && !!cur("year")) ||
     (fields.includes("origin") && boValues.length > 0) ||
     (fields.includes("project") && projValues.length > 0) ||
     (fields.includes("campaign") && campValues.length > 0) ||
@@ -79,6 +91,25 @@ export function PortalFilters({
 
   return (
     <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-4 py-3 mb-5 flex items-end gap-3 flex-wrap">
+      {fields.includes("year") && (
+        <Field label={lang === "es" ? "Año" : "Year"}>
+          <select
+            value={cur("year") || currentYear}
+            onChange={(e) =>
+              update("year", e.target.value === currentYear ? "" : e.target.value)
+            }
+            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[110px]"
+          >
+            {yearOpts.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+            <option value="all">{lang === "es" ? "Todos" : "All"}</option>
+          </select>
+        </Field>
+      )}
+
       {fields.includes("pstatus") && (
         <Field label={lang === "es" ? "Estado" : "Status"}>
           <select

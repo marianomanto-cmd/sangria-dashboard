@@ -34,6 +34,7 @@ import {
   projectPeriod,
 } from "@/lib/project-period";
 import { PortalBenchmarksFilters } from "./portal-benchmarks-filters";
+import { PortalFilters } from "./portal-filters";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Secciones (tabs) del portal de cliente. Todas read-only y scopeadas al
@@ -45,6 +46,8 @@ export type PortalParams = {
   bo: string;
   proj: string;
   month: string;
+  // Filtro de año (Reportes): "" = año actual (default) · "all" = todos · "YYYY".
+  year: string;
   // Rango de fechas (Proyectos): pfrom / pto en formato YYYY-MM-DD. Un proyecto
   // entra si alguno de sus planes tiene un período que INTERSECTA el rango.
   dateFrom: string;
@@ -371,19 +374,112 @@ export async function EstimateSection({
 export async function ReportsSection({
   clientId,
   lang,
+  params,
+  filterOptions,
 }: {
   clientId: string;
   lang: Language;
+  params: PortalParams;
+  filterOptions: {
+    budgetOrigins: { id: string; name: string }[];
+    projects: { id: string; code: string; name: string }[];
+  };
 }) {
   const [cal, sent] = await Promise.all([
     getReportingCalendar(clientId),
     getSentReports(clientId),
   ]);
 
-  const upcoming = cal.inProgress;
+  const upcomingAll = cal.inProgress;
+  const sentAll = sent;
+  const hasAnyReports = upcomingAll.length + sentAll.length > 0;
+
+  // Fecha representativa de cada reporte: en curso → fecha de entrega (o cierre
+  // si todavía no la tiene); enviado → fecha de envío.
+  const upcomingDate = (r: (typeof upcomingAll)[number]) =>
+    r.deliveryDate ?? r.closedAt ?? "";
+  const sentDate = (r: (typeof sentAll)[number]) => r.deliveredAt;
+
+  // Filtro de Año: por DEFAULT el año ACTUAL (sin param). "all" = todos.
+  const currentYear = String(new Date().getFullYear());
+  const selectedYear = params.year || currentYear;
+  const reportYears = Array.from(
+    new Set(
+      [
+        ...upcomingAll.map((r) => upcomingDate(r).slice(0, 4)),
+        ...sentAll.map((r) => sentDate(r).slice(0, 4)),
+      ].filter((y) => y.length === 4),
+    ),
+  )
+    .sort()
+    .reverse();
+
+  // Opciones de Mes: meses con reportes dentro del año elegido (o de todos si el
+  // año es "Todos"), desc — así el filtro de Mes nunca choca con el de Año.
+  const reportMonths = Array.from(
+    new Set(
+      [...upcomingAll.map(upcomingDate), ...sentAll.map(sentDate)]
+        .filter(Boolean)
+        .filter((d) => selectedYear === "all" || d.slice(0, 4) === selectedYear)
+        .map((d) => d.slice(0, 7)),
+    ),
+  )
+    .sort()
+    .reverse();
+
+  // Filtros (mismos que Estimación: Budget Origin / Proyecto / Mes) + Año.
+  const selOrigins = splitList(params.bo);
+  const selProjects = splitList(params.proj);
+  const selMonths = splitList(params.month);
+
+  const passes = (
+    repDate: string,
+    budgetOriginId: string | null,
+    projectId: string | null,
+  ) => {
+    if (selectedYear !== "all" && repDate.slice(0, 4) !== selectedYear)
+      return false;
+    if (selMonths.length > 0 && !selMonths.includes(repDate.slice(0, 7)))
+      return false;
+    if (
+      selOrigins.length > 0 &&
+      !(budgetOriginId != null && selOrigins.includes(budgetOriginId))
+    )
+      return false;
+    if (
+      selProjects.length > 0 &&
+      !(projectId != null && selProjects.includes(projectId))
+    )
+      return false;
+    return true;
+  };
+
+  const upcoming = upcomingAll.filter((r) =>
+    passes(upcomingDate(r), r.budgetOriginId, r.projectId),
+  );
+  const sentFiltered = sentAll.filter((r) =>
+    passes(sentDate(r), r.budgetOriginId, r.projectId),
+  );
+
+  if (!hasAnyReports) {
+    return (
+      <EmptyPortal
+        text={lang === "es" ? "Sin reportes aún." : "No reports yet."}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
+      <PortalFilters
+        fields={["year", "origin", "project", "month"]}
+        budgetOrigins={filterOptions.budgetOrigins}
+        projects={filterOptions.projects}
+        months={reportMonths}
+        years={reportYears}
+        lang={lang}
+      />
+
       <section>
         <h2 className="text-sm font-semibold mb-3">
           {lang === "es" ? "Calendario de entregas" : "Delivery calendar"}
@@ -395,10 +491,12 @@ export async function ReportsSection({
         <h2 className="text-sm font-semibold mb-3">
           {lang === "es" ? "Reportes enviados" : "Sent reports"}
         </h2>
-        {sent.length === 0 ? (
+        {sentFiltered.length === 0 ? (
           <EmptyPortal
             text={
-              lang === "es" ? "Sin reportes enviados aún." : "No sent reports yet."
+              lang === "es"
+                ? "Sin reportes enviados para los filtros aplicados."
+                : "No sent reports for the current filters."
             }
           />
         ) : (
@@ -418,7 +516,7 @@ export async function ReportsSection({
                   </tr>
                 </thead>
                 <tbody>
-                  {sent.map((r) => (
+                  {sentFiltered.map((r) => (
                     <tr key={r.reportId} className="border-t border-line-soft">
                       <td className="px-5 py-2 text-ink">{r.projectName}</td>
                       <td className="px-5 py-2 text-ink-2">
@@ -447,7 +545,7 @@ export async function ReportsSection({
 
             {/* Mobile: tarjetas (sin scroll horizontal). */}
             <div className="lg:hidden divide-y divide-line-soft">
-              {sent.map((r) => (
+              {sentFiltered.map((r) => (
                 <div key={r.reportId} className="px-5 py-3.5">
                   <div className="flex items-start justify-between gap-2">
                     <p className="font-medium text-ink min-w-0">{r.projectName}</p>

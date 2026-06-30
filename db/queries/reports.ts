@@ -65,6 +65,7 @@ export type CalendarReport = {
   projectId: string | null;
   projectCode: string | null;
   closedAt: string | null;
+  budgetOriginId: string | null;
   budgetOriginName: string | null;
   // Comunes:
   clientId: string;
@@ -103,6 +104,7 @@ export async function getReportingCalendar(
         clientId: clients.id,
         clientName: clients.name,
         clientSlug: clients.slug,
+        budgetOriginId: projects.budgetOriginId,
         budgetOriginName: budgetOrigins.name,
         closedAt: projectReports.closedAt,
         deliveryDate: projectReports.deliveryDate,
@@ -146,6 +148,7 @@ export async function getReportingCalendar(
       projectCode: r.projectCode,
       closedAt:
         r.closedAt instanceof Date ? r.closedAt.toISOString() : String(r.closedAt),
+      budgetOriginId: r.budgetOriginId,
       budgetOriginName: r.budgetOriginName,
       clientId: r.clientId,
       clientName: r.clientName,
@@ -175,6 +178,7 @@ export async function getReportingCalendar(
       projectCode: null,
       closedAt:
         r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+      budgetOriginId: null,
       budgetOriginName: null,
       clientId: r.clientId,
       clientName: r.clientName,
@@ -252,6 +256,7 @@ export type SentReport = {
   clientId: string;
   clientName: string;
   clientSlug: string;
+  budgetOriginId: string | null;    // null para manual
   budgetOriginName: string | null;  // null para manual
   closedAt: string;
   deliveryDate: string | null;
@@ -280,6 +285,7 @@ export async function getSentReports(
         clientId: clients.id,
         clientName: clients.name,
         clientSlug: clients.slug,
+        budgetOriginId: projects.budgetOriginId,
         budgetOriginName: budgetOrigins.name,
         closedAt: projectReports.closedAt,
         deliveryDate: projectReports.deliveryDate,
@@ -342,6 +348,7 @@ export async function getSentReports(
       clientId: r.clientId,
       clientName: r.clientName,
       clientSlug: r.clientSlug,
+      budgetOriginId: r.budgetOriginId,
       budgetOriginName: r.budgetOriginName,
       closedAt:
         r.closedAt instanceof Date ? r.closedAt.toISOString() : String(r.closedAt),
@@ -367,6 +374,7 @@ export async function getSentReports(
       clientId: r.clientId,
       clientName: r.clientName,
       clientSlug: r.clientSlug,
+      budgetOriginId: null,
       budgetOriginName: null,
       closedAt:
         r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),

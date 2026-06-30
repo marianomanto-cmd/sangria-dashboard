@@ -720,10 +720,18 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   campañas a la vez**, con **export Excel consolidado** del pacing —reporte
   ejecutivo—), **Análisis**
   (mapa de América con activaciones por mercado + tabla filtrable), **Reportes**
-  (**Gantt** de entregas en curso, read-only + tabla de enviados con link al PPT) y
+  (**Gantt** de entregas en curso, read-only + tabla de enviados con link al PPT;
+  con los **mismos filtros que Estimación** —Budget Origin / Proyecto / Mes— **más
+  un filtro de Año que arranca en el año actual** por default) y
   **Benchmarks** (tabla CPM/CPC/CPV/CTR como el simulador). Todo scopeado al
   cliente; reusa las queries internas pasando `clientId`. El `ReportingGantt`
   acepta `readOnly` (sin botones de edición ni links internos) para el portal.
+  Los filtros de Reportes se aplican **en memoria** sobre la fecha representativa
+  de cada reporte (enviado → fecha de envío; en curso → fecha de entrega o cierre);
+  los reportes manuales (sin proyecto/origen) quedan fuera cuando hay filtro de
+  proyecto u origen activo. El filtro `year` es URL-based (`?year=`, vacío = año
+  actual, `all` = todos) en `portal-filters.tsx`; las opciones de Mes se acotan al
+  año elegido.
 - **Acceso (baja seguridad, a propósito)**: usuario = nombre o slug del cliente;
   password compartido `sangriaagency` (constante en `lib/client-portal.ts`,
   `CLIENT_PORTAL_PASSWORD`). El admin de `/configuracion/clientes` muestra el

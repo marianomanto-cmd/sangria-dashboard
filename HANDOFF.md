@@ -2,6 +2,30 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 30/jun/2026 (4) — Portal (Reportes): filtros (Budget Origin / Proyecto / Mes) + filtro de Año con default = año actual
+
+- **Pedido**: agregar a la sección **Reportes** del portal los **mismos filtros
+  que Estimación** (Budget Origin / Proyecto / Mes) y que el **filtro de Año** use
+  por default el **año actual**.
+- `db/queries/reports.ts`: `CalendarReport` y `SentReport` ahora exponen
+  `budgetOriginId` (antes solo `budgetOriginName`) para poder filtrar por el id que
+  manda el multi-select. Manual → `null`.
+- `ReportsSection` (`portal-content.tsx`): recibe `params` + `filterOptions`
+  (budgetOrigins/projects, del `getPortalFilterOptions` que ya trae la page) y
+  filtra **en memoria** los reportes en curso (Gantt) y enviados por Año + Budget
+  Origin + Proyecto + Mes. La **fecha representativa** es: enviado → `deliveredAt`;
+  en curso → `deliveryDate` (o `closedAt` si falta). El **Año** default = año
+  actual (sin param); "Todos" = `all`. Las opciones de **Mes** se acotan al año
+  elegido (no chocan con el de Año). Manuales (sin proyecto/origen) quedan fuera
+  cuando hay filtro de proyecto u origen.
+- `portal-filters.tsx`: nuevo field `"year"` (un `<select>` Año + "Todos", URL
+  param `?year=`, vacío = año actual; opciones = año actual ∪ años con reportes).
+  `reset()` y `isFiltered` contemplan `year`. `PortalParams` suma `year`; la page
+  lo lee de `sp.year` y se lo pasa a `ReportsSection`.
+- Verificado en mobile (390px): la barra de filtros envuelve sin scroll
+  horizontal. `tsc` + `eslint` + `next build` en verde. **Sin cambios de schema.
+  No requiere acción en prod.**
+
 ### Cambios de la sesión 30/jun/2026 (3) — Portal (Estimación): histórico de facturas emitidas en el detalle del plan
 
 - **Pedido**: en el detalle desplegado de cada plan deben aparecer también los

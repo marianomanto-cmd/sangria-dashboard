@@ -77,6 +77,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
     bo: one(sp.bo),
     proj: one(sp.proj),
     month: one(sp.month),
+    year: one(sp.year),
     dateFrom: one(sp.pfrom),
     dateTo: one(sp.pto),
     plan: one(sp.plan),
@@ -208,7 +209,15 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
           />
         )}
         {tab === "reportes" && (
-          <ReportsSection clientId={client.id} lang={lang} />
+          <ReportsSection
+            clientId={client.id}
+            lang={lang}
+            params={portalParams}
+            filterOptions={{
+              budgetOrigins: opts.budgetOrigins,
+              projects: opts.projects,
+            }}
+          />
         )}
         {tab === "benchmarks" && (
           <BenchmarksSection
