@@ -148,8 +148,7 @@ components/                 # UI compartida
   dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
   topbar-nav.tsx            # título de sección (Archivo), SOLO mobile (<lg) — en desktop manda la TopNav del header
   top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; mide el ancho y mete lo que no entra en un menú "Más ▾" (nunca scrollea, ResizeObserver). Reemplaza al sidebar vertical para liberar el ancho al contenido
-  billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates
-  billing-projection-by-project.tsx # portal (tab Estimación): por proyecto, desplegable → billing de cada plan + lo que falta facturar prorrateado por cada mes restante (getClientBillingProjections)
+  billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates y en el portal. Con `projectionsById` (portal) cada fila de proyecto se DESPLIEGA in situ → billing de cada plan + cronograma de lo que falta facturar por mes restante (getClientBillingProjections)
   billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
   reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
@@ -593,11 +592,17 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   para no duplicar (PRs #77 + #83).
 
 ### Proyección de facturación por proyecto (portal del cliente)
-- En el portal (`/<slug>` → tab **Estimación**), debajo de las cards mensuales,
-  hay una **proyección por proyecto**: cada proyecto tiene un **botón para
-  desplegar** y ver el **billing de cada uno de sus planes** (total a facturar /
-  ya facturado / **falta facturar**) + la proyección de **lo que falta facturar
-  prorrateada para cada mes que le queda al plan**.
+- En el portal (`/<slug>` → tab **Estimación**), **cada fila de proyecto de las
+  cards mensuales es DESPLEGABLE in situ** (no hay un listado aparte debajo): al
+  tocar la fila se abre, dentro de la misma card, el **billing de cada uno de sus
+  planes** (total a facturar / ya facturado / **falta facturar**) + la proyección
+  de **lo que falta facturar prorrateada para cada mes que le queda al plan**,
+  como un mini **cronograma**: una barra por mes restante con el monto al lado.
+- **Affordance**: la fila entera actúa como botón (chevron que rota + hover +
+  `cursor-pointer` + foco de teclado + `aria-expanded`); en mobile la tarjeta del
+  proyecto se expande igual. Patrón de *disclosure / master-detail* (fila de
+  detalle a todo el ancho en desktop; bloque debajo en mobile). El gráfico de
+  barras lleva el valor **etiquetado al lado** (no depende solo del color).
 - Query: `getClientBillingProjections` en `db/queries/dashboard.ts`. A diferencia
   de `getBillingEstimate` (agrega al nivel proyecto, solo para meses puntuales),
   baja hasta el **plan** y arma todos los meses que le quedan. Reusa el **mismo
@@ -607,12 +612,14 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `invoiced`/`paid` (publishers billable + `plan_billing_fees`); `remaining =
   max(0, gross − billed)`. Lo que falta facturar se reparte por mes **ponderado
   por el bruto programado** de cada mes restante (suma exactamente `remaining`).
-- Solo incluye planes con **meses por venir** (período que llega al mes actual o
-  más allá) y proyectos con `remaining > 0`. Respeta los filtros Budget Origin /
-  Proyecto del portal (ignora el de **Mes**: su horizonte son los meses
-  restantes de cada plan). UI read-only en
-  `components/billing-projection-by-project.tsx` (despliegue = estado local de
-  cliente, sin POST/Server Actions). **Sin cambios de schema.**
+  Un plan ya finalizado con saldo imputa el remanente al mes actual.
+- Solo incluye planes con `remaining > 0`. La proyección se le pasa a
+  `BillingEstimateCard` como `projectionsById` (mapa `projectId → proyección`):
+  cuando está presente, las filas de proyecto se vuelven desplegables; cuando no
+  (vista interna `/billing-tracker?tab=estimates`), siguen siendo links al
+  detalle, sin despliegue. UI en `components/billing-estimate-card.tsx` (client,
+  read-only; el despliegue es estado local, sin POST/Server Actions). Respeta los
+  filtros Budget Origin / Proyecto del portal. **Sin cambios de schema.**
 
 ### Pendientes del dashboard
 - `getDashboardPendings(clientId)` en `db/queries/pendings.ts` arma las cuatro

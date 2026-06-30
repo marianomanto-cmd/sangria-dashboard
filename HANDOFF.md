@@ -2,6 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 30/jun/2026 (2) — Portal (Estimación): el despliegue va EN CADA FILA de las cards mensuales (no un listado aparte) + UX investigada
+
+- **Feedback del cliente**: la primera versión agregaba un **listado separado**
+  ("Proyección por proyecto") **debajo** de las cards mensuales. No era eso: el
+  desplegable tiene que estar **en cada fila** de proyecto de las cards, sin
+  sumar bloques nuevos abajo.
+- **Rediseño**: se borró `components/billing-projection-by-project.tsx`. Ahora
+  `BillingEstimateCard` (`components/billing-estimate-card.tsx`, pasó a client)
+  acepta `projectionsById` (mapa `projectId → proyección`). Cuando viene (portal),
+  **cada fila de proyecto se vuelve desplegable in situ** (la fila entera es un
+  botón: chevron que rota + hover + `cursor-pointer` + teclado + `aria-expanded`);
+  al abrir inserta una fila de detalle a todo el ancho (desktop) / un bloque
+  debajo (mobile) con el billing de cada plan (Total / Facturado / Falta facturar)
+  y un **cronograma**: una barra por mes restante con el monto etiquetado al lado.
+  Sin `projectionsById` (vista interna `/billing-tracker`), las filas siguen
+  siendo links, sin despliegue.
+- **UX investigada** (skill `ui-ux-pro-max` + ejemplos web): patrón *disclosure /
+  master-detail* con chevron + fila clickeable (afordancia universal); para la
+  proyección, **mini-cronograma de barras horizontales con valor etiquetado al
+  lado** (no depende solo del color; legible y mobile-first). Marca: barras en
+  gradiente vino `from-accent to-accent-2` sobre track `bg-line`, cifras mono.
+- **Mobile verificado**: render real del componente (Tailwind del repo compilado
+  + screenshot con el Chromium headless preinstalado) a **390px** y desktop — sin
+  scroll horizontal, el cronograma entra bien. `tsc` + `eslint` + `next build` en
+  verde. **Sin cambios de schema. No requiere acción en prod.**
+- `EstimateSection` (`portal-content.tsx`) arma `projectionsById` desde
+  `getClientBillingProjections` y se lo pasa a `BillingEstimateCard` (sin bloque
+  aparte). Archivos: `components/billing-estimate-card.tsx`,
+  `app/(portal)/[clientSlug]/portal-content.tsx`, `db/queries/dashboard.ts`
+  (el plan ya finalizado con saldo imputa el remanente al mes actual), README.
+
 ### Cambios de la sesión 30/jun/2026 — Portal (Estimación): proyección por proyecto desplegable + lo que falta facturar prorrateado por mes restante
 
 - **Pedido**: en la **vista de cliente** (portal), tab **Estimación**, cada

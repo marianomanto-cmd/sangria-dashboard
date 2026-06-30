@@ -23,7 +23,6 @@ import {
   SpendByPublisherChart,
 } from "@/components/portal-charts";
 import { BillingEstimateCard } from "@/components/billing-estimate-card";
-import { BillingProjectionByProject } from "@/components/billing-projection-by-project";
 import { BillingStatusBadge } from "@/components/billing-status-badge";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { ReportingGantt } from "@/components/reporting-gantt";
@@ -338,7 +337,14 @@ export async function EstimateSection({
     : null;
   const estimates = prev ? all.filter((e) => e.month !== prev) : all;
 
-  if (estimates.length === 0 && !previousEstimate && projections.length === 0) {
+  // Map projectId → proyección, para que cada fila de proyecto de las cards
+  // mensuales se despliegue in situ (billing de cada plan + falta facturar por
+  // mes restante). No agrega listados nuevos: enriquece las filas existentes.
+  const projectionsById = Object.fromEntries(
+    projections.map((p) => [p.projectId, p]),
+  );
+
+  if (estimates.length === 0 && !previousEstimate) {
     return (
       <EmptyPortal
         text={
@@ -351,14 +357,12 @@ export async function EstimateSection({
   }
 
   return (
-    <>
-      <BillingEstimateCard
-        estimates={estimates}
-        previousMonth={previousEstimate}
-        lang={lang}
-      />
-      <BillingProjectionByProject projects={projections} lang={lang} />
-    </>
+    <BillingEstimateCard
+      estimates={estimates}
+      previousMonth={previousEstimate}
+      lang={lang}
+      projectionsById={projectionsById}
+    />
   );
 }
 
