@@ -1,6 +1,31 @@
-# Handoff — viernes 26/jun/2026
+# Handoff — jueves 02/jul/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 02/jul/2026 — Billing: filtro/buscador por N° de factura o nombre de plan (#178)
+
+- **Pedido**: agregarle a la tab de **Billing** (`/billing`) un **filtro/buscador**
+  para buscar por **número de factura** o **nombre de plan**.
+- **Cómo**: se siguió la convención de buscador en vivo de `/planes` y `/proyectos`
+  (client-side sobre las filas ya cargadas, no recarga la página). La tabla + las
+  cards de mobile se movieron de la page a un client component nuevo
+  **`components/billing-table.tsx`**, que antepone el input de búsqueda y filtra
+  en memoria por `invoiceNumber` **o** `planName`, case-insensitive. Muestra un
+  contador **"N de M"** mientras se busca y un empty state propio ("Ninguna
+  factura coincide con la búsqueda") cuando no hay match.
+- **`app/(app)/billing/page.tsx`**: dejó de renderizar la tabla inline (se quitaron
+  los helpers `RowCell`/`CardStat`, que se movieron al componente) y ahora usa
+  `<BillingTable rows={rows} lang={lang} />`. Conserva el empty state de "sin
+  facturas" para cuando los **filtros del servidor** (budget origin / proyecto /
+  estado / rango de meses, URL-based) no devuelven filas. El buscador **acota lo
+  que esos filtros ya dejaron** (no los reemplaza).
+- **Verificación**: `tsc --noEmit` + `eslint` + `next build` en verde. Test
+  determinístico del predicado (11 casos: por número, por nombre, case-insensitive,
+  `invoiceNumber` null, sin match). **Render real** del componente (headless
+  Chromium + datos mock) en 5 estados: tabla completa, filtro por nombre
+  ("copa" → "1 de 4"), filtro por número ("5678" → 1 fila), sin coincidencias, y
+  mobile (cards, sin scroll horizontal a 420px).
+- **Sin cambios de schema. No requiere acción en prod.**
 
 ### Cambios de la sesión 30/jun/2026 (4) — Portal (Reportes): filtros (Budget Origin / Proyecto / Mes) + filtro de Año con default = año actual
 
@@ -2396,6 +2421,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+91f2eee  Billing: filtro/buscador por N° de factura o nombre de plan (#178)
 cd59a06  Portal: filtros multi-select (Budget Origin / Proyecto / Mes) + revert #174 (#176)
 0154ed0  Billing Tracker (Estimación): filtro multi-select de clientes (#174) — revertido por #176 (vista equivocada)
 f9551f9  Campaign Tracker: cargar todas las métricas del plan desde el catálogo (#171)
@@ -3045,7 +3071,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
-| Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. |
+| Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
 | Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave + cerrar día + comparar) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Actions: `setPlacementActual`, `closeDailyLoad` en `app/actions/campaign-tracker.ts`. |
