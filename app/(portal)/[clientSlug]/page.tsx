@@ -169,7 +169,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
             fields={["origin", "project", "month"]}
             budgetOrigins={opts.budgetOrigins}
             projects={opts.projects}
-            months={estimationMonthOptions()}
+            months={estimationMonthOptions(opts.months)}
             lang={lang}
           />
         )}
@@ -191,7 +191,12 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
           <BillingSection clientId={client.id} lang={lang} params={portalParams} />
         )}
         {tab === "estimacion" && (
-          <EstimateSection clientId={client.id} lang={lang} params={portalParams} />
+          <EstimateSection
+            clientId={client.id}
+            clientSlug={client.slug}
+            lang={lang}
+            params={portalParams}
+          />
         )}
         {tab === "proyectos" && (
           <ProjectsSection

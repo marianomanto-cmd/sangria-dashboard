@@ -295,19 +295,32 @@ function previousMonth(): string {
   return `${y}-${String(m).padStart(2, "0")}`;
 }
 
-// Opciones del filtro de Mes de la tab Estimación: la estimación apunta a meses
-// FUTUROS (mes anterior + próximos), así que no puede reusar los meses históricos
-// del billing (elegir un mes pasado caía siempre al estado vacío).
-export function estimationMonthOptions(): string[] {
-  return [previousMonth(), ...nextMonths(6)];
+function thisMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+// Opciones del filtro de Mes de la tab Estimación. Ofrece dos cosas:
+//   • el histórico real del cliente (`billingMonths`, meses con billings/
+//     placements) — para poder elegir un mes YA CERRADO y ver el FACTURADO
+//     REAL de ese mes; y
+//   • una ventana futura generada (mes actual + próximos) — para estimar
+//     aunque no haya placements que lleguen tan adelante.
+// (Antes solo iba 1 mes atrás porque la query descartaba el facturado real de
+// meses pasados; ahora getBillingEstimate lo devuelve, así que sí sirve.)
+export function estimationMonthOptions(billingMonths: string[] = []): string[] {
+  const future = nextMonths(6);
+  return Array.from(new Set([...billingMonths, ...future])).sort();
 }
 
 export async function EstimateSection({
   clientId,
+  clientSlug,
   lang,
   params,
 }: {
   clientId: string;
+  clientSlug: string;
   lang: Language;
   params: PortalParams;
 }) {
@@ -315,6 +328,33 @@ export async function EstimateSection({
   const months = selectedMonths.length
     ? selectedMonths
     : [previousMonth(), ...nextMonths(2)];
+
+  // Export a Excel de lo que se está viendo: mismos filtros (bo/proj/month) que
+  // la ventana. GET, portal-safe (route pública en /api/portal/*).
+  const exportParams = new URLSearchParams({ client: clientSlug });
+  if (params.bo) exportParams.set("bo", params.bo);
+  if (params.proj) exportParams.set("proj", params.proj);
+  if (params.month) exportParams.set("month", params.month);
+  const exportHref = `/api/portal/estimate.xlsx?${exportParams.toString()}`;
+
+  const exportBar = (
+    <div className="flex items-center justify-end">
+      <a
+        href={exportHref}
+        className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink-2 hover:text-accent hover:border-accent transition-colors"
+        title={
+          lang === "es"
+            ? "Descargar en Excel lo que se ve en pantalla (mismos meses y filtros)"
+            : "Download what's on screen as Excel (same months and filters)"
+        }
+      >
+        <FileSpreadsheet size={14} />
+        {lang === "es"
+          ? "Descargar estimación (Excel)"
+          : "Download estimate (Excel)"}
+      </a>
+    </div>
+  );
 
   // Estimación mensual (cards por mes) + proyección por proyecto/plan (despliegue
   // con el billing de cada plan y lo que falta facturar prorrateado por cada mes
@@ -349,23 +389,30 @@ export async function EstimateSection({
 
   if (estimates.length === 0 && !previousEstimate) {
     return (
-      <EmptyPortal
-        text={
-          lang === "es"
-            ? "Sin planes vigentes para estimar en el período."
-            : "No active plans to estimate for the period."
-        }
-      />
+      <div className="flex flex-col gap-3">
+        {exportBar}
+        <EmptyPortal
+          text={
+            lang === "es"
+              ? "Sin planes vigentes para estimar en el período."
+              : "No active plans to estimate for the period."
+          }
+        />
+      </div>
     );
   }
 
   return (
-    <BillingEstimateCard
-      estimates={estimates}
-      previousMonth={previousEstimate}
-      lang={lang}
-      projectionsById={projectionsById}
-    />
+    <div>
+      {exportBar}
+      <BillingEstimateCard
+        estimates={estimates}
+        previousMonth={previousEstimate}
+        lang={lang}
+        projectionsById={projectionsById}
+        currentMonth={thisMonth()}
+      />
+    </div>
   );
 }
 
