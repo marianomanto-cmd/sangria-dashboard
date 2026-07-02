@@ -757,19 +757,10 @@ export async function getBillingEstimate(options: {
   );
   const placements = await placementsBase.where(placementWhere);
 
-  if (placements.length === 0) {
-    return options.months.map((m) => ({
-      month: m,
-      grossUsd: 0,
-      grossMediaUsd: 0,
-      grossFeesUsd: 0,
-      alreadyBilledUsd: 0,
-      alreadyBilledMediaUsd: 0,
-      alreadyBilledFeesUsd: 0,
-      netUsd: 0,
-      byProject: [],
-    }));
-  }
+  // Ojo: NO cortamos si placements está vacío. Aunque no haya planes
+  // approved/ready (p. ej. un cliente con todo archivado), igual queremos
+  // devolver el FACTURADO REAL de cada mes pedido — clave para ver meses
+  // pasados ya cerrados. El facturado sale de las subqueries de más abajo.
 
   // 2. Períodos por plan (para prorratear fees) + total media por plan
   const planPeriodMap = new Map<
@@ -920,11 +911,15 @@ export async function getBillingEstimate(options: {
     .select({
       month: planBillings.month,
       projectId: projects.id,
+      projectCode: projects.code,
+      projectName: projects.name,
+      clientName: clients.name,
       pubBilled: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}) filter (where ${planBillingPublishers.isBillable}), 0)`,
     })
     .from(planBillings)
     .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .innerJoin(clients, eq(projects.clientId, clients.id))
     .leftJoin(
       planBillingPublishers,
       eq(planBillingPublishers.planBillingId, planBillings.id),
@@ -936,17 +931,21 @@ export async function getBillingEstimate(options: {
         ...scopeConds,
       ),
     )
-    .groupBy(planBillings.month, projects.id);
+    .groupBy(planBillings.month, projects.id, projects.code, projects.name, clients.name);
 
   const billedFeesBase = db
     .select({
       month: planBillings.month,
       projectId: projects.id,
+      projectCode: projects.code,
+      projectName: projects.name,
+      clientName: clients.name,
       feeBilled: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
     })
     .from(planBillings)
     .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .innerJoin(clients, eq(projects.clientId, clients.id))
     .leftJoin(
       planBillingFees,
       eq(planBillingFees.planBillingId, planBillings.id),
@@ -958,7 +957,7 @@ export async function getBillingEstimate(options: {
         ...scopeConds,
       ),
     )
-    .groupBy(planBillings.month, projects.id);
+    .groupBy(planBillings.month, projects.id, projects.code, projects.name, clients.name);
 
   const [billedPubRows, billedFeeRows] = await Promise.all([
     billedBase,
@@ -966,23 +965,44 @@ export async function getBillingEstimate(options: {
   ]);
 
   // Para que aparezcan proyectos que SOLO tienen facturas (sin placements
-  // activos en el período por algún motivo), creamos el bucket si no existe.
-  // Esto puede pasar con planes ya facturados parcialmente cuyo placement
-  // ya terminó. Como no tenemos info del proyecto en billedRows directo,
-  // los matching que no encuentran proyecto se ignoran (sólo se reflejan
-  // si el proyecto ya tiene un bucket de placements/fees en ese mes).
+  // activos en el mes), creamos el bucket si no existe — así un mes ya cerrado
+  // muestra su FACTURADO REAL aunque su plan ya esté archivado o su placement
+  // haya terminado. Las subqueries de facturado ya traen la metadata del
+  // proyecto (code/name/cliente) justamente para poder crear el bucket acá.
+  const ensureBucket = (month: string, r: {
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    clientName: string;
+  }): ProjectAgg | null => {
+    if (!targetMonths.has(month)) return null;
+    let projMap = monthBuckets.get(month);
+    if (!projMap) {
+      projMap = new Map();
+      monthBuckets.set(month, projMap);
+    }
+    let cur = projMap.get(r.projectId);
+    if (!cur) {
+      cur = {
+        projectId: r.projectId,
+        projectCode: r.projectCode,
+        projectName: r.projectName,
+        clientName: r.clientName,
+        media: 0,
+        fees: 0,
+        billedMedia: 0,
+        billedFees: 0,
+      };
+      projMap.set(r.projectId, cur);
+    }
+    return cur;
+  };
   for (const r of billedPubRows) {
-    if (!targetMonths.has(r.month)) continue;
-    const projMap = monthBuckets.get(r.month);
-    if (!projMap) continue;
-    const cur = projMap.get(r.projectId);
+    const cur = ensureBucket(r.month, r);
     if (cur) cur.billedMedia += Number.parseFloat(r.pubBilled);
   }
   for (const r of billedFeeRows) {
-    if (!targetMonths.has(r.month)) continue;
-    const projMap = monthBuckets.get(r.month);
-    if (!projMap) continue;
-    const cur = projMap.get(r.projectId);
+    const cur = ensureBucket(r.month, r);
     if (cur) cur.billedFees += Number.parseFloat(r.feeBilled);
   }
 

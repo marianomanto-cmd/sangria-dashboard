@@ -127,6 +127,7 @@ app/
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
       pacing.xlsx/route.ts  # XLSX CONSOLIDADO del pacing de varias campañas (Resumen/Detalle/Por mercado). Público + canAccessClientExport + ownership
+      estimate.xlsx/route.ts # XLSX de la tab Estimación con los mismos meses/filtros que la ventana (thin handler → lib/portal-estimate-xlsx.ts). Público + canAccessClientExport
     benchmarks/
       export/route.ts       # Excel/PDF de benchmarks filtrados (público + canAccessClientExport)
     reports/
@@ -191,6 +192,7 @@ lib/
   nav.ts                    # entradas de navegación compartidas (PRIMARY_NAV/FOOTER_NAV + isNavActive) entre top-nav.tsx (desktop) y sidebar.tsx (drawer mobile)
   budget-split.ts           # prorrateo por días + agregación mercado × mes — compartido por el Tab 2 del Excel y el preview del editor
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas + una página por hoja auxiliar (formato del plan + firma/fecha)
+  portal-estimate-xlsx.ts   # buildEstimateWorkbook(estimates): Excel de la tab Estimación del portal (Resumen mensual + Detalle por proyecto, look de marca). Lo usa api/portal/estimate.xlsx
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
@@ -596,6 +598,23 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - Histórico: estas cards también se mostraban en `/planes`, `/proyectos` y
   `/proyectos/[code]`; se concentraron en `/billing-tracker` (tab Estimates)
   para no duplicar (PRs #77 + #83).
+- **Facturado real de meses pasados (portal)**: `getBillingEstimate` devuelve
+  una fila **por cada mes pedido** e incluye el **facturado real** (`invoiced`/
+  `paid`) de ese mes **aunque no haya gross** — creando el bucket del proyecto
+  on-demand desde las subqueries de facturado (que traen `code`/`name`/cliente)
+  y **sin cortar** cuando no hay placements approved/ready. Por eso un mes ya
+  cerrado (incl. planes archivados) muestra lo realmente facturado. En el portal
+  el **filtro de Mes de Estimación** ofrece los meses históricos del cliente
+  (`estimationMonthOptions(opts.months)` = histórico ∪ ventana futura), así se
+  puede elegir un mes pasado y ver su facturado. La card de un mes **anterior al
+  actual** (`isPast`, con `currentMonth` server-computed) lidera con el
+  **FACTURADO REAL** en vez del neto (`components/billing-estimate-card.tsx`).
+- **Export a Excel (portal)**: la tab Estimación tiene un botón **"Descargar
+  estimación (Excel)"** que baja lo que se ve en la ventana (mismos meses +
+  filtros bo/proj) vía `GET /api/portal/estimate.xlsx` (thin handler →
+  `lib/portal-estimate-xlsx.ts`): hoja **Resumen** (fila por mes: media/fees est.
+  · bruto · facturado real · neto + TOTAL, con estado Cerrado/En curso/Estimado)
+  + hoja **Detalle por proyecto** (por mes, con subtotal). Look de marca del plan.
 
 ### Proyección de facturación por proyecto (portal del cliente)
 - En el portal (`/<slug>` → tab **Estimación**), **cada fila de proyecto de las

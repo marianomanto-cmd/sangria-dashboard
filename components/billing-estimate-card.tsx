@@ -44,6 +44,10 @@ type Props = {
   // mes que le queda al plan. Si no se pasa (vista interna), las filas siguen
   // siendo links al detalle del proyecto, sin despliegue.
   projectionsById?: Record<string, ProjectBillingProjection>;
+  // Mes actual (YYYY-MM), server-computed. Cada mes de `estimates` anterior a
+  // éste se considera CERRADO y su card muestra el FACTURADO REAL como número
+  // principal (en vez del neto a facturar, que para un mes cerrado es ~0).
+  currentMonth?: string;
 };
 
 export function BillingEstimateCard({
@@ -52,6 +56,7 @@ export function BillingEstimateCard({
   hideProjectBreakdown = false,
   lang = "en",
   projectionsById,
+  currentMonth = "",
 }: Props) {
   if (estimates.length === 0 && !previousMonth) return null;
 
@@ -91,6 +96,7 @@ export function BillingEstimateCard({
             hideProjectBreakdown={hideProjectBreakdown}
             lang={lang}
             projectionsById={projectionsById}
+            isPast={currentMonth !== "" && e.month < currentMonth}
           />
         ))}
       </div>
@@ -209,11 +215,14 @@ function EstimateMonthCard({
   hideProjectBreakdown,
   lang,
   projectionsById,
+  isPast = false,
 }: {
   estimate: MonthlyBillingEstimate;
   hideProjectBreakdown: boolean;
   lang: Language;
   projectionsById?: Record<string, ProjectBillingProjection>;
+  // Mes ya cerrado (anterior al actual): la card lidera con el FACTURADO REAL.
+  isPast?: boolean;
 }) {
   const hasData = estimate.byProject.length > 0;
   const portalMode = !!projectionsById;
@@ -223,44 +232,75 @@ function EstimateMonthCard({
         <div className="flex items-baseline justify-between">
           <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
             {formatMonth(estimate.month, lang)}
+            {isPast && <> · {t("common.closed", lang)}</>}
           </p>
           <p className="font-mono text-lg font-semibold text-ink tabular-nums">
-            {formatUsd(estimate.netUsd)}
+            {formatUsd(isPast ? estimate.alreadyBilledUsd : estimate.netUsd)}
           </p>
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
-          <span>
-            {t("common.media", lang)}:{" "}
-            <span className="font-mono text-ink-2">
-              {formatUsdCompact(estimate.grossMediaUsd)}
+        {isPast ? (
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
+            <span className="text-ink-2 font-medium">
+              {lang === "es" ? "Facturado real" : "Actual invoiced"}
             </span>
-          </span>
-          <span>
-            {t("common.fees", lang)}:{" "}
-            <span className="font-mono text-ink-2">
-              {formatUsdCompact(estimate.grossFeesUsd)}
+            <span>
+              {t("common.media", lang)}:{" "}
+              <span className="font-mono text-success">
+                {formatUsdCompact(estimate.alreadyBilledMediaUsd)}
+              </span>
             </span>
-          </span>
-          <span>
-            {t("common.gross", lang)}:{" "}
-            <span className="font-mono text-ink-2">
-              {formatUsdCompact(estimate.grossUsd)}
+            <span>
+              {t("common.fees", lang)}:{" "}
+              <span className="font-mono text-success">
+                {formatUsdCompact(estimate.alreadyBilledFeesUsd)}
+              </span>
             </span>
-          </span>
-          <span>
-            {t("common.alreadyInvoiced", lang)}:{" "}
-            <span className="font-mono text-success">
-              {formatUsdCompact(estimate.alreadyBilledUsd)}
+            <span>
+              {t("common.estimated", lang)}:{" "}
+              <span className="font-mono text-ink-2">
+                {formatUsdCompact(estimate.grossUsd)}
+              </span>
             </span>
-          </span>
-        </div>
+          </div>
+        ) : (
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
+            <span>
+              {t("common.media", lang)}:{" "}
+              <span className="font-mono text-ink-2">
+                {formatUsdCompact(estimate.grossMediaUsd)}
+              </span>
+            </span>
+            <span>
+              {t("common.fees", lang)}:{" "}
+              <span className="font-mono text-ink-2">
+                {formatUsdCompact(estimate.grossFeesUsd)}
+              </span>
+            </span>
+            <span>
+              {t("common.gross", lang)}:{" "}
+              <span className="font-mono text-ink-2">
+                {formatUsdCompact(estimate.grossUsd)}
+              </span>
+            </span>
+            <span>
+              {t("common.alreadyInvoiced", lang)}:{" "}
+              <span className="font-mono text-success">
+                {formatUsdCompact(estimate.alreadyBilledUsd)}
+              </span>
+            </span>
+          </div>
+        )}
       </div>
 
       {!hasData ? (
         <div className="px-5 py-6 text-center text-xs text-muted">
-          {lang === "es"
-            ? "Sin planes activos este mes."
-            : "No active plans this month."}
+          {isPast
+            ? lang === "es"
+              ? "Sin facturación este mes."
+              : "No invoicing this month."
+            : lang === "es"
+              ? "Sin planes activos este mes."
+              : "No active plans this month."}
         </div>
       ) : hideProjectBreakdown ? null : (
         <>
