@@ -2,6 +2,44 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 02/jul/2026 (2) — Portal (Estimación): filtro con meses pasados (facturado real) + export a Excel (#179)
+
+- **Pedido**: en la **tab Estimación** del portal de cliente, (a) que el filtro
+  de Mes permita elegir **meses para atrás** para ver el **facturado real**, y
+  (b) poder **exportar a Excel** lo que se ve en la ventana, bien formateado.
+- **(a) Facturado real de meses pasados**:
+  - `getBillingEstimate` (`db/queries/dashboard.ts`) **ya no corta** cuando no
+    hay placements approved/ready, y los loops de facturado **crean el bucket
+    del proyecto on-demand** (las subqueries de facturado ahora traen
+    `code`/`name`/cliente). Resultado: **cada mes pedido** devuelve su
+    **facturado real** (`invoiced`/`paid`) aunque no haya gross — así un mes ya
+    cerrado (incl. planes archivados) muestra lo realmente facturado. Antes esos
+    meses caían siempre a $0/estado vacío.
+  - `estimationMonthOptions(billingMonths)` (`portal-content.tsx`) ahora ofrece
+    el **histórico real del cliente ∪ ventana futura** (antes: solo 1 mes atrás).
+    La page pasa `opts.months`.
+  - `BillingEstimateCard` (`components/billing-estimate-card.tsx`) recibe
+    `currentMonth` (server-computed) y marca cada mes `isPast`: su card **lidera
+    con el FACTURADO REAL** (en vez del neto), con tag "Cerrado" y la línea
+    "Facturado real" (media/fees en verde + estimado de referencia). Los meses
+    actual/futuros siguen igual (neto + estimación).
+- **(b) Export a Excel**: botón **"Descargar estimación (Excel)"** en la sección
+  (GET portal-safe) → `app/api/portal/estimate.xlsx/route.ts` (thin handler) +
+  `lib/portal-estimate-xlsx.ts` (`buildEstimateWorkbook`). Baja los **mismos
+  meses + filtros** (bo/proj/month) que la ventana. Dos hojas con el look de
+  marca del plan: **Resumen** (fila por mes: media/fees est. · bruto · facturado
+  real · neto + TOTAL, con estado Cerrado/En curso/Estimado) y **Detalle por
+  proyecto** (por mes, con subtotal). Ruta pública en el proxy (`/api/portal/*`).
+- **Verificación**: `tsc` + `eslint` + `next build` en verde. **Render real**
+  (headless Chromium): las cards de meses cerrados lideran con el facturado real
+  (un mes con plan archivado muestra Media/Fees "—" pero Facturado > 0), y el
+  Excel generado con datos mock quedó bien formateado (banners de marca, estados
+  por mes, facturado en verde, TOTAL/subtotales, reconciliación de sumas).
+- **Sin cambios de schema. No requiere acción en prod.** (Nota: el fix de
+  `getBillingEstimate` también aplica al `/billing-tracker?tab=estimates`
+  interno, pero ahí solo se piden mes anterior + actual + próximo, sin cambios
+  visibles.)
+
 ### Cambios de la sesión 02/jul/2026 — Billing: filtro/buscador por N° de factura o nombre de plan (#178)
 
 - **Pedido**: agregarle a la tab de **Billing** (`/billing`) un **filtro/buscador**
@@ -2421,6 +2459,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+b3efb2d  Portal (Estimación): filtro con meses pasados (facturado real) + export a Excel (#179)
 91f2eee  Billing: filtro/buscador por N° de factura o nombre de plan (#178)
 cd59a06  Portal: filtros multi-select (Budget Origin / Proyecto / Mes) + revert #174 (#176)
 0154ed0  Billing Tracker (Estimación): filtro multi-select de clientes (#174) — revertido por #176 (vista equivocada)
@@ -3073,6 +3112,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
+| Tocar la tab Estimación (portal + interno) | Datos: `getBillingEstimate` en `db/queries/dashboard.ts` (una fila por mes; devuelve **facturado real** aunque no haya gross → sirve para meses cerrados). Cards: `components/billing-estimate-card.tsx` (`isPast` via `currentMonth` → lidera con el facturado real). Portal: `EstimateSection` + `estimationMonthOptions` en `app/(portal)/[clientSlug]/portal-content.tsx` (el filtro de Mes ofrece histórico ∪ futuro). |
+| Tocar el export a Excel de la Estimación (portal) | `app/api/portal/estimate.xlsx/route.ts` (thin handler: auth `canAccessClientExport` + mismos meses/filtros que la ventana) + `lib/portal-estimate-xlsx.ts` (`buildEstimateWorkbook`: hojas Resumen + Detalle, look de marca). Botón en `EstimateSection`. |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
 | Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave + cerrar día + comparar) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Actions: `setPlacementActual`, `closeDailyLoad` en `app/actions/campaign-tracker.ts`. |
 | Tocar el histórico de cargas / "Cerrar día" | Tabla `campaign_actual_snapshots` (`db/schema.ts`), action `closeDailyLoad`. La query `getCampaignTrackerPlan` arma `lastCloseDate` + `previousActuals` por placement leyendo el snapshot más reciente. |
