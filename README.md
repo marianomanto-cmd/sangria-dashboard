@@ -99,7 +99,7 @@ app/
         plan-history.tsx    # chip "Última edición" + modal read-only con los cambios de la versión vigente (audit_log)
         billing/            # editor de facturación mensual
     planes/                 # /planes — vista cross-proyectos
-    billing/                # /billing — lista de facturas con filtros (origin/project/range) + click-to-edit
+    billing/                # /billing — lista de facturas con filtros (origin/project/range) + buscador en vivo por N°/plan + click-to-edit
     billing-tracker/        # /billing-tracker — tabs "Tracker" (proyecto→plan→facturas emitidas) + "Estimates" (estimación de facturación)
     campaign-tracker/       # /campaign-tracker — hub con filtro vigentes/concluidos/todos + vista de carga de consumo real vs goal
       [planId]/             # vista de carga: tabla editable (autosave) + chart de progreso
@@ -150,6 +150,7 @@ components/                 # UI compartida
   top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; mide el ancho y mete lo que no entra en un menú "Más ▾" (nunca scrollea, ResizeObserver). Reemplaza al sidebar vertical para liberar el ancho al contenido
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates y en el portal. Con `projectionsById` (portal) cada fila de proyecto se DESPLIEGA in situ → billing de cada plan + facturas emitidas (histórico: número + mes + valor) + cronograma de lo que falta facturar por mes restante (getClientBillingProjections)
   billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
+  billing-table.tsx         # /billing: tabla (desktop) + cards (mobile) con buscador en vivo por N° de factura o nombre de plan (client-side, sobre las filas ya cargadas; case-insensitive, no recarga)
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
   reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
   reporting-gantt.tsx       # Gantt diario -30/+30 días para reporting calendar
@@ -268,6 +269,11 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - Planes: la tabla vive en `components/plans-table-client.tsx`. Proyectos: la
   tabla es `ProjectsTableExpandable` con el prop `searchable` (el dashboard la
   usa con `searchable=false` → sin buscador y con el orden de la query).
+- **`/billing` comparte el mismo patrón**: `components/billing-table.tsx`
+  antepone un buscador en vivo por **N° de factura o nombre de plan**
+  (client-side sobre las filas ya cargadas, case-insensitive). Los filtros
+  duros de `/billing` (budget origin / proyecto / estado / rango de meses)
+  siguen siendo URL-based y el buscador acota lo que esos filtros ya dejaron.
 
 ### Filtro de año (Planes, Proyectos, Calendario)
 - Las tabs `/planes`, `/proyectos` y `/reportes/calendario` filtran por **año**,
