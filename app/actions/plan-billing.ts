@@ -177,10 +177,13 @@ async function autoRecomputeMgmtFees(billingId: string, mediaPlanId: string) {
   const totalMedia = Number.parseFloat(tmRow.total);
   if (!Number.isFinite(totalMedia) || totalMedia <= 0) return;
 
-  // Gasto del mes: suma de los consumos de publishers billable en este billing.
+  // Gasto del mes: suma de TODOS los consumos del billing (facturables o no).
+  // El management fee se cobra sobre toda la media gestionada — aunque el
+  // cliente pague al publisher directo, la agencia le cobra el fee — así que el
+  // prorrateo del fee usa el consumo TOTAL del mes, no solo el facturable.
   const [consumedRow] = await db
     .select({
-      total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}) filter (where ${planBillingPublishers.isBillable}), 0)`,
+      total: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
     })
     .from(planBillingPublishers)
     .where(eq(planBillingPublishers.planBillingId, billingId));
