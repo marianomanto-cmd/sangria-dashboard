@@ -363,9 +363,14 @@ export async function getBillingDetail(id: string): Promise<BillingDetail | null
 // total del plan. Alimenta el gráfico de "dónde estoy parado" arriba del billing
 // del plan.
 //
-// Convenciones (mismas que el resto del app):
-//   • Total del plan  = total media (Σ media_plan_publishers.total_planned_usd,
-//     todos los publishers) + total fees (management = TM·rate/(100−rate)).
+// Convenciones — todo del lado FACTURABLE (lo que la agencia le factura al
+// cliente), para que numerador y denominador reconcilien y el avance llegue a
+// 100% cuando está todo facturado:
+//   • Total del plan  = media facturable (Σ total_planned_usd de publishers
+//     donde la agencia factura) + total fees. La management fee se computa sobre
+//     la media FACTURABLE — es lo que realmente se imputa/factura mes a mes
+//     (`consumo_billable × rate/(100−rate)`; destildar un publisher lo saca del
+//     fee). Setup/reporting/custom = montos fijos.
 //   • Facturado media = Σ plan_billing_publishers.amount_real_usd FILTER
 //     (is_billable)  ·  Facturado fee = Σ plan_billing_fees.amount_imputed_usd.
 //   • "Emitido" (facturado de verdad) = billing en estado invoiced|paid. Lo que
@@ -398,26 +403,27 @@ const EMITTED_STATUSES = ["invoiced", "paid"] as const;
 export async function getPlanBillingProgress(
   planId: string,
 ): Promise<PlanBillingProgress> {
-  // 1. Media del plan. Distinguimos:
-  //   • total (todos los publishers) → base de la management fee (regla del
-  //     negocio: la fee se computa sobre la media TOTAL gestionada).
-  //   • facturable (agencia paga → se le factura al cliente) → es el DENOMINADOR
-  //     del avance, para que sea apples-to-apples con el facturado (que también
-  //     filtra is_billable). Si no filtráramos, un plan con media que paga el
-  //     cliente directo nunca llegaría al 100% y "Falta facturar" quedaría
-  //     inflado con plata que la agencia no factura.
+  // 1. Media FACTURABLE del plan = Σ total_planned_usd de los publishers donde
+  //    la agencia factura (`coalesce(agency_pays_override, publishers.agency_pays)`).
+  //    Es el DENOMINADOR del avance — apples-to-apples con el facturado (que
+  //    también filtra is_billable) — y también la base de la management fee (ver
+  //    abajo). Si no filtráramos, un plan con media que paga el cliente directo
+  //    nunca llegaría a 100% y "Falta facturar" quedaría inflado.
   const [mediaRow] = await db
     .select({
-      totalAll: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
       totalBillable: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}) filter (where coalesce(${mediaPlanPublishers.agencyPaysOverride}, ${publishers.agencyPays})), 0)`,
     })
     .from(mediaPlanPublishers)
     .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
     .where(eq(mediaPlanPublishers.mediaPlanId, planId));
-  const totalMediaAllUsd = Number.parseFloat(mediaRow?.totalAll ?? "0");
   const totalMediaUsd = Number.parseFloat(mediaRow?.totalBillable ?? "0");
 
-  // 2. Total fees (management por % se deriva de la media TOTAL del plan).
+  // 2. Total fees. La management fee que REALMENTE se factura se computa sobre la
+  //    media FACTURABLE: la imputación mensual (autoRecomputeMgmtFees en
+  //    app/actions/plan-billing.ts) es `consumo_billable × rate/(100−rate)` (el
+  //    total media se cancela en el prorrateo), así que destildar un publisher
+  //    lo saca del fee. Sumado sobre el plan da `media_facturable × rate/(100−rate)`.
+  //    Las demás fees (setup/reporting/custom) son montos fijos.
   const feeRows = await db
     .select()
     .from(mediaPlanFees)
@@ -431,7 +437,7 @@ export async function getPlanBillingProgress(
       ratePct > 0 &&
       ratePct < 100
     ) {
-      totalFeesUsd += (totalMediaAllUsd * ratePct) / (100 - ratePct);
+      totalFeesUsd += (totalMediaUsd * ratePct) / (100 - ratePct);
     } else {
       totalFeesUsd += Number.parseFloat(f.amountUsd);
     }

@@ -2,6 +2,23 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 03/jul/2026 (2) — Fix: la management fee del gráfico va sobre media FACTURABLE (#181)
+
+- **Contexto**: en #180 el denominador ponía la **management fee sobre la media
+  TOTAL** del plan. Pero la imputación mensual real
+  (`autoRecomputeMgmtFees`, `app/actions/plan-billing.ts`) es
+  `(consumo_billable / media_total) × feeTotal` = **`consumo_billable ×
+  rate/(100−rate)`** (la media total se cancela en el prorrateo) → **destildar un
+  publisher lo saca del fee**. O sea el fee que realmente se factura sobre todo el
+  plan es `media_facturable × rate/(100−rate)`, no sobre la media total.
+- **Fix** (`db/queries/billing.ts` → `getPlanBillingProgress`): la management fee
+  del denominador ahora usa la **media facturable** (mismo `totalMediaUsd` que ya
+  usábamos de denominador de medios). Así numerador (fee imputado real) y
+  denominador reconcilian y el avance llega a 100% cuando está todo facturado —
+  el mismo criterio que ya aplicábamos a los medios (era el mismo bug, pero en el
+  fee). Se eliminó el `totalMediaAllUsd` (ya no hace falta).
+- **Sin cambios de schema. No requiere acción en prod.**
+
 ### Cambios de la sesión 03/jul/2026 — Billing del plan: gráfico "Avance de facturación" (facturado medios/fee vs total) (#180)
 
 - **Pedido**: en la vista de **Billing de un plan**, un gráfico que muestre **lo
@@ -11,8 +28,9 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   `PlanBillingProgress`/`PlanBillingProgressMonth`): total del plan **facturable**
   (denominador) = media FACTURABLE (Σ `total_planned_usd` de publishers donde la
   agencia factura: `coalesce(agency_pays_override, publishers.agency_pays)`) +
-  total fees. La **management fee** se deriva de la media TOTAL del plan
-  (`TM·rate/(100−rate)`, igual criterio que el resto). Se usa el denominador
+  total fees. La **management fee** también se computa sobre la media
+  **FACTURABLE** (`media_facturable·rate/(100−rate)`) — corregido en #181, ver la
+  entrada de arriba: es lo que realmente se imputa/factura. Se usa el denominador
   facturable para que sea apples-to-apples con el facturado (que también filtra
   `is_billable`) — si no, un plan con media que paga el cliente directo nunca
   llegaría a 100% y "Falta facturar" quedaría inflado. Por billing: facturado
@@ -2496,6 +2514,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+dc4f6be  Billing del plan: la management fee del avance va sobre media facturable (#181)
 c81946c  Billing del plan: gráfico "Avance de facturación" (facturado medios/fee vs total) (#180)
 b3efb2d  Portal (Estimación): filtro con meses pasados (facturado real) + export a Excel (#179)
 91f2eee  Billing: filtro/buscador por N° de factura o nombre de plan (#178)
@@ -3150,7 +3169,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
-| Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (denominador = media FACTURABLE Σtotal_planned where agencia paga + fees; la mgmt fee se deriva de la media TOTAL; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Se renderiza en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |
+| Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (todo del lado FACTURABLE: denominador = media facturable Σtotal_planned where agencia paga + fees; la mgmt fee también se computa sobre la media facturable = lo que se imputa mes a mes; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Se renderiza en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |
 | Tocar la tab Estimación (portal + interno) | Datos: `getBillingEstimate` en `db/queries/dashboard.ts` (una fila por mes; devuelve **facturado real** aunque no haya gross → sirve para meses cerrados). Cards: `components/billing-estimate-card.tsx` (`isPast` via `currentMonth` → lidera con el facturado real). Portal: `EstimateSection` + `estimationMonthOptions` en `app/(portal)/[clientSlug]/portal-content.tsx` (el filtro de Mes ofrece histórico ∪ futuro). |
 | Tocar el export a Excel de la Estimación (portal) | `app/api/portal/estimate.xlsx/route.ts` (thin handler: auth `canAccessClientExport` + mismos meses/filtros que la ventana) + `lib/portal-estimate-xlsx.ts` (`buildEstimateWorkbook`: hojas Resumen + Detalle, look de marca). Botón en `EstimateSection`. |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
