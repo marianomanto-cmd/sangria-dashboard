@@ -16,7 +16,9 @@ import {
   publishers,
 } from "@/db/schema";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
+import { getPlanBillingProgress } from "@/db/queries/billing";
 import { BillingStatusBadge } from "@/components/billing-status-badge";
+import { PlanBillingProgressCard } from "@/components/plan-billing-progress";
 import { BillingMonthEditor } from "./editor";
 
 type Props = {
@@ -94,6 +96,12 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
 
   const billingByMonth = new Map(existingBillings.map((b) => [b.month, b]));
   const selectedMonth = sp.month && months.includes(sp.month) ? sp.month : null;
+
+  // Avance de facturación del plan (para el gráfico "dónde estoy parado"). Solo
+  // si el plan tiene período/meses — si no, la card no se muestra y evitamos las
+  // queries.
+  const billingProgress =
+    months.length > 0 ? await getPlanBillingProgress(planId) : null;
 
   // Plan publishers (catálogo del plan). Un mismo publisher puede tener N
   // bloques: para la vista de billing los agregamos a UNA línea por
@@ -312,6 +320,13 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
           </p>
         </div>
       </header>
+
+      {billingProgress && (
+        <PlanBillingProgressCard
+          progress={billingProgress}
+          planMonths={months}
+        />
+      )}
 
       {months.length === 0 ? (
         <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">

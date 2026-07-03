@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, isNull, lte, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import {
   budgetOrigins,
@@ -355,5 +355,154 @@ export async function getBillingDetail(id: string): Promise<BillingDetail | null
     budgetOrigin: billingRow.origin,
     publisherLines,
     feeLines,
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Avance de facturación de UN plan: lo facturado (medios + fee) mes a mes vs el
+// total del plan. Alimenta el gráfico de "dónde estoy parado" arriba del billing
+// del plan.
+//
+// Convenciones (mismas que el resto del app):
+//   • Total del plan  = total media (Σ media_plan_publishers.total_planned_usd,
+//     todos los publishers) + total fees (management = TM·rate/(100−rate)).
+//   • Facturado media = Σ plan_billing_publishers.amount_real_usd FILTER
+//     (is_billable)  ·  Facturado fee = Σ plan_billing_fees.amount_imputed_usd.
+//   • "Emitido" (facturado de verdad) = billing en estado invoiced|paid. Lo que
+//     está cargado en un billing draft/ready/sent va como "cargado sin emitir".
+// ────────────────────────────────────────────────────────────────────────────
+
+export type PlanBillingProgressMonth = {
+  month: string; // YYYY-MM
+  status: (typeof planBillings.$inferSelect)["status"];
+  emitted: boolean; // invoiced | paid
+  mediaUsd: number; // facturable (amount_real_usd filter is_billable) del mes
+  feesUsd: number; // fee imputado del mes
+};
+
+export type PlanBillingProgress = {
+  totalMediaUsd: number;
+  totalFeesUsd: number;
+  totalUsd: number;
+  // Emitido (facturado):
+  invoicedMediaUsd: number;
+  invoicedFeesUsd: number;
+  // Cargado en billings todavía no emitidos (draft/ready/sent):
+  pendingMediaUsd: number;
+  pendingFeesUsd: number;
+  months: PlanBillingProgressMonth[]; // una fila por billing existente, asc por mes
+};
+
+const EMITTED_STATUSES = ["invoiced", "paid"] as const;
+
+export async function getPlanBillingProgress(
+  planId: string,
+): Promise<PlanBillingProgress> {
+  // 1. Media del plan. Distinguimos:
+  //   • total (todos los publishers) → base de la management fee (regla del
+  //     negocio: la fee se computa sobre la media TOTAL gestionada).
+  //   • facturable (agencia paga → se le factura al cliente) → es el DENOMINADOR
+  //     del avance, para que sea apples-to-apples con el facturado (que también
+  //     filtra is_billable). Si no filtráramos, un plan con media que paga el
+  //     cliente directo nunca llegaría al 100% y "Falta facturar" quedaría
+  //     inflado con plata que la agencia no factura.
+  const [mediaRow] = await db
+    .select({
+      totalAll: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}), 0)`,
+      totalBillable: sql<string>`coalesce(sum(${mediaPlanPublishers.totalPlannedUsd}) filter (where coalesce(${mediaPlanPublishers.agencyPaysOverride}, ${publishers.agencyPays})), 0)`,
+    })
+    .from(mediaPlanPublishers)
+    .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
+    .where(eq(mediaPlanPublishers.mediaPlanId, planId));
+  const totalMediaAllUsd = Number.parseFloat(mediaRow?.totalAll ?? "0");
+  const totalMediaUsd = Number.parseFloat(mediaRow?.totalBillable ?? "0");
+
+  // 2. Total fees (management por % se deriva de la media TOTAL del plan).
+  const feeRows = await db
+    .select()
+    .from(mediaPlanFees)
+    .where(eq(mediaPlanFees.mediaPlanId, planId));
+  let totalFeesUsd = 0;
+  for (const f of feeRows) {
+    const ratePct = f.ratePct ? Number.parseFloat(f.ratePct) : null;
+    if (
+      f.feeType === "management" &&
+      ratePct != null &&
+      ratePct > 0 &&
+      ratePct < 100
+    ) {
+      totalFeesUsd += (totalMediaAllUsd * ratePct) / (100 - ratePct);
+    } else {
+      totalFeesUsd += Number.parseFloat(f.amountUsd);
+    }
+  }
+
+  // 3. Billings del plan + facturado (media facturable + fee) por billing.
+  const billings = await db
+    .select({
+      id: planBillings.id,
+      month: planBillings.month,
+      status: planBillings.status,
+    })
+    .from(planBillings)
+    .where(eq(planBillings.mediaPlanId, planId))
+    .orderBy(asc(planBillings.month));
+
+  const billingIds = billings.map((b) => b.id);
+  const mediaByBilling = new Map<string, number>();
+  const feesByBilling = new Map<string, number>();
+  if (billingIds.length > 0) {
+    const [pubSums, feeSums] = await Promise.all([
+      db
+        .select({
+          planBillingId: planBillingPublishers.planBillingId,
+          media: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}) filter (where ${planBillingPublishers.isBillable}), 0)`,
+        })
+        .from(planBillingPublishers)
+        .where(inArray(planBillingPublishers.planBillingId, billingIds))
+        .groupBy(planBillingPublishers.planBillingId),
+      db
+        .select({
+          planBillingId: planBillingFees.planBillingId,
+          fees: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
+        })
+        .from(planBillingFees)
+        .where(inArray(planBillingFees.planBillingId, billingIds))
+        .groupBy(planBillingFees.planBillingId),
+    ]);
+    for (const r of pubSums)
+      mediaByBilling.set(r.planBillingId, Number.parseFloat(r.media));
+    for (const r of feeSums)
+      feesByBilling.set(r.planBillingId, Number.parseFloat(r.fees));
+  }
+
+  const emitted = new Set<string>(EMITTED_STATUSES);
+  let invoicedMediaUsd = 0;
+  let invoicedFeesUsd = 0;
+  let pendingMediaUsd = 0;
+  let pendingFeesUsd = 0;
+  const months: PlanBillingProgressMonth[] = billings.map((b) => {
+    const mediaUsd = mediaByBilling.get(b.id) ?? 0;
+    const feesUsd = feesByBilling.get(b.id) ?? 0;
+    const isEmitted = emitted.has(b.status);
+    if (isEmitted) {
+      invoicedMediaUsd += mediaUsd;
+      invoicedFeesUsd += feesUsd;
+    } else {
+      pendingMediaUsd += mediaUsd;
+      pendingFeesUsd += feesUsd;
+    }
+    return { month: b.month, status: b.status, emitted: isEmitted, mediaUsd, feesUsd };
+  });
+
+  return {
+    totalMediaUsd,
+    totalFeesUsd,
+    totalUsd: totalMediaUsd + totalFeesUsd,
+    invoicedMediaUsd,
+    invoicedFeesUsd,
+    pendingMediaUsd,
+    pendingFeesUsd,
+    months,
   };
 }
