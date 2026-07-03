@@ -2,7 +2,37 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 03/jul/2026 (2) — Fix: la management fee del gráfico va sobre media FACTURABLE (#181)
+### Cambios de la sesión 03/jul/2026 (3) — Decisión de negocio: el management fee se cobra sobre TODA la media (fix del auto-prorrateo) (#182)
+
+- **Decisión del dueño**: la management fee **se cobra sobre toda la media
+  gestionada**, aunque un publisher lo pague el cliente directo ("no se factura
+  el publisher, pero sí le cobramos el fee"). Esto **revierte el criterio de #181**
+  (que había puesto el fee sobre la media facturable, siguiendo lo que hacía la
+  imputación en ese momento).
+- **Bug encontrado**: la imputación mensual del fee (`autoRecomputeMgmtFees`,
+  `app/actions/plan-billing.ts`) prorrateaba por **consumo facturable**
+  (`sum(amount_real_usd) filter (is_billable)`), así que destildar un publisher lo
+  sacaba del fee → sobre el plan solo se facturaba el fee de la media facturable.
+- **Fix** (`app/actions/plan-billing.ts`): el prorrateo mensual ahora usa el
+  **consumo TOTAL del mes** (sin filtrar `is_billable`) → fee del mes =
+  `consumo_total × rate/(100−rate)`; sumado sobre el plan llega a la fee total
+  (media total × rate/(100−rate)). **⚠️ Cambia montos facturados**: los billings
+  **draft** que se re-editen recalculan el fee más alto (incluye el consumo no
+  facturable). Los billings **ya emitidos** (invoiced/paid) quedan **inmutables**
+  (no se tocan retroactivamente).
+- **Gráfico** (`db/queries/billing.ts` → `getPlanBillingProgress`): el denominador
+  del fee vuelve a la **media total** (`totalMediaAllUsd`); los **medios** del
+  denominador siguen siendo la media **facturable** (la media que paga el cliente
+  directo no se factura como medio). Así reconcilia con el fee imputado ya
+  arreglado.
+- **Nota**: billings emitidos ANTES de este fix tienen el fee viejo (prorrateado
+  por facturable), así que en planes viejos con media no-facturable el "Facturado"
+  del gráfico puede quedar algo por debajo del 100% aunque esté todo emitido — es
+  data histórica, no un bug de la lógica nueva.
+- `tsc` + `eslint` + `next build` en verde. **Sin cambios de schema.** Impacto en
+  prod: cambia el cálculo del management fee de billings draft a futuro.
+
+### Cambios de la sesión 03/jul/2026 (2) — [REVERTIDO por #182, ver arriba] Fix: la management fee del gráfico va sobre media FACTURABLE (#181)
 
 - **Contexto**: en #180 el denominador ponía la **management fee sobre la media
   TOTAL** del plan. Pero la imputación mensual real
@@ -28,12 +58,12 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   `PlanBillingProgress`/`PlanBillingProgressMonth`): total del plan **facturable**
   (denominador) = media FACTURABLE (Σ `total_planned_usd` de publishers donde la
   agencia factura: `coalesce(agency_pays_override, publishers.agency_pays)`) +
-  total fees. La **management fee** también se computa sobre la media
-  **FACTURABLE** (`media_facturable·rate/(100−rate)`) — corregido en #181, ver la
-  entrada de arriba: es lo que realmente se imputa/factura. Se usa el denominador
-  facturable para que sea apples-to-apples con el facturado (que también filtra
-  `is_billable`) — si no, un plan con media que paga el cliente directo nunca
-  llegaría a 100% y "Falta facturar" quedaría inflado. Por billing: facturado
+  total fees. La **management fee** se cobra sobre la media **TOTAL**
+  (`media_total·rate/(100−rate)`) — ver la entrada #182 arriba (decisión final).
+  El denominador de **medios** es el facturable para que sea apples-to-apples con
+  el facturado (que también filtra `is_billable`) — si no, un plan con media que
+  paga el cliente directo nunca llegaría a 100% y "Falta facturar" quedaría
+  inflado. Por billing: facturado
   media = Σ `amount_real_usd` FILTER (`is_billable`) y fee = Σ `amount_imputed_usd`.
   "Emitido" (facturado) = estado `invoiced`/`paid`; lo que está en billings
   draft/ready/sent va como **"cargado sin emitir"** (pipeline). El burn-up del
@@ -2514,6 +2544,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+5c64f33  Management fee: cobrar sobre TODA la media (fix auto-prorrateo mensual) (#182)
 dc4f6be  Billing del plan: la management fee del avance va sobre media facturable (#181)
 c81946c  Billing del plan: gráfico "Avance de facturación" (facturado medios/fee vs total) (#180)
 b3efb2d  Portal (Estimación): filtro con meses pasados (facturado real) + export a Excel (#179)
@@ -3169,7 +3200,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
-| Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (todo del lado FACTURABLE: denominador = media facturable Σtotal_planned where agencia paga + fees; la mgmt fee también se computa sobre la media facturable = lo que se imputa mes a mes; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Se renderiza en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |
+| Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (denominador: MEDIOS = media facturable Σtotal_planned where agencia paga; FEE = mgmt sobre media TOTAL — se cobra sobre toda la media aunque el cliente pague directo; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). El fee mensual lo imputa `autoRecomputeMgmtFees` en `app/actions/plan-billing.ts` (prorratea por consumo TOTAL). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Render en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |
 | Tocar la tab Estimación (portal + interno) | Datos: `getBillingEstimate` en `db/queries/dashboard.ts` (una fila por mes; devuelve **facturado real** aunque no haya gross → sirve para meses cerrados). Cards: `components/billing-estimate-card.tsx` (`isPast` via `currentMonth` → lidera con el facturado real). Portal: `EstimateSection` + `estimationMonthOptions` en `app/(portal)/[clientSlug]/portal-content.tsx` (el filtro de Mes ofrece histórico ∪ futuro). |
 | Tocar el export a Excel de la Estimación (portal) | `app/api/portal/estimate.xlsx/route.ts` (thin handler: auth `canAccessClientExport` + mismos meses/filtros que la ventana) + `lib/portal-estimate-xlsx.ts` (`buildEstimateWorkbook`: hojas Resumen + Detalle, look de marca). Botón en `EstimateSection`. |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
