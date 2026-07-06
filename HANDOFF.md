@@ -1,6 +1,34 @@
-# Handoff — viernes 03/jul/2026
+# Handoff — lunes 06/jul/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 06/jul/2026 — Reporte PDF de billing: sacar el fondo bordó del header + descripciones sin truncar
+
+- **Pedido** (feedback de finanzas sobre los PDF de billing 2026-06): el fondo
+  **bordó** de la primera fila (header) "no funciona en el procesamiento" (su
+  sistema automático se traba con las filas de color), y varias descripciones
+  salían **cortadas** (p.ej. `... - Instagram - J.` en vez de `June 2026`, o
+  `Tarifas Los Cab.` en vez de `Tarifas Los Cabos 2026`).
+- **Fix** en el reporte PDF:
+  - El render se **extrajo** del route a `lib/billing-report-pdf.ts`
+    (`renderBillingReportPdf`). `app/api/billings/[id]/report.pdf/route.ts` sólo
+    resuelve el detalle del billing y filtra qué líneas entran; el dibujo vive
+    en el lib. Así el PDF que baja finanzas y cualquier regeneración usan el
+    mismo código.
+  - **Sin rectángulos rellenos**: el header dejó de tener fondo bordó — ahora es
+    texto oscuro sobre blanco con una línea fina debajo, y las filas se separan
+    con una línea gris fina (solo trazos, nunca fills). Es lo que pedía finanzas
+    para que el PDF se procese bien.
+  - **Descripción que envuelve**: si no entra en la columna, se parte en varias
+    líneas (`wrapText`) en vez de truncarse con "…". El texto siempre completo.
+  - Geometría de columnas reajustada para que **Amount** termine justo en el
+    margen derecho (antes se corría contra el borde de la hoja).
+- **Acción hecha en esta sesión (fuera del código)**: se regeneraron los 13 PDF
+  de billing 2026-06 ya enviados, con el fix aplicado, para reenviarlos
+  corregidos. Datos: nombres completos (plan/proyecto/publisher) traídos de la
+  DB; montos cruzados contra los PDF originales — idénticos.
+- **Sin cambios de datos ni de schema.** El filtrado de líneas
+  (`agencyPays && isBillable`, fees imputados > 0) queda igual.
 
 ### Cambios de la sesión 03/jul/2026 (3) — Decisión de negocio: el management fee se cobra sobre TODA la media (fix del auto-prorrateo) (#182)
 
@@ -3195,7 +3223,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
-| Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
+| Cambiar el formato del PDF que se manda a finanzas | Render: `lib/billing-report-pdf.ts` (`renderBillingReportPdf`) — columnas hardcodeadas en `COL_*`, header **sin fondo** (texto oscuro + línea fina; nada de rectángulos rellenos porque el sistema de finanzas no procesa filas de color), descripción que **envuelve** con `wrapText` (no se trunca). El route `app/api/billings/[id]/report.pdf/route.ts` sólo resuelve el detalle y filtra qué líneas entran: `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |

@@ -193,6 +193,7 @@ lib/
   nav.ts                    # entradas de navegación compartidas (PRIMARY_NAV/FOOTER_NAV + isNavActive) entre top-nav.tsx (desktop) y sidebar.tsx (drawer mobile)
   budget-split.ts           # prorrateo por días + agregación mercado × mes — compartido por el Tab 2 del Excel y el preview del editor
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas + una página por hoja auxiliar (formato del plan + firma/fecha)
+  billing-report-pdf.ts     # renderBillingReportPdf(input): PDF de billing para finanzas (tabla #/Product/Description/Qty/Rate/Amount). Header sin fondo (solo trazos, nunca fills → el sistema de finanzas procesa filas de color) + descripción que envuelve (no trunca). Lo usa api/billings/[id]/report.pdf
   portal-estimate-xlsx.ts   # buildEstimateWorkbook(estimates): Excel de la tab Estimación del portal (Resumen mensual + Detalle por proyecto, look de marca). Lo usa api/portal/estimate.xlsx
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
@@ -542,8 +543,9 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - **Publishers que paga el cliente directo (`agency_pays=false`)**: se cargan
   igual en el billing porque su consumo alimenta el cálculo del management fee
   (que el cliente sí paga), pero su inversión de medios **no se factura ni se
-  reporta**. El PDF de finanzas (`app/api/billings/[id]/report.pdf/route.ts`)
-  filtra las líneas de "Media Placement" por `agencyPays && isBillable`, así
+  reporta**. El PDF de finanzas (`app/api/billings/[id]/report.pdf/route.ts`,
+  render en `lib/billing-report-pdf.ts`) filtra las líneas de "Media Placement"
+  por `agencyPays && isBillable`, así
   que los publishers client-pays nunca aparecen en el reporte. `agencyPays` es
   la verdad estructural (override del bloque ?? default del publisher);
   `isBillable` es el flag editable del mes que además permite marcar
