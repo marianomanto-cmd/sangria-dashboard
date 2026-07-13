@@ -128,6 +128,7 @@ app/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
       pacing.xlsx/route.ts  # XLSX CONSOLIDADO del pacing de varias campañas (Resumen/Detalle/Por mercado). Público + canAccessClientExport + ownership
       estimate.xlsx/route.ts # XLSX de la tab Estimación con los mismos meses/filtros que la ventana (thin handler → lib/portal-estimate-xlsx.ts). Público + canAccessClientExport
+      analysis.xlsx/route.ts # XLSX de la sección Análisis (mapa) con los mismos filtros que la vista: detalle línea por línea (campaña/mercado/budget origin/inversión) + hoja Por mercado (thin handler → lib/portal-analysis-xlsx.ts). Público + canAccessClientExport
     benchmarks/
       export/route.ts       # Excel/PDF de benchmarks filtrados (público + canAccessClientExport)
     reports/
@@ -143,7 +144,7 @@ components/                 # UI compartida
   chart-kit.tsx             # recharts compartido: useChartColors() (dark-aware) + tooltipStyle() + <ChartGradient>
   portal-charts.tsx         # charts del Resumen del portal: SpendByPublisherChart (planeado vs real) + CumulativeBillingChart (área YTD)
   americas-map.tsx          # mapa de mercados con Leaflet (tiles CARTO, burbujas por mercado, zoom/pan)
-  market-analysis.tsx       # vista de análisis publisher × mercado (filtros multi-select + mapa + ranking + tabla); /analisis y portal
+  market-analysis.tsx       # vista de análisis publisher × mercado (filtros multi-select + mapa + ranking + tabla + botón export a Excel); /analisis y portal
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
@@ -194,6 +195,7 @@ lib/
   budget-split.ts           # prorrateo por días + agregación mercado × mes — compartido por el Tab 2 del Excel y el preview del editor
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas + una página por hoja auxiliar (formato del plan + firma/fecha)
   portal-estimate-xlsx.ts   # buildEstimateWorkbook(estimates): Excel de la tab Estimación del portal (Resumen mensual + Detalle por proyecto, look de marca). Lo usa api/portal/estimate.xlsx
+  portal-analysis-xlsx.ts   # buildAnalysisWorkbook(rows, markets): Excel de la sección Análisis (Detalle de activaciones + Por mercado, look de marca). Lo usa api/portal/analysis.xlsx
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
@@ -811,6 +813,17 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   **Análisis** del portal de cliente. Ambas renderean el mismo
   `components/market-analysis.tsx` con datos de `getMarketActivations` +
   `getAnalysisFilterOptions` (`db/queries/analysis.ts`).
+- **Export a Excel** (`GET /api/portal/analysis.xlsx?client=<slug>&pub=&mkt=&bo=&from=&to=`):
+  botón "Descargar Excel" en el header de la tabla de Activaciones (ambas
+  vistas). Baja **la data filtrada que se está viendo** (mismos params URL que
+  la vista) en dos hojas con el look de marca: **Detalle** (una fila por
+  activación: campaña, mercado, budget origin, proyecto, publisher, período,
+  inversión + TOTAL, con autofiltro y los filtros aplicados en el header) y
+  **Por mercado** (el agregado del mapa + fila "Sin mercado" para que el total
+  reconcilie). Thin handler → `lib/portal-analysis-xlsx.ts`; público en el
+  proxy (`/api/portal/*`), barrera real `canAccessClientExport`. Para esto
+  `getMarketActivations` expone también `budgetOriginName` (leftJoin a
+  `budget_origins`).
 - **Mapa** (`components/americas-map.tsx`): **Leaflet** (tiles reales de CARTO,
   zoom/pan nativos). Se importa **dinámico dentro de un effect** (vanilla
   Leaflet, sin react-leaflet) para no tocar `window` en SSR. Cada mercado es una

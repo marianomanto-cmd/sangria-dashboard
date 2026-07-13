@@ -1,6 +1,41 @@
-# Handoff — viernes 03/jul/2026
+# Handoff — lunes 13/jul/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 13/jul/2026 — Análisis (mapa): export a Excel de la data filtrada (#183)
+
+- **Pedido**: en la sección **Análisis** del portal de cliente (la del mapa),
+  un botón para **descargar un Excel con toda la data filtrada**, bien
+  formateado, detallando línea por línea **campaña, mercado, inversión y
+  budget origin**.
+- **Botón** (`components/market-analysis.tsx`): "Descargar Excel" en el header
+  de la tabla de Activaciones (visible si hay filas; es/en). Como la vista es
+  compartida, aparece **en el tab Análisis del portal Y en `/analisis`
+  interno**. Arma el href con los mismos params URL (`pub/mkt/bo/from/to`) que
+  la vista + `client=<slug>` (prop `clientSlug` nueva, la pasan ambas vistas).
+- **Route** (`app/api/portal/analysis.xlsx/route.ts`, nueva): thin handler GET
+  con el patrón de `estimate.xlsx` — pública en el proxy (`/api/portal/*`),
+  barrera real `canAccessClientExport`; misma query (`getMarketActivations`)
+  y filtros que la vista. Para **usuarios internos** con un cliente
+  **archivado** (alcanzable por URL directa en `/analisis`) cae a un lookup
+  sin el filtro de archived — `getPortalClient` solo daría 404 con el botón a
+  la vista (hallazgo de la revisión adversarial del diff).
+- **Workbook** (`lib/portal-analysis-xlsx.ts`, nueva): `buildAnalysisWorkbook`
+  con el look de marca. Hoja **Detalle**: una fila por activación (campaña,
+  mercado, budget origin, proyecto, publisher, período, inversión) + TOTAL +
+  autofiltro + los filtros aplicados en el header. Hoja **Por mercado**: el
+  agregado del mapa (+ fila "Sin mercado" para que el total reconcilie).
+- **Fix en la query compartida** (`db/queries/analysis.ts`): el filtro "Hasta"
+  armaba `${toMonth}-31` — fecha inválida en meses de <31 días
+  (`'2026-02-31'`) que Postgres no castea → **500 en la vista y en el export**
+  para feb/abr/jun/sep/nov. Ahora `monthEnd()` computa el último día real del
+  mes. Además `ActivationRow` expone `budgetOriginName` (leftJoin a
+  `budget_origins`).
+- **Verificación**: `tsc` + `eslint` + `next build` en verde; workbook generado
+  y releído con ExcelJS (es/en, nulls, totales reconcilian entre hojas).
+  Revisión adversarial del diff (33 agentes): 9 hallazgos refutados, los 2
+  reales arreglados acá.
+- **Sin cambios de schema. No requiere acción en prod.**
 
 ### Cambios de la sesión 03/jul/2026 (3) — Decisión de negocio: el management fee se cobra sobre TODA la media (fix del auto-prorrateo) (#182)
 
@@ -2544,6 +2579,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+ad49aad  Análisis (mapa): export a Excel de la data filtrada (campaña/mercado/inversión/budget origin) (#183)
 5c64f33  Management fee: cobrar sobre TODA la media (fix auto-prorrateo mensual) (#182)
 dc4f6be  Billing del plan: la management fee del avance va sobre media facturable (#181)
 c81946c  Billing del plan: gráfico "Avance de facturación" (facturado medios/fee vs total) (#180)
@@ -3203,6 +3239,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (denominador: MEDIOS = media facturable Σtotal_planned where agencia paga; FEE = mgmt sobre media TOTAL — se cobra sobre toda la media aunque el cliente pague directo; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). El fee mensual lo imputa `autoRecomputeMgmtFees` en `app/actions/plan-billing.ts` (prorratea por consumo TOTAL). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Render en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |
 | Tocar la tab Estimación (portal + interno) | Datos: `getBillingEstimate` en `db/queries/dashboard.ts` (una fila por mes; devuelve **facturado real** aunque no haya gross → sirve para meses cerrados). Cards: `components/billing-estimate-card.tsx` (`isPast` via `currentMonth` → lidera con el facturado real). Portal: `EstimateSection` + `estimationMonthOptions` en `app/(portal)/[clientSlug]/portal-content.tsx` (el filtro de Mes ofrece histórico ∪ futuro). |
 | Tocar el export a Excel de la Estimación (portal) | `app/api/portal/estimate.xlsx/route.ts` (thin handler: auth `canAccessClientExport` + mismos meses/filtros que la ventana) + `lib/portal-estimate-xlsx.ts` (`buildEstimateWorkbook`: hojas Resumen + Detalle, look de marca). Botón en `EstimateSection`. |
+| Tocar el export a Excel del Análisis (mapa) | `app/api/portal/analysis.xlsx/route.ts` (thin handler: auth `canAccessClientExport` + mismos filtros pub/mkt/bo/from/to que la vista; fallback sin filtro de archived para usuarios internos) + `lib/portal-analysis-xlsx.ts` (`buildAnalysisWorkbook`: hojas Detalle + Por mercado, look de marca). Botón en `components/market-analysis.tsx` (header de la tabla de Activaciones; ambas vistas). |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
 | Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave + cerrar día + comparar) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Actions: `setPlacementActual`, `closeDailyLoad` en `app/actions/campaign-tracker.ts`. |
 | Tocar el histórico de cargas / "Cerrar día" | Tabla `campaign_actual_snapshots` (`db/schema.ts`), action `closeDailyLoad`. La query `getCampaignTrackerPlan` arma `lastCloseDate` + `previousActuals` por placement leyendo el snapshot más reciente. |
