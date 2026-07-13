@@ -72,6 +72,7 @@ export default async function AnalisisPage({
         markets={data.markets}
         options={options}
         lang={lang}
+        clientSlug={client.slug}
       />
     </PageShell>
   );
