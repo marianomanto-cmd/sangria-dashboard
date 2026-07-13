@@ -1296,10 +1296,12 @@ export type AnalysisParams = {
 
 export async function AnalysisSection({
   clientId,
+  clientSlug,
   lang,
   analysis,
 }: {
   clientId: string;
+  clientSlug: string;
   lang: Language;
   analysis: AnalysisParams;
 }) {
@@ -1321,6 +1323,7 @@ export async function AnalysisSection({
       markets={data.markets}
       options={options}
       lang={lang}
+      clientSlug={clientSlug}
     />
   );
 }

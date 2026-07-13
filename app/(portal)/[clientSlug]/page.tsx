@@ -209,6 +209,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
         {tab === "analisis" && (
           <AnalysisSection
             clientId={client.id}
+            clientSlug={client.slug}
             lang={lang}
             analysis={analysisParams}
           />

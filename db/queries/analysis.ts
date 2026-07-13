@@ -23,6 +23,7 @@ export type ActivationRow = {
   projectCode: string;
   planName: string;
   publisherName: string;
+  budgetOriginName: string | null;
   marketId: string | null;
   marketName: string | null;
   marketSlug: string | null;
@@ -49,6 +50,15 @@ export type AnalysisFilters = {
   toMonth?: string | null; // YYYY-MM
 };
 
+// Último día del mes como YYYY-MM-DD. Antes se usaba `${toMonth}-31` directo,
+// que en meses de menos de 31 días arma una fecha inválida ('2026-02-31') y
+// Postgres no la castea a date → 500 en la vista y en el export.
+function monthEnd(yyyymm: string): string {
+  const [y, m] = yyyymm.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return `${yyyymm}-${String(lastDay).padStart(2, "0")}`;
+}
+
 export async function getMarketActivations(
   filters: AnalysisFilters,
 ): Promise<{ rows: ActivationRow[]; markets: MarketAgg[] }> {
@@ -66,7 +76,7 @@ export async function getMarketActivations(
   if (filters.fromMonth)
     conds.push(gte(mediaPlanPlacements.endDate, `${filters.fromMonth}-01`));
   if (filters.toMonth)
-    conds.push(lte(mediaPlanPlacements.startDate, `${filters.toMonth}-31`));
+    conds.push(lte(mediaPlanPlacements.startDate, monthEnd(filters.toMonth)));
 
   const raw = await db
     .select({
@@ -75,6 +85,7 @@ export async function getMarketActivations(
       projectCode: projects.code,
       planName: mediaPlans.name,
       publisherName: publishers.name,
+      budgetOriginName: budgetOrigins.name,
       marketId: markets.id,
       marketName: markets.name,
       marketSlug: markets.slug,
@@ -91,6 +102,7 @@ export async function getMarketActivations(
     .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
     .innerJoin(mediaPlans, eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .leftJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
     .leftJoin(markets, eq(mediaPlanPlacements.marketId, markets.id))
     .where(and(...conds))
     .orderBy(asc(projects.code), asc(mediaPlans.name));
@@ -101,6 +113,7 @@ export async function getMarketActivations(
     projectCode: r.projectCode,
     planName: r.planName,
     publisherName: r.publisherName,
+    budgetOriginName: r.budgetOriginName,
     marketId: r.marketId,
     marketName: r.marketName,
     marketSlug: r.marketSlug,

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Check, ChevronDown, X } from "lucide-react";
+import { Check, ChevronDown, FileSpreadsheet, X } from "lucide-react";
 import { AmericasMap, type MapPoint } from "@/components/americas-map";
 import type {
   ActivationRow,
@@ -21,11 +21,13 @@ export function MarketAnalysis({
   markets,
   options,
   lang,
+  clientSlug,
 }: {
   rows: ActivationRow[];
   markets: MarketAgg[];
   options: AnalysisFilterOptions;
   lang: Language;
+  clientSlug: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -94,6 +96,15 @@ export function MarketAnalysis({
 
   const totalSpend = rows.reduce((s, r) => s + r.amountUsd, 0);
   const maxMarket = Math.max(1, ...markets.map((m) => m.plannedUsd));
+
+  // Export a Excel de lo que se está viendo: mismos filtros (pub/mkt/bo/from/
+  // to) que la vista. GET, portal-safe (route pública en /api/portal/*).
+  const exportQs = new URLSearchParams({ client: clientSlug });
+  for (const k of ["pub", "mkt", "bo", "from", "to"]) {
+    const v = cur(k);
+    if (v) exportQs.set(k, v);
+  }
+  const exportHref = `/api/portal/analysis.xlsx?${exportQs.toString()}`;
 
   return (
     <div className="space-y-5">
@@ -214,10 +225,24 @@ export function MarketAnalysis({
 
       {/* Tabla de activaciones (abajo de todo) */}
       <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-        <div className="px-5 py-3 border-b border-line">
+        <div className="px-5 py-3 border-b border-line flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold">
             {lang === "es" ? "Activaciones" : "Activations"}
           </h3>
+          {rows.length > 0 && (
+            <a
+              href={exportHref}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-xs font-medium text-ink-2 hover:text-accent hover:border-accent transition-colors"
+              title={
+                lang === "es"
+                  ? "Descargar en Excel la data filtrada (campaña, mercado, inversión y budget origin línea por línea)"
+                  : "Download the filtered data as Excel (campaign, market, spend and budget origin line by line)"
+              }
+            >
+              <FileSpreadsheet size={13} />
+              {lang === "es" ? "Descargar Excel" : "Download Excel"}
+            </a>
+          )}
         </div>
         {rows.length === 0 ? (
           <div className="px-5 py-10 text-center text-sm text-muted">
