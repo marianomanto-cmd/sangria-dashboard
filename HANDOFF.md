@@ -2,7 +2,7 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 22/jul/2026 — Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla)
+### Cambios de la sesión 22/jul/2026 — Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla) (#186)
 
 - **Pedido**: en el Excel de detalle de la tab **Estimación** del portal, el
   **Facturado real** tenía que tener columnas de detalle **media/fees/bruto**
@@ -2649,6 +2649,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+e17ad7e  Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla) (#186)
 a1cf089  Portal (Estimación): filtro de Año — el de Mes ya no trae otros años (#184)
 ad49aad  Análisis (mapa): export a Excel de la data filtrada (campaña/mercado/inversión/budget origin) (#183)
 5c64f33  Management fee: cobrar sobre TODA la media (fix auto-prorrateo mensual) (#182)
