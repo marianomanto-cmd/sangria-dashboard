@@ -1,4 +1,7 @@
-import { getBillingEstimate } from "@/db/queries/dashboard";
+import {
+  getBillingEstimate,
+  getClientBillingProjections,
+} from "@/db/queries/dashboard";
 import { getPortalClient } from "@/db/queries/client-portal";
 import { canAccessClientExport } from "@/lib/client-portal.server";
 import { estimateWindowMonths, thisMonth } from "@/lib/estimate-window";
@@ -45,15 +48,29 @@ export async function GET(req: Request) {
     selectedMonths: splitList(url.searchParams.get("month")),
   });
 
-  const estimates = await getBillingEstimate({
-    clientId: client.id,
-    budgetOriginIds: splitList(url.searchParams.get("bo")),
-    projectIds: splitList(url.searchParams.get("proj")),
-    months,
-  });
+  const budgetOriginIds = splitList(url.searchParams.get("bo"));
+  const projectIds = splitList(url.searchParams.get("proj"));
+
+  // Estimación mensual (Resumen + Detalle) + proyección por proyecto/plan
+  // (hoja Proyección). La proyección respeta los filtros de origin/proyecto
+  // pero ignora el de mes (su horizonte son los meses restantes de cada plan),
+  // igual que la vista del portal.
+  const [estimates, projections] = await Promise.all([
+    getBillingEstimate({
+      clientId: client.id,
+      budgetOriginIds,
+      projectIds,
+      months,
+    }),
+    getClientBillingProjections({
+      clientId: client.id,
+      budgetOriginIds,
+      projectIds,
+    }),
+  ]);
 
   const lang: Language = client.language ?? DEFAULT_LANGUAGE;
-  const wb = buildEstimateWorkbook(estimates, {
+  const wb = buildEstimateWorkbook(estimates, projections, {
     lang,
     clientName: client.name,
     currentMonth: thisMonth(),

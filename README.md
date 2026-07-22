@@ -127,7 +127,7 @@ app/
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
       pacing.xlsx/route.ts  # XLSX CONSOLIDADO del pacing de varias campañas (Resumen/Detalle/Por mercado). Público + canAccessClientExport + ownership
-      estimate.xlsx/route.ts # XLSX de la tab Estimación con los mismos meses/filtros que la ventana (thin handler → lib/portal-estimate-xlsx.ts). Público + canAccessClientExport
+      estimate.xlsx/route.ts # XLSX de la tab Estimación con los mismos meses/filtros que la ventana: hojas Resumen + Detalle + Proyección (thin handler → lib/portal-estimate-xlsx.ts). Público + canAccessClientExport
       analysis.xlsx/route.ts # XLSX de la sección Análisis (mapa) con los mismos filtros que la vista: detalle línea por línea (campaña/mercado/budget origin/inversión) + hoja Por mercado (thin handler → lib/portal-analysis-xlsx.ts). Público + canAccessClientExport
     benchmarks/
       export/route.ts       # Excel/PDF de benchmarks filtrados (público + canAccessClientExport)
@@ -194,7 +194,7 @@ lib/
   nav.ts                    # entradas de navegación compartidas (PRIMARY_NAV/FOOTER_NAV + isNavActive) entre top-nav.tsx (desktop) y sidebar.tsx (drawer mobile)
   budget-split.ts           # prorrateo por días + agregación mercado × mes — compartido por el Tab 2 del Excel y el preview del editor
   plan-pdf.ts               # renderPlanPdf(detail, allMetrics): PDF apaisado con tabla de métricas + una página por hoja auxiliar (formato del plan + firma/fecha)
-  portal-estimate-xlsx.ts   # buildEstimateWorkbook(estimates): Excel de la tab Estimación del portal (Resumen mensual + Detalle por proyecto, look de marca). Lo usa api/portal/estimate.xlsx
+  portal-estimate-xlsx.ts   # buildEstimateWorkbook(estimates, projections): Excel de la tab Estimación del portal — espeja la pantalla en 3 hojas (Resumen mensual + Detalle por proyecto + Proyección por plan, look de marca). Lo usa api/portal/estimate.xlsx
   portal-analysis-xlsx.ts   # buildAnalysisWorkbook(rows, markets): Excel de la sección Análisis (Detalle de activaciones + Por mercado, look de marca). Lo usa api/portal/analysis.xlsx
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
@@ -621,9 +621,18 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - **Export a Excel (portal)**: la tab Estimación tiene un botón **"Descargar
   estimación (Excel)"** que baja lo que se ve en la ventana (mismos meses +
   filtros bo/proj) vía `GET /api/portal/estimate.xlsx` (thin handler →
-  `lib/portal-estimate-xlsx.ts`): hoja **Resumen** (fila por mes: media/fees est.
-  · bruto · facturado real · neto + TOTAL, con estado Cerrado/En curso/Estimado)
-  + hoja **Detalle por proyecto** (por mes, con subtotal). Look de marca del plan.
+  `lib/portal-estimate-xlsx.ts`). **Espejo de la pantalla** (regla dura, ver
+  `AGENTS.md`) en tres hojas con el look de marca del plan:
+  - **Resumen** — fila por mes con header **agrupado en dos niveles**:
+    **Estimación** (media · fees · bruto) · **Facturado real** (media · fees ·
+    bruto) · neto + TOTAL, con estado Cerrado/En curso/Estimado.
+  - **Detalle por proyecto** — por mes → proyecto, mismo desglose est. + real,
+    con subtotal por mes.
+  - **Proyección** — espeja el desplegable de cada proyecto: por proyecto →
+    plan (Total / Facturado / Falta facturar) y, anidado y colapsable, las
+    **facturas emitidas** (suman "Facturado") y la **proyección por mes
+    restante** (suma "Falta facturar"). Usa `getClientBillingProjections`;
+    forward-looking, ignora el filtro de Mes igual que la vista.
 
 ### Proyección de facturación por proyecto (portal del cliente)
 - En el portal (`/<slug>` → tab **Estimación**), **cada fila de proyecto de las

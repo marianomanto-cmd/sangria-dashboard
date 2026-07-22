@@ -32,3 +32,18 @@ session so the repo reflects the new state. Concretely:
 
 Push the doc update on a fresh feature branch and merge via PR (do not commit
 docs directly to main).
+
+# Los exports a Excel espejan la pantalla (regla dura)
+
+Todo export a Excel (y a PDF) tiene que mostrar TODO lo que se ve en la pantalla
+desde donde se descarga: si un dato o desglose es visible en la vista —incluida
+la data detrás de desplegables/expandibles— tiene que estar también en el
+archivo. El export es un espejo descargable de la vista, nunca un subconjunto.
+Al tocar una vista con export (o su export), verificá la paridad
+pantalla↔archivo en la misma sesión y sumá las columnas/hojas que falten.
+
+Ejemplo (tab Estimación): la vista muestra estimado y **facturado real** con su
+desglose media/fees/bruto y, en el desplegable de cada proyecto, la proyección
+por plan (facturas emitidas + lo que falta por mes). El Excel replica todo eso
+en tres hojas (Resumen · Detalle · Proyección) —
+`lib/portal-estimate-xlsx.ts`.
