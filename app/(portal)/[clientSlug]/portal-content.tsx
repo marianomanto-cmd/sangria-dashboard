@@ -29,6 +29,12 @@ import { ReportingGantt } from "@/components/reporting-gantt";
 import { formatUsd, formatUsdCompact, formatPct } from "@/lib/format";
 import { formatDate, formatMonth, type Language } from "@/lib/i18n";
 import {
+  currentYear,
+  estimateWindowMonths,
+  previousMonth,
+  thisMonth,
+} from "@/lib/estimate-window";
+import {
   endingSoonDays,
   endingSoonLabel,
   projectPeriod,
@@ -268,51 +274,6 @@ export async function BillingSection({
 
 // ─── Estimación ───────────────────────────────────────────────────────────────
 
-function nextMonths(count: number): string[] {
-  const out: string[] = [];
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth() + 1;
-  for (let i = 0; i < count; i++) {
-    out.push(`${y}-${String(m).padStart(2, "0")}`);
-    m += 1;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-  }
-  return out;
-}
-
-function previousMonth(): string {
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth();
-  if (m === 0) {
-    y -= 1;
-    m = 12;
-  }
-  return `${y}-${String(m).padStart(2, "0")}`;
-}
-
-function thisMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-// Opciones del filtro de Mes de la tab Estimación. Ofrece dos cosas:
-//   • el histórico real del cliente (`billingMonths`, meses con billings/
-//     placements) — para poder elegir un mes YA CERRADO y ver el FACTURADO
-//     REAL de ese mes; y
-//   • una ventana futura generada (mes actual + próximos) — para estimar
-//     aunque no haya placements que lleguen tan adelante.
-// (Antes solo iba 1 mes atrás porque la query descartaba el facturado real de
-// meses pasados; ahora getBillingEstimate lo devuelve, así que sí sirve.)
-export function estimationMonthOptions(billingMonths: string[] = []): string[] {
-  const future = nextMonths(6);
-  return Array.from(new Set([...billingMonths, ...future])).sort();
-}
-
 export async function EstimateSection({
   clientId,
   clientSlug,
@@ -325,16 +286,19 @@ export async function EstimateSection({
   params: PortalParams;
 }) {
   const selectedMonths = splitList(params.month);
-  const months = selectedMonths.length
-    ? selectedMonths
-    : [previousMonth(), ...nextMonths(2)];
+  // Año efectivo: "" → año actual (default), "all" → todos, "YYYY". La ventana de
+  // meses ya sale scopeada al año (helper compartido con el export) — así filtrar
+  // por Mes no trae meses de otros años.
+  const effYear = params.year || currentYear();
+  const months = estimateWindowMonths({ year: params.year, selectedMonths });
 
-  // Export a Excel de lo que se está viendo: mismos filtros (bo/proj/month) que
-  // la ventana. GET, portal-safe (route pública en /api/portal/*).
+  // Export a Excel de lo que se está viendo: mismos filtros (bo/proj/month/year)
+  // que la ventana. GET, portal-safe (route pública en /api/portal/*).
   const exportParams = new URLSearchParams({ client: clientSlug });
   if (params.bo) exportParams.set("bo", params.bo);
   if (params.proj) exportParams.set("proj", params.proj);
   if (params.month) exportParams.set("month", params.month);
+  if (params.year) exportParams.set("year", params.year);
   const exportHref = `/api/portal/estimate.xlsx?${exportParams.toString()}`;
 
   const exportBar = (
@@ -374,7 +338,13 @@ export async function EstimateSection({
     }),
   ]);
 
-  const prev = selectedMonths.length ? null : previousMonth();
+  // La card de "mes anterior" (accuracy real vs estimado) solo tiene sentido en
+  // la vista de aterrizaje forward-looking (año actual / Todos, sin meses
+  // elegidos). Para un año puntual mostramos los 12 meses sin card de accuracy.
+  const isForwardDefault =
+    selectedMonths.length === 0 &&
+    (effYear === "all" || effYear === currentYear());
+  const prev = isForwardDefault ? previousMonth() : null;
   const previousEstimate = prev
     ? all.find((e) => e.month === prev) ?? null
     : null;
@@ -383,6 +353,9 @@ export async function EstimateSection({
   // Map projectId → proyección, para que cada fila de proyecto de las cards
   // mensuales se despliegue in situ (billing de cada plan + falta facturar por
   // mes restante). No agrega listados nuevos: enriquece las filas existentes.
+  // La proyección es forward-looking por naturaleza ("lo que falta facturar de
+  // acá en más") y está siempre etiquetada como tal, así que se pasa igual en
+  // cualquier año; el filtro de Año solo scopea las cards mensuales.
   const projectionsById = Object.fromEntries(
     projections.map((p) => [p.projectId, p]),
   );
