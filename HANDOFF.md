@@ -1,6 +1,34 @@
-# Handoff — lunes 13/jul/2026
+# Handoff — miércoles 22/jul/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 22/jul/2026 — Portal (Estimación): filtro de Año (el de Mes ya no trae otros años) (#184)
+
+- **Pedido**: la tab **Estimación** del portal necesita un **filtro de Año**
+  como las demás vistas, porque al filtrar por un mes traía datos de otros años
+  (el multi-select de Mes mezclaba meses de todos los años del cliente).
+- **Filtro de Año** (`app/(portal)/[clientSlug]/page.tsx`): la tab Estimación
+  ahora incluye el field `year` (que `portal-filters.tsx` ya soportaba para
+  Reportes) — default = año actual, opción "Todos". El multi-select de **Mes**
+  se scopea al año elegido (`estimationMonthOptions(opts.months, año)`), así
+  elegir un mes ya no arrastra meses de otros años.
+- **`lib/estimate-window.ts`** (nuevo): fuente única de la ventana de meses —
+  `estimateWindowMonths({ year, selectedMonths })`, `estimationMonthOptions`,
+  `estimationYearOptions`. La comparten `EstimateSection` y el export
+  `estimate.xlsx` para no desincronizarse. Convención de Año: `""` → actual ·
+  `all` → todos · `YYYY`. Sin meses elegidos: actual/Todos → ventana
+  forward-looking (mes anterior + 2 próximos); un año puntual → sus 12 meses.
+- **Export** (`app/api/portal/estimate.xlsx/route.ts`): calcula la misma ventana
+  con el helper; el `exportHref` de `EstimateSection` propaga `year` para que el
+  Excel refleje lo que se ve.
+- **Verificación**: `tsc` + `eslint` + `next build` en verde. Revisión de casos
+  borde (enero, "Todos", año pasado/futuro, mes viejo colgado en la URL, paridad
+  vista↔export) → **cachada una regresión propia**: pasar `projectionsById =
+  undefined` para años pasados volvía las filas del portal read-only en links
+  internos `/proyectos/` (clientes no pueden abrirlos). Revertida: la proyección
+  forward-looking se muestra igual en cualquier año; el Año solo scopea las
+  cards mensuales.
+- **Sin cambios de schema. No requiere acción en prod.**
 
 ### Cambios de la sesión 13/jul/2026 — Análisis (mapa): export a Excel de la data filtrada (#183)
 
@@ -2582,6 +2610,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+a1cf089  Portal (Estimación): filtro de Año — el de Mes ya no trae otros años (#184)
 ad49aad  Análisis (mapa): export a Excel de la data filtrada (campaña/mercado/inversión/budget origin) (#183)
 5c64f33  Management fee: cobrar sobre TODA la media (fix auto-prorrateo mensual) (#182)
 dc4f6be  Billing del plan: la management fee del avance va sobre media facturable (#181)
