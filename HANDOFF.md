@@ -2,6 +2,42 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 22/jul/2026 — Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla) (#186)
+
+- **Pedido**: en el Excel de detalle de la tab **Estimación** del portal, el
+  **Facturado real** tenía que tener columnas de detalle **media/fees/bruto**
+  (como ya las tiene el Estimado). Y, como **regla general**, lo que se ve en la
+  pantalla al descargar el Excel tiene que estar también en el Excel.
+- **Facturado real con desglose** (`lib/portal-estimate-xlsx.ts`): las hojas
+  **Resumen** y **Detalle** ahora usan un **header agrupado en dos filas** —
+  `Estimación` (media · fees · bruto) y `Facturado real` (media · fees · bruto),
+  más `Neto`. La data ya existía en `MonthlyBillingEstimate`
+  (`alreadyBilledMediaUsd` / `alreadyBilledFeesUsd`); no tocó queries. Nuevo
+  helper `groupedHeader()` para el header de dos niveles (merge horizontal por
+  grupo + merge vertical de las columnas simples).
+- **Regla dura nueva** (`AGENTS.md`): *los exports a Excel/PDF espejan la
+  pantalla* — nunca un subconjunto. Al auditar la tab Estimación contra esta
+  regla, el único bloque que faltaba en el Excel era el **desplegable de
+  proyección** por proyecto.
+- **Hoja Proyección nueva** (`buildProyeccionSheet`): espeja
+  `ProjectProjectionDetail` de la vista. Por proyecto → plan
+  (Total / Facturado / Falta facturar) y, **anidado y colapsable** (outline
+  level 1), las **facturas emitidas** (número · mes · estado, monto bajo
+  "Facturado" — suman `billedUsd`) y la **proyección por mes restante** (monto
+  bajo "Falta facturar" — suma `remainingUsd`). El route
+  (`app/api/portal/estimate.xlsx/route.ts`) ahora también trae
+  `getClientBillingProjections` (mismos filtros bo/proj, ignora el de mes, como
+  la vista) y se lo pasa a `buildEstimateWorkbook(estimates, projections, opts)`.
+- **Reuso**: labels de estado vía `t("status.<plan.status>")` y
+  `billingStatusLabel(inv.status)` (fuente única, `billing-status-badge.tsx`).
+- **Verificación**: `tsc` + `eslint` + `next build` en verde. Generación real
+  del workbook con data mock (es/en): 3 hojas OK, header agrupado con los merges
+  correctos, outline colapsable en Proyección, y **reconciliación** (media+fees=
+  bruto en ambos lados; facturas=Facturado; proyección mensual=Falta facturar) →
+  0 problemas. Casos borde OK (mes sin actividad, plan sin saldo, sin
+  proyecciones).
+- **Sin cambios de schema. No requiere acción en prod.**
+
 ### Cambios de la sesión 22/jul/2026 — Portal (Estimación): filtro de Año (el de Mes ya no trae otros años) (#184)
 
 - **Pedido**: la tab **Estimación** del portal necesita un **filtro de Año**
@@ -177,10 +213,13 @@ Estado del repo al cierre y plan para retomar en otra sesión.
 - **(b) Export a Excel**: botón **"Descargar estimación (Excel)"** en la sección
   (GET portal-safe) → `app/api/portal/estimate.xlsx/route.ts` (thin handler) +
   `lib/portal-estimate-xlsx.ts` (`buildEstimateWorkbook`). Baja los **mismos
-  meses + filtros** (bo/proj/month) que la ventana. Dos hojas con el look de
-  marca del plan: **Resumen** (fila por mes: media/fees est. · bruto · facturado
-  real · neto + TOTAL, con estado Cerrado/En curso/Estimado) y **Detalle por
-  proyecto** (por mes, con subtotal). Ruta pública en el proxy (`/api/portal/*`).
+  meses + filtros** (bo/proj/month) que la ventana. **Tres** hojas con el look
+  de marca del plan (espejo de la pantalla): **Resumen** y **Detalle por
+  proyecto** con header agrupado **Estimación** (media/fees/bruto) · **Facturado
+  real** (media/fees/bruto) · neto, y **Proyección** por plan (Total/Facturado/
+  Falta + facturas emitidas + proyección por mes restante, colapsable). Ruta
+  pública en el proxy (`/api/portal/*`). (Ver sesión 22/jul/2026 al tope para el
+  detalle de media/fees/bruto + hoja Proyección.)
 - **Verificación**: `tsc` + `eslint` + `next build` en verde. **Render real**
   (headless Chromium): las cards de meses cerrados lideran con el facturado real
   (un mes con plan archivado muestra Media/Fees "—" pero Facturado > 0), y el
@@ -2610,6 +2649,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+e17ad7e  Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla) (#186)
 a1cf089  Portal (Estimación): filtro de Año — el de Mes ya no trae otros años (#184)
 ad49aad  Análisis (mapa): export a Excel de la data filtrada (campaña/mercado/inversión/budget origin) (#183)
 5c64f33  Management fee: cobrar sobre TODA la media (fix auto-prorrateo mensual) (#182)
@@ -3270,7 +3310,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (denominador: MEDIOS = media facturable Σtotal_planned where agencia paga; FEE = mgmt sobre media TOTAL — se cobra sobre toda la media aunque el cliente pague directo; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). El fee mensual lo imputa `autoRecomputeMgmtFees` en `app/actions/plan-billing.ts` (prorratea por consumo TOTAL). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Render en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |
 | Tocar la tab Estimación (portal + interno) | Datos: `getBillingEstimate` en `db/queries/dashboard.ts` (una fila por mes; devuelve **facturado real** aunque no haya gross → sirve para meses cerrados). Cards: `components/billing-estimate-card.tsx` (`isPast` via `currentMonth` → lidera con el facturado real). Portal: `EstimateSection` en `app/(portal)/[clientSlug]/portal-content.tsx` con filtros **Año + Mes** (el Mes se scopea al año). La **ventana de meses** (vista y export) sale de `lib/estimate-window.ts` (`estimateWindowMonths` / `estimationMonthOptions(billingMonths, year)` / `estimationYearOptions`), fuente única compartida — el filtro de Año evita que el de Mes traiga meses de otros años. |
-| Tocar el export a Excel de la Estimación (portal) | `app/api/portal/estimate.xlsx/route.ts` (thin handler: auth `canAccessClientExport` + misma ventana que la vista vía `estimateWindowMonths({ year, selectedMonths })` de `lib/estimate-window.ts`, más filtros bo/proj) + `lib/portal-estimate-xlsx.ts` (`buildEstimateWorkbook`: hojas Resumen + Detalle, look de marca). Botón en `EstimateSection` (el `exportHref` propaga `year`). |
+| Tocar el export a Excel de la Estimación (portal) | `app/api/portal/estimate.xlsx/route.ts` (thin handler: auth `canAccessClientExport` + misma ventana que la vista vía `estimateWindowMonths({ year, selectedMonths })` de `lib/estimate-window.ts`, más filtros bo/proj; trae `getBillingEstimate` + `getClientBillingProjections`) + `lib/portal-estimate-xlsx.ts` (`buildEstimateWorkbook(estimates, projections)`: hojas Resumen + Detalle con header agrupado Estimación/Facturado real (media·fees·bruto) + Proyección por plan, look de marca). Espejo de la pantalla (regla dura en `AGENTS.md`). Botón en `EstimateSection` (el `exportHref` propaga `year`). |
 | Tocar el export a Excel del Análisis (mapa) | `app/api/portal/analysis.xlsx/route.ts` (thin handler: auth `canAccessClientExport` + mismos filtros pub/mkt/bo/from/to que la vista; fallback sin filtro de archived para usuarios internos) + `lib/portal-analysis-xlsx.ts` (`buildAnalysisWorkbook`: hojas Detalle + Por mercado, look de marca). Botón en `components/market-analysis.tsx` (header de la tabla de Activaciones; ambas vistas). |
 | Compartir el slider dual de meses | `components/month-range-slider.tsx`. Self-contained; el parent pasa `initialFromIdx`/`initialToIdx` + `key` para resetearlo cuando los committed values cambian. |
 | Tocar el Campaign Tracker | `app/(app)/campaign-tracker/page.tsx` (hub), `app/(app)/campaign-tracker/[planId]/page.tsx` (vista de carga) + `tracker-editor.tsx` (tabla editable con autosave + cerrar día + comparar) + `tracker-chart.tsx` (chart recharts). Queries: `db/queries/campaign-tracker.ts` (`getCampaignTrackerHub`, `getCampaignTrackerPlan`). Actions: `setPlacementActual`, `closeDailyLoad` en `app/actions/campaign-tracker.ts`. |
