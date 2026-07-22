@@ -607,11 +607,17 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   on-demand desde las subqueries de facturado (que traen `code`/`name`/cliente)
   y **sin cortar** cuando no hay placements approved/ready. Por eso un mes ya
   cerrado (incl. planes archivados) muestra lo realmente facturado. En el portal
-  el **filtro de Mes de Estimación** ofrece los meses históricos del cliente
-  (`estimationMonthOptions(opts.months)` = histórico ∪ ventana futura), así se
-  puede elegir un mes pasado y ver su facturado. La card de un mes **anterior al
-  actual** (`isPast`, con `currentMonth` server-computed) lidera con el
-  **FACTURADO REAL** en vez del neto (`components/billing-estimate-card.tsx`).
+  la tab Estimación tiene un **filtro de Año** (default: año actual · `all` =
+  todos) además del de Mes: el multi-select de **Mes** se scopea al año elegido
+  (`estimationMonthOptions(opts.months, año)` = histórico ∪ ventana futura,
+  filtrado por año), así **filtrar por Mes ya no mezcla meses de otros años**.
+  La ventana efectiva de meses (vista y export) la calcula
+  `estimateWindowMonths({ year, selectedMonths })` en `lib/estimate-window.ts`
+  (fuente única compartida): meses elegidos scopeados al año, o el default (año
+  actual/`all` → mes anterior + 2 próximos; un año puntual → sus 12 meses). La
+  card de un mes **anterior al actual** (`isPast`, con `currentMonth`
+  server-computed) lidera con el **FACTURADO REAL** en vez del neto
+  (`components/billing-estimate-card.tsx`).
 - **Export a Excel (portal)**: la tab Estimación tiene un botón **"Descargar
   estimación (Excel)"** que baja lo que se ve en la ventana (mismos meses +
   filtros bo/proj) vía `GET /api/portal/estimate.xlsx` (thin handler →

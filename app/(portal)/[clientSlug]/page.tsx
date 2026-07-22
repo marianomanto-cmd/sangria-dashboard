@@ -26,12 +26,16 @@ import {
   BenchmarksSection,
   BillingSection,
   EstimateSection,
-  estimationMonthOptions,
   type PortalParams,
   ProjectsSection,
   ReportsSection,
   ResumenSection,
 } from "./portal-content";
+import {
+  currentYear,
+  estimationMonthOptions,
+  estimationYearOptions,
+} from "@/lib/estimate-window";
 
 export const dynamic = "force-dynamic";
 
@@ -166,10 +170,16 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
         )}
         {tab === "estimacion" && (
           <PortalFilters
-            fields={["origin", "project", "month"]}
+            fields={["year", "origin", "project", "month"]}
             budgetOrigins={opts.budgetOrigins}
             projects={opts.projects}
-            months={estimationMonthOptions(opts.months)}
+            // El multi-select de Mes se scopea al año elegido (default: actual),
+            // así filtrar por Mes nunca mezcla meses de otros años.
+            months={estimationMonthOptions(
+              opts.months,
+              portalParams.year || currentYear(),
+            )}
+            years={estimationYearOptions(opts.months)}
             lang={lang}
           />
         )}

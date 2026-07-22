@@ -1,14 +1,16 @@
 import { getBillingEstimate } from "@/db/queries/dashboard";
 import { getPortalClient } from "@/db/queries/client-portal";
 import { canAccessClientExport } from "@/lib/client-portal.server";
+import { estimateWindowMonths, thisMonth } from "@/lib/estimate-window";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/i18n";
 import { buildEstimateWorkbook } from "@/lib/portal-estimate-xlsx";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Export de la tab ESTIMACIÓN del portal — refleja "lo que se está viendo en la
-// ventana": los mismos meses (filtro de Mes, o el default mes anterior + 2
-// próximos) y filtros (Budget Origin / Proyecto) que la vista, con el mismo
-// criterio de getBillingEstimate. Thin handler: el armado del Excel vive en
+// ventana": los mismos filtros de Año/Mes (o el default mes anterior + 2
+// próximos) y Budget Origin / Proyecto que la vista, con el mismo criterio de
+// getBillingEstimate (ventana calculada por estimateWindowMonths, compartida con
+// portal-content). Thin handler: el armado del Excel vive en
 // lib/portal-estimate-xlsx.ts.
 //
 // Ruta pública en el proxy (`/api/portal/*`). Barrera real: canAccessClientExport
@@ -17,36 +19,6 @@ import { buildEstimateWorkbook } from "@/lib/portal-estimate-xlsx";
 
 export const maxDuration = 60;
 
-// Mismos helpers de mes que EstimateSection (portal-content.tsx).
-function nextMonths(count: number): string[] {
-  const out: string[] = [];
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth() + 1;
-  for (let i = 0; i < count; i++) {
-    out.push(`${y}-${String(m).padStart(2, "0")}`);
-    m += 1;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-  }
-  return out;
-}
-function previousMonth(): string {
-  const now = new Date();
-  let y = now.getFullYear();
-  let m = now.getMonth();
-  if (m === 0) {
-    y -= 1;
-    m = 12;
-  }
-  return `${y}-${String(m).padStart(2, "0")}`;
-}
-function thisMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
 function splitList(v: string | null): string[] {
   return (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 }
@@ -65,11 +37,13 @@ export async function GET(req: Request) {
     return new Response("Not found", { status: 404 });
   }
 
-  const selectedMonths = splitList(url.searchParams.get("month"));
-  // Mismos meses que la ventana: los elegidos, o el default (mes anterior + 2).
-  const months = selectedMonths.length
-    ? selectedMonths
-    : [previousMonth(), ...nextMonths(2)];
+  // Misma ventana que la vista (helper compartido): meses elegidos scopeados al
+  // año, o el default (año actual/Todos → mes anterior + 2 próximos; un año
+  // puntual → sus 12 meses).
+  const months = estimateWindowMonths({
+    year: (url.searchParams.get("year") ?? "").trim(),
+    selectedMonths: splitList(url.searchParams.get("month")),
+  });
 
   const estimates = await getBillingEstimate({
     clientId: client.id,
