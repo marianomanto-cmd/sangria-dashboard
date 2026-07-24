@@ -2675,6 +2675,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+41184b9  Estimación: renombrar columna "Neto" → "Falta facturar" (pantalla + Excel) (#187)
 e17ad7e  Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla) (#186)
 a1cf089  Portal (Estimación): filtro de Año — el de Mes ya no trae otros años (#184)
 ad49aad  Análisis (mapa): export a Excel de la data filtrada (campaña/mercado/inversión/budget origin) (#183)
