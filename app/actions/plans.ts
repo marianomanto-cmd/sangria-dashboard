@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
@@ -450,6 +450,41 @@ export async function transitionPlanStatus(input: {
       ok: false,
       error: `Transición ${before.status} → ${input.to} no permitida`,
     };
+  }
+
+  // Regla dura: un plan NO puede pasar a "listo" ni "aprobado" con placements
+  // sin fecha de inicio/fin. Un placement sin fechas no entra al prorrateo de la
+  // facturación ni de la estimación (getBillingEstimate lo saltea con
+  // `if (!startDate || !endDate) continue`), así que su media —y el management
+  // fee sobre esa media— desaparecen silenciosamente del estimado. Exigimos las
+  // fechas justo antes de que el plan se vuelva facturable (ready_to_send/approved).
+  if (input.to === "ready_to_send" || input.to === "approved") {
+    const undated = await db
+      .select({ name: mediaPlanPlacements.placementName })
+      .from(mediaPlanPlacements)
+      .innerJoin(
+        mediaPlanPublishers,
+        eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+      )
+      .where(
+        and(
+          eq(mediaPlanPublishers.mediaPlanId, input.planId),
+          or(
+            isNull(mediaPlanPlacements.startDate),
+            isNull(mediaPlanPlacements.endDate),
+          ),
+        ),
+      );
+    if (undated.length > 0) {
+      const names = undated
+        .map((p) => p.name?.trim() || "(placement sin nombre)")
+        .join(", ");
+      const target = input.to === "approved" ? "Aprobado" : "Listo";
+      return {
+        ok: false,
+        error: `No se puede marcar el plan como ${target}: estos placements no tienen fecha de inicio y/o fin — ${names}. Cargá las fechas: un placement sin fechas no entra en la facturación ni en la estimación.`,
+      };
+    }
   }
 
   // Si pasa a approved: tomar snapshot inmutable.

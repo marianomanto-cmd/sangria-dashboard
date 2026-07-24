@@ -2147,10 +2147,28 @@ function ExcelPreview({
                               {pl.marketName ?? ""}
                             </td>
                             <td className="px-3 py-1.5 text-muted">
-                              {formatDate(pl.startDate, lang)}
+                              {pl.startDate ? (
+                                formatDate(pl.startDate, lang)
+                              ) : (
+                                <span
+                                  className="text-warn font-medium"
+                                  title="Falta la fecha — el plan no se puede marcar Listo ni Aprobado sin ella (y un placement sin fecha no entra en la facturación ni en la estimación)"
+                                >
+                                  ⚠ falta
+                                </span>
+                              )}
                             </td>
                             <td className="px-3 py-1.5 text-muted">
-                              {formatDate(pl.endDate, lang)}
+                              {pl.endDate ? (
+                                formatDate(pl.endDate, lang)
+                              ) : (
+                                <span
+                                  className="text-warn font-medium"
+                                  title="Falta la fecha — el plan no se puede marcar Listo ni Aprobado sin ella (y un placement sin fecha no entra en la facturación ni en la estimación)"
+                                >
+                                  ⚠ falta
+                                </span>
+                              )}
                             </td>
                             <td className="px-3 py-1.5 font-mono text-ink-2">
                               {pl.costMethod ?? ""}

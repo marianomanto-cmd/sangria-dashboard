@@ -2,6 +2,24 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 24/jul/2026 (4) — Regla dura: no se puede marcar Listo/Aprobado un plan con placements sin fecha
+
+- **Contexto**: descubrimos que un placement **sin fechas** (start/end null)
+  queda fuera del prorrateo de `getBillingEstimate` (`if (!startDate ||
+  !endDate) continue`), así que su media —y el management fee sobre esa media—
+  **desaparecen del estimado** sin aviso (caso real: los placements de YouTube
+  de "Boosting Imposible").
+- **Fix** (`app/actions/plans.ts`, `transitionPlanStatus`): antes de pasar un
+  plan a `ready_to_send` **o** `approved` (los estados que la facturación y la
+  estimación consumen), se valida que **todos** los placements tengan
+  `start_date` y `end_date`. Si falta alguno, se rechaza la transición con un
+  error que **lista los placements culpables** por nombre. Barrera real
+  server-side (el choke point de todas las transiciones de estado).
+- **UI** (`editor.tsx`): la planilla marca las fechas faltantes con `⚠ falta`
+  (color warn + tooltip) para verlo antes de intentar aprobar.
+- **Verificación**: `tsc --noEmit` + `eslint` en verde. Sin cambios de schema.
+- **Doc**: README (sección lifecycle del plan) actualizado.
+
 ### Cambios de la sesión 24/jul/2026 (3) — Estimación: "falta facturar" fantasma (fee ya cobrado + prorrateo despareja)
 
 - **Síntoma**: un plan con Meta 100% facturado ($9.999 sobre $10K planeados,
@@ -2737,6 +2755,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+885ea3d  Estimación: matar el "falta facturar" fantasma (fee ya cobrado + meses cerrados) (#190)
 6cf0250  Estimación: la media no facturable (cliente paga directo) no figura como falta facturar (#189)
 41184b9  Estimación: renombrar columna "Neto" → "Falta facturar" (pantalla + Excel) (#187)
 e17ad7e  Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla) (#186)

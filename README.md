@@ -314,6 +314,13 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).
 - Cada plan tiene su propio lifecycle: `draft` → `ready_to_send` → `approved` → `archived`.
 - Los planes pueden solapar fechas y estar todos `approved` al mismo tiempo.
+- **Regla dura — fechas obligatorias para facturar**: `transitionPlanStatus`
+  bloquea el pase a `ready_to_send` **y** a `approved` si algún placement del
+  plan no tiene `start_date` y `end_date` (el error lista los placements
+  culpables). Motivo: un placement sin fechas queda fuera del prorrateo de
+  `getBillingEstimate` (`if (!startDate || !endDate) continue`), así que su media
+  —y el management fee sobre esa media— desaparecen del estimado. El editor
+  además marca en la planilla las fechas faltantes con un aviso (`⚠ falta`).
 
 ### Aprobar, editar (nueva versión) y descartar el borrador
 - Aprobar (`ready_to_send` → `approved`) guarda un **snapshot inmutable** en
