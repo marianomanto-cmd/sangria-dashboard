@@ -2,6 +2,21 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 24/jul/2026 (6) — Proyectos (dashboard general): filtro por estado
+
+- **Pedido**: en `/proyectos` (dashboard interno, no el portal de cliente), un
+  filtro para filtrar los proyectos por estado.
+- **Fix**: nuevo `components/project-status-selector.tsx` (pills URL-based,
+  server component — mismo patrón que `year-selector.tsx`): planning / active /
+  paused / closed / reportado + "Todos", con dots que espejan `status-badge.tsx`.
+  Exporta `PROJECT_STATUS_VALUES` para validar el `?status=` antes de filtrar.
+- **Página** (`app/(app)/proyectos/page.tsx`): lee `?status=`, valida contra el
+  enum, filtra en memoria sobre las filas (después del filtro de año), suma el
+  estado a los descriptores del subtítulo, y **preserva** `status` en los otros
+  filtros (BudgetOrigin / Año) y viceversa.
+- **i18n**: se agregó `status.reportado` (faltaba) para el label es/en.
+- **Verificación**: `tsc` + `eslint` en verde. Sin cambios de schema.
+
 ### Cambios de la sesión 24/jul/2026 (5) — Portal (Estimación): semáforo "facturado vs total del plan" + bullets que explican el gap
 
 - **Pedido**: que el facturado se muestre en **verde** cuando coincide con el
@@ -2784,6 +2799,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+d52fcb0  Estimación (portal): semáforo facturado vs total del plan + bullets del gap (#193)
 6b858ad  Planes: no permitir Listo/Aprobado con placements sin fecha (#191)
 885ea3d  Estimación: matar el "falta facturar" fantasma (fee ya cobrado + meses cerrados) (#190)
 6cf0250  Estimación: la media no facturable (cliente paga directo) no figura como falta facturar (#189)
