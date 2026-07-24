@@ -2755,6 +2755,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+6b858ad  Planes: no permitir Listo/Aprobado con placements sin fecha (#191)
 885ea3d  Estimación: matar el "falta facturar" fantasma (fee ya cobrado + meses cerrados) (#190)
 6cf0250  Estimación: la media no facturable (cliente paga directo) no figura como falta facturar (#189)
 41184b9  Estimación: renombrar columna "Neto" → "Falta facturar" (pantalla + Excel) (#187)
