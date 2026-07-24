@@ -590,7 +590,7 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 ### Estimación de facturación
 - `getBillingEstimate` en `db/queries/dashboard.ts` prorratea linealmente
   placements y fees de planes `approved` / `ready_to_send` sobre sus meses
-  activos y resta lo ya facturado en cada mes (status `sent`/`paid`).
+  activos y resta lo ya facturado en cada mes (facturas `invoiced`/`paid`).
 - Devuelve **separado media de fees**: `grossMediaUsd` (placements) y
   `grossFeesUsd` (management/setup/reporting/custom). El **facturado** se lee de
   los TOTALES de la propia factura: `alreadyBilledMediaUsd` = `plan_billings.total_net_usd`
@@ -621,8 +621,8 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `getClientBillingProjections` (el desglose por plan del portal).
 - Acepta filtros opcionales: `months[]`, `budgetOriginId`/`budgetOriginIds[]`,
   `projectId`/`projectIds[]`, `clientId`. Los `*Ids[]` (multi) tienen prioridad
-  sobre los single homónimos (`inArray` en las 3 subqueries) — los usan los
-  **filtros multi-select del portal**.
+  sobre los single homónimos (`inArray` en las subqueries de scope) — los usan
+  los **filtros multi-select del portal**.
 - **Dónde vive**: en `/billing-tracker?tab=estimates`. Las cards se renderean
   con `components/billing-estimate-card.tsx` — 2 meses adelante + 1 card del
   **mes anterior** con "Real vs Estimado recomputado" y variación coloreada.
