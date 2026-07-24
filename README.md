@@ -652,7 +652,7 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   estimación (Excel)"** que baja lo que se ve en la ventana (mismos meses +
   filtros bo/proj) vía `GET /api/portal/estimate.xlsx` (thin handler →
   `lib/portal-estimate-xlsx.ts`). **Espejo de la pantalla** (regla dura, ver
-  `AGENTS.md`) en tres hojas con el look de marca del plan:
+  `AGENTS.md`) en cuatro hojas con el look de marca del plan:
   - **Resumen** — fila por mes con header **agrupado en dos niveles**:
     **Estimación** (media · fees · bruto) · **Facturado real** (media · fees ·
     bruto) · neto + TOTAL, con estado Cerrado/En curso/Estimado.
@@ -663,6 +663,29 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     **facturas emitidas** (suman "Facturado") y la **proyección por mes
     restante** (suma "Falta facturar"). Usa `getClientBillingProjections`;
     forward-looking, ignora el filtro de Mes igual que la vista.
+  - **Conciliación** — espeja los bullets de "facturado vs total del plan": una
+    fila por proyecto con Total del plan · Facturado (coloreado verde/azul/rojo)
+    · Diferencia · media que paga el cliente · publishers client-pays · Estado.
+    Usa `getClientBillingReconciliation`.
+
+### Conciliación "facturado vs total del plan" (portal)
+- Debajo de las cards mensuales de la tab Estimación, una sección de **bullets**
+  compara, por proyecto, el **facturado real** contra el **total del plan** =
+  **presupuesto completo** (TODA la media —incl. la que paga el cliente directo—
+  + fees). Semáforo del facturado: 🟢 **verde** = coincide · 🔵 **azul** (`text-info`)
+  = le falta · 🔴 **rojo** = se pasó.
+- El bullet **explica el gap**: en la mayoría de los casos el faltante es media
+  que paga el cliente directo (YT/Google) —la agencia cobra el fee sobre esa
+  inversión (#182) pero no factura el medio—, nombrando esos publishers y el
+  monto. Si además queda facturación billable pendiente, lo aclara aparte.
+- Datos: `getClientBillingReconciliation(clientId, bo?, proj?)` en
+  `db/queries/dashboard.ts`. A diferencia de la estimación (solo media
+  facturable) y la proyección (solo planes con saldo), mira el **presupuesto
+  completo** de **todos** los planes approved/ready (suma TODOS los placements,
+  aun sin fechas) y lo compara con el `total_usd` facturado (invoiced/paid). El
+  fee de management va sobre toda la media (#182), así que en el gap los fees se
+  cancelan y la diferencia ≈ media client-pays. UI en
+  `components/billing-estimate-card.tsx` (`BillingReconciliationBullets`).
 
 ### Proyección de facturación por proyecto (portal del cliente)
 - En el portal (`/<slug>` → tab **Estimación**), **cada fila de proyecto de las

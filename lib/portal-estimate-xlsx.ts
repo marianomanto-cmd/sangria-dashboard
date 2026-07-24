@@ -3,6 +3,7 @@ import { getBrandLogo } from "@/lib/brand-logo";
 import type {
   MonthlyBillingEstimate,
   ProjectBillingProjection,
+  ProjectBillingReconciliation,
 } from "@/db/queries/dashboard";
 import { billingStatusLabel } from "@/components/billing-status-badge";
 import { formatMonth, formatMonthShort, t, type Language } from "@/lib/i18n";
@@ -32,6 +33,8 @@ const WHITE = "FFFFFFFF";
 const BORDER = "FFD6D3D1";
 const MUTED = "FF78716C";
 const SUCCESS = "FF15803D";
+const INFO = "FF1E40AF"; // azul — "falta" en el semáforo de conciliación
+const DANGER = "FFB0263A"; // rojo — "se pasó"
 
 const thin = { style: "thin" as const, color: { argb: BORDER } };
 const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
@@ -51,6 +54,7 @@ export function monthStateLabel(
 export function buildEstimateWorkbook(
   estimates: MonthlyBillingEstimate[],
   projections: ProjectBillingProjection[],
+  reconciliation: ProjectBillingReconciliation[],
   opts: { lang: Language; clientName: string; currentMonth: string },
 ): ExcelJS.Workbook {
   // Orden cronológico (la selección del filtro puede venir en cualquier orden).
@@ -67,6 +71,7 @@ export function buildEstimateWorkbook(
   buildResumenSheet(wb, sorted, opts);
   buildDetalleSheet(wb, sorted, opts);
   buildProyeccionSheet(wb, sortedProjections, opts);
+  buildConciliacionSheet(wb, reconciliation, opts);
   return wb;
 }
 
@@ -620,4 +625,112 @@ function buildProyeccionSheet(
 
     r++; // aire entre proyectos
   }
+}
+
+// ── Hoja 4 — Conciliación: facturado vs total del plan ────────────────────────
+// Espeja la sección de bullets de la pantalla: una fila por proyecto con el
+// semáforo del facturado (verde = coincide · azul = falta · rojo = se pasó), la
+// media que paga el cliente directo y qué publishers, para explicar el gap.
+function buildConciliacionSheet(
+  wb: ExcelJS.Workbook,
+  reconciliation: ProjectBillingReconciliation[],
+  opts: { lang: Language; clientName: string },
+) {
+  const { lang, clientName } = opts;
+  const es = lang === "es";
+  const rows = reconciliation.filter((r) => r.planTotalUsd > 0);
+  if (rows.length === 0) return;
+
+  const ws = wb.addWorksheet(es ? "Conciliación" : "Reconciliation");
+  const totalCols = 7;
+  ws.columns = [
+    { width: 30 }, // Proyecto
+    { width: 16 }, // Total del plan
+    { width: 16 }, // Facturado
+    { width: 16 }, // Diferencia
+    { width: 18 }, // Media que paga el cliente
+    { width: 26 }, // Publishers cliente
+    { width: 12 }, // Estado
+  ];
+
+  const headerEnd = brandHeader(
+    ws,
+    wb,
+    `${es ? "FACTURADO VS TOTAL DEL PLAN" : "INVOICED VS PLAN TOTAL"} · ${clientName}`,
+    [],
+    totalCols,
+  );
+
+  const noteRow = ws.getRow(headerEnd);
+  noteRow.getCell(1).value = es
+    ? "Total del plan = presupuesto completo (toda la media + fees). Verde = el facturado coincide · azul = falta · rojo = se pasó. El faltante suele ser media que paga el cliente directo (YT/Google): la agencia cobra el fee sobre esa inversión pero no factura el medio."
+    : "Plan total = full budget (all media + fees). Green = invoiced matches · blue = short · red = over. The shortfall is usually media the client pays directly (YT/Google): the agency charges the fee on that spend but doesn't invoice the media.";
+  noteRow.getCell(1).font = { italic: true, color: { argb: MUTED }, size: 9 };
+  noteRow.getCell(1).alignment = { wrapText: true, vertical: "top" };
+  ws.mergeCells(headerEnd, 1, headerEnd, totalCols);
+  noteRow.height = 30;
+
+  const headerRow = headerEnd + 1;
+  simpleHeader(ws, headerRow, [
+    es ? "Proyecto" : "Project",
+    es ? "Total del plan" : "Plan total",
+    es ? "Facturado" : "Invoiced",
+    es ? "Diferencia" : "Difference",
+    es ? "Media que paga el cliente" : "Client-paid media",
+    es ? "Publishers cliente" : "Client-paid publishers",
+    es ? "Estado" : "Status",
+  ]);
+  ws.views = [{ state: "frozen", ySplit: headerRow }];
+
+  let r = headerRow + 1;
+  for (const row of rows) {
+    const diff = row.planTotalUsd - row.billedUsd;
+    const tol = Math.max(1, row.planTotalUsd * 0.005);
+    const status = diff > tol ? "short" : diff < -tol ? "over" : "match";
+    const color =
+      status === "match" ? SUCCESS : status === "short" ? INFO : DANGER;
+    const label =
+      status === "match"
+        ? es
+          ? "Coincide"
+          : "Matches"
+        : status === "short"
+          ? es
+            ? "Falta"
+            : "Short"
+          : es
+            ? "Se pasó"
+            : "Over";
+    const dataRow = ws.getRow(r);
+    dataRow.getCell(1).value = row.projectName;
+    dataRow.getCell(1).border = allBorders;
+    usdCell(dataRow, 2, row.planTotalUsd);
+    usdCell(dataRow, 3, row.billedUsd, color);
+    usdCell(dataRow, 4, diff, color);
+    usdCell(dataRow, 5, row.clientPaidMediaUsd);
+    dataRow.getCell(6).value = row.clientPaidPublishers.join(", ");
+    dataRow.getCell(6).border = allBorders;
+    dataRow.getCell(6).alignment = { wrapText: true, vertical: "top" };
+    dataRow.getCell(7).value = label;
+    dataRow.getCell(7).font = { bold: true, color: { argb: color } };
+    dataRow.getCell(7).border = allBorders;
+    r++;
+  }
+
+  // Fila TOTAL.
+  const totalRow = ws.getRow(r);
+  totalRow.getCell(1).value = "TOTAL";
+  fillRow(totalRow, totalCols, ACCENT_SOFT);
+  usdCell(totalRow, 2, sum(rows, (x) => x.planTotalUsd));
+  usdCell(totalRow, 3, sum(rows, (x) => x.billedUsd));
+  usdCell(
+    totalRow,
+    4,
+    sum(rows, (x) => x.planTotalUsd) - sum(rows, (x) => x.billedUsd),
+  );
+  usdCell(totalRow, 5, sum(rows, (x) => x.clientPaidMediaUsd));
+}
+
+function sum<T>(arr: T[], f: (x: T) => number): number {
+  return arr.reduce((s, x) => s + f(x), 0);
 }

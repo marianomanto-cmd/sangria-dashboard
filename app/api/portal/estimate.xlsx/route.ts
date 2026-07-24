@@ -1,6 +1,7 @@
 import {
   getBillingEstimate,
   getClientBillingProjections,
+  getClientBillingReconciliation,
 } from "@/db/queries/dashboard";
 import { getPortalClient } from "@/db/queries/client-portal";
 import { canAccessClientExport } from "@/lib/client-portal.server";
@@ -55,7 +56,7 @@ export async function GET(req: Request) {
   // (hoja Proyección). La proyección respeta los filtros de origin/proyecto
   // pero ignora el de mes (su horizonte son los meses restantes de cada plan),
   // igual que la vista del portal.
-  const [estimates, projections] = await Promise.all([
+  const [estimates, projections, reconciliation] = await Promise.all([
     getBillingEstimate({
       clientId: client.id,
       budgetOriginIds,
@@ -67,10 +68,15 @@ export async function GET(req: Request) {
       budgetOriginIds,
       projectIds,
     }),
+    getClientBillingReconciliation({
+      clientId: client.id,
+      budgetOriginIds,
+      projectIds,
+    }),
   ]);
 
   const lang: Language = client.language ?? DEFAULT_LANGUAGE;
-  const wb = buildEstimateWorkbook(estimates, projections, {
+  const wb = buildEstimateWorkbook(estimates, projections, reconciliation, {
     lang,
     clientName: client.name,
     currentMonth: thisMonth(),

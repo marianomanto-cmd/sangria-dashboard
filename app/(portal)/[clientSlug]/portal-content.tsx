@@ -3,6 +3,7 @@ import { ChevronRight, Download, FileSpreadsheet } from "lucide-react";
 import {
   getBillingEstimate,
   getClientBillingProjections,
+  getClientBillingReconciliation,
   getDashboardKpis,
   getDashboardProjects,
   getMonthlyTotals,
@@ -324,7 +325,7 @@ export async function EstimateSection({
   // con el billing de cada plan y lo que falta facturar prorrateado por cada mes
   // restante). La proyección respeta los filtros de origin/proyecto pero ignora
   // el de mes: su horizonte es "los meses que le quedan a cada plan".
-  const [all, projections] = await Promise.all([
+  const [all, projections, reconciliation] = await Promise.all([
     getBillingEstimate({
       clientId,
       budgetOriginIds: splitList(params.bo),
@@ -332,6 +333,11 @@ export async function EstimateSection({
       months,
     }),
     getClientBillingProjections({
+      clientId,
+      budgetOriginIds: splitList(params.bo),
+      projectIds: splitList(params.proj),
+    }),
+    getClientBillingReconciliation({
       clientId,
       budgetOriginIds: splitList(params.bo),
       projectIds: splitList(params.proj),
@@ -384,6 +390,7 @@ export async function EstimateSection({
         lang={lang}
         projectionsById={projectionsById}
         currentMonth={thisMonth()}
+        reconciliation={reconciliation}
       />
     </div>
   );
