@@ -2817,6 +2817,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+932cfbb  Mapa (Análisis): burbujas de nivel país en azul (#195)
 6e432bc  Proyectos (dashboard): filtro por estado (#194)
 d52fcb0  Estimación (portal): semáforo facturado vs total del plan + bullets del gap (#193)
 6b858ad  Planes: no permitir Listo/Aprobado con placements sin fecha (#191)
