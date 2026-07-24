@@ -2699,6 +2699,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+6cf0250  Estimación: la media no facturable (cliente paga directo) no figura como falta facturar (#189)
 41184b9  Estimación: renombrar columna "Neto" → "Falta facturar" (pantalla + Excel) (#187)
 e17ad7e  Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla) (#186)
 a1cf089  Portal (Estimación): filtro de Año — el de Mes ya no trae otros años (#184)
