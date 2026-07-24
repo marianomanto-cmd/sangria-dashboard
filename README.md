@@ -902,14 +902,21 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `light_all`/`dark_all` según el tema. Estilos de la burbuja: `.mkt-bubble` en
   `globals.css`. (Antes era un SVG propio con d3-geo; se cambió a Leaflet por
   robustez de zoom/escala.)
+- **Color por nivel del mercado**: las burbujas de **nivel país** (un país
+  entero) se pintan **azul** (`.mkt-bubble--country`) para diferenciarlas de las
+  de **ciudad/región** (bordó, default). El nivel lo infiere `resolveMarketGeo`
+  por CÓMO matcheó: match **exacto** a una key país → `country`; match por
+  **token** dentro de un país (ej. "Ciudad de Panamá" → `panama`) → `city`;
+  agrupaciones (LATAM/…) → `region`. Leyenda debajo del mapa (País · Ciudad/región).
 - **Geocoding de mercados (todo en la UI, sin tocar la DB)**: los `markets` son
   nombres/slugs libres sin coordenadas. `lib/market-geo.ts` (`resolveMarketGeo`)
   resuelve por (1) match exacto normalizado y (2) match por **token** — una
   clave conocida que aparece como palabra dentro del nombre, así
   "Estados Unidos - Varios" → `estados-unidos`. Cubre países LATAM + agrupaciones
-  (`centroamerica`/`latam`/…). Los no reconocidos se listan aparte ("Sin
-  ubicación en el mapa"). **Para sumar/ajustar un mercado, editá `GEO` en
-  `lib/market-geo.ts`** (centroide + `feature` = nombre del país en world-atlas).
+  (`centroamerica`/`latam`/…). Devuelve además `level` (país/ciudad/región, ver
+  arriba). Los no reconocidos se listan aparte ("Sin ubicación en el mapa").
+  **Para sumar/ajustar un mercado, editá `GEO` en `lib/market-geo.ts`**
+  (centroide + `feature` = nombre del país en world-atlas).
 - Sin cambios de schema. Deps nuevas: `d3-geo`, `d3-scale`, `topojson-client`,
   `world-atlas`. **No requiere acción en prod.**
 

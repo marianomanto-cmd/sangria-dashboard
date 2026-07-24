@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { scaleSqrt } from "d3-scale";
 import { formatUsd } from "@/lib/format";
 import { type Language } from "@/lib/i18n";
+import { type MarketLevel } from "@/lib/market-geo";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Mapa de mercados con Leaflet (tiles reales de CARTO, zoom/pan nativos). Cada
@@ -22,6 +23,9 @@ export type MapPoint = {
   lng: number;
   featureName?: string;
   kind?: "country" | "region";
+  // Nivel del mercado. La burbuja de nivel "country" (un país entero) se pinta
+  // AZUL para diferenciarla de ciudad/región (bordó). Ver lib/market-geo.ts.
+  level?: MarketLevel;
 };
 
 function escapeHtml(s: string): string {
@@ -117,7 +121,7 @@ export function AmericasMap({
       const d = Math.round(diam(p.value));
       const sel = selected.has(p.id);
       const html =
-        `<div class="mkt-bubble${sel ? " mkt-bubble--sel" : ""}" ` +
+        `<div class="mkt-bubble${p.level === "country" ? " mkt-bubble--country" : ""}${sel ? " mkt-bubble--sel" : ""}" ` +
         `style="width:${d}px;height:${d}px;font-size:${Math.min(13, Math.round(d * 0.42))}px">` +
         `${d >= 22 ? p.count : ""}</div>`;
       const icon = L.divIcon({
@@ -167,10 +171,28 @@ export function AmericasMap({
         style={{ height: 560, width: "100%" }}
         aria-label={lang === "es" ? "Mapa de mercados" : "Markets map"}
       />
-      <div className="mt-2 text-[11px] text-muted">
-        {lang === "es"
-          ? "Tamaño = inversión · número = activaciones · rueda para zoom"
-          : "Size = spend · number = activations · scroll to zoom"}
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+        <span>
+          {lang === "es"
+            ? "Tamaño = inversión · número = activaciones · rueda para zoom"
+            : "Size = spend · number = activations · scroll to zoom"}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-2.5 w-2.5 rounded-full"
+            style={{ background: "#1e40af" }}
+          />
+          {lang === "es" ? "País" : "Country"}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-2.5 w-2.5 rounded-full"
+            style={{ background: "#7a1f3d" }}
+          />
+          {lang === "es" ? "Ciudad / región" : "City / region"}
+        </span>
       </div>
     </div>
   );

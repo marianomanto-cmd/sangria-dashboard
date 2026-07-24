@@ -23,6 +23,17 @@ export type MarketGeo = {
   feature?: string;
 };
 
+// Nivel del mercado, inferido por CÓMO matcheó (ver resolveMarketGeo):
+//   • "country" — el nombre ES un país entero (match exacto a una key país).
+//   • "city"    — el nombre contiene un país pero es más específico (match por
+//                 token, ej. "Ciudad de Panamá", "México DF"): una plaza dentro
+//                 del país, no el país entero.
+//   • "region"  — agrupación supranacional (LATAM, Centroamérica…).
+// El mapa colorea País en azul para diferenciarlo de ciudad/región (bordó).
+export type MarketLevel = "country" | "city" | "region";
+
+export type MarketGeoResolved = MarketGeo & { level: MarketLevel };
+
 function norm(s: string): string {
   return s
     .toLowerCase()
@@ -93,21 +104,29 @@ const GEO_KEYS = Object.keys(GEO).sort((a, b) => b.length - a.length);
 export function resolveMarketGeo(
   slug: string | null,
   name: string | null,
-): MarketGeo | null {
+): MarketGeoResolved | null {
   const cands = [slug, name]
     .filter((x): x is string => !!x)
     .map(norm)
     .filter(Boolean);
 
-  // 1) match exacto
+  // 1) match exacto → el nombre ES el país/región (nivel país o región).
   for (const m of cands) {
-    if (GEO[m]) return GEO[m];
+    const geo = GEO[m];
+    if (geo) {
+      return { ...geo, level: geo.kind === "region" ? "region" : "country" };
+    }
   }
-  // 2) match por token: la clave aparece como palabra (delimitada por "-")
+  // 2) match por token: la clave aparece como palabra (delimitada por "-"). Si
+  // la key es un país, el mercado es más específico que el país entero → ciudad
+  // (ej. "ciudad-de-panama" → panama). Si es región, sigue siendo región.
   for (const m of cands) {
     for (const key of GEO_KEYS) {
       const re = new RegExp(`(^|-)${key}(-|$)`);
-      if (re.test(m)) return GEO[key];
+      if (re.test(m)) {
+        const geo = GEO[key];
+        return { ...geo, level: geo.kind === "region" ? "region" : "city" };
+      }
     }
   }
   return null;

@@ -86,6 +86,7 @@ export function MarketAnalysis({
           lng: geo.lng,
           featureName: geo.feature,
           kind: geo.kind,
+          level: geo.level,
         });
       } else {
         un.push(m);
