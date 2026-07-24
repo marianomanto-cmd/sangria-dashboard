@@ -1,6 +1,31 @@
-# Handoff — miércoles 22/jul/2026
+# Handoff — jueves 24/jul/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 24/jul/2026 — Estimación: renombrar la columna "Neto" → "Falta facturar" (pantalla + Excel)
+
+- **Pedido**: en la tab **Estimación** del portal, la columna **Neto** no se
+  entendía. Se renombra a **"Falta facturar" / "Left to invoice"** — que es lo
+  que el valor realmente representa: `bruto − ya facturado` (con piso en $0), o
+  sea lo que todavía queda por emitir ese mes. El cálculo NO cambió, solo el
+  label.
+- **Un solo término en todo el feature**: ya existía "Falta facturar" en el
+  desplegable por plan (`ProjectProjectionDetail`); ahora la columna, el
+  subtítulo, la card mobile y las tres hojas del Excel usan la misma etiqueta.
+  - `lib/i18n.ts`: la key `common.net` (única, usada solo acá) pasa a
+    `common.leftToInvoice` (`Left to invoice` / `Falta facturar`).
+  - `components/billing-estimate-card.tsx`: header de la tabla (desktop),
+    subtítulo del card (`Falta facturar = bruto − ya facturado`) y —nuevo— label
+    sobre el número principal de cada card **mobile**, que antes iba sin rótulo.
+  - `lib/portal-estimate-xlsx.ts` (regla dura espejo pantalla↔Excel): hojas
+    **Resumen** y **Detalle** — el header de la última columna pasa de
+    `Neto (falta)` / `Net (pending)` a `Falta facturar` / `Left to invoice`, y la
+    nota al pie usa el mismo término. La hoja **Proyección** ya lo usaba.
+- **Sin tocar**: `components/billing-table.tsx` mantiene su columna "Net"
+  (`totalNetUsd` del billing = neto de medios vs fees de una factura, concepto
+  distinto).
+- **Verificación**: `tsc --noEmit` + `eslint` de los archivos tocados en verde.
+- **Sin cambios de schema. No requiere acción en prod.**
 
 ### Cambios de la sesión 22/jul/2026 — Estimación (Excel): Facturado real con desglose media/fees/bruto + hoja Proyección (espejo de la pantalla) (#186)
 
@@ -11,7 +36,8 @@ Estado del repo al cierre y plan para retomar en otra sesión.
 - **Facturado real con desglose** (`lib/portal-estimate-xlsx.ts`): las hojas
   **Resumen** y **Detalle** ahora usan un **header agrupado en dos filas** —
   `Estimación` (media · fees · bruto) y `Facturado real` (media · fees · bruto),
-  más `Neto`. La data ya existía en `MonthlyBillingEstimate`
+  más `Falta facturar` (renombrada desde `Neto` el 24/jul, ver arriba). La data
+  ya existía en `MonthlyBillingEstimate`
   (`alreadyBilledMediaUsd` / `alreadyBilledFeesUsd`); no tocó queries. Nuevo
   helper `groupedHeader()` para el header de dos niveles (merge horizontal por
   grupo + merge vertical de las columnas simples).

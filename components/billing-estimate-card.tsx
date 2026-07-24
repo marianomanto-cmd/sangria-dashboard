@@ -70,8 +70,8 @@ export function BillingEstimateCard({
         </h2>
         <p className="text-xs text-muted">
           {lang === "es"
-            ? "Prorrateo lineal de placements (media) y fees de planes approved / ready_to_send sobre sus meses activos. Neto = bruto − ya facturado."
-            : "Linear proration of placements (media) and fees from approved / ready_to_send plans across their active months. Net = gross − already invoiced."}
+            ? "Prorrateo lineal de placements (media) y fees de planes approved / ready_to_send sobre sus meses activos. Falta facturar = bruto − ya facturado."
+            : "Linear proration of placements (media) and fees from approved / ready_to_send plans across their active months. Left to invoice = gross − already invoiced."}
         </p>
         {projectionsById && !hideProjectBreakdown && (
           <p className="text-xs text-muted mt-1">
@@ -323,7 +323,7 @@ function EstimateMonthCard({
                     {t("common.invoiced", lang)}
                   </th>
                   <th className="text-right font-medium px-5 py-1.5">
-                    {t("common.net", lang)}
+                    {t("common.leftToInvoice", lang)}
                   </th>
                 </tr>
               </thead>
@@ -492,9 +492,14 @@ function EstimateCardMobile({
           )}
           <span className="text-ink-2">{p.projectName}</span>
         </div>
-        <span className="font-mono text-sm font-semibold text-ink tabular-nums shrink-0">
-          {formatUsdCompact(p.netUsd)}
-        </span>
+        <div className="flex flex-col items-end shrink-0">
+          <span className="text-[9px] uppercase tracking-[0.06em] text-muted">
+            {t("common.leftToInvoice", lang)}
+          </span>
+          <span className="font-mono text-sm font-semibold text-ink tabular-nums">
+            {formatUsdCompact(p.netUsd)}
+          </span>
+        </div>
       </div>
       <p className="font-mono text-[10px] text-muted mt-0.5">
         {p.projectCode} · {p.clientName}
