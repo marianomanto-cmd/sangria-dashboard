@@ -2,6 +2,35 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 24/jul/2026 (5) — Portal (Estimación): semáforo "facturado vs total del plan" + bullets que explican el gap
+
+- **Pedido**: que el facturado se muestre en **verde** cuando coincide con el
+  total del plan, **azul** cuando le falta y **rojo** cuando se pasó; y, debajo
+  de las cards (arriba del pie), **bullets** que aclaren cuánto falta y por qué
+  —típicamente porque el plan tiene YT/Google que paga el cliente.
+- **"Total del plan" = presupuesto COMPLETO** (toda la media, incluida la
+  client-pays, + fees). Es una comparación **distinta** de "Falta facturar" (que
+  solo cuenta lo billable): acá el gap incluye a propósito la media client-pays,
+  que es la razón típica de la diferencia.
+- **Datos** (`db/queries/dashboard.ts`): nueva
+  `getClientBillingReconciliation({clientId, bo?, proj?})` →
+  `ProjectBillingReconciliation[]` con `planTotalUsd` (todo + fees),
+  `billedUsd` (total_usd invoiced/paid), `clientPaidMediaUsd` y
+  `clientPaidPublishers`. Suma TODOS los placements de planes approved/ready
+  (aun sin fechas, porque el presupuesto existe). Fee de management sobre la
+  media total (#182) → en el gap los fees se cancelan y la diferencia ≈ media
+  client-pays.
+- **UI** (`components/billing-estimate-card.tsx`, `BillingReconciliationBullets`):
+  sección de bullets debajo de las cards. Semáforo con `text-success` /
+  `text-info` (azul) / `text-danger`. El bullet nombra los publishers client-pays
+  y el monto; si queda billable pendiente, lo aclara aparte.
+- **Excel** (regla espejo): hoja nueva **Conciliación** en
+  `lib/portal-estimate-xlsx.ts` (`buildConciliacionSheet`) — Total / Facturado
+  (coloreado) / Diferencia / media client-pays / publishers / Estado. El route
+  `estimate.xlsx` ahora también trae la conciliación.
+- **Verificación**: `tsc` + `eslint` en verde; smoke test real del workbook
+  (verde/azul/rojo OK). Sin cambios de schema.
+
 ### Cambios de la sesión 24/jul/2026 (4) — Regla dura: no se puede marcar Listo/Aprobado un plan con placements sin fecha
 
 - **Contexto**: descubrimos que un placement **sin fechas** (start/end null)

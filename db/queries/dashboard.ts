@@ -1426,3 +1426,206 @@ export async function getClientBillingProjections(options: {
   result.sort((a, b) => b.remainingUsd - a.remainingUsd);
   return result;
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Conciliación "facturado vs total del plan" por proyecto, para el portal.
+//
+// A diferencia de la estimación (que solo cuenta media FACTURABLE) y de la
+// proyección (que solo trae planes con saldo por facturar), esta función mira
+// el PRESUPUESTO COMPLETO del plan —toda la media, incluida la que paga el
+// cliente directo (YT/Google), + fees— y lo compara con lo realmente facturado.
+// Es la base del semáforo del facturado (verde = coincide, azul = falta, rojo =
+// se pasó) y de los bullets que explican por qué falta: en la mayoría de los
+// casos, porque hay media que paga el cliente y la agencia no factura.
+//
+// El fee de management se calcula sobre TODA la media del plan (#182), así que
+// en el gap "facturado vs total" los fees se cancelan y la diferencia queda,
+// típicamente, igual a la media client-pays.
+// ────────────────────────────────────────────────────────────────────────────
+
+export type ProjectBillingReconciliation = {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  // Presupuesto completo del plan: toda la media (facturable + client-pays) + fees.
+  planTotalUsd: number;
+  // Lo que la agencia PUEDE facturar: media facturable + fees (sin la client-pays).
+  billableTotalUsd: number;
+  // Facturado real (invoiced/paid) = suma de total_usd de las facturas.
+  billedUsd: number;
+  // Media que paga el cliente directo (no facturable) — la razón típica del gap.
+  clientPaidMediaUsd: number;
+  // Publishers client-pays con media > 0 (para nombrar en el bullet, desc por monto).
+  clientPaidPublishers: string[];
+};
+
+export async function getClientBillingReconciliation(options: {
+  clientId: string;
+  budgetOriginIds?: string[] | null;
+  projectIds?: string[] | null;
+}): Promise<ProjectBillingReconciliation[]> {
+  const filterOriginIds = (options.budgetOriginIds ?? []).filter(Boolean);
+  const filterProjectIds = (options.projectIds ?? []).filter(Boolean);
+  const scopeConds = [
+    eq(projects.clientId, options.clientId),
+    ...(filterOriginIds.length
+      ? [inArray(projects.budgetOriginId, filterOriginIds)]
+      : []),
+    ...(filterProjectIds.length ? [inArray(projects.id, filterProjectIds)] : []),
+  ];
+
+  // 1. Placements de planes approved / ready_to_send del cliente, con su
+  // billability efectiva y el nombre del publisher. NO se filtra por fechas: el
+  // presupuesto del plan es la suma de TODOS los placements (aunque falten
+  // fechas, el monto planeado existe).
+  const placements = await db
+    .select({
+      planId: mediaPlans.id,
+      projectId: projects.id,
+      projectCode: projects.code,
+      projectName: projects.name,
+      amount: mediaPlanPlacements.amountUsd,
+      agencyPays: sql<boolean>`coalesce(${mediaPlanPublishers.agencyPaysOverride}, ${publishers.agencyPays})`,
+      publisherName: publishers.name,
+    })
+    .from(mediaPlanPlacements)
+    .innerJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
+    .innerJoin(
+      mediaPlans,
+      and(
+        eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id),
+        isNull(mediaPlans.deletedAt),
+      ),
+    )
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .where(
+      and(
+        inArray(mediaPlans.status, ["approved", "ready_to_send"]),
+        ...scopeConds,
+      ),
+    );
+
+  if (placements.length === 0) return [];
+
+  type ProjAgg = {
+    projectId: string;
+    projectCode: string;
+    projectName: string;
+    fullMedia: number;
+    billableMedia: number;
+    clientPaidMedia: number;
+    clientPaidPubs: Map<string, number>;
+  };
+  const projAgg = new Map<string, ProjAgg>();
+  const planFullMedia = new Map<string, number>(); // planId → media total (base del fee)
+  const planProject = new Map<string, string>(); // planId → projectId
+  for (const p of placements) {
+    const amt = Number.parseFloat(p.amount);
+    planFullMedia.set(p.planId, (planFullMedia.get(p.planId) ?? 0) + amt);
+    planProject.set(p.planId, p.projectId);
+    let a = projAgg.get(p.projectId);
+    if (!a) {
+      a = {
+        projectId: p.projectId,
+        projectCode: p.projectCode,
+        projectName: p.projectName,
+        fullMedia: 0,
+        billableMedia: 0,
+        clientPaidMedia: 0,
+        clientPaidPubs: new Map(),
+      };
+      projAgg.set(p.projectId, a);
+    }
+    a.fullMedia += amt;
+    if (p.agencyPays) {
+      a.billableMedia += amt;
+    } else {
+      a.clientPaidMedia += amt;
+      a.clientPaidPubs.set(
+        p.publisherName,
+        (a.clientPaidPubs.get(p.publisherName) ?? 0) + amt,
+      );
+    }
+  }
+
+  // 2. Fees por plan (management sobre la media TOTAL del plan, #182) → proyecto.
+  const planIds = Array.from(planFullMedia.keys());
+  const feeRows = planIds.length
+    ? await db
+        .select()
+        .from(mediaPlanFees)
+        .where(inArray(mediaPlanFees.mediaPlanId, planIds))
+    : [];
+  const projFees = new Map<string, number>();
+  for (const f of feeRows) {
+    const projectId = planProject.get(f.mediaPlanId);
+    if (!projectId) continue;
+    const base = planFullMedia.get(f.mediaPlanId) ?? 0;
+    const ratePct = f.ratePct ? Number.parseFloat(f.ratePct) : null;
+    let totalFee: number;
+    if (
+      f.feeType === "management" &&
+      ratePct != null &&
+      ratePct > 0 &&
+      ratePct < 100
+    ) {
+      totalFee = (base * ratePct) / (100 - ratePct);
+    } else {
+      totalFee = Number.parseFloat(f.amountUsd);
+    }
+    if (totalFee <= 0) continue;
+    projFees.set(projectId, (projFees.get(projectId) ?? 0) + totalFee);
+  }
+
+  // 3. Facturado real por proyecto (invoiced/paid) — total_usd de las facturas
+  // de los MISMOS planes (approved/ready), para que compare contra su presupuesto.
+  const billedRows = planIds.length
+    ? await db
+        .select({
+          planId: planBillings.mediaPlanId,
+          billed: sql<string>`coalesce(sum(${planBillings.totalUsd}), 0)`,
+        })
+        .from(planBillings)
+        .where(
+          and(
+            inArray(planBillings.mediaPlanId, planIds),
+            inArray(planBillings.status, ["invoiced", "paid"]),
+          ),
+        )
+        .groupBy(planBillings.mediaPlanId)
+    : [];
+  const billedByProj = new Map<string, number>();
+  for (const r of billedRows) {
+    const projectId = planProject.get(r.planId);
+    if (!projectId) continue;
+    billedByProj.set(
+      projectId,
+      (billedByProj.get(projectId) ?? 0) + Number.parseFloat(r.billed),
+    );
+  }
+
+  const result: ProjectBillingReconciliation[] = [];
+  for (const a of projAgg.values()) {
+    const fees = projFees.get(a.projectId) ?? 0;
+    const clientPaidPublishers = Array.from(a.clientPaidPubs.entries())
+      .filter(([, v]) => v > 0)
+      .sort((x, y) => y[1] - x[1])
+      .map(([name]) => name);
+    result.push({
+      projectId: a.projectId,
+      projectCode: a.projectCode,
+      projectName: a.projectName,
+      planTotalUsd: a.fullMedia + fees,
+      billableTotalUsd: a.billableMedia + fees,
+      billedUsd: billedByProj.get(a.projectId) ?? 0,
+      clientPaidMediaUsd: a.clientPaidMedia,
+      clientPaidPublishers,
+    });
+  }
+  result.sort((a, b) => b.planTotalUsd - a.planTotalUsd);
+  return result;
+}

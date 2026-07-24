@@ -7,6 +7,7 @@ import type {
   MonthlyBillingEstimate,
   PlanBillingProjection,
   ProjectBillingProjection,
+  ProjectBillingReconciliation,
 } from "@/db/queries/dashboard";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { formatMonth, formatMonthShort, type Language, t } from "@/lib/i18n";
@@ -48,6 +49,11 @@ type Props = {
   // éste se considera CERRADO y su card muestra el FACTURADO REAL como número
   // principal (en vez del neto a facturar, que para un mes cerrado es ~0).
   currentMonth?: string;
+  // Portal: conciliación "facturado vs total del plan" por proyecto. Cuando se
+  // pasa, se dibuja debajo de las cards una sección de bullets con el semáforo
+  // del facturado (verde = coincide, azul = falta, rojo = se pasó) y la razón
+  // del gap (típicamente media que paga el cliente directo).
+  reconciliation?: ProjectBillingReconciliation[];
 };
 
 export function BillingEstimateCard({
@@ -57,6 +63,7 @@ export function BillingEstimateCard({
   lang = "en",
   projectionsById,
   currentMonth = "",
+  reconciliation,
 }: Props) {
   if (estimates.length === 0 && !previousMonth) return null;
 
@@ -100,7 +107,167 @@ export function BillingEstimateCard({
           />
         ))}
       </div>
+
+      {reconciliation && reconciliation.length > 0 && (
+        <BillingReconciliationBullets
+          reconciliation={reconciliation}
+          lang={lang}
+        />
+      )}
     </section>
+  );
+}
+
+// ── Conciliación: facturado vs total del plan ────────────────────────────────
+// Debajo de las cards, un bullet por proyecto con el semáforo del facturado y la
+// razón del gap. "Total del plan" = presupuesto COMPLETO (toda la media —incl. la
+// que paga el cliente directo— + fees). Verde = el facturado coincide con ese
+// total · azul = le falta · rojo = se pasó. La causa típica del "le falta" es que
+// el plan tiene media que paga el cliente directo (YT/Google), que la agencia no
+// factura — se aclara nombrando esos publishers.
+type ReconStatus = "match" | "short" | "over";
+
+function reconStatus(r: ProjectBillingReconciliation): ReconStatus {
+  const tol = Math.max(1, r.planTotalUsd * 0.005);
+  const diff = r.planTotalUsd - r.billedUsd;
+  if (diff > tol) return "short";
+  if (diff < -tol) return "over";
+  return "match";
+}
+
+function BillingReconciliationBullets({
+  reconciliation,
+  lang,
+}: {
+  reconciliation: ProjectBillingReconciliation[];
+  lang: Language;
+}) {
+  const rows = reconciliation.filter((r) => r.planTotalUsd > 0);
+  if (rows.length === 0) return null;
+  const es = lang === "es";
+
+  return (
+    <section className="mt-4 rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4">
+      <h3 className="text-xs font-semibold text-ink">
+        {es
+          ? "Facturado vs total del plan"
+          : "Invoiced vs plan total"}
+      </h3>
+      <p className="text-[11px] text-muted mt-0.5 mb-3">
+        {es
+          ? "El total del plan es el presupuesto completo (toda la media + fees). Cuando el facturado no llega, casi siempre es porque el plan tiene medios que paga el cliente directo (ej. YouTube/Google): la agencia cobra el fee sobre esa inversión pero no factura el medio."
+          : "Plan total is the full budget (all media + fees). When invoiced falls short it's usually because the plan has media the client pays directly (e.g. YouTube/Google): the agency charges the fee on that spend but doesn't invoice the media itself."}
+      </p>
+      <ul className="space-y-2">
+        {rows.map((r) => (
+          <ReconciliationBullet key={r.projectId} r={r} es={es} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ReconciliationBullet({
+  r,
+  es,
+}: {
+  r: ProjectBillingReconciliation;
+  es: boolean;
+}) {
+  const status = reconStatus(r);
+  const gap = r.planTotalUsd - r.billedUsd;
+  const tol = Math.max(1, r.planTotalUsd * 0.005);
+
+  // Color del semáforo: verde coincide · azul falta · rojo se pasó.
+  const dotColor =
+    status === "match"
+      ? "bg-success"
+      : status === "short"
+        ? "bg-info"
+        : "bg-danger";
+  const billedColor =
+    status === "match"
+      ? "text-success"
+      : status === "short"
+        ? "text-info"
+        : "text-danger";
+
+  const pubs = r.clientPaidPublishers.join(", ");
+  const clientPaidSignificant = r.clientPaidMediaUsd > tol;
+  // Parte del gap que NO es media client-pays → facturación realmente pendiente.
+  const billablePending = gap - r.clientPaidMediaUsd;
+
+  return (
+    <li className="flex items-start gap-2 text-[12px] leading-relaxed">
+      <span
+        className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dotColor}`}
+        aria-hidden
+      />
+      <span className="text-ink-2">
+        <span className="font-medium text-ink">{r.projectName}</span>
+        {": "}
+        <span className={`font-mono font-semibold tabular-nums ${billedColor}`}>
+          {formatUsd(r.billedUsd)}
+        </span>{" "}
+        {es ? "de" : "of"}{" "}
+        <span className="font-mono tabular-nums text-ink-2">
+          {formatUsd(r.planTotalUsd)}
+        </span>{" "}
+        {es ? "del plan" : "plan total"}
+        {status === "match" && (
+          <span className="text-success">
+            {" "}
+            · {es ? "coincide, facturado al 100%" : "matches, fully invoiced"}
+          </span>
+        )}
+        {status === "over" && (
+          <span className="text-danger">
+            {" · "}
+            {es
+              ? `se pasó ${formatUsd(-gap)} — revisar`
+              : `over by ${formatUsd(-gap)} — review`}
+          </span>
+        )}
+        {status === "short" && (
+          <>
+            {" · "}
+            <span className="text-info">
+              {es ? "faltan" : "short by"} {formatUsd(gap)}
+            </span>
+            {clientPaidSignificant && (
+              <>
+                {" — "}
+                {es ? (
+                  <>
+                    {formatUsd(r.clientPaidMediaUsd)} es media que paga el
+                    cliente directo
+                    {pubs ? ` (${pubs})` : ""} y la agencia no factura
+                    {billablePending > tol
+                      ? `; quedan ${formatUsd(billablePending)} por facturar.`
+                      : "."}
+                  </>
+                ) : (
+                  <>
+                    {formatUsd(r.clientPaidMediaUsd)} is media the client pays
+                    directly
+                    {pubs ? ` (${pubs})` : ""}, not invoiced by the agency
+                    {billablePending > tol
+                      ? `; ${formatUsd(billablePending)} still to invoice.`
+                      : "."}
+                  </>
+                )}
+              </>
+            )}
+            {!clientPaidSignificant && (
+              <>
+                {" — "}
+                {es ? "pendiente de facturar." : "still to invoice."}
+              </>
+            )}
+          </>
+        )}
+      </span>
+    </li>
   );
 }
 
