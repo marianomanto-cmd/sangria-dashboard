@@ -171,7 +171,7 @@ const DICT: Record<string, Record<Language, string>> = {
   "common.invoiced": { en: "Invoiced", es: "Facturado" },
   "common.estimated": { en: "Estimated", es: "Estimado" },
   "common.gross": { en: "Gross", es: "Bruto" },
-  "common.net": { en: "Net", es: "Neto" },
+  "common.leftToInvoice": { en: "Left to invoice", es: "Falta facturar" },
   "common.variance": { en: "Variance", es: "Variación" },
   "common.closed": { en: "closed", es: "cerrado" },
   "common.real": { en: "Real (sent/paid)", es: "Real (sent/paid)" },

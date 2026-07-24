@@ -240,7 +240,7 @@ function buildResumenSheet(
     { width: 15 }, // Facturado real · Media
     { width: 15 }, // Facturado real · Fees
     { width: 15 }, // Facturado real · Bruto
-    { width: 16 }, // Neto (falta)
+    { width: 16 }, // Falta facturar
   ];
 
   const headerEnd = brandHeader(
@@ -264,7 +264,7 @@ function buildResumenSheet(
       group: es ? "Facturado real" : "Actual invoiced",
       subs: ["Media", "Fees", bruto],
     },
-    { label: es ? "Neto (falta)" : "Net (pending)" },
+    { label: es ? "Falta facturar" : "Left to invoice" },
   ]);
 
   ws.views = [{ state: "frozen", ySplit: dataStart - 1 }];
@@ -315,8 +315,8 @@ function buildResumenSheet(
 
   const noteRow = ws.getRow(r + 2);
   noteRow.getCell(1).value = es
-    ? "Bruto = media + fees prorrateados de planes approved/ready. Facturado real (media · fees · bruto) = lo emitido (facturado/pagado) ese mes. Neto = bruto − facturado."
-    : "Gross = prorated media + fees from approved/ready plans. Actual invoiced (media · fees · gross) = issued (invoiced/paid) that month. Net = gross − invoiced.";
+    ? "Bruto = media + fees prorrateados de planes approved/ready. Facturado real (media · fees · bruto) = lo emitido (facturado/pagado) ese mes. Falta facturar = bruto − facturado."
+    : "Gross = prorated media + fees from approved/ready plans. Actual invoiced (media · fees · gross) = issued (invoiced/paid) that month. Left to invoice = gross − invoiced.";
   noteRow.getCell(1).font = { italic: true, color: { argb: MUTED }, size: 9 };
   noteRow.getCell(1).alignment = { wrapText: true, vertical: "top" };
   ws.mergeCells(r + 2, 1, r + 2, totalCols);
@@ -342,7 +342,7 @@ function buildDetalleSheet(
     { width: 15 }, // Facturado real · Media
     { width: 15 }, // Facturado real · Fees
     { width: 15 }, // Facturado real · Bruto
-    { width: 16 }, // Neto
+    { width: 16 }, // Falta facturar
   ];
 
   const headerEnd = brandHeader(
@@ -361,7 +361,7 @@ function buildDetalleSheet(
       group: es ? "Facturado real" : "Actual invoiced",
       subs: ["Media", "Fees", bruto],
     },
-    { label: es ? "Neto (falta)" : "Net (pending)" },
+    { label: es ? "Falta facturar" : "Left to invoice" },
   ]);
 
   ws.views = [{ state: "frozen", ySplit: dataStart - 1, xSplit: 1 }];
