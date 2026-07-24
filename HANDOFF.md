@@ -2,6 +2,33 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 24/jul/2026 (8) — Portal (Estimación): card SIMPLE para el cliente + estimado remaining-forward
+
+- **Pedido**: la card de estimación era confusa para el cliente (media/fees/
+  bruto/facturado/falta = jerga interna). Simplificar para que el cliente entre,
+  vea y entienda fácil. Y unificar el cálculo: mes pasado → facturado real; mes
+  que viene → `(total facturable del plan − ya facturado) ÷ meses restantes`.
+- **Fix** — `components/billing-estimate-card.tsx` ahora tiene **dos modos**:
+  - **Interno** (sin `projectionsById`, /billing-tracker): card DETALLADA, igual
+    que antes (no se tocó).
+  - **Portal/cliente** (con `projectionsById`): card **SIMPLE** (`SimpleMonthCard`)
+    — **un número por proyecto**: mes cerrado → **FACTURADO** real; mes en curso/
+    próximo → **ESTIMADO** = remaining-forward, que ya calcula
+    `getClientBillingProjections` (`(total facturable − facturado) ÷ meses
+    restantes`). El desglose media/fees/plan queda en el **desplegable** de cada
+    fila. Se oculta la card de accuracy "real vs estimado" (verificación interna)
+    — el mes anterior se muestra como una card simple cerrada más.
+- **No se tocó `getBillingEstimate`**: el remaining-forward se toma de la
+  proyección que el portal ya calculaba y pasaba (`projectionsById`). Cambio
+  contenido al componente; el Excel y el billing-tracker interno quedan igual.
+- **Excel — PENDIENTE de alinear**: las hojas Resumen/Detalle siguen con el
+  modelo lineal detallado (bruto/facturado/neto). El remaining-forward ya está
+  en la hoja **Proyección** y la conciliación en **Conciliación**, así que el
+  Excel no muestra MENOS que la pantalla, pero el "neto" del Resumen no coincide
+  con el "Estimado" simple de la card. No se reescribió para no arriesgar el
+  download; alinear Resumen/Detalle al modelo simple queda como follow-up.
+- **Verificación**: `tsc --noEmit` + `eslint` en verde. Sin cambios de schema.
+
 ### Cambios de la sesión 24/jul/2026 (7) — Mapa (Análisis): burbujas de nivel país en azul
 
 - **Pedido**: en el mapa, las inversiones en mercado a **nivel país** en **azul**
