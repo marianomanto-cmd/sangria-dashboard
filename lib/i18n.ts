@@ -206,6 +206,7 @@ const DICT: Record<string, Record<Language, string>> = {
   "status.active": { en: "active", es: "activo" },
   "status.paused": { en: "paused", es: "pausado" },
   "status.closed": { en: "closed", es: "cerrado" },
+  "status.reportado": { en: "reported", es: "reportado" },
   // PDF/Excel export labels
   "export.mediaPlan": { en: "MEDIA PLAN", es: "PLAN DE MEDIOS" },
   "export.totals": { en: "Totals", es: "Totales" },
