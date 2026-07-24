@@ -2,6 +2,30 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 24/jul/2026 (2) — Estimación: la media no facturable (cliente paga directo) ya no figura como "falta facturar"
+
+- **Bug**: en la tab **Estimación** del portal, un publisher que paga el cliente
+  directo (`agency_pays=false`, ej. Google/YT) sumaba su media al **bruto**
+  estimado, pero el **facturado real** la excluye (`filter (is_billable)`). Como
+  `falta facturar = bruto − facturado`, esa media quedaba **pendiente para
+  siempre** aunque nunca se vaya a facturar.
+- **Fix** (`db/queries/dashboard.ts`): tanto `getBillingEstimate` como
+  `getClientBillingProjections` ahora traen el flag efectivo
+  `coalesce(media_plan_publishers.agency_pays_override, publishers.agency_pays)`
+  por placement y **solo suman al bruto de medios la media facturable**. La media
+  que paga el cliente directo ya no aparece como pendiente.
+- **Fee intacto (#182)**: la base del management fee (`totalMedia` /
+  `planPeriodMap`) sigue siendo **toda** la media (facturable + no facturable),
+  porque el fee se cobra sobre toda la media gestionada aunque el publisher lo
+  pague el cliente. Se filtró **solo** la media, no el fee.
+- **Efecto colateral bueno**: la card "mes anterior · Real vs Estimado" ahora
+  compara media facturable vs facturado real (apples-to-apples); antes mostraba
+  una varianza negativa permanente en planes con media client-pays.
+- **Excel**: se arregla solo — las hojas usan la salida de estas mismas queries.
+- **Verificación**: `tsc --noEmit` + `eslint` en verde. Sin cambios de schema.
+  No requiere acción en prod (recomputa en cada request; no toca facturas
+  emitidas).
+
 ### Cambios de la sesión 24/jul/2026 — Estimación: renombrar la columna "Neto" → "Falta facturar" (pantalla + Excel)
 
 - **Pedido**: en la tab **Estimación** del portal, la columna **Neto** no se

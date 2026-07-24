@@ -588,6 +588,14 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   facturado (`alreadyBilledMediaUsd` viene de `plan_billing_publishers`;
   `alreadyBilledFeesUsd` de `plan_billing_fees`). Los totales `grossUsd` y
   `alreadyBilledUsd` se siguen exportando como sumas.
+- **Solo media FACTURABLE**: `grossMediaUsd` cuenta únicamente placements de
+  publishers que la agencia factura (`coalesce(media_plan_publishers.agency_pays_override,
+  publishers.agency_pays)`). La media que paga el cliente directo **no se
+  factura como medio**, así que no figura como "falta facturar" (antes sí, y
+  quedaba pendiente para siempre porque el facturado real la excluye). El
+  **fee** en cambio se sigue calculando sobre **toda** la media gestionada
+  (base `totalMedia` sin filtrar) — decisión de negocio #182. Misma regla en
+  `getClientBillingProjections` (el desglose por plan del portal).
 - Acepta filtros opcionales: `months[]`, `budgetOriginId`/`budgetOriginIds[]`,
   `projectId`/`projectIds[]`, `clientId`. Los `*Ids[]` (multi) tienen prioridad
   sobre los single homónimos (`inArray` en las 3 subqueries) — los usan los

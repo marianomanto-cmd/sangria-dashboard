@@ -741,12 +741,17 @@ export async function getBillingEstimate(options: {
       startDate: mediaPlanPlacements.startDate,
       endDate: mediaPlanPlacements.endDate,
       amount: mediaPlanPlacements.amountUsd,
+      // Facturable = la agencia factura ese publisher (override del bloque o
+      // default per-cliente). La media que paga el cliente directo no se
+      // factura como medio (#182); el fee igual va sobre TODA la media.
+      agencyPays: sql<boolean>`coalesce(${mediaPlanPublishers.agencyPaysOverride}, ${publishers.agencyPays})`,
     })
     .from(mediaPlanPlacements)
     .innerJoin(
       mediaPlanPublishers,
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
+    .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
     .innerJoin(mediaPlans, eq(mediaPlanPublishers.mediaPlanId, mediaPlans.id))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id));
@@ -762,7 +767,10 @@ export async function getBillingEstimate(options: {
   // devolver el FACTURADO REAL de cada mes pedido — clave para ver meses
   // pasados ya cerrados. El facturado sale de las subqueries de más abajo.
 
-  // 2. Períodos por plan (para prorratear fees) + total media por plan
+  // 2. Períodos por plan (para prorratear fees) + total media por plan.
+  // OJO: totalMedia acumula TODA la media (facturable + no facturable) a
+  // propósito — es la base del management fee, que se cobra sobre toda la media
+  // gestionada aunque el cliente pague el publisher directo (#182).
   const planPeriodMap = new Map<
     string,
     { startMonth: string; endMonth: string; totalMedia: number }
@@ -866,8 +874,12 @@ export async function getBillingEstimate(options: {
     }
   };
 
-  // 5a. Placements (media)
+  // 5a. Placements (media) — SOLO la media facturable. La media que paga el
+  // cliente directo (publisher no facturable) no se factura como medio, así que
+  // no debe aparecer como pendiente (#182). El fee sí va sobre toda la media:
+  // por eso planPeriodMap.totalMedia (arriba) NO filtra por facturable.
   for (const p of placements) {
+    if (!p.agencyPays) continue;
     if (!p.startDate || !p.endDate) continue;
     const months = enumerateMonths(
       p.startDate.slice(0, 7),
@@ -1153,12 +1165,17 @@ export async function getClientBillingProjections(options: {
       startDate: mediaPlanPlacements.startDate,
       endDate: mediaPlanPlacements.endDate,
       amount: mediaPlanPlacements.amountUsd,
+      // Facturable = la agencia factura ese publisher (override del bloque o
+      // default per-cliente). Solo la media facturable alimenta el "falta
+      // facturar" de medios; el fee va sobre toda la media (#182).
+      agencyPays: sql<boolean>`coalesce(${mediaPlanPublishers.agencyPaysOverride}, ${publishers.agencyPays})`,
     })
     .from(mediaPlanPlacements)
     .innerJoin(
       mediaPlanPublishers,
       eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
     )
+    .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
     .innerJoin(
       mediaPlans,
       and(
@@ -1225,7 +1242,13 @@ export async function getClientBillingProjections(options: {
       if (ed > agg.endDate) agg.endDate = ed;
     }
     const amt = Number.parseFloat(p.amount);
+    // totalMedia = TODA la media (base del fee, #182); el período ya se
+    // actualizó arriba con este placement (facturable o no).
     agg.totalMedia += amt;
+    // scheduledMedia (lo que alimenta el "falta facturar" de medios) SOLO
+    // suma media facturable: la que paga el cliente directo no se factura como
+    // medio, así que no debe figurar como pendiente.
+    if (!p.agencyPays) continue;
     const months = enumerateMonths(sm, em);
     if (months.length === 0) continue;
     const monthly = amt / months.length;
