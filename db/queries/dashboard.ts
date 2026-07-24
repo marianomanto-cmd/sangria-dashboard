@@ -918,24 +918,28 @@ export async function getBillingEstimate(options: {
     }
   }
 
-  // 6. Ya facturado por mes y proyecto (sent/paid)
-  const billedBase = db
+  // 6. Ya facturado por mes y proyecto (invoiced/paid). Leemos los totales de
+  // la PROPIA factura: `total_net_usd` (media facturable) y `total_fee_usd`
+  // (fees). Son la fuente de verdad de lo emitido — evita descuadres cuando la
+  // itemización por publisher/fee no está completa (p. ej. facturas con el fee
+  // en `total_fee_usd` pero sin filas en `plan_billing_fees`, que hacían que el
+  // fee ya cobrado apareciera como pendiente). `recalcBillingTotals` garantiza
+  // total_net = media facturable y total_fee = suma de fees, así que para data
+  // creada por la app da idéntico a sumar las sublíneas.
+  const billedRows = await db
     .select({
       month: planBillings.month,
       projectId: projects.id,
       projectCode: projects.code,
       projectName: projects.name,
       clientName: clients.name,
-      pubBilled: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}) filter (where ${planBillingPublishers.isBillable}), 0)`,
+      mediaBilled: sql<string>`coalesce(sum(${planBillings.totalNetUsd}), 0)`,
+      feeBilled: sql<string>`coalesce(sum(${planBillings.totalFeeUsd}), 0)`,
     })
     .from(planBillings)
     .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .innerJoin(clients, eq(projects.clientId, clients.id))
-    .leftJoin(
-      planBillingPublishers,
-      eq(planBillingPublishers.planBillingId, planBillings.id),
-    )
     .where(
       and(
         inArray(planBillings.month, options.months),
@@ -944,37 +948,6 @@ export async function getBillingEstimate(options: {
       ),
     )
     .groupBy(planBillings.month, projects.id, projects.code, projects.name, clients.name);
-
-  const billedFeesBase = db
-    .select({
-      month: planBillings.month,
-      projectId: projects.id,
-      projectCode: projects.code,
-      projectName: projects.name,
-      clientName: clients.name,
-      feeBilled: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
-    })
-    .from(planBillings)
-    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
-    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
-    .innerJoin(clients, eq(projects.clientId, clients.id))
-    .leftJoin(
-      planBillingFees,
-      eq(planBillingFees.planBillingId, planBillings.id),
-    )
-    .where(
-      and(
-        inArray(planBillings.month, options.months),
-        inArray(planBillings.status, ["invoiced", "paid"]),
-        ...scopeConds,
-      ),
-    )
-    .groupBy(planBillings.month, projects.id, projects.code, projects.name, clients.name);
-
-  const [billedPubRows, billedFeeRows] = await Promise.all([
-    billedBase,
-    billedFeesBase,
-  ]);
 
   // Para que aparezcan proyectos que SOLO tienen facturas (sin placements
   // activos en el mes), creamos el bucket si no existe — así un mes ya cerrado
@@ -1009,17 +982,24 @@ export async function getBillingEstimate(options: {
     }
     return cur;
   };
-  for (const r of billedPubRows) {
+  for (const r of billedRows) {
     const cur = ensureBucket(r.month, r);
-    if (cur) cur.billedMedia += Number.parseFloat(r.pubBilled);
-  }
-  for (const r of billedFeeRows) {
-    const cur = ensureBucket(r.month, r);
-    if (cur) cur.billedFees += Number.parseFloat(r.feeBilled);
+    if (cur) {
+      cur.billedMedia += Number.parseFloat(r.mediaBilled);
+      cur.billedFees += Number.parseFloat(r.feeBilled);
+    }
   }
 
-  // 7. Construir respuesta ordenada como options.months
+  // 7. Construir respuesta ordenada como options.months.
+  // "Falta facturar" es forward-looking: un mes CERRADO (anterior al actual) ya
+  // no se factura, así que su neto va a 0. Esto evita el "fantasma" de un plan
+  // que quedó 100% facturado pero de forma despareja entre meses (el prorrateo
+  // lineal esperaba X/mes, se facturó despar, y el piso por mes no dejaba que un
+  // mes compensara al otro). El saldo REAL pendiente de un plan vive en el mes
+  // actual/futuro y en getClientBillingProjections (que reconcilia al nivel plan).
+  const nowMonth = currentYearMonth();
   return options.months.map((m) => {
+    const isPastMonth = m < nowMonth;
     const projMap = monthBuckets.get(m);
     const byProject = projMap
       ? Array.from(projMap.values())
@@ -1041,10 +1021,13 @@ export async function getBillingEstimate(options: {
               alreadyBilledUsd,
               alreadyBilledMediaUsd,
               alreadyBilledFeesUsd,
-              netUsd: Math.max(0, grossUsd - alreadyBilledUsd),
+              netUsd: isPastMonth ? 0 : Math.max(0, grossUsd - alreadyBilledUsd),
             };
           })
-          .sort((a, b) => b.netUsd - a.netUsd)
+          .sort(
+            (a, b) =>
+              b.netUsd - a.netUsd || b.alreadyBilledUsd - a.alreadyBilledUsd,
+          )
       : [];
     const grossMediaUsd = byProject.reduce((s, p) => s + p.grossMediaUsd, 0);
     const grossFeesUsd = byProject.reduce((s, p) => s + p.grossFeesUsd, 0);
@@ -1066,7 +1049,7 @@ export async function getBillingEstimate(options: {
       alreadyBilledUsd,
       alreadyBilledMediaUsd,
       alreadyBilledFeesUsd,
-      netUsd: Math.max(0, grossUsd - alreadyBilledUsd),
+      netUsd: isPastMonth ? 0 : Math.max(0, grossUsd - alreadyBilledUsd),
       byProject,
     };
   });

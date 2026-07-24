@@ -2,6 +2,44 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 24/jul/2026 (3) — Estimación: "falta facturar" fantasma (fee ya cobrado + prorrateo despareja)
+
+- **Síntoma**: un plan con Meta 100% facturado ($9.999 sobre $10K planeados,
+  emitido despar: $1.7K en mayo + $8.2K en junio) mostraba **$4.6K de "falta
+  facturar"** en mayo. Diagnóstico: fantasma, no plata real. Dos causas:
+  - **Fee ya cobrado no contado (~$1.4K)**: las facturas tenían el management
+    fee en `plan_billings.total_fee_usd` pero **sin filas** en
+    `plan_billing_fees`. El estimado leía el fee facturado desde
+    `plan_billing_fees` (=$0) → contaba todo el fee como pendiente. (Además la
+    columna **Facturado** sub-contaba el fee: mostraba $1.8K cuando la factura
+    real era $3.077.)
+  - **Media despareja + piso por mes (~$3.2K)**: el prorrateo lineal esperaba
+    $5K/mes; se facturó $1.7K en mayo y $8.2K en junio; el `max(0, …)` por mes
+    impedía que el "de más" de junio compensara el "de menos" de mayo.
+- **Fix** (`db/queries/dashboard.ts`, `getBillingEstimate`):
+  1. El **facturado** ahora se lee de los totales de la factura
+     (`total_net_usd` / `total_fee_usd`), no de la suma de sublíneas. Son la
+     fuente de verdad de lo emitido e inmunes a itemización incompleta. Para
+     data de la app da idéntico (`recalcBillingTotals` garantiza el invariante).
+     Arregla la columna Facturado y el fantasma del fee.
+  2. **Meses cerrados** (anteriores al actual): `netUsd` (por proyecto y del
+     mes) = **0**. Un mes cerrado ya no se factura; el saldo real vive en el mes
+     actual/futuro y en `getClientBillingProjections` (que ya reconciliaba bien
+     al nivel plan con `total_usd`). Los cerrados siguen mostrando Facturado real.
+- **NO se tocó la regla de negocio #182**: media facturable filtrada del bruto
+  de medios, pero el management fee se sigue cobrando sobre TODA la media
+  gestionada (`planPeriodMap.totalMedia` sin filtrar). Confirmado con el dueño.
+- **Caveat**: si un plan quedó genuinamente sub-facturado en un mes ya cerrado,
+  ese saldo ya no aparece en la card mensual del mes cerrado — surge en el
+  desglose por proyecto (`getClientBillingProjections`, que lo imputa al mes
+  actual). La card mensual es forward-looking; el desglose es la fuente
+  autoritativa del pendiente real.
+- **Nota de data**: los placements de YouTube de ese plan no tienen fechas
+  cargadas → hoy quedan fuera del prorrateo del estimado (media y base del fee).
+  Pendiente: regla que impida guardar un placement sin fechas.
+- **Verificación**: `tsc --noEmit` + `eslint` en verde. Sin cambios de schema.
+  No requiere acción en prod (recomputa en cada request; no toca facturas).
+
 ### Cambios de la sesión 24/jul/2026 (2) — Estimación: la media no facturable (cliente paga directo) ya no figura como "falta facturar"
 
 - **Bug**: en la tab **Estimación** del portal, un publisher que paga el cliente

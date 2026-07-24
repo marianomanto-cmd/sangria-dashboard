@@ -584,10 +584,25 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   placements y fees de planes `approved` / `ready_to_send` sobre sus meses
   activos y resta lo ya facturado en cada mes (status `sent`/`paid`).
 - Devuelve **separado media de fees**: `grossMediaUsd` (placements) y
-  `grossFeesUsd` (management/setup/reporting/custom). Lo mismo para el
-  facturado (`alreadyBilledMediaUsd` viene de `plan_billing_publishers`;
-  `alreadyBilledFeesUsd` de `plan_billing_fees`). Los totales `grossUsd` y
-  `alreadyBilledUsd` se siguen exportando como sumas.
+  `grossFeesUsd` (management/setup/reporting/custom). El **facturado** se lee de
+  los TOTALES de la propia factura: `alreadyBilledMediaUsd` = `plan_billings.total_net_usd`
+  (media facturable) y `alreadyBilledFeesUsd` = `plan_billings.total_fee_usd`
+  (fees). Se usan los totales de la factura —y no la suma de sublíneas
+  (`plan_billing_publishers` / `plan_billing_fees`)— porque son la **fuente de
+  verdad de lo emitido**: evita descuadres cuando la itemización está incompleta
+  (p. ej. facturas con el fee en `total_fee_usd` pero sin filas en
+  `plan_billing_fees`, que hacían aparecer el fee ya cobrado como pendiente).
+  Para data creada por la app da idéntico (ver `recalcBillingTotals`). Los
+  totales `grossUsd` y `alreadyBilledUsd` se exportan como sumas.
+- **Meses cerrados → "falta facturar" = $0**: "Falta facturar" es
+  forward-looking; un mes anterior al actual ya no se factura, así que su
+  `netUsd` (por proyecto y del mes) va a 0. Evita el "fantasma" de un plan que
+  quedó 100% facturado pero de forma **despareja** entre meses (el prorrateo
+  lineal esperaba X/mes, se facturó despar, y el piso `max(0, …)` por mes no
+  dejaba que un mes compensara al otro). El saldo REAL pendiente de un plan vive
+  en el mes actual/futuro y, sobre todo, en `getClientBillingProjections` (que
+  reconcilia al nivel plan con `total_usd`). Los meses cerrados siguen mostrando
+  su **Facturado real**.
 - **Solo media FACTURABLE**: `grossMediaUsd` cuenta únicamente placements de
   publishers que la agencia factura (`coalesce(media_plan_publishers.agency_pays_override,
   publishers.agency_pays)`). La media que paga el cliente directo **no se
