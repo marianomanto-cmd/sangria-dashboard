@@ -2,6 +2,24 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 24/jul/2026 (7) — Mapa (Análisis): burbujas de nivel país en azul
+
+- **Pedido**: en el mapa, las inversiones en mercado a **nivel país** en **azul**
+  para diferenciarlas de las de **nivel ciudad** (bordó, el color actual).
+- **Fix** — el nivel se infiere sin tocar el schema, por CÓMO matchea el
+  geocoding (`lib/market-geo.ts`, `resolveMarketGeo` ahora devuelve `level`):
+  - match **exacto** a una key país → `country` (ej. "Panamá", "México").
+  - match por **token** dentro de un país → `city` (ej. "Ciudad de Panamá" →
+    `panama`): plaza más específica que el país entero.
+  - agrupaciones (LATAM/Centroamérica) → `region`.
+- **UI**: `components/americas-map.tsx` pinta la burbuja `level==="country"` con
+  `.mkt-bubble--country` (azul `#1e40af`, en `globals.css`) y suma una **leyenda**
+  (País azul · Ciudad/región bordó). `market-analysis.tsx` propaga `level`.
+- **Caveat**: "Estados Unidos - Varios" (token match) queda como `city`/bordó
+  aunque sea country-ish; es un borde aceptable. Para forzar un nivel puntual,
+  se puede sumar la ciudad al `GEO` con su centroide.
+- **Verificación**: `tsc` + `eslint` en verde. Sin cambios de schema.
+
 ### Cambios de la sesión 24/jul/2026 (6) — Proyectos (dashboard general): filtro por estado
 
 - **Pedido**: en `/proyectos` (dashboard interno, no el portal de cliente), un
@@ -2799,6 +2817,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+6e432bc  Proyectos (dashboard): filtro por estado (#194)
 d52fcb0  Estimación (portal): semáforo facturado vs total del plan + bullets del gap (#193)
 6b858ad  Planes: no permitir Listo/Aprobado con placements sin fecha (#191)
 885ea3d  Estimación: matar el "falta facturar" fantasma (fee ya cobrado + meses cerrados) (#190)
