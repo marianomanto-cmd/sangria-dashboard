@@ -2,32 +2,36 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 24/jul/2026 (8) — Portal (Estimación): card SIMPLE para el cliente + estimado remaining-forward
+### Cambios de la sesión 27/jul/2026 — REVERT de la "card simple" de Estimación (vuelve la card detallada)
 
-- **Pedido**: la card de estimación era confusa para el cliente (media/fees/
-  bruto/facturado/falta = jerga interna). Simplificar para que el cliente entre,
-  vea y entienda fácil. Y unificar el cálculo: mes pasado → facturado real; mes
-  que viene → `(total facturable del plan − ya facturado) ÷ meses restantes`.
-- **Fix** — `components/billing-estimate-card.tsx` ahora tiene **dos modos**:
-  - **Interno** (sin `projectionsById`, /billing-tracker): card DETALLADA, igual
-    que antes (no se tocó).
-  - **Portal/cliente** (con `projectionsById`): card **SIMPLE** (`SimpleMonthCard`)
-    — **un número por proyecto**: mes cerrado → **FACTURADO** real; mes en curso/
-    próximo → **ESTIMADO** = remaining-forward, que ya calcula
-    `getClientBillingProjections` (`(total facturable − facturado) ÷ meses
-    restantes`). El desglose media/fees/plan queda en el **desplegable** de cada
-    fila. Se oculta la card de accuracy "real vs estimado" (verificación interna)
-    — el mes anterior se muestra como una card simple cerrada más.
-- **No se tocó `getBillingEstimate`**: el remaining-forward se toma de la
-  proyección que el portal ya calculaba y pasaba (`projectionsById`). Cambio
-  contenido al componente; el Excel y el billing-tracker interno quedan igual.
-- **Excel — PENDIENTE de alinear**: las hojas Resumen/Detalle siguen con el
-  modelo lineal detallado (bruto/facturado/neto). El remaining-forward ya está
-  en la hoja **Proyección** y la conciliación en **Conciliación**, así que el
-  Excel no muestra MENOS que la pantalla, pero el "neto" del Resumen no coincide
-  con el "Estimado" simple de la card. No se reescribió para no arriesgar el
-  download; alinear Resumen/Detalle al modelo simple queda como follow-up.
-- **Verificación**: `tsc --noEmit` + `eslint` en verde. Sin cambios de schema.
+- **Reportado**: en la tab Estimación del portal, **julio 2026 listaba planes de
+  2025** y **desapareció la estimación de fees del mes** (la línea
+  `Facturado real · Media · Fees · Estimado` que iba arriba de la lista de cada
+  mes).
+- **Causa**: el commit `3b241a6` ("card simple para el cliente + estimado
+  remaining-forward", pusheado directo a main). En modo portal, para los meses
+  en curso/próximos armaba las filas con
+  `rows = Object.values(projectionsById)` — es decir, desde
+  `getClientBillingProjections`, que **no tiene filtro de mes/año** y que, cuando
+  a un plan ya terminado le queda saldo sin facturar, **imputa ese remanente al
+  mes ACTUAL** (`months = [{ month: nowMonth, ... }]`). Por eso planes de 2025
+  con saldo aparecían dentro de julio 2026. La misma card reemplazaba el header
+  detallado por un solo número, y de ahí la pérdida del desglose de fees.
+- **Acción**: `git revert` de `3b241a6` (revierte los 3 archivos que tocó:
+  `components/billing-estimate-card.tsx` + sus notas en README/HANDOFF). Vuelve
+  la **card detallada** de siempre: mes cerrado → `Facturado real` con
+  `Media / Fees / Estimado`; mes en curso → `Media / Fees / Bruto / Ya
+  facturado`. Las filas por proyecto vuelven a salir de `getBillingEstimate`,
+  que **sí** bucketea por mes → un plan de 2025 ya no puede caer en julio 2026.
+- **NO se tocó** nada más: siguen en pie el filtro de Año (#184), la media no
+  facturable fuera del pendiente (#189), el fix del falta-facturar fantasma
+  (#190), el semáforo de conciliación (#193) y el resto de #186–#197.
+- **Si se quiere retomar la idea** de una card más simple para el cliente, hay
+  que hacerla **sin** alimentar los meses en curso desde la proyección
+  remaining-forward (o filtrando esa proyección por el mes de la card), que es
+  justamente lo que traía planes viejos al mes actual.
+- **Verificación**: `tsc` + `eslint` + `next build` en verde.
+- **Sin cambios de schema. No requiere acción en prod.**
 
 ### Cambios de la sesión 24/jul/2026 (7) — Mapa (Análisis): burbujas de nivel país en azul
 

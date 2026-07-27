@@ -67,61 +67,45 @@ export function BillingEstimateCard({
 }: Props) {
   if (estimates.length === 0 && !previousMonth) return null;
 
-  // Modo portal (cliente): vista SIMPLE — un solo número por proyecto (facturado
-  // en meses cerrados, estimado en los que vienen), sin la jerga interna de
-  // media/fees/bruto (queda en el desplegable). Modo interno: card detallada.
-  const portalMode = !!projectionsById;
-  const es = lang === "es";
-
   return (
     <section className="mt-8">
       <header className="mb-3">
         <h2 className="text-sm font-semibold text-ink">
-          {es ? "Estimación de facturación" : "Billing estimate"}
+          {lang === "es"
+            ? "Estimación de facturación"
+            : "Billing estimate"}
         </h2>
         <p className="text-xs text-muted">
-          {portalMode
-            ? es
-              ? "Por mes: lo facturado en los meses cerrados y lo que estimamos facturar en los meses en curso y próximos. Tocá un proyecto para ver el detalle por plan."
-              : "By month: what was invoiced in closed months and what we estimate to invoice in current and upcoming months. Tap a project for the per-plan detail."
-            : es
-              ? "Prorrateo lineal de placements (media) y fees de planes approved / ready_to_send sobre sus meses activos. Falta facturar = bruto − ya facturado."
-              : "Linear proration of placements (media) and fees from approved / ready_to_send plans across their active months. Left to invoice = gross − already invoiced."}
+          {lang === "es"
+            ? "Prorrateo lineal de placements (media) y fees de planes approved / ready_to_send sobre sus meses activos. Falta facturar = bruto − ya facturado."
+            : "Linear proration of placements (media) and fees from approved / ready_to_send plans across their active months. Left to invoice = gross − already invoiced."}
         </p>
+        {projectionsById && !hideProjectBreakdown && (
+          <p className="text-xs text-muted mt-1">
+            {lang === "es"
+              ? "Tocá un proyecto para ver el billing de cada plan y lo que falta facturar, prorrateado por cada mes restante."
+              : "Tap a project to see each plan's billing and what's left to invoice, prorated across each remaining month."}
+          </p>
+        )}
       </header>
 
-      {/* Card de accuracy (real vs estimado recomputado) — es una verificación
-          interna, no la mostramos al cliente. */}
-      {!portalMode && previousMonth && (
+      {previousMonth && (
         <div className="mb-3">
           <PreviousMonthCard estimate={previousMonth} lang={lang} />
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        {portalMode
-          ? // El mes anterior (que la vista separa como "accuracy") se muestra
-            // acá como una card simple más (cerrada → facturado), para que el
-            // cliente vea el mes recién cerrado sin la jerga de variación.
-            [...(previousMonth ? [previousMonth] : []), ...estimates].map((e) => (
-              <SimpleMonthCard
-                key={e.month}
-                estimate={e}
-                projectionsById={projectionsById}
-                isPast={currentMonth !== "" && e.month < currentMonth}
-                lang={lang}
-              />
-            ))
-          : estimates.map((e) => (
-              <EstimateMonthCard
-                key={e.month}
-                estimate={e}
-                hideProjectBreakdown={hideProjectBreakdown}
-                lang={lang}
-                projectionsById={projectionsById}
-                isPast={currentMonth !== "" && e.month < currentMonth}
-              />
-            ))}
+        {estimates.map((e) => (
+          <EstimateMonthCard
+            key={e.month}
+            estimate={e}
+            hideProjectBreakdown={hideProjectBreakdown}
+            lang={lang}
+            projectionsById={projectionsById}
+            isPast={currentMonth !== "" && e.month < currentMonth}
+          />
+        ))}
       </div>
 
       {reconciliation && reconciliation.length > 0 && (
@@ -131,187 +115,6 @@ export function BillingEstimateCard({
         />
       )}
     </section>
-  );
-}
-
-// ── Card mensual SIMPLE (portal/cliente) ─────────────────────────────────────
-// Un número por proyecto: mes cerrado → FACTURADO real; mes en curso/próximo →
-// ESTIMADO = (total facturable del plan − ya facturado) prorrateado por los
-// meses que le quedan (viene del desglose por plan, getClientBillingProjections).
-// El desglose media/fees/plan queda en el desplegable de cada fila.
-function projectedForMonth(
-  projection: ProjectBillingProjection,
-  month: string,
-): number {
-  let s = 0;
-  for (const plan of projection.plans) {
-    for (const m of plan.months) if (m.month === month) s += m.projectedUsd;
-  }
-  return s;
-}
-
-function SimpleMonthCard({
-  estimate,
-  projectionsById,
-  isPast,
-  lang,
-}: {
-  estimate: MonthlyBillingEstimate;
-  projectionsById: Record<string, ProjectBillingProjection>;
-  isPast: boolean;
-  lang: Language;
-}) {
-  const es = lang === "es";
-
-  type Row = {
-    projectId: string;
-    projectName: string;
-    projectCode: string;
-    amount: number;
-    projection?: ProjectBillingProjection;
-  };
-  let rows: Row[];
-  if (isPast) {
-    // Mes cerrado: facturado real por proyecto.
-    rows = estimate.byProject
-      .filter((p) => p.alreadyBilledUsd > 0.005)
-      .map((p) => ({
-        projectId: p.projectId,
-        projectName: p.projectName,
-        projectCode: p.projectCode,
-        amount: p.alreadyBilledUsd,
-        projection: projectionsById[p.projectId],
-      }))
-      .sort((a, b) => b.amount - a.amount);
-  } else {
-    // Mes en curso/próximo: estimado a facturar (remaining-forward) por proyecto.
-    rows = Object.values(projectionsById)
-      .map((proj) => ({
-        projectId: proj.projectId,
-        projectName: proj.projectName,
-        projectCode: proj.projectCode,
-        amount: projectedForMonth(proj, estimate.month),
-        projection: proj,
-      }))
-      .filter((r) => r.amount > 0.005)
-      .sort((a, b) => b.amount - a.amount);
-  }
-  const total = rows.reduce((s, r) => s + r.amount, 0);
-
-  const label = isPast
-    ? es
-      ? "Facturado"
-      : "Invoiced"
-    : es
-      ? "Estimado"
-      : "Estimated";
-  const sub = isPast
-    ? es
-      ? "Lo que se facturó este mes"
-      : "Invoiced this month"
-    : es
-      ? "Lo que estimamos facturar este mes"
-      : "What we estimate to invoice this month";
-
-  return (
-    <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-      <div className="px-5 py-3 border-b border-line-soft bg-paper-2/40">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            {formatMonth(estimate.month, lang)} · {label}
-          </p>
-          <p className="font-mono text-lg font-semibold text-ink tabular-nums">
-            {formatUsd(total)}
-          </p>
-        </div>
-        <p className="text-[11px] text-muted mt-0.5">{sub}</p>
-      </div>
-
-      {rows.length === 0 ? (
-        <div className="px-5 py-6 text-center text-xs text-muted">
-          {isPast
-            ? es
-              ? "Sin facturación este mes."
-              : "No invoicing this month."
-            : es
-              ? "Sin facturación estimada este mes."
-              : "No estimated invoicing this month."}
-        </div>
-      ) : (
-        <ul className="divide-y divide-line-soft">
-          {rows.map((r) => (
-            <SimpleProjectRow
-              key={r.projectId}
-              projectName={r.projectName}
-              projectCode={r.projectCode}
-              amount={r.amount}
-              projection={r.projection}
-              lang={lang}
-            />
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function SimpleProjectRow({
-  projectName,
-  projectCode,
-  amount,
-  projection,
-  lang,
-}: {
-  projectName: string;
-  projectCode: string;
-  amount: number;
-  projection?: ProjectBillingProjection;
-  lang: Language;
-}) {
-  const [open, setOpen] = useState(false);
-  const expandable = !!projection && projection.plans.length > 0;
-
-  const head = (
-    <div className="flex items-center justify-between gap-3 px-5 py-2.5">
-      <div className="flex items-center gap-1.5 min-w-0">
-        {expandable && (
-          <ChevronRight
-            size={13}
-            aria-hidden
-            className={`shrink-0 text-muted transition-transform ${open ? "rotate-90" : ""}`}
-          />
-        )}
-        <div className="min-w-0">
-          <span className="text-ink-2 text-[13px]">{projectName}</span>
-          <div className="font-mono text-[10px] text-muted truncate">
-            {projectCode}
-          </div>
-        </div>
-      </div>
-      <span className="font-mono text-sm font-semibold text-ink tabular-nums shrink-0">
-        {formatUsd(amount)}
-      </span>
-    </div>
-  );
-
-  if (!expandable) return <li>{head}</li>;
-
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="w-full text-left hover:bg-paper-2 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent transition-colors"
-      >
-        {head}
-      </button>
-      {open && (
-        <div className="px-5 pb-4 pt-1 bg-paper-2/40">
-          <ProjectProjectionDetail projection={projection} lang={lang} />
-        </div>
-      )}
-    </li>
   );
 }
 
