@@ -25,6 +25,11 @@ type ConfirmOptions = {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  // Modo "aviso": un solo botón (no hay nada que cancelar). Se usa para
+  // informar, p. ej. la lista de lo que falta completar en un plan.
+  hideCancel?: boolean;
+  // Diálogo más ancho, para bodies que son una lista y no una pregunta corta.
+  wide?: boolean;
 };
 
 type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
@@ -120,20 +125,22 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="confirm-title"
-            className="relative w-full max-w-sm rounded-lg border border-line bg-white dark:bg-paper-2 p-5 shadow-[var(--shadow-card-hover)] animate-dialog-in"
+            className={`relative w-full ${opts.wide ? "max-w-lg" : "max-w-sm"} rounded-lg border border-line bg-white dark:bg-paper-2 p-5 shadow-[var(--shadow-card-hover)] animate-dialog-in`}
           >
             <h2 id="confirm-title" className="text-base font-semibold text-ink">
               {opts.title}
             </h2>
             {opts.body && (
-              <p className="mt-2 text-sm text-muted leading-relaxed whitespace-pre-line">
+              <p className="mt-2 max-h-[60vh] overflow-y-auto text-sm text-muted leading-relaxed whitespace-pre-line">
                 {opts.body}
               </p>
             )}
             <div className="mt-5 flex items-center justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => settle(false)}>
-                {opts.cancelLabel ?? "Cancelar"}
-              </Button>
+              {!opts.hideCancel && (
+                <Button variant="ghost" size="sm" onClick={() => settle(false)}>
+                  {opts.cancelLabel ?? "Cancelar"}
+                </Button>
+              )}
               <button
                 ref={confirmBtnRef}
                 type="button"

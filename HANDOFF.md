@@ -2,6 +2,39 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 28/jul/2026 — Planes: no se puede marcar Listo/Aprobado un plan incompleto (+ diálogo)
+
+- **Pedido**: no permitir marcar un plan como **Listo para enviar** si a algún
+  **publisher le falta el monto**, si hay algún **placement vacío**, o si a un
+  placement le falta la **métrica principal** o algún **campo principal**. Y que
+  al intentarlo, **un diálogo muestre qué falta completar**.
+- **`lib/plan-readiness.ts`** (nuevo): fuente ÚNICA de la regla (módulo puro, sin
+  DB ni React). `findPlanReadinessIssues(publishers)` devuelve la lista de lo que
+  falta; `formatReadinessIssues` / `readinessErrorMessage` la formatean. Reglas:
+  - **Publisher**: `totalPlannedUsd` en 0 → falta el monto; sin placements →
+    falta cargar al menos uno.
+  - **Placement vacío** (sin nombre, sin monto, sin cost method, sin fechas y sin
+    métricas) → se reporta como una sola cosa: completar la fila o eliminarla.
+  - **Placement incompleto**: nombre, monto, cost method, fecha de inicio, fecha
+    de fin.
+  - **Métrica principal**: la que corresponde al cost method
+    (`COST_METHOD_PRIMARY_METRIC`: dCPM/CPM→impressions, CPC→clicks,
+    CPV→views, CPA→conversions) tiene que estar en `metricsJson` y ser > 0.
+    **Flat/Other no la piden** (no tienen métrica canónica).
+- **Barrera real** (`transitionPlanStatus` en `app/actions/plans.ts`): reemplaza
+  el chequeo viejo de solo-fechas (#191) por el helper completo, para
+  `ready_to_send` **y** `approved`. Server-side: vale aunque no se pase por el editor.
+- **Diálogo** (`editor.tsx` + `components/confirm-dialog.tsx`): el editor calcula
+  los issues con el MISMO helper sobre los datos que ya tiene (sin ida y vuelta)
+  y, si hay, abre un diálogo con la lista `• Publisher · Placement: falta X` en
+  vez de disparar la acción. `ConfirmOptions` suma `hideCancel` (modo aviso, un
+  solo botón) y `wide` (para listas), y el body ahora scrollea si es largo.
+- **Nota de alcance**: NO se bloquea por **mercado** vacío — la app tolera "Sin
+  mercado" por diseño (el Análisis tiene su propia fila para eso).
+- **Verificación**: `tsc` + `eslint` + `next build` en verde; el helper probado a
+  mano con un plan completo (0 issues) y uno con todos los casos rotos.
+- **Sin cambios de schema. No requiere acción en prod.**
+
 ### Cambios de la sesión 27/jul/2026 — REVERT de la "card simple" de Estimación (vuelve la card detallada)
 
 - **Reportado**: en la tab Estimación del portal, **julio 2026 listaba planes de
@@ -3563,6 +3596,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
 | Agregar/cambiar pares rate↔delivery del editor | `DIRECT_METRIC_RATES` en `lib/cost-methods.ts` + nueva calculated metric en `scripts/seed.ts` con fórmula `amount / <delivery>` |
 | Editor de métricas del placement       | `MetricsEditor` y `PrincipalPairEditor` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx` |
+| Tocar qué se exige para marcar un plan **Listo/Aprobado** | `lib/plan-readiness.ts` (`findPlanReadinessIssues` — publisher sin monto o sin placements, placement vacío, nombre/monto/cost method/fechas, y la métrica principal del cost method vía `COST_METHOD_PRIMARY_METRIC`; Flat/Other no la piden). **Barrera real**: `transitionPlanStatus` en `app/actions/plans.ts`. **Diálogo** con lo que falta: `blockedByReadiness` en `…/planes/[planId]/editor.tsx` + `hideCancel`/`wide` de `components/confirm-dialog.tsx`. Agregar/sacar una exigencia = tocar SOLO el helper (lo comparten UI y server). |
 | Cambiar la card de estimación de facturación | `components/billing-estimate-card.tsx` (UI) + `getBillingEstimate` en `db/queries/dashboard.ts` (datos). **Vive en** `/billing-tracker?tab=estimates` (tab Estimates) y en el portal (tab Estimación). Meses cerrados → falta facturar $0; el facturado se lee de `total_net_usd`/`total_fee_usd` de la factura. |
 | Agregar otra dimensión al desglose de la estimación | Extender el `ProjectAgg` interno de `getBillingEstimate` con el nuevo agregado, propagar a `MonthlyBillingEstimate`, y agregar columna en `EstimateMonthCard` |
 | Tocar el semáforo "facturado vs total del plan" (bullets del portal) | `components/billing-estimate-card.tsx` (`BillingReconciliationBullets`, verde/azul/rojo) + `getClientBillingReconciliation` en `db/queries/dashboard.ts` (presupuesto completo vs facturado + media client-pays). Excel: `buildConciliacionSheet` en `lib/portal-estimate-xlsx.ts`. |
