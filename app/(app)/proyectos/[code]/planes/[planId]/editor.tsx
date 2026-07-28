@@ -37,6 +37,10 @@ import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm-dialog";
+import {
+  findPlanReadinessIssues,
+  formatReadinessIssues,
+} from "@/lib/plan-readiness";
 import type {
   PlanDetail,
   PlanFee,
@@ -146,7 +150,41 @@ export function PlanEditor({
     });
   };
 
-  const onMarkReady = () => {
+  // Lo que le falta al plan para poder pasar a Listo/Aprobado. Se calcula acá
+  // con los datos que el editor ya tiene (mismo helper que usa la server action,
+  // lib/plan-readiness.ts) para poder mostrar el diálogo sin ida y vuelta. La
+  // barrera real igual está en transitionPlanStatus.
+  const readinessIssues = findPlanReadinessIssues(
+    detail.publishers.map((pub) => ({
+      publisherName: pub.publisherName,
+      totalPlannedUsd: pub.totalPlannedUsd,
+      placements: pub.placements.map((pl) => ({
+        placementName: pl.placementName,
+        amountUsd: pl.amountUsd,
+        costMethod: pl.costMethod,
+        startDate: pl.startDate,
+        endDate: pl.endDate,
+        metricsJson: pl.metricsJson,
+      })),
+    })),
+  );
+
+  // Diálogo con el detalle de lo que falta. Devuelve true si el plan está
+  // incompleto (y ya avisó), para cortar la acción en el call-site.
+  const blockedByReadiness = async (target: "Listo" | "Aprobado") => {
+    if (readinessIssues.length === 0) return false;
+    await confirm({
+      title: `Falta completar el plan para marcarlo como ${target}`,
+      body: `${formatReadinessIssues(readinessIssues)}\n\nUn plan ${target} alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados.`,
+      confirmLabel: "Entendido",
+      hideCancel: true,
+      wide: true,
+    });
+    return true;
+  };
+
+  const onMarkReady = async () => {
+    if (await blockedByReadiness("Listo")) return;
     startTransition(async () => {
       const r = await transitionPlanStatus({ planId: detail.plan.id, to: "ready_to_send" });
       if (!r.ok) toast.error(r.error);
@@ -184,6 +222,7 @@ export function PlanEditor({
   };
 
   const onApprove = async () => {
+    if (await blockedByReadiness("Aprobado")) return;
     if (
       !(await confirm({
         title: `¿Aprobar el plan ${detail.plan.name} (v${detail.plan.currentVersion + 1})?`,

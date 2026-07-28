@@ -1,11 +1,16 @@
 "use server";
 
-import { and, asc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
 import { canApprovePlans } from "@/lib/permissions";
+import {
+  findPlanReadinessIssues,
+  type ReadinessPlacement,
+  readinessErrorMessage,
+} from "@/lib/plan-readiness";
 import {
   markets,
   mediaPlanFees,
@@ -452,38 +457,71 @@ export async function transitionPlanStatus(input: {
     };
   }
 
-  // Regla dura: un plan NO puede pasar a "listo" ni "aprobado" con placements
-  // sin fecha de inicio/fin. Un placement sin fechas no entra al prorrateo de la
-  // facturación ni de la estimación (getBillingEstimate lo saltea con
-  // `if (!startDate || !endDate) continue`), así que su media —y el management
-  // fee sobre esa media— desaparecen silenciosamente del estimado. Exigimos las
-  // fechas justo antes de que el plan se vuelva facturable (ready_to_send/approved).
+  // Regla dura: un plan NO puede pasar a "listo" ni "aprobado" incompleto —
+  // publisher sin monto o sin placements, placement vacío, o placement al que le
+  // falta un campo principal (nombre, monto, cost method, fechas) o la métrica
+  // principal de su cost method. Un plan Listo/Aprobado alimenta la facturación,
+  // la estimación y los exports: por ejemplo, un placement sin fechas no entra al
+  // prorrateo (getBillingEstimate lo saltea con `if (!startDate || !endDate)
+  // continue`), así que su media —y el management fee sobre esa media—
+  // desaparecen silenciosamente del estimado.
+  //
+  // La regla vive en lib/plan-readiness.ts porque el editor la usa también, para
+  // mostrar el diálogo con lo que falta antes de llamar acá. Ésta es la barrera
+  // real (server-side); el diálogo es la conveniencia.
   if (input.to === "ready_to_send" || input.to === "approved") {
-    const undated = await db
-      .select({ name: mediaPlanPlacements.placementName })
-      .from(mediaPlanPlacements)
-      .innerJoin(
-        mediaPlanPublishers,
-        eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
-      )
-      .where(
-        and(
-          eq(mediaPlanPublishers.mediaPlanId, input.planId),
-          or(
-            isNull(mediaPlanPlacements.startDate),
-            isNull(mediaPlanPlacements.endDate),
-          ),
-        ),
-      );
-    if (undated.length > 0) {
-      const names = undated
-        .map((p) => p.name?.trim() || "(placement sin nombre)")
-        .join(", ");
-      const target = input.to === "approved" ? "Aprobado" : "Listo";
-      return {
-        ok: false,
-        error: `No se puede marcar el plan como ${target}: estos placements no tienen fecha de inicio y/o fin — ${names}. Cargá las fechas: un placement sin fechas no entra en la facturación ni en la estimación.`,
-      };
+    const pubRows = await db
+      .select({
+        id: mediaPlanPublishers.id,
+        publisherName: publishers.name,
+        totalPlannedUsd: mediaPlanPublishers.totalPlannedUsd,
+      })
+      .from(mediaPlanPublishers)
+      .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
+      .where(eq(mediaPlanPublishers.mediaPlanId, input.planId))
+      .orderBy(asc(mediaPlanPublishers.sortOrder));
+
+    const mppIds = pubRows.map((p) => p.id);
+    const plRows = mppIds.length
+      ? await db
+          .select({
+            mediaPlanPublisherId: mediaPlanPlacements.mediaPlanPublisherId,
+            placementName: mediaPlanPlacements.placementName,
+            amountUsd: mediaPlanPlacements.amountUsd,
+            costMethod: mediaPlanPlacements.costMethod,
+            startDate: mediaPlanPlacements.startDate,
+            endDate: mediaPlanPlacements.endDate,
+            metricsJson: mediaPlanPlacements.metricsJson,
+          })
+          .from(mediaPlanPlacements)
+          .where(inArray(mediaPlanPlacements.mediaPlanPublisherId, mppIds))
+          .orderBy(asc(mediaPlanPlacements.sortOrder))
+      : [];
+
+    const byPub = new Map<string, ReadinessPlacement[]>();
+    for (const pl of plRows) {
+      const list = byPub.get(pl.mediaPlanPublisherId) ?? [];
+      list.push({
+        placementName: pl.placementName,
+        amountUsd: Number.parseFloat(pl.amountUsd ?? "0"),
+        costMethod: pl.costMethod,
+        startDate: pl.startDate,
+        endDate: pl.endDate,
+        metricsJson: pl.metricsJson ?? {},
+      });
+      byPub.set(pl.mediaPlanPublisherId, list);
+    }
+
+    const issues = findPlanReadinessIssues(
+      pubRows.map((p) => ({
+        publisherName: p.publisherName,
+        totalPlannedUsd: Number.parseFloat(p.totalPlannedUsd ?? "0"),
+        placements: byPub.get(p.id) ?? [],
+      })),
+    );
+
+    if (issues.length > 0) {
+      return { ok: false, error: readinessErrorMessage(issues, input.to) };
     }
   }
 

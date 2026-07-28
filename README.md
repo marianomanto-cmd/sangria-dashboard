@@ -206,6 +206,7 @@ lib/
   audit-format.ts           # entityNoun / actionVerb / entityLabel / actorLabel / formatRelativeDateTime
   auth.ts                   # getCurrentUser() (server-side)
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
+  plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado. Fuente única: server action (barrera) + editor (diálogo)
   client-portal.ts          # portal público: password compartido, slugs reservados, helpers PUROS (edge-safe, los usa el proxy)
   client-portal.server.ts   # cookie de sesión del portal (set/clear/has) + canAccessClientExport
   market-geo.ts             # geocoding de mercados → centroide (match exacto + por token); para el mapa de Análisis
@@ -315,13 +316,28 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).
 - Cada plan tiene su propio lifecycle: `draft` → `ready_to_send` → `approved` → `archived`.
 - Los planes pueden solapar fechas y estar todos `approved` al mismo tiempo.
-- **Regla dura — fechas obligatorias para facturar**: `transitionPlanStatus`
-  bloquea el pase a `ready_to_send` **y** a `approved` si algún placement del
-  plan no tiene `start_date` y `end_date` (el error lista los placements
-  culpables). Motivo: un placement sin fechas queda fuera del prorrateo de
+- **Regla dura — el plan tiene que estar COMPLETO para pasar a Listo/Aprobado**:
+  `transitionPlanStatus` bloquea el pase a `ready_to_send` **y** a `approved` si
+  el plan tiene algo sin cargar. La regla vive en **`lib/plan-readiness.ts`**
+  (`findPlanReadinessIssues`), fuente única que comparten la server action (la
+  barrera real) y el editor (el diálogo). Exige:
+  - **publisher**: `total_planned_usd` > 0 y al menos un placement;
+  - **placement**: no puede estar vacío, y necesita `placement_name`,
+    `amount_usd` > 0, `cost_method`, `start_date` y `end_date`;
+  - **métrica principal**: la que mapea el cost method en
+    `COST_METHOD_PRIMARY_METRIC` (dCPM/CPM→`impressions`, CPC→`clicks`,
+    CPV→`views`, CPA→`conversions`) tiene que estar en `metrics_json` y ser > 0.
+    `Flat`/`Other` no la piden (no tienen métrica canónica).
+
+  Motivo: un plan Listo/Aprobado alimenta facturación, estimación y exports —
+  p. ej. un placement sin fechas queda fuera del prorrateo de
   `getBillingEstimate` (`if (!startDate || !endDate) continue`), así que su media
-  —y el management fee sobre esa media— desaparecen del estimado. El editor
-  además marca en la planilla las fechas faltantes con un aviso (`⚠ falta`).
+  —y el management fee sobre esa media— desaparecen del estimado. **No** se
+  bloquea por mercado vacío: la app tolera "Sin mercado" por diseño.
+
+  Al intentarlo, el editor abre un **diálogo** con la lista de lo que falta
+  (`• Publisher · Placement: falta …`) en vez de disparar la acción; además marca
+  en la planilla las fechas faltantes con un aviso (`⚠ falta`).
 
 ### Aprobar, editar (nueva versión) y descartar el borrador
 - Aprobar (`ready_to_send` → `approved`) guarda un **snapshot inmutable** en
