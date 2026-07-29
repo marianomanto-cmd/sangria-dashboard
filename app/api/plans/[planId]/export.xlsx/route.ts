@@ -1,7 +1,14 @@
 import ExcelJS from "exceljs";
 import { getBrandLogo } from "@/lib/brand-logo";
-import { getPlanDetail } from "@/db/queries/project-detail";
+import {
+  getPlanDetail,
+  getPlanDetailAtVersion,
+} from "@/db/queries/project-detail";
 import { listMetricsForClient } from "@/app/actions/plans";
+import {
+  parseVersionParam,
+  versionFilenameSuffix,
+} from "@/lib/plan-export-version";
 import {
   evalFormula,
   placementMetricValue,
@@ -42,13 +49,27 @@ const allBorders = { top: thin, left: thin, bottom: thin, right: thin };
 // lib/budget-split.ts, compartidos con el preview del editor del plan.
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ planId: string }> },
 ) {
   const { planId } = await params;
-  const detail = await getPlanDetail(planId);
+  // ?v=N → baja el Excel de esa versión APROBADA (snapshot del historial), en
+  // vez del plan vigente. Sin el param, el comportamiento es el de siempre.
+  const version = parseVersionParam(req);
+  if (version === "invalid") {
+    return new Response("Bad request: ?v debe ser un entero >= 1", {
+      status: 400,
+    });
+  }
+  const detail =
+    version == null
+      ? await getPlanDetail(planId)
+      : await getPlanDetailAtVersion(planId, version);
   if (!detail) {
-    return new Response("Plan not found", { status: 404 });
+    return new Response(
+      version == null ? "Plan not found" : `Versión v${version} no encontrada`,
+      { status: 404 },
+    );
   }
 
   // Ruta pública en el proxy (para el portal del cliente). Barrera real:
@@ -507,7 +528,7 @@ export async function GET(
   // ─── Output ─────────────────────────────────────────────────────────────
   const buf = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
 
-  const filename = `${detail.plan.name}-V${detail.plan.currentVersion}.xlsx`.replace(
+  const filename = `${detail.plan.name}-V${detail.plan.currentVersion}${versionFilenameSuffix(version)}.xlsx`.replace(
     /[^A-Za-z0-9._-]+/g,
     "_",
   );

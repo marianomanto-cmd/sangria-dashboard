@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Copy,
   Download,
+  FileSpreadsheet,
   FileText,
   Plus,
   Receipt,
@@ -591,9 +592,16 @@ export function PlanEditor({
       {detail.snapshots.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold mb-2">Snapshots de aprobación</h2>
+          <p className="text-xs text-muted mb-2">
+            Cada versión aprobada se puede descargar tal como se aprobó (Excel o
+            PDF), sin afectar al plan vigente.
+          </p>
           <ul className="rounded-lg border border-line bg-white dark:bg-paper-2 divide-y divide-line-soft">
             {detail.snapshots.map((s) => (
-              <li key={s.id} className="px-5 py-2.5 flex items-center gap-3 text-sm">
+              <li
+                key={s.id}
+                className="px-5 py-2.5 flex items-center gap-3 text-sm flex-wrap"
+              >
                 <span className="font-mono text-ink-2">v{s.versionNumber}</span>
                 <span className="font-mono text-xs text-muted">
                   {s.approvedAt.toISOString().slice(0, 10)}
@@ -603,18 +611,38 @@ export function PlanEditor({
                     {s.notes}
                   </span>
                 )}
-                {s.signedPdfUrl ? (
+                {/* Descarga de la versión histórica: reconstruida desde el
+                    snapshot (?v=N), no del plan vigente. */}
+                <span className="ml-auto flex items-center gap-3 shrink-0">
                   <a
-                    href={s.signedPdfUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-accent text-xs hover:underline"
+                    href={`/api/plans/${detail.plan.id}/export.xlsx?v=${s.versionNumber}`}
+                    className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent"
+                    title={`Descargar el Excel del plan tal como se aprobó en v${s.versionNumber}`}
                   >
-                    PDF firmado
+                    <FileSpreadsheet size={13} />
+                    Excel
                   </a>
-                ) : (
-                  <span className="text-line text-xs">sin PDF</span>
-                )}
+                  <a
+                    href={`/api/plans/${detail.plan.id}/export.pdf?v=${s.versionNumber}`}
+                    className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent"
+                    title={`Descargar el PDF del plan tal como se aprobó en v${s.versionNumber}`}
+                  >
+                    <Download size={13} />
+                    PDF
+                  </a>
+                  {s.signedPdfUrl ? (
+                    <a
+                      href={s.signedPdfUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-accent text-xs hover:underline"
+                    >
+                      PDF firmado
+                    </a>
+                  ) : (
+                    <span className="text-line text-xs">sin PDF firmado</span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

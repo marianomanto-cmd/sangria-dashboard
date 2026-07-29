@@ -122,8 +122,8 @@ app/
       portal-filters.tsx      # filtros URL-based del portal: multi-select genérico (MultiSelect, búsqueda opcional) para Budget Origin (?bo) / Proyecto (?proj) / Mes (?month) / Campañas (?camp) — todos listas separadas por coma — + rango de fechas Desde/Hasta (Proyectos, ?pfrom/?pto)
   api/
     plans/[planId]/
-      export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + mercado + fechas por publisher/placement)
-      export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). Acceso: sesión interna O cookie de portal del cliente dueño
+      export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + mercado + fechas por publisher/placement). ?v=N → versión aprobada histórica
+      export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). ?v=N → versión aprobada histórica. Acceso: sesión interna O cookie de portal del cliente dueño
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
       pacing.xlsx/route.ts  # XLSX CONSOLIDADO del pacing de varias campañas (Resumen/Detalle/Por mercado). Público + canAccessClientExport + ownership
@@ -207,6 +207,7 @@ lib/
   auth.ts                   # getCurrentUser() (server-side)
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
   plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado. Fuente única: server action (barrera) + editor (diálogo)
+  plan-export-version.ts    # parseVersionParam(?v=N) de los exports del plan: null = plan vigente, N = versión aprobada histórica, "invalid" = 400
   client-portal.ts          # portal público: password compartido, slugs reservados, helpers PUROS (edge-safe, los usa el proxy)
   client-portal.server.ts   # cookie de sesión del portal (set/clear/has) + canAccessClientExport
   market-geo.ts             # geocoding de mercados → centroide (match exacto + por token); para el mapa de Análisis
@@ -348,6 +349,16 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - "Editar (nueva versión)" vuelve el plan `approved` → `draft` para trabajar la
   v(N+1) sin tocar el snapshot aprobado (`current_version` no cambia hasta la
   próxima aprobación).
+- **Descargar una versión vieja**: en el editor, la sección "Snapshots de
+  aprobación" tiene links **Excel** y **PDF** por versión. Van a las rutas de
+  export con **`?v=N`**, que reconstruyen el plan desde el snapshot vía
+  `getPlanDetailAtVersion` (`db/queries/project-detail.ts`) — misma forma que
+  `getPlanDetail`, así los builders de Excel/PDF se reusan sin cambios. Sin `?v`
+  se exporta el plan vigente (comportamiento de siempre); un `?v` inválido da
+  **400**. El archivo lleva sufijo `-historico`.
+  **Ojo**: los snapshots **no capturan tabs auxiliares**, así que un export
+  histórico sale sin ellos (para las versiones futuras habría que sumarlos a
+  `capturePlanSnapshot`; retroactivamente no se puede recuperar).
 - Si el planner se arrepiente, **"Descartar borrador"** (botón visible en el
   editor solo en un `draft` con `current_version > 0`) tira todos los cambios y
   restaura el plan al snapshot de la versión aprobada vigente, dejándolo de
