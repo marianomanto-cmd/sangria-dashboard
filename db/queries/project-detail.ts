@@ -506,6 +506,240 @@ export async function getPlanDetail(planId: string): Promise<PlanDetail | null> 
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// Plan RECONSTRUIDO desde el snapshot de una versión aprobada.
+//
+// Devuelve la MISMA forma que getPlanDetail, pero con los publishers /
+// placements / fees congelados en `media_plan_snapshots.snapshot_json` de la
+// versión pedida. Sirve para bajar el Excel/PDF de una versión vieja del plan
+// (historial de aprobaciones) sin tocar el plan vigente.
+//
+// Qué sale del snapshot y qué del presente:
+//   • Del SNAPSHOT: plan (nombre de entonces), publishers del plan, placements y
+//     fees — o sea los números tal cual se aprobaron.
+//   • Del PRESENTE: nombres de publisher y de mercado (son catálogos: el
+//     snapshot guarda sus IDs, y el nombre actual es la etiqueta correcta), más
+//     el contexto de proyecto / cliente / budget origin.
+//
+// Ojo: `capturePlanSnapshot` NO captura los tabs auxiliares, así que un export
+// de versión vieja sale sin ellos (`auxSheets: []`). Es una limitación conocida
+// de los snapshots viejos, no de este export.
+// ────────────────────────────────────────────────────────────────────────────
+
+// Forma de lo que guarda capturePlanSnapshot (app/actions/plans.ts). Los
+// numéricos y las fechas vuelven del JSONB como string.
+type SnapshotJson = {
+  plan?: typeof mediaPlans.$inferSelect;
+  publishers?: (typeof mediaPlanPublishers.$inferSelect)[];
+  placements?: (typeof mediaPlanPlacements.$inferSelect)[];
+  fees?: (typeof mediaPlanFees.$inferSelect)[];
+};
+
+export async function getPlanDetailAtVersion(
+  planId: string,
+  version: number,
+): Promise<PlanDetail | null> {
+  if (!Number.isInteger(version) || version < 1) return null;
+
+  const [planRow] = await db
+    .select({
+      plan: mediaPlans,
+      project: {
+        id: projects.id,
+        code: projects.code,
+        name: projects.name,
+        totalGrossBudgetUsd: projects.totalGrossBudgetUsd,
+      },
+      client: {
+        id: clients.id,
+        name: clients.name,
+        slug: clients.slug,
+        language: clients.language,
+      },
+      origin: { id: budgetOrigins.id, name: budgetOrigins.name },
+    })
+    .from(mediaPlans)
+    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+    .innerJoin(clients, eq(projects.clientId, clients.id))
+    .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
+    .where(and(eq(mediaPlans.id, planId), isNull(mediaPlans.deletedAt)))
+    .limit(1);
+
+  if (!planRow) return null;
+
+  const [snap] = await db
+    .select({
+      id: mediaPlanSnapshots.id,
+      versionNumber: mediaPlanSnapshots.versionNumber,
+      approvedAt: mediaPlanSnapshots.approvedAt,
+      notes: mediaPlanSnapshots.notes,
+      snapshotJson: mediaPlanSnapshots.snapshotJson,
+    })
+    .from(mediaPlanSnapshots)
+    .where(
+      and(
+        eq(mediaPlanSnapshots.mediaPlanId, planId),
+        eq(mediaPlanSnapshots.versionNumber, version),
+      ),
+    )
+    .limit(1);
+
+  if (!snap) return null;
+  const data = (snap.snapshotJson ?? {}) as SnapshotJson;
+  if (!data.plan) return null; // snapshot vacío / corrupto
+
+  const snapPubs = data.publishers ?? [];
+  const snapPlacements = data.placements ?? [];
+  const snapFees = data.fees ?? [];
+
+  // Catálogos del presente para etiquetar los IDs congelados.
+  const publisherIds = Array.from(
+    new Set(snapPubs.map((p) => p.publisherId).filter(Boolean)),
+  );
+  const pubCatalog = publisherIds.length
+    ? await db
+        .select({
+          id: publishers.id,
+          slug: publishers.slug,
+          name: publishers.name,
+          agencyPays: publishers.agencyPays,
+        })
+        .from(publishers)
+        .where(inArray(publishers.id, publisherIds))
+    : [];
+  const pubById = new Map(pubCatalog.map((p) => [p.id, p]));
+
+  const marketIds = Array.from(
+    new Set(
+      snapPlacements
+        .map((p) => p.marketId)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const marketCatalog = marketIds.length
+    ? await db
+        .select({ id: markets.id, name: markets.name })
+        .from(markets)
+        .where(inArray(markets.id, marketIds))
+    : [];
+  const marketNameById = new Map(marketCatalog.map((m) => [m.id, m.name]));
+
+  // Historial completo, para que la forma sea idéntica a getPlanDetail.
+  const snapshotRows = await db
+    .select({
+      id: mediaPlanSnapshots.id,
+      versionNumber: mediaPlanSnapshots.versionNumber,
+      approvedAt: mediaPlanSnapshots.approvedAt,
+      notes: mediaPlanSnapshots.notes,
+      pdfUrl: mediaPlanSnapshots.pdfUrl,
+      signedPdfUrl: mediaPlanSnapshots.signedPdfUrl,
+    })
+    .from(mediaPlanSnapshots)
+    .where(eq(mediaPlanSnapshots.mediaPlanId, planId))
+    .orderBy(desc(mediaPlanSnapshots.versionNumber));
+
+  const num = (v: unknown) => Number.parseFloat(String(v ?? "0")) || 0;
+
+  const placementsByPub = new Map<string, PlanPlacement[]>();
+  for (const p of snapPlacements) {
+    const list = placementsByPub.get(p.mediaPlanPublisherId) ?? [];
+    list.push({
+      id: p.id,
+      placementName: p.placementName,
+      marketId: p.marketId ?? null,
+      marketName: p.marketId ? (marketNameById.get(p.marketId) ?? null) : null,
+      audience: p.audience ?? null,
+      amountUsd: num(p.amountUsd),
+      costMethod: p.costMethod ?? null,
+      startDate: p.startDate ?? null,
+      endDate: p.endDate ?? null,
+      metricsJson: (p.metricsJson ?? {}) as Record<string, number>,
+      notesMd: p.notesMd ?? null,
+      sortOrder: p.sortOrder ?? 0,
+    });
+    placementsByPub.set(p.mediaPlanPublisherId, list);
+  }
+  for (const list of placementsByPub.values()) {
+    list.sort((a, b) => a.sortOrder - b.sortOrder);
+  }
+
+  const publisherGroups: PlanPublisherGroup[] = [...snapPubs]
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .map((mpp) => {
+      const cat = pubById.get(mpp.publisherId);
+      const placements = placementsByPub.get(mpp.id) ?? [];
+      return {
+        id: mpp.id,
+        publisherId: mpp.publisherId,
+        publisherSlug: cat?.slug ?? "",
+        // Un publisher borrado del catálogo después de la aprobación no se
+        // puede etiquetar: mostramos el fallback en vez de romper el export.
+        publisherName: cat?.name ?? "(publisher dado de baja)",
+        totalPlannedUsd: num(mpp.totalPlannedUsd),
+        agencyPays: mpp.agencyPaysOverride ?? cat?.agencyPays ?? true,
+        sortOrder: mpp.sortOrder ?? 0,
+        placements,
+        placementsTotalUsd: placements.reduce((s, p) => s + p.amountUsd, 0),
+      };
+    });
+
+  const totalMedia = publisherGroups.reduce((s, g) => s + g.totalPlannedUsd, 0);
+
+  const fees: PlanFee[] = [...snapFees]
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+    .map((f) => {
+      const ratePct = f.ratePct != null ? num(f.ratePct) : null;
+      let amount = num(f.amountUsd);
+      let isAutoComputed = false;
+      // Mismo criterio que getPlanDetail: el management fee con rate se DERIVA
+      // del total media (acá, el del snapshot).
+      if (
+        f.feeType === "management" &&
+        ratePct != null &&
+        ratePct > 0 &&
+        ratePct < 100
+      ) {
+        amount = (totalMedia * ratePct) / (100 - ratePct);
+        isAutoComputed = true;
+      }
+      return {
+        id: f.id,
+        feeType: f.feeType,
+        name: f.name,
+        amountUsd: amount,
+        ratePct,
+        isAutoComputed,
+        notes: f.notes ?? null,
+        sortOrder: f.sortOrder ?? 0,
+      };
+    });
+
+  const totalFees = fees.reduce((s, f) => s + f.amountUsd, 0);
+
+  return {
+    // El snapshot se captura ANTES de bumpear la versión, así que su
+    // plan.currentVersion es la anterior: lo forzamos a la versión pedida (y a
+    // 'approved') para que headers, labels y nombre de archivo digan V{n}.
+    plan: {
+      ...data.plan,
+      currentVersion: version,
+      status: "approved" as const,
+    },
+    project: planRow.project,
+    client: planRow.client,
+    budgetOrigin: planRow.origin,
+    publishers: publisherGroups,
+    fees,
+    snapshots: snapshotRows,
+    auxSheets: [], // los snapshots no capturan tabs auxiliares
+    totals: {
+      media: totalMedia,
+      fees: totalFees,
+      grand: totalMedia + totalFees,
+    },
+  };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Lista de proyectos "abiertos" (no closed) para el selector del MM
 // al crear un plan nuevo.
 // ────────────────────────────────────────────────────────────────────────────

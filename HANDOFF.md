@@ -2,6 +2,44 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 29/jul/2026 — Descargar versiones VIEJAS del plan (historial de aprobaciones)
+
+- **Pedido**: poder **bajar los planes viejos** del historial de versiones
+  aprobadas de cada media plan.
+- **`getPlanDetailAtVersion(planId, version)`** (`db/queries/project-detail.ts`,
+  nueva): reconstruye un `PlanDetail` **idéntico en forma** al de `getPlanDetail`,
+  pero con publishers / placements / fees congelados en
+  `media_plan_snapshots.snapshot_json` de esa versión. Así los builders de Excel y
+  PDF se reusan **sin tocarlos**.
+  - Del **snapshot**: el plan (nombre de entonces), sus publishers, placements y
+    fees — los números tal cual se aprobaron.
+  - Del **presente**: nombres de publisher y mercado (son catálogos; el snapshot
+    guarda IDs) + contexto de proyecto / cliente / budget origin.
+  - **Detalle clave**: `capturePlanSnapshot` corre ANTES de bumpear la versión, así
+    que `snapshot.plan.currentVersion` es la ANTERIOR. Se fuerza
+    `currentVersion = version` y `status = "approved"` para que headers, labels y
+    nombre de archivo digan V{n} correcto.
+  - Un `market_id` del snapshot puede apuntar a un mercado **ya borrado** (lo mismo
+    que maneja `revertPlanToApprovedSnapshot`): cae a nombre `null`, igual que el
+    `leftJoin` del plan vivo. No rompe el export.
+- **Rutas**: `export.xlsx` y `export.pdf` aceptan **`?v=N`**
+  (`lib/plan-export-version.ts`, `parseVersionParam`). Sin el param → plan vigente
+  (**comportamiento intacto**). Con `?v=N` → esa versión aprobada. Un `?v` basura
+  devuelve **400** en vez de bajar el plan actual sin avisar (un download
+  equivocado silencioso es peor que un error). El archivo sale con sufijo
+  **`-historico`** para no confundirlo en Descargas.
+- **UI** (`editor.tsx`, sección "Snapshots de aprobación"): cada versión ahora
+  tiene links **Excel** y **PDF** (además del "PDF firmado" si está cargado).
+- **Limitación conocida**: los snapshots **no capturan los tabs auxiliares**
+  (`capturePlanSnapshot` nunca los guardó), así que un export histórico sale sin
+  ellos (`auxSheets: []`). Para que las versiones futuras los tengan hay que
+  sumarlos a `capturePlanSnapshot` — no se puede recuperar retroactivamente.
+- **Verificación**: `tsc` + `eslint` + `next build` en verde; `parseVersionParam`
+  probado (v=1/7 ok, sin param → vigente, v=0/-2/abc/1.5 → 400). El shape del
+  snapshot se validó contra su productor (`capturePlanSnapshot`) y su otro
+  consumidor (`revertPlanToApprovedSnapshot`).
+- **Sin cambios de schema. No requiere acción en prod.**
+
 ### Cambios de la sesión 28/jul/2026 — Planes: no se puede marcar Listo/Aprobado un plan incompleto (+ diálogo)
 
 - **Pedido**: no permitir marcar un plan como **Listo para enviar** si a algún
@@ -3596,6 +3634,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
 | Agregar/cambiar pares rate↔delivery del editor | `DIRECT_METRIC_RATES` en `lib/cost-methods.ts` + nueva calculated metric en `scripts/seed.ts` con fórmula `amount / <delivery>` |
 | Editor de métricas del placement       | `MetricsEditor` y `PrincipalPairEditor` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx` |
+| Tocar la **descarga de versiones viejas** del plan (historial de aprobaciones) | `getPlanDetailAtVersion(planId, version)` en `db/queries/project-detail.ts` (reconstruye un `PlanDetail` desde `media_plan_snapshots.snapshot_json`; fuerza `currentVersion = version` + `status = approved` porque el snapshot se captura ANTES del bump). Param `?v=N`: `parseVersionParam` en `lib/plan-export-version.ts`, consumido por `export.xlsx/route.ts` y `export.pdf/route.ts` (sin `v` → plan vigente; `v` inválido → 400). Links por versión: sección "Snapshots de aprobación" de `…/planes/[planId]/editor.tsx`. **Los snapshots no capturan tabs auxiliares** → el export histórico va sin ellos. |
 | Tocar qué se exige para marcar un plan **Listo/Aprobado** | `lib/plan-readiness.ts` (`findPlanReadinessIssues` — publisher sin monto o sin placements, placement vacío, nombre/monto/cost method/fechas, y la métrica principal del cost method vía `COST_METHOD_PRIMARY_METRIC`; Flat/Other no la piden). **Barrera real**: `transitionPlanStatus` en `app/actions/plans.ts`. **Diálogo** con lo que falta: `blockedByReadiness` en `…/planes/[planId]/editor.tsx` + `hideCancel`/`wide` de `components/confirm-dialog.tsx`. Agregar/sacar una exigencia = tocar SOLO el helper (lo comparten UI y server). |
 | Cambiar la card de estimación de facturación | `components/billing-estimate-card.tsx` (UI) + `getBillingEstimate` en `db/queries/dashboard.ts` (datos). **Vive en** `/billing-tracker?tab=estimates` (tab Estimates) y en el portal (tab Estimación). Meses cerrados → falta facturar $0; el facturado se lee de `total_net_usd`/`total_fee_usd` de la factura. |
 | Agregar otra dimensión al desglose de la estimación | Extender el `ProjectAgg` interno de `getBillingEstimate` con el nuevo agregado, propagar a `MonthlyBillingEstimate`, y agregar columna en `EstimateMonthCard` |
