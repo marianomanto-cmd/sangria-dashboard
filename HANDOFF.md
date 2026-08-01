@@ -2960,6 +2960,10 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+0b3ebdd  Billing report (PDF de finanzas): sin fondo bordó, una sola tipografía, todo legible (#201)
+6178824  Planes: descargar las versiones viejas del historial de aprobaciones (#200)
+030feb3  Planes: no marcar Listo/Aprobado un plan incompleto + diálogo con lo que falta (#199)
+2e6ff9a  Revert "Portal (Estimación): card simple para el cliente" (vuelve la card detallada) (#198)
 932cfbb  Mapa (Análisis): burbujas de nivel país en azul (#195)
 6e432bc  Proyectos (dashboard): filtro por estado (#194)
 d52fcb0  Estimación (portal): semáforo facturado vs total del plan + bullets del gap (#193)
