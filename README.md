@@ -585,6 +585,12 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   la verdad estructural (override del bloque ?? default del publisher);
   `isBillable` es el flag editable del mes que además permite marcar
   no-facturable un publisher de agencia en un mes puntual.
+- **Estilo del PDF de finanzas** (excepción deliberada al look de marca): a
+  diferencia del resto de los exports, este reporte va **sin el header bordó**
+  — header gris claro, **una sola tipografía** (Helvetica) y un solo tamaño en
+  todas las celdas del cuerpo, y la columna Description hace **wrap** (la fila
+  crece) en vez de truncarse. Es un documento operativo que finanzas imprime y
+  reenvía: manda la legibilidad, no la marca.
 
 ### Campaign Tracker: consumo real vs goal
 - `campaign_placement_actuals (placement_id, metric_key, value_actual,
