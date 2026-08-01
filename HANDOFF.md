@@ -2,6 +2,47 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/ago/2026 — Billing report (PDF de finanzas): estilo legible, sin fondo bordó
+
+- **Pedido**: el reporte que se manda a finanzas tenía el **fondo bordó** en el
+  header ("molesta"), **mezclaba tipografías** dentro de una misma fila y había
+  texto **cortado**. Se pidió: sin bordó, misma tipografía en todas las celdas,
+  todo legible.
+- **`app/api/billings/[id]/report.pdf/route.ts`** (único archivo de código
+  tocado — el resto de los generadores mantiene el look de marca):
+  - **Header sin bordó**: gris muy claro (`#EDEDF0`) + texto tinta + línea
+    divisoria; se cierra la tabla con otra línea abajo. Zebra neutra
+    (`#F8F8F9`) en vez del beige anterior. Es un documento de finanzas que se
+    imprime y se reenvía: el bloque de color saturado no aportaba nada.
+  - **Una sola tipografía**: Helvetica en TODAS las celdas del cuerpo, mismo
+    size (9.5). Antes una fila alternaba Courier (#, Qty, Rate, Amount) y
+    Helvetica (Product/service, Description). El header es lo único bold.
+    Los dígitos de Helvetica son de ancho fijo, así que las columnas de plata
+    alinean igual sin monoespaciada.
+  - **Nada se trunca**: la Description ahora hace **wrap** en varias líneas y
+    la fila crece (alto dinámico, la zebra y el salto de página lo respetan).
+    Antes se cortaba con "..." a los 290pt.
+  - **Columnas de plata más anchas** (Rate 76pt / Amount 78pt vs 50pt): con
+    50pt un monto de 7 cifras salía cortado — en el screenshot del pedido se
+    veía literalmente `$5,812.` en Rate.
+  - **Bugs arreglados de paso**: (1) en el helper de texto `bold` cortocircuitaba
+    a `mono`, así que Amount salía en Helvetica-Bold (proporcional) mientras
+    Rate salía en Courier — dos columnas de plata contiguas que nunca alineaban;
+    (2) el loop de truncado sacaba 2 caracteres y agregaba 3, oscilaba y podía
+    terminar en un punto suelto en vez de "...". Ambos desaparecen con el nuevo
+    layout (no hay `mono` ni truncado).
+  - La geometría de columnas pasó de constantes sueltas `COL_*_X` a un objeto
+    `COL` con `{x, w}` por columna, y la paleta a constantes nombradas arriba
+    del archivo.
+- **Sin cambios de datos**: mismas filas, mismo filtro (`agencyPays &&
+  isBillable` para Media Placement, fees con imputación > 0), mismos montos y
+  mismo nombre de archivo. Es 100% presentación.
+- **Verificación**: `tsc` + `eslint` + `next build` en verde. Además se renderizó
+  el PDF real (código del route con data de ejemplo) y se rasterizó con pdf.js
+  para mirarlo: se chequeó una sola familia/size de fuente, montos de 7 cifras
+  completos, descripciones largas con wrap y multipágina (46 filas → 3 páginas)
+  con el header repetido en cada página. **No requiere acción en prod.**
+
 ### Cambios de la sesión 29/jul/2026 — Descargar versiones VIEJAS del plan (historial de aprobaciones)
 
 - **Pedido**: poder **bajar los planes viejos** del historial de versiones
@@ -3580,7 +3621,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
-| Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Columnas hardcodeadas en `COL_*` constants; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). |
+| Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Geometría de columnas hardcodeada en el objeto `COL` (`{x, w}` relativo a `MARGIN`) + paleta/tamaños en las constantes de arriba del archivo; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). **Estilo (pedido explícito)**: header gris claro **sin bordó**, una sola tipografía (Helvetica) y mismo size en todas las celdas del cuerpo, y la Description hace wrap (fila de alto dinámico) en vez de truncarse — si tocás anchos, no vuelvas a truncar ni a meter Courier. |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
