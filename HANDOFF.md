@@ -3009,6 +3009,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+cccba65  Billing: lo facturado deja de borrarse cuando cambia el plan — FK sin cascade + revert no destructivo (#203)
 0b3ebdd  Billing report (PDF de finanzas): sin fondo bordó, una sola tipografía, todo legible (#201)
 6178824  Planes: descargar las versiones viejas del historial de aprobaciones (#200)
 030feb3  Planes: no marcar Listo/Aprobado un plan incompleto + diálogo con lo que falta (#199)
