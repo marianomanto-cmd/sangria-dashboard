@@ -50,6 +50,28 @@ Estado del repo al cierre y plan para retomar en otra sesión.
 - **Verificación**: `tsc` + `eslint` + `next build` en verde. El diagnóstico se
   hizo contra la data real de prod (query de diagnóstico + auditoría) y la
   reconstrucción se validó aritméticamente mes por mes.
+- **Segunda tanda de daño** (el barrido global del SQL encontró dos planes más):
+  `COPA.m1164.BoostingIGGlobal` (2026-02 a 2026-05) y
+  `COPA.m1190.BoostingImposible` (2026-05 y 2026-06), **todos meses ya
+  facturados**. Reparación: **`db/billing-fees-repair-m1164-m1190.sql`**.
+  - **Los montos NO son estimados**: Set Up / Reporting salen del `audit_log`
+    (`setFeeImputation` audita cada escritura con el monto en el `after_json`),
+    y el management fee sale por diferencia contra el `total_fee_usd` que
+    sobrevivió. Los 6 meses dan exacto al centavo también por la fórmula del
+    prorrateo — dos caminos independientes que coinciden.
+  - Esto convierte al **audit_log en la fuente de recuperación** para este tipo
+    de daño: `entity_type = 'plan_billing_fee'`, monto en
+    `after_json->>'amountImputedUsd'`. Lo único no auditado es el management
+    fee automático (`autoRecomputeMgmtFees` no llama a `recordAudit`), pero es
+    derivable.
+  - **⚠️ Pendiente comercial**: en m1190 2026-06 se recargaron Set Up (500) y
+    Reporting (500) que ya estaban 100% imputados en 2026-05 — y ese mes **se
+    facturó** (factura 1430). O sea **$1.000 cobrados de más**. Como está
+    facturado, el SQL restaura lo que realmente se facturó (el plan queda con
+    esos fees sobre-imputados y la app lo marca con "Restante" en negativo); la
+    corrección es comercial (nota de crédito o descuento en un mes futuro), no
+    de datos. Distinto de m1172 2026-07, que estaba en **draft** y por eso ahí
+    sí se dejó afuera el duplicado.
 
 ### Cambios de la sesión 01/ago/2026 — Billing report (PDF de finanzas): estilo legible, sin fondo bordó
 
