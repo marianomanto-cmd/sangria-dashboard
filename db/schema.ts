@@ -524,6 +524,19 @@ export const planBillingPublishers = pgTable(
 // Imputación de fees del plan en un mes específico. La suma a lo largo
 // del tiempo de un fee no debería exceder al fee total del plan
 // (validación en app, no DB).
+//
+// ⚠️ REGLA DURA: LO FACTURADO YA ESTÁ FACTURADO.
+// Un plan cambia todo el tiempo (nueva versión, descartar borrador, editar
+// fees), pero lo que ya se imputó y se facturó tiene que seguir existiendo y
+// mostrándose. Por eso `media_plan_fee_id` es `no action` y NO `cascade`:
+// borrar un fee del plan NO puede llevarse en silencio la imputación de los
+// meses ya cargados. Si el fee tiene imputaciones > 0, el borrado falla y la
+// app lo explica (`removeFee` en app/actions/plans.ts).
+// `no action` (y no `restrict`) a propósito: el chequeo queda diferido al fin
+// de la sentencia, así el hard delete de un plan sigue funcionando — ahí
+// plan_billings cascadea a plan_billing_fees antes de que se evalúe la FK.
+// `plan_billing_id` sí queda en cascade: borrar el MES sí debe borrar sus
+// líneas.
 export const planBillingFees = pgTable(
   "plan_billing_fees",
   {
@@ -533,7 +546,7 @@ export const planBillingFees = pgTable(
       .references(() => planBillings.id, { onDelete: "cascade" }),
     mediaPlanFeeId: uuid("media_plan_fee_id")
       .notNull()
-      .references(() => mediaPlanFees.id, { onDelete: "cascade" }),
+      .references(() => mediaPlanFees.id, { onDelete: "no action" }),
     amountImputedUsd: numeric("amount_imputed_usd", {
       precision: 14,
       scale: 2,

@@ -19,6 +19,8 @@ import {
   mediaPlans,
   mediaPlanSnapshots,
   metricsCatalog,
+  planBillingFees,
+  planBillings,
   projects,
   publishers,
 } from "@/db/schema";
@@ -714,15 +716,18 @@ export async function revertPlanToApprovedSnapshot(input: {
     for (const m of existingMarkets) liveMarketIds.add(m.id);
   }
 
+  // Fees que el draft agregó y que ya tienen plata imputada en algún mes: no
+  // se borran aunque el snapshot no los tenga (lo facturado no se toca).
+  const keptBilledFees: string[] = [];
+
   try {
     await db.transaction(async (tx) => {
       // El delete de publishers cascadea a sus placements (FK onDelete cascade).
+      // Los consumos del billing (plan_billing_publishers) NO cuelgan de acá:
+      // apuntan al catálogo de publishers, así que sobreviven al revert.
       await tx
         .delete(mediaPlanPublishers)
         .where(eq(mediaPlanPublishers.mediaPlanId, input.planId));
-      await tx
-        .delete(mediaPlanFees)
-        .where(eq(mediaPlanFees.mediaPlanId, input.planId));
 
       // Reinsertar publishers del snapshot (old id → new id para los placements).
       const idMap = new Map<string, string>();
@@ -764,10 +769,45 @@ export async function revertPlanToApprovedSnapshot(input: {
         );
       }
 
-      const fees = data.fees ?? [];
-      if (fees.length > 0) {
-        await tx.insert(mediaPlanFees).values(
-          fees.map((f) => ({
+      // ── Fees: reconciliación NO destructiva ───────────────────────────────
+      // Los fees NO se borran y reinsertan como los publishers. Cada fee es el
+      // padre de las imputaciones mensuales (plan_billing_fees), o sea de lo
+      // YA FACTURADO: si lo borráramos, se llevaría puesta la historia de
+      // billing de todos los meses (antes pasaba exactamente eso, y "Imputado
+      // antes" quedaba en 0 para siempre). En cambio:
+      //   · fee del snapshot que ya existe (mismo id) → UPDATE a los valores
+      //     aprobados. El id se mantiene, así que las imputaciones siguen
+      //     colgando del mismo fee.
+      //   · fee del snapshot que no existe → INSERT conservando el id del
+      //     snapshot (si el draft lo había borrado, sus imputaciones no
+      //     existen igual, pero volver a usar el id evita divergencias).
+      //   · fee vivo que el snapshot no tiene (lo agregó el draft) → se borra
+      //     SOLO si no tiene nada imputado; si ya se imputó en algún mes, se
+      //     conserva (lo facturado no se toca) y se reporta.
+      const snapFees = data.fees ?? [];
+      const liveFees = await tx
+        .select({ id: mediaPlanFees.id })
+        .from(mediaPlanFees)
+        .where(eq(mediaPlanFees.mediaPlanId, input.planId));
+      const liveFeeIds = new Set(liveFees.map((f) => f.id));
+      const snapFeeIds = new Set(snapFees.map((f) => f.id));
+
+      for (const f of snapFees) {
+        if (liveFeeIds.has(f.id)) {
+          await tx
+            .update(mediaPlanFees)
+            .set({
+              feeType: f.feeType,
+              name: f.name,
+              ratePct: f.ratePct,
+              amountUsd: f.amountUsd,
+              notes: f.notes,
+              sortOrder: f.sortOrder,
+            })
+            .where(eq(mediaPlanFees.id, f.id));
+        } else {
+          await tx.insert(mediaPlanFees).values({
+            id: f.id,
             mediaPlanId: input.planId,
             feeType: f.feeType,
             name: f.name,
@@ -775,8 +815,30 @@ export async function revertPlanToApprovedSnapshot(input: {
             amountUsd: f.amountUsd,
             notes: f.notes,
             sortOrder: f.sortOrder,
-          })),
-        );
+          });
+        }
+      }
+
+      const extraFeeIds = liveFees
+        .map((f) => f.id)
+        .filter((id) => !snapFeeIds.has(id));
+      for (const feeId of extraFeeIds) {
+        const [imputed] = await tx
+          .select({
+            total: sql<string>`coalesce(sum(${planBillingFees.amountImputedUsd}), 0)`,
+          })
+          .from(planBillingFees)
+          .where(eq(planBillingFees.mediaPlanFeeId, feeId));
+        if (Number.parseFloat(imputed.total) > 0) {
+          keptBilledFees.push(feeId);
+          continue;
+        }
+        // Sin imputar: limpiamos las filas en 0 que precrea el billing del mes
+        // y recién ahí borramos el fee (la FK es `no action`, no cascade).
+        await tx
+          .delete(planBillingFees)
+          .where(eq(planBillingFees.mediaPlanFeeId, feeId));
+        await tx.delete(mediaPlanFees).where(eq(mediaPlanFees.id, feeId));
       }
 
       // Restaurar metadata (nombre + notas) y volver a 'approved'. currentVersion
@@ -810,6 +872,8 @@ export async function revertPlanToApprovedSnapshot(input: {
       notesMd: data.plan.notesMd,
       status: "approved",
       revertedToVersion: plan.currentVersion,
+      // Fees del draft que se conservaron por tener imputaciones ya cargadas.
+      keptBilledFees,
     },
   });
 
@@ -1313,6 +1377,37 @@ export async function removeFee(feeId: string): Promise<Result> {
     .limit(1);
   if (!before) return { ok: false, error: "No encontrado" };
 
+  // Lo facturado no se borra: si el fee ya tiene plata imputada en algún mes,
+  // borrarlo se llevaría puesta esa imputación (y el mes quedaría con un total
+  // que no cierra contra ninguna línea). Cortamos acá y decimos en qué meses
+  // está, para que la analista los ponga en 0 primero si de verdad quiere
+  // sacarlo del plan.
+  const imputedMonths = await db
+    .select({
+      month: planBillings.month,
+      amount: planBillingFees.amountImputedUsd,
+    })
+    .from(planBillingFees)
+    .innerJoin(planBillings, eq(planBillingFees.planBillingId, planBillings.id))
+    .where(eq(planBillingFees.mediaPlanFeeId, feeId))
+    .orderBy(asc(planBillings.month));
+
+  const billed = imputedMonths.filter((m) => Number.parseFloat(m.amount) > 0);
+  if (billed.length > 0) {
+    const detalle = billed
+      .map((m) => `${m.month}: $${Number.parseFloat(m.amount).toFixed(2)}`)
+      .join(" · ");
+    return {
+      ok: false,
+      error: `No se puede eliminar "${before.name}": ya tiene imputaciones cargadas en el billing (${detalle}). Poné esos meses en 0 y volvé a intentar.`,
+    };
+  }
+
+  // Solo quedan filas en 0 (las precrea el billing de cada mes). Se limpian a
+  // mano porque la FK es `no action`: sin esto el delete del fee falla.
+  await db
+    .delete(planBillingFees)
+    .where(eq(planBillingFees.mediaPlanFeeId, feeId));
   await db.delete(mediaPlanFees).where(eq(mediaPlanFees.id, feeId));
 
   await recordAudit({
