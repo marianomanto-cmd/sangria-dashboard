@@ -1953,6 +1953,7 @@ function FeeRow({
   startTransition: StartTransition;
 }) {
   const confirm = useConfirm();
+  const toast = useToast();
 
   const update = (
     partial: Omit<Parameters<typeof updateFee>[0], "feeId">,
@@ -1973,7 +1974,10 @@ function FeeRow({
     )
       return;
     startTransition(async () => {
-      await removeFee(fee.id);
+      // Puede fallar a propósito: un fee con imputaciones cargadas no se borra
+      // (se llevaría puesto lo ya facturado). El error dice en qué meses está.
+      const r = await removeFee(fee.id);
+      if (!r.ok) toast.error(r.error);
       onChange();
     });
   };

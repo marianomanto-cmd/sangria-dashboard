@@ -2,6 +2,55 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 03/ago/2026 — Lo facturado ya no se borra cuando cambia el plan
+
+- **Síntoma reportado**: en el billing del plan de tarifas de Viaja Panamá, por
+  más que se cargaban fees mes a mes, al mes siguiente **"Imputado antes"
+  aparecía en 0**.
+- **Diagnóstico (no era un bug de lectura: los datos NO estaban)**. En el plan
+  `COPA.m1172.TarifasViajaPanama` (`0ae7d4a1…`) los billings 2026-03 a 2026-07
+  conservaban `total_fee_usd` pero tenían **cero filas** en `plan_billing_fees`.
+  Los consumos por publisher seguían intactos y no había filas huérfanas: firma
+  de un **DELETE en cascada**.
+  - Causa: `plan_billing_fees.media_plan_fee_id` era `ON DELETE CASCADE` hacia
+    `media_plan_fees`, y **"Descartar borrador"**
+    (`revertPlanToApprovedSnapshot`) borraba TODOS los fees del plan y los
+    reinsertaba con **ids nuevos**. Cada revert se llevaba en silencio la
+    imputación de todos los meses del plan, incluidos los ya facturados.
+  - Auditoría: pares de `update` sobre el plan el 31/jul (18:33, 18:39, 19:08,
+    19:12 — patrón "editar nueva versión" + "descartar borrador") y otro el
+    03/ago 12:12, **19 minutos después** de que se creara el billing de julio.
+  - Consecuencia de plata: en julio se volvieron a cargar Set Up (500) y
+    Reporting (1500) **ya imputados** entre marzo y mayo → $2.000 duplicados en
+    un mes todavía en draft.
+- **Fix estructural** (aplica a todos los planes, no solo a éste):
+  - `db/schema.ts`: la FK pasa a **`no action`**. Nunca más un borrado de fee se
+    lleva la historia de billing. Es `no action` y no `restrict` para que el
+    hard delete de un plan siga andando (el chequeo queda diferido al fin de la
+    sentencia, cuando `plan_billings` ya cascadeó a `plan_billing_fees`).
+  - `revertPlanToApprovedSnapshot` (`app/actions/plans.ts`): los fees ya **no se
+    borran y reinsertan**. Se reconcilian — update del que existe (mismo id →
+    la imputación sigue colgando), insert del que falta **conservando el id del
+    snapshot**, y borrado del que agregó el draft **solo si no tiene nada
+    imputado** (si tiene, se conserva y va al audit como `keptBilledFees`).
+    Publishers y placements siguen igual: el billing no cuelga de ellos.
+  - `removeFee`: pre-chequea imputaciones y devuelve error con **los meses y
+    montos** en vez de borrar; si solo hay filas en 0 (las precrea
+    `ensureBillingForMonth`) las limpia y borra el fee. La UI ahora **muestra**
+    ese error (antes `FeeRow` ignoraba el resultado de la action).
+- **⚠️ ACCIÓN EN PROD**: correr **`db/billing-fees-no-cascade.sql`** en el SQL
+  Editor de Supabase, junto con el deploy. Tiene dos partes en una transacción:
+  (1) el `ALTER TABLE` de la FK y (2) la **reconstrucción de las imputaciones
+  borradas** del m1172 (marzo–julio), derivadas de `total_fee_usd`: management
+  13% prorrateado por consumo + set up + reporting, cierra al centavo en los
+  cinco meses. Julio se restaura **sin** los $2.000 duplicados (solo el
+  management fee → total del mes 12.217,64 → 10.217,64) y se recalculan los
+  totales. Al final trae bloques de verificación, incluido un **barrido global**
+  que lista cualquier otro mes con fee cobrado y sin líneas.
+- **Verificación**: `tsc` + `eslint` + `next build` en verde. El diagnóstico se
+  hizo contra la data real de prod (query de diagnóstico + auditoría) y la
+  reconstrucción se validó aritméticamente mes por mes.
+
 ### Cambios de la sesión 01/ago/2026 — Billing report (PDF de finanzas): estilo legible, sin fondo bordó
 
 - **Pedido**: el reporte que se manda a finanzas tenía el **fondo bordó** en el
@@ -3624,6 +3673,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el nombre de archivo del export | `filename` en cada ruta `export.{pdf,xlsx}/route.ts`: hoy `{plan.name}-V{currentVersion}`. |
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
+| Tocar algo que borre/recree fees de un plan | **Regla dura: lo facturado ya está facturado.** `plan_billing_fees.media_plan_fee_id` es `no action` (no cascade) — ver `db/schema.ts`. `revertPlanToApprovedSnapshot` reconcilia los fees en vez de borrarlos y `removeFee` bloquea el borrado si hay imputaciones > 0 (`app/actions/plans.ts`). Si agregás un camino nuevo que toque `media_plan_fees`, no uses delete+insert: rompe el histórico de billing. Migración de la FK: `db/billing-fees-no-cascade.sql`. |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Geometría de columnas hardcodeada en el objeto `COL` (`{x, w}` relativo a `MARGIN`) + paleta/tamaños en las constantes de arriba del archivo; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). **Estilo (pedido explícito)**: header gris claro **sin bordó**, una sola tipografía (Helvetica) y mismo size en todas las celdas del cuerpo, y la Description hace wrap (fila de alto dinámico) en vez de truncarse — si tocás anchos, no vuelvas a truncar ni a meter Courier. |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |

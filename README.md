@@ -367,6 +367,15 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   draft y reinserta el del snapshot, mapeando old→new ids), restaura nombre +
   notas y vuelve a `approved`. Pre-chequea colisión de nombre con el partial
   unique index si el draft había renombrado el plan. Es irreversible.
+- **Los fees NO se borran en el revert** (regla dura: lo facturado ya está
+  facturado). Publishers y placements sí se borran y reinsertan, porque el
+  billing no cuelga de ellos (`plan_billing_publishers` apunta al catálogo de
+  publishers). Los fees en cambio son el padre de `plan_billing_fees`, o sea de
+  lo ya imputado y facturado: por eso el revert los **reconcilia** en vez de
+  recrearlos — actualiza el fee que ya existe (mismo id → la imputación sigue
+  colgando de él), inserta el que falta **conservando el id del snapshot**, y
+  borra el que el draft agregó **solo si no tiene nada imputado** (si ya se
+  imputó, se conserva y queda registrado en el audit como `keptBilledFees`).
 - **Snapshot vs. FKs que pueden desaparecer**: el snapshot es JSONB congelado,
   así que puede referenciar un `market_id` que ya no existe (los markets se
   borran/editan desde config; la FK live es `onDelete: set null`). Al restaurar,
@@ -585,6 +594,19 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   la verdad estructural (override del bloque ?? default del publisher);
   `isBillable` es el flag editable del mes que además permite marcar
   no-facturable un publisher de agencia en un mes puntual.
+- **Lo facturado ya está facturado** (regla dura): un plan cambia todo el tiempo
+  (nueva versión, descartar borrador, editar fees), pero lo que ya se imputó en
+  un mes tiene que seguir existiendo y mostrándose. Por eso
+  `plan_billing_fees.media_plan_fee_id` es **`no action`, NO `cascade`**: borrar
+  un fee del plan no puede llevarse en silencio la imputación de los meses ya
+  cargados. `removeFee` (`app/actions/plans.ts`) pre-chequea y devuelve un error
+  con los meses y montos si el fee tiene imputaciones > 0 (hay que ponerlos en 0
+  primero); si solo tiene filas en 0 —las que precrea `ensureBillingForMonth`—
+  las limpia y borra el fee. `plan_billing_id` sí queda en `cascade`: borrar el
+  **mes** sí borra sus líneas. Es `no action` y no `restrict` a propósito: el
+  chequeo diferido al fin de la sentencia deja andar el hard delete de un plan
+  (ahí `plan_billings` cascadea a `plan_billing_fees` antes de evaluar la FK).
+  Migración: `db/billing-fees-no-cascade.sql`.
 - **Estilo del PDF de finanzas** (excepción deliberada al look de marca): a
   diferencia del resto de los exports, este reporte va **sin el header bordó**
   — header gris claro, **una sola tipografía** (Helvetica) y un solo tamaño en
