@@ -64,6 +64,24 @@ Estado del repo al cierre y plan para retomar en otra sesión.
     `after_json->>'amountImputedUsd'`. Lo único no auditado es el management
     fee automático (`autoRecomputeMgmtFees` no llama a `recordAudit`), pero es
     derivable.
+  - **m1164 2026-07** (estaba en `ready`, sin facturar): el Set Up de julio era
+    un duplicado (feb 500 + jun 500 ya completaban el fee de 1000), cargado
+    cuando "Imputado antes" mostraba 0 por este bug. Se puso en 0 y se recalculó
+    el mes (3688.06 → 3188.06). El Reporting de ese plan sí cerraba exacto.
+  - **Sobre-imputaciones remanentes: no son daño de la cascada.** La
+    verificación de fees sobre-imputados trae ~8 planes viejos ya triagueados: (a) ruido de redondeo del prorrateo (m1033, +0.12); (b)
+    management fee prorrateado cuando el plan tenía más media y después se la
+    bajaron — el total se deriva de la media actual, así que encoge (m1058,
+    m1059, m1068, m1075, m1108, CPA.1062); (c) fees fijos de 2025 en múltiplos
+    exactos (m1073, m1089) que entraron por la **importación histórica**
+    (`scripts/seed.ts` inserta `plan_billing_fees` sin `recordAudit`) — cero
+    filas en `audit_log` para esos planes lo confirma. En los tres casos la
+    imputación es la que se facturó; lo que queda desactualizado es el total del
+    fee cargado en el plan. Está anotado también en el SQL de reparación.
+  - **Pendiente**: los planes de **2025 están 100% facturados** — falta cerrarlos
+    en el dashboard (completar imputaciones contra las facturas reales) para que
+    no figuren con saldo por facturar. Se hace con una carga puntual cuando
+    estén las facturas.
   - **⚠️ Pendiente comercial**: en m1190 2026-06 se recargaron Set Up (500) y
     Reporting (500) que ya estaban 100% imputados en 2026-05 — y ese mes **se
     facturó** (factura 1430). O sea **$1.000 cobrados de más**. Como está

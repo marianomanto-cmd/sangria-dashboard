@@ -101,9 +101,29 @@ where b.id in (
 group by mp.name, b.month, b.status, b.invoice_number, b.total_fee_usd
 order by mp.name, b.month;
 
--- 2) Fees sobre-imputados (lo imputado supera el total del fee). Esperado:
---    SOLO Set Up y Reporting de m1190, en 1000 sobre 500 → los $1.000 de más
---    ya facturados en la 1430. Cualquier otra fila acá hay que mirarla.
+-- 2) Fees sobre-imputados (lo imputado supera el total del fee).
+--
+--    OJO: esta query trae ~8 planes viejos que NO son daño de la cascada (la
+--    cascada dejaba filas FALTANTES, no de más). Triage de cada una:
+--      · Ruido de redondeo del prorrateo mensual (m1033: +0.12 en 3 meses).
+--      · Management fee prorrateado cuando el plan tenía MÁS media, y después
+--        le bajaron la media: el total se deriva de la media actual
+--        (TM × pct/(100−pct)), así que encoge y lo ya imputado queda por
+--        encima (m1058, m1059, m1068, m1075, m1108, CPA.1062). La imputación
+--        fue correcta cuando se hizo y ya se reportó → lo facturado ya está
+--        facturado, no se toca.
+--      · Fees fijos de 2025 en múltiplos exactos (m1073 Reporting 3×500,
+--        m1089 Reporting 2×500): entraron por la **importación histórica**
+--        (`scripts/seed.ts` inserta plan_billing_fees sin recordAudit), no por
+--        la app — no hay ni una fila en audit_log para esos planes. Reflejan lo
+--        que se facturó en 2025; el dato flojo es el total del fee cargado en
+--        el plan, no las imputaciones. Los planes 2025 se van a cerrar contra
+--        las facturas reales (están 100% facturados), así que estos números se
+--        ajustan en esa pasada, no acá.
+--
+--    Lo ÚNICO esperable de esta reparación: Set Up y Reporting de m1190, en
+--    1000 sobre 500 → los $1.000 de más ya facturados en la 1430 (pendiente
+--    comercial). Cualquier fila NUEVA fuera de esa lista sí hay que mirarla.
 select mp.name as plan, f.name as fee, f.fee_type,
        case when f.rate_pct is not null
             then round((select coalesce(sum(mpp.total_planned_usd), 0)
