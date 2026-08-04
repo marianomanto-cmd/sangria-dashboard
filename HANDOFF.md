@@ -77,6 +77,13 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   invisible en /auditoria). Después, dos bloques de verificación.
   - **NO toca**: `invoice_number`, `status`, `sent_at`/`paid_at`,
     `total_fee_usd` / `plan_billing_fees` ni `amount_real_usd`.
+  - **Estados y números de factura: quedan como están** (confirmado 04/ago).
+    Los meses en `invoiced` siguen en "Facturado" con su mismo número (1384,
+    1386, 1403, 1420), y los tres meses de `COPA.m1149StopoverDGEN` que están
+    en `sent` **se quedan en `sent`** — no se les inventa número ni se los marca
+    facturados; finanzas se los carga por la UI cuando corresponda. La
+    corrección es solo de MONTOS. La VERIFICACIÓN A trae `estado_mes` y
+    `factura` para poder constatarlo de un vistazo.
   - **El management fee sobre la media de Google SÍ se cobra** (confirmado por
     el dueño del negocio) y el script no lo toca. Además **no se cae solo
     después**: `autoRecomputeMgmtFees` calcula el prorrateo del mes sumando

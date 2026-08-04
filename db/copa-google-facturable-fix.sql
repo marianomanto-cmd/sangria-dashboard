@@ -31,7 +31,14 @@
 --
 -- QUÉ **NO** TOCA:
 --   · `invoice_number`, `status`, `sent_at`, `paid_at` — las facturas no se
---     tocan.
+--     tocan. **Decisión confirmada (04/ago)**: cada mes queda con el estado y
+--     el número de factura que ya tenía. Los meses en `invoiced` siguen en
+--     "Facturado" con su mismo número (1384, 1386, 1403, 1420); los tres meses
+--     de `COPA.m1149StopoverDGEN` que están en `sent` **se quedan en `sent`** —
+--     no se inventa un número ni se los marca facturados. Finanzas les carga el
+--     número por la UI cuando corresponda. Acá solo se corrigen los MONTOS.
+--     (La VERIFICACIÓN A de abajo trae `estado_mes` y `factura` justamente para
+--     que se vea que quedaron igual.)
 --   · `total_fee_usd` ni `plan_billing_fees` — **el management fee sobre la
 --     media de Google SÍ se cobra** y no se toca. Por la decisión de negocio
 --     #182 el fee va sobre TODA la media gestionada, aunque el cliente le pague
