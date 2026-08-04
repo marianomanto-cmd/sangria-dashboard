@@ -35,8 +35,40 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   Google con monto 0, un `agency_pays_override` de bloque, meses fuera de la
   ventana y otro cliente con su propio Google). Cada caso cayó en el veredicto
   correcto y los filtros de mes/cliente aislaron bien.
-- **Pendiente**: correr la auditoría contra prod y decidir, mes por mes, si hay
-  que emitir nota de crédito.
+- **RESULTADO CONTRA PROD (bloque 3, corrido el 04/ago)** — hay Google sumando
+  al total facturado en los tres meses, en tres planes:
+
+  | mes | plan | estado | factura | total media hoy | Google de más | corregido |
+  |---|---|---|---|---|---|---|
+  | 2026-03 | COPA.m1177.VideoViews | invoiced | 1386 | 2.043,78 | **2.043,78** | 0,00 |
+  | 2026-03 | COPA.m1172.TarifasViajaPanama | invoiced | 1384 | 12.337,70 | **6.856,90** | 5.480,80 |
+  | 2026-03 | COPA.m1149StopoverDGEN | sent | — | 40.619,88 | **40.619,88** | 0,00 |
+  | 2026-04 | COPA.m1177.VideoViews | invoiced | 1403 | 13.849,09 | **10.349,16** | 3.499,93 |
+  | 2026-04 | COPA.m1149StopoverDGEN | sent | — | 49.427,33 | **49.427,33** | 0,00 |
+  | 2026-05 | COPA.m1177.VideoViews | invoiced | 1420 | 12.581,72 | **12.581,72** | 0,00 |
+  | 2026-05 | COPA.m1149StopoverDGEN | sent | — | 52.769,68 | **52.769,68** | 0,00 |
+
+  - **Ya facturado** (facturas 1384, 1386, 1403, 1420): **31.831,56** →
+    corrección **comercial**, no de datos.
+  - **Todavía en `sent`, sin factura** (los tres meses de m1149StopoverDGEN):
+    **142.816,89** → se corrige antes de facturar. Es la urgencia.
+  - Total expuesto: **174.648,45**.
+  - Los fees **no** cambian: por decisión de negocio (#182) el management fee se
+    cobra sobre TODA la media, incluida la que paga el cliente directo.
+- **⚠️ A confirmar antes de tocar nada: ¿YouTube cuenta como Google?** El patrón
+  de la auditoría incluye la familia entera (YouTube, DV360, PMax, Search…), y
+  `COPA.m1177.VideoViews` es justamente YouTube. Si a Copa **sí** se le factura
+  YouTube, los tres meses de m1177 son falsos positivos y lo ya facturado baja
+  de 31.831,56 a **6.856,90** (solo m1172). `m1149StopoverDGEN` (DemandGen) y el
+  bloque Google de m1172 no tienen ambigüedad. El bloque 2b desglosa por
+  publisher para resolverlo.
+- **Pendiente**: correr el bloque 2b para saber si es MODO 1 (catálogo mal
+  configurado) o MODO 2 (bug de la app), corregir los meses en `sent` antes de
+  facturar, y decidir la nota de crédito de lo ya facturado.
+- **Pendiente de código (no hecho en esta sesión)**: `recalcBillingTotals` filtra
+  solo por `is_billable` mientras que el PDF filtra por `agencyPays &&
+  isBillable`. Habría que unificar el predicado para que el total del mes y el
+  PDF no puedan discrepar nunca.
 
 ### Cambios de la sesión 04/ago/2026 — Carga manual: proyecto "Tarifas Viaja Panama V2" (Copa, budget Online)
 

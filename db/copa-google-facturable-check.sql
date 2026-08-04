@@ -148,6 +148,63 @@ ORDER BY
 
 
 -- ────────────────────────────────────────────────────────────────────────────
+-- BLOQUE 2b — Desglose por publisher: QUÉ publisher suma y POR QUÉ
+-- ────────────────────────────────────────────────────────────────────────────
+-- Este es el que decide qué hay que arreglar. Separa los dos modos de falla:
+--
+--   MODO 1 (`is_billable` + `agency_pays`)      → configuración: el publisher
+--     figura como "agencia paga" en el catálogo (o en el override del bloque).
+--     Suma al total Y sale como línea en el PDF. Se arregla en el catálogo.
+--   MODO 2 (`is_billable` + NO `agency_pays`)   → bug de la app: el publisher
+--     está bien configurado como "cliente paga directo", así que NO sale en el
+--     PDF, pero `recalcBillingTotals` igual lo suma al `total_net_usd`. La
+--     factura no cierra con el PDF y no hay forma de verlo desde la UI.
+--
+-- Ojo: MODO 1 es lo ESPERADO para Meta, TikTok y cualquier publisher que la
+-- agencia sí factura. Solo es un problema cuando la fila es de Google.
+WITH ventana AS (
+  SELECT unnest(ARRAY['2026-03', '2026-04', '2026-05']) AS month
+),
+efectivo AS (
+  SELECT mpp.media_plan_id, mpp.publisher_id,
+         bool_or(COALESCE(mpp.agency_pays_override, pub.agency_pays)) AS agency_pays
+  FROM media_plan_publishers mpp
+  JOIN publishers pub ON pub.id = mpp.publisher_id
+  GROUP BY mpp.media_plan_id, mpp.publisher_id
+)
+SELECT
+  pb.month,
+  prj.code                                   AS proyecto,
+  mp.name                                    AS plan,
+  pb.status::text                            AS estado_mes,
+  pb.invoice_number                          AS factura,
+  pub.name                                   AS publisher,
+  COALESCE(ef.agency_pays, pub.agency_pays)  AS agency_pays,
+  pbp.is_billable,
+  pbp.amount_real_usd                        AS monto,
+  CASE
+    WHEN pbp.is_billable AND COALESCE(ef.agency_pays, pub.agency_pays)
+      THEN 'MODO 1 — suma al total Y sale en el PDF (correcto salvo que sea Google)'
+    WHEN pbp.is_billable AND NOT COALESCE(ef.agency_pays, pub.agency_pays)
+      THEN '🚩 MODO 2 — NO sale en el PDF pero SUMA al total: la factura no cierra con el PDF'
+    WHEN NOT pbp.is_billable AND COALESCE(ef.agency_pays, pub.agency_pays)
+      THEN 'destildado a mano este mes (no suma, no sale)'
+    ELSE 'OK — cliente paga directo: no suma ni sale'
+  END                                        AS diagnostico
+FROM plan_billings pb
+JOIN media_plans mp              ON mp.id  = pb.media_plan_id
+JOIN projects prj                ON prj.id = mp.project_id
+JOIN clients c                   ON c.id   = prj.client_id
+JOIN plan_billing_publishers pbp ON pbp.plan_billing_id = pb.id
+JOIN publishers pub              ON pub.id = pbp.publisher_id
+LEFT JOIN efectivo ef ON ef.media_plan_id = mp.id AND ef.publisher_id = pbp.publisher_id
+WHERE c.slug = 'copa'
+  AND pb.month IN (SELECT month FROM ventana)
+  AND pbp.amount_real_usd > 0
+ORDER BY pb.month, prj.code, pub.name;
+
+
+-- ────────────────────────────────────────────────────────────────────────────
 -- BLOQUE 3 — El resumen de plata: cuánto se facturó de más por mes
 -- ────────────────────────────────────────────────────────────────────────────
 -- `total_media_facturado` es el `total_net_usd` del mes tal como está hoy;
