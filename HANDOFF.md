@@ -2,6 +2,42 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/ago/2026 (2) — Auditoría: ¿se coló Google como facturable en el billing de Copa?
+
+- **Pedido**: revisar los billings de **marzo, abril y mayo** de Copa buscando
+  líneas de Google / Google DemandGen (o cualquier otra) marcadas como
+  facturables, cuando **a Copa no se le factura la media de Google** (la paga
+  directo; su consumo se carga igual porque alimenta el management fee).
+- **Entregable**: **`db/copa-google-facturable-check.sql`** — auditoría
+  **read-only** en tres bloques: (1) el catálogo de publishers de Copa con su
+  flag `agency_pays` (la causa raíz: si Google está en "agencia paga", cada mes
+  nuevo nace mal), (2) las líneas de los tres meses con un veredicto por fila, y
+  (3) el resumen de plata por mes (`total_net_usd` de hoy vs. corregido). Los
+  `UPDATE` de corrección van comentados al final.
+- **Hallazgo del código, importante para leer los resultados: son DOS bugs
+  posibles, no uno.** `plan_billings.total_net_usd` —el número que va a la
+  factura— se calcula con `sum(amount_real_usd) FILTER (is_billable)` y **no
+  mira `agency_pays`** (`recalcBillingTotals`, `app/actions/plan-billing.ts`).
+  El PDF de finanzas, en cambio, filtra por `agencyPays && isBillable &&
+  monto > 0` (`app/api/billings/[id]/report.pdf/route.ts`). Entonces:
+  - `is_billable` + `agency_pays` → sale en el PDF **y** en el total. Caso obvio.
+  - `is_billable` + **NO** `agency_pays` → **no** sale en el PDF pero **igual
+    infla el total del mes**: la factura queda por un monto que el PDF no
+    explica. Este es el que se pasa por alto.
+- **Recordatorio al corregir**: si el mes está en `invoiced`/`paid` rige la
+  regla dura "lo facturado ya está facturado" — la corrección es **comercial**
+  (nota de crédito / descuento futuro), no de datos. Destildar `is_billable`
+  solo aplica a meses en draft/ready/sent, y después hay que **recalcular** los
+  totales del mes (el SQL trae la fórmula, o alcanza con tocar un monto en la
+  UI y que la action recalcule).
+- **Verificación**: Postgres local con el schema real + un escenario armado a
+  propósito (Google facturable, DemandGen facturable, Google bien destildado,
+  Google con monto 0, un `agency_pays_override` de bloque, meses fuera de la
+  ventana y otro cliente con su propio Google). Cada caso cayó en el veredicto
+  correcto y los filtros de mes/cliente aislaron bien.
+- **Pendiente**: correr la auditoría contra prod y decidir, mes por mes, si hay
+  que emitir nota de crédito.
+
 ### Cambios de la sesión 04/ago/2026 — Carga manual: proyecto "Tarifas Viaja Panama V2" (Copa, budget Online)
 
 - **Pedido**: dar de alta en Copa Airlines un proyecto nuevo **Tarifas Viaja
@@ -3757,6 +3793,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
 | Tocar algo que borre/recree fees de un plan | **Regla dura: lo facturado ya está facturado.** `plan_billing_fees.media_plan_fee_id` es `no action` (no cascade) — ver `db/schema.ts`. `revertPlanToApprovedSnapshot` reconcilia los fees en vez de borrarlos y `removeFee` bloquea el borrado si hay imputaciones > 0 (`app/actions/plans.ts`). Si agregás un camino nuevo que toque `media_plan_fees`, no uses delete+insert: rompe el histórico de billing. Migración de la FK: `db/billing-fees-no-cascade.sql`. |
+| Chequear si un publisher se está facturando cuando no debería | `db/copa-google-facturable-check.sql` (auditoría read-only, sirve de plantilla para cualquier cliente/publisher). Ojo con los **dos** flags: `agency_pays` es la verdad estructural (override del bloque `media_plan_publishers.agency_pays_override` ?? default de `publishers.agency_pays`, y con N bloques basta que uno diga true — regla `anyAgencyPays`), y `is_billable` es el flag editable del mes en `plan_billing_publishers`, que nace copiado de aquél. **El PDF de finanzas filtra por los dos** (`report.pdf/route.ts`) pero **`total_net_usd` solo mira `is_billable`** (`recalcBillingTotals` en `app/actions/plan-billing.ts`) — o sea que se puede inflar la factura sin que la línea aparezca en el PDF. |
 | Cargar a mano un proyecto + su plan desde un Excel exportado | `db/copa-tarifas-viaja-panama-v2.sql` sirve de **plantilla**: un `DO $$` transaccional que resuelve cliente/budget origin/mercado/publishers por nombre y slug (nada de UUIDs pegados), aborta con `RAISE EXCEPTION` si falta una pieza del catálogo, y encadena `projects → media_plans → media_plan_publishers → media_plan_placements → media_plan_fees → media_plan_aux_sheets` con un SELECT de verificación al final. Mapeo Excel→DB: `metrics_json` guarda solo los directs + la tarifa declarada (`cpc`/`cpm`); CTR y demás calculated se derivan en runtime (`lib/plan-metrics.ts`). La grilla de un tab auxiliar arranca en la fila `AUX_SHEET_GRID_ROW_OFFSET` (5) del archivo (`lib/aux-sheet.ts`). Para validar antes de prod: Postgres local + `drizzle-kit push` con el `DATABASE_URL` apuntado ahí. |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Geometría de columnas hardcodeada en el objeto `COL` (`{x, w}` relativo a `MARGIN`) + paleta/tamaños en las constantes de arriba del archivo; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). **Estilo (pedido explícito)**: header gris claro **sin bordó**, una sola tipografía (Helvetica) y mismo size en todas las celdas del cuerpo, y la Description hace wrap (fila de alto dinámico) en vez de truncarse — si tocás anchos, no vuelvas a truncar ni a meter Courier. |

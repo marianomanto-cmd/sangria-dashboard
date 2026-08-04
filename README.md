@@ -174,6 +174,7 @@ db/
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
   rls.sql                   # ENABLE ROW LEVEL SECURITY en todas las tablas (cierra la REST API pública de Supabase)
   copa-tarifas-viaja-panama-v2.sql  # carga manual (data, no schema): proyecto "Tarifas Viaja Panama V2" (Copa, budget Online) + el MP COPA.m1213.TarifasViajaPanamaV2 desde su Excel. Sirve de plantilla para dar de alta un proyecto+plan a mano
+  copa-google-facturable-check.sql  # auditoría READ-ONLY: publishers marcados facturables que no deberían (Copa no factura Google). Catálogo + líneas del mes con veredicto + resumen de plata; UPDATE de corrección comentados
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
