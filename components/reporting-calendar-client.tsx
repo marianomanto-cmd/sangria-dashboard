@@ -17,7 +17,7 @@ import {
   ReportCommentsModal,
 } from "@/components/report-comments";
 import type { CalendarReport, SentReport } from "@/db/queries/reports";
-import { formatDate, type Language } from "@/lib/i18n";
+import { formatDate, shortMonthName, type Language } from "@/lib/i18n";
 import { availableYears, periodMatchesYear } from "@/lib/year-filter";
 
 type ReportKind = CalendarReport["kind"];
@@ -30,6 +30,64 @@ function reportDate(r: {
   deliveredAt?: string;
 }): string | null {
   return r.deliveryDate ?? r.deliveredAt ?? r.closedAt ?? null;
+}
+
+// Fecha de envío ("YYYY-MM-DD") de un reporte ya entregado: la misma que se
+// muestra en la columna "Enviado el", así el filtro y la tabla no se pisan.
+function sentDate(r: { deliveredAt: string }): string {
+  return r.deliveredAt.slice(0, 10);
+}
+
+const MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+// Chips de filtro (año / mes): grupo con label a la izquierda y un chip activo.
+function ChipGroup({
+  label,
+  disabled,
+  title,
+  children,
+}: {
+  label: string;
+  disabled?: boolean;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      title={title}
+      data-disabled={disabled === true}
+      className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-paper-2 border border-line data-[disabled=true]:opacity-50"
+    >
+      <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted mr-1">
+        {label}
+      </span>
+      <div className="flex flex-wrap items-center gap-0.5">{children}</div>
+    </div>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      data-active={active}
+      className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink disabled:hover:text-muted disabled:cursor-not-allowed data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
+    >
+      {label}
+    </button>
+  );
 }
 
 type DialogState =
@@ -97,16 +155,18 @@ export function ReportingCalendarClient({
   }, [pending, inProgress, sent]);
 
   // Años disponibles (desc) según la fecha representativa de cada reporte.
+  // Solo cuentan los pendientes/en curso: los enviados tienen su propio filtro
+  // de año/mes dentro de la sección "Reportes enviados".
   const years = useMemo(
     () =>
       availableYears(
-        [...pending, ...inProgress, ...sent].map((r) => {
+        [...pending, ...inProgress].map((r) => {
           const d = reportDate(r);
           return { start: d, end: d };
         }),
         currentYear,
       ),
-    [pending, inProgress, sent, currentYear],
+    [pending, inProgress, currentYear],
   );
 
   const matchYear = (r: {
@@ -138,14 +198,12 @@ export function ReportingCalendarClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [inProgress, budgetOrigin, year, currentYear],
   );
+  // Los enviados NO usan el filtro de año de arriba (que mira la fecha objetivo
+  // y sirve al Gantt): filtran por fecha de envío con su propio año/mes.
   const fSent = useMemo(
     () =>
-      sent.filter(
-        (r) =>
-          (!budgetOrigin || r.budgetOriginName === budgetOrigin) && matchYear(r),
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sent, budgetOrigin, year, currentYear],
+      sent.filter((r) => !budgetOrigin || r.budgetOriginName === budgetOrigin),
+    [sent, budgetOrigin],
   );
 
   const openAssign = (
@@ -248,32 +306,21 @@ export function ReportingCalendarClient({
     <>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-paper-2 border border-line">
-            <span className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted mr-1">
-              {lang === "es" ? "Año" : "Year"}
-            </span>
-            <div className="flex items-center gap-0.5">
-              {years.map((y) => (
-                <button
-                  key={y}
-                  type="button"
-                  onClick={() => setYear(y)}
-                  data-active={year === y}
-                  className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
-                >
-                  {y}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={() => setYear(null)}
-                data-active={year === null}
-                className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
-              >
-                {lang === "es" ? "Todos" : "All"}
-              </button>
-            </div>
-          </div>
+          <ChipGroup label={lang === "es" ? "Año" : "Year"}>
+            {years.map((y) => (
+              <FilterChip
+                key={y}
+                active={year === y}
+                onClick={() => setYear(y)}
+                label={String(y)}
+              />
+            ))}
+            <FilterChip
+              active={year === null}
+              onClick={() => setYear(null)}
+              label={lang === "es" ? "Todos" : "All"}
+            />
+          </ChipGroup>
           {budgetOrigins.length > 1 && (
             <div className="flex items-center gap-2">
               <label
@@ -690,6 +737,14 @@ function SentReportsSection({
   lang: Language;
 }) {
   const [query, setQuery] = useState("");
+  // Filtros de año y mes por fecha de envío (default: año y mes en curso).
+  // null = "Todos". El mes vive adentro del año elegido: con año "Todos" queda
+  // sin efecto (si no, "Ago" mezclaría agosto de todos los años).
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const [year, setYear] = useState<number | null>(currentYear);
+  const [month, setMonth] = useState<number | null>(currentMonth);
   const [linkEditing, setLinkEditing] = useState<LinkEditing | null>(null);
   const [linkPending, startLinkTransition] = useTransition();
   const [linkError, setLinkError] = useState<string | null>(null);
@@ -721,10 +776,32 @@ function SentReportsSection({
     });
   };
 
+  // Años con envíos (desc), con el año actual siempre presente.
+  const years = useMemo(
+    () =>
+      availableYears(
+        sent.map((r) => {
+          const d = sentDate(r);
+          return { start: d, end: d };
+        }),
+        currentYear,
+      ),
+    [sent, currentYear],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sent;
     return sent.filter((r) => {
+      const d = sentDate(r);
+      if (year != null && Number.parseInt(d.slice(0, 4), 10) !== year)
+        return false;
+      if (
+        year != null &&
+        month != null &&
+        Number.parseInt(d.slice(5, 7), 10) !== month
+      )
+        return false;
+      if (!q) return true;
       const haystack = [
         r.projectName,
         r.projectCode ?? "",
@@ -735,7 +812,9 @@ function SentReportsSection({
         .toLowerCase();
       return haystack.includes(q);
     });
-  }, [sent, query]);
+  }, [sent, query, year, month]);
+
+  const partial = filtered.length !== sent.length;
 
   return (
     <section className="mt-8">
@@ -745,29 +824,78 @@ function SentReportsSection({
         </h2>
         <span className="text-[11px] uppercase tracking-[0.08em] text-muted font-medium">
           {filtered.length}
-          {query.trim() ? ` / ${sent.length}` : ""}
+          {partial ? ` / ${sent.length}` : ""}
           {lang === "es"
-            ? ` reporte${(query.trim() ? sent.length : filtered.length) === 1 ? "" : "s"}`
-            : ` report${(query.trim() ? sent.length : filtered.length) === 1 ? "" : "s"}`}
+            ? ` reporte${(partial ? sent.length : filtered.length) === 1 ? "" : "s"}`
+            : ` report${(partial ? sent.length : filtered.length) === 1 ? "" : "s"}`}
         </span>
       </header>
 
-      <div className="relative mb-3 max-w-sm">
-        <Search
-          size={14}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-        />
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={
-            lang === "es"
-              ? "Filtrar por proyecto, campaña o nombre…"
-              : "Filter by project, campaign or name…"
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <ChipGroup label={lang === "es" ? "Año" : "Year"}>
+          {years.map((y) => (
+            <FilterChip
+              key={y}
+              active={year === y}
+              onClick={() => setYear(y)}
+              label={String(y)}
+            />
+          ))}
+          <FilterChip
+            active={year === null}
+            onClick={() => {
+              setYear(null);
+              setMonth(null);
+            }}
+            label={lang === "es" ? "Todos" : "All"}
+          />
+        </ChipGroup>
+
+        <ChipGroup
+          label={lang === "es" ? "Mes" : "Month"}
+          disabled={year === null}
+          title={
+            year === null
+              ? lang === "es"
+                ? "Elegí un año para filtrar por mes"
+                : "Pick a year to filter by month"
+              : undefined
           }
-          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
-        />
+        >
+          {MONTHS.map((m) => (
+            <FilterChip
+              key={m}
+              active={month === m}
+              disabled={year === null}
+              onClick={() => setMonth(m)}
+              label={shortMonthName(m - 1, lang)}
+            />
+          ))}
+          <FilterChip
+            active={month === null}
+            disabled={year === null}
+            onClick={() => setMonth(null)}
+            label={lang === "es" ? "Todos" : "All"}
+          />
+        </ChipGroup>
+
+        <div className="relative w-full max-w-sm">
+          <Search
+            size={14}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+          />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={
+              lang === "es"
+                ? "Filtrar por proyecto, campaña o nombre…"
+                : "Filter by project, campaign or name…"
+            }
+            className="w-full rounded-md border border-line bg-white dark:bg-paper-2 pl-9 pr-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+          />
+        </div>
       </div>
 
       {sent.length === 0 ? (
@@ -779,8 +907,8 @@ function SentReportsSection({
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-8 text-center text-sm text-muted">
           {lang === "es"
-            ? "Ningún reporte enviado coincide con el filtro."
-            : "No sent report matches the filter."}
+            ? "Ningún reporte enviado coincide con los filtros."
+            : "No sent report matches the filters."}
         </div>
       ) : (
         <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
