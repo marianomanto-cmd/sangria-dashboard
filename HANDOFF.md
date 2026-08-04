@@ -2,6 +2,48 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 04/ago/2026 — Carga manual: proyecto "Tarifas Viaja Panama V2" (Copa, budget Online)
+
+- **Pedido**: dar de alta en Copa Airlines un proyecto nuevo **Tarifas Viaja
+  Panama V2** con budget origin **Online**, con el MP del Excel
+  `COPA.m1213.TarifasViajaPanamaV2-V1.xlsx` adentro (export del plan homónimo
+  que hoy vive en el proyecto `tarifas-viaja-panama-2026`, budget origin **PR**).
+- **Entregable**: **`db/copa-tarifas-viaja-panama-v2.sql`**. Es solo data — no
+  toca schema ni código de la app.
+  - Crea `projects` (`code = 'tarifas-viaja-panama-v2'`, slugify del nombre igual
+    que `uniqueProjectCode`), el `media_plan` **COPA.m1213.TarifasViajaPanamaV2**
+    en `draft`/v0, los dos bloques de publisher (Google 30.000 / Meta 20.000),
+    los dos placements con su audiencia y `metrics_json`, los tres fees
+    (management 13% → 7.471,26 · set up 500 · reporting 2.500) y el tab
+    auxiliar "Auxiliar" (COMBINED PROJECTIONS).
+  - `total_gross_budget_usd = 60.471,26` = grand total del plan (media + fees),
+    que es contra lo que el editor calcula la **cobertura**.
+  - Resuelve cliente / budget origin / mercado / publishers **por nombre y slug**
+    contra los catálogos per-cliente: cero UUIDs hardcodeados. Si falta alguna
+    pieza aborta con un `RAISE EXCEPTION` explicativo, todo dentro de una sola
+    transacción, y si el proyecto ya existe corta sin tocar nada.
+- **⚠️ ACCIÓN EN PROD**: correr `db/copa-tarifas-viaja-panama-v2.sql` en el SQL
+  Editor de Supabase. Trae al final un bloque de verificación (totales, período
+  derivado, cantidad de placements) y un bloque de **opcionales** comentados:
+  pasar el plan a `ready_to_send`, corregir la fecha de Meta, o **mover** el plan
+  original en vez de copiarlo.
+- **Ojo con una fecha (viene así del Excel, se replica tal cual)**: el placement
+  de **Meta arranca y termina el 31/07/2026** (un día), mientras que el de Google
+  corre 31/07 → 31/12. Por eso el "Budget por mercado" carga los 20.000 de Meta
+  enteros en julio (julio = 20.194,81). Si fue un error de carga del plan
+  original, el opcional (b) del SQL lo corrige — y conviene arreglarlo también en
+  el plan de `tarifas-viaja-panama-2026`.
+- **Copia, no mudanza**: el plan original sigue vivo bajo PR. Mover el plan se
+  llevaría también su **billing** (`plan_billings` cuelga del plan, no del
+  proyecto), o sea reimputaría lo ya facturado al budget origin Online.
+- **Verificación**: no alcanzaba con revisar la sintaxis, así que se levantó un
+  **Postgres 16 local**, se aplicó el schema real con `drizzle-kit push` y se
+  corrió el script entero. Chequeado: totales (media 50.000 / fees 10.471,26 /
+  grand 60.471,26, iguales al Excel), período derivado 31/07 → 31/12/2026,
+  audiencias **md5-idénticas** a las celdas del xlsx, grilla del tab auxiliar
+  igual celda por celda, corte limpio al re-correr, y abort sin dejar nada a
+  medias cuando falta el budget origin.
+
 ### Cambios de la sesión 03/ago/2026 — Lo facturado ya no se borra cuando cambia el plan
 
 - **Síntoma reportado**: en el billing del plan de tarifas de Viaja Panamá, por
@@ -3715,6 +3757,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
 | Tocar algo que borre/recree fees de un plan | **Regla dura: lo facturado ya está facturado.** `plan_billing_fees.media_plan_fee_id` es `no action` (no cascade) — ver `db/schema.ts`. `revertPlanToApprovedSnapshot` reconcilia los fees en vez de borrarlos y `removeFee` bloquea el borrado si hay imputaciones > 0 (`app/actions/plans.ts`). Si agregás un camino nuevo que toque `media_plan_fees`, no uses delete+insert: rompe el histórico de billing. Migración de la FK: `db/billing-fees-no-cascade.sql`. |
+| Cargar a mano un proyecto + su plan desde un Excel exportado | `db/copa-tarifas-viaja-panama-v2.sql` sirve de **plantilla**: un `DO $$` transaccional que resuelve cliente/budget origin/mercado/publishers por nombre y slug (nada de UUIDs pegados), aborta con `RAISE EXCEPTION` si falta una pieza del catálogo, y encadena `projects → media_plans → media_plan_publishers → media_plan_placements → media_plan_fees → media_plan_aux_sheets` con un SELECT de verificación al final. Mapeo Excel→DB: `metrics_json` guarda solo los directs + la tarifa declarada (`cpc`/`cpm`); CTR y demás calculated se derivan en runtime (`lib/plan-metrics.ts`). La grilla de un tab auxiliar arranca en la fila `AUX_SHEET_GRID_ROW_OFFSET` (5) del archivo (`lib/aux-sheet.ts`). Para validar antes de prod: Postgres local + `drizzle-kit push` con el `DATABASE_URL` apuntado ahí. |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Geometría de columnas hardcodeada en el objeto `COL` (`{x, w}` relativo a `MARGIN`) + paleta/tamaños en las constantes de arriba del archivo; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). **Estilo (pedido explícito)**: header gris claro **sin bordó**, una sola tipografía (Helvetica) y mismo size en todas las celdas del cuerpo, y la Description hace wrap (fila de alto dinámico) en vez de truncarse — si tocás anchos, no vuelvas a truncar ni a meter Courier. |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
