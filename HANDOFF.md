@@ -62,9 +62,47 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   de 31.831,56 a **6.856,90** (solo m1172). `m1149StopoverDGEN` (DemandGen) y el
   bloque Google de m1172 no tienen ambigüedad. El bloque 2b desglosa por
   publisher para resolverlo.
+- **DECISIÓN DEL DUEÑO DEL NEGOCIO (04/ago)**: **las facturas emitidas y sus
+  números están bien** — lo que se le cobró a Copa es correcto, Google nunca se
+  facturó. El error es de la **base**, que quedó registrando como facturable
+  algo que nunca salió en una factura. Por eso se corrigen también los meses en
+  `invoiced`: no es reescribir lo facturado, es hacer que la base coincida con
+  lo que realmente se facturó. La regla "lo facturado ya está facturado" protege
+  contra perder historia real, no contra corregir data que nunca fue real.
+- **Corrección**: **`db/copa-google-facturable-fix.sql`**. Preview read-only
+  (PASO 0) + transacción con: destildar `is_billable` en las líneas de Google,
+  recalcular `total_net_usd`/`total_usd` con la fórmula de
+  `recalcBillingTotals`, y una fila en `audit_log` por mes corregido (el SQL
+  crudo no pasa por `recordAudit`, así que si no, la corrección quedaba
+  invisible en /auditoria). Después, dos bloques de verificación.
+  - **NO toca**: `invoice_number`, `status`, `sent_at`/`paid_at`,
+    `total_fee_usd` / `plan_billing_fees` ni `amount_real_usd`.
+  - **El management fee sobre la media de Google SÍ se cobra** (confirmado por
+    el dueño del negocio) y el script no lo toca. Además **no se cae solo
+    después**: `autoRecomputeMgmtFees` calcula el prorrateo del mes sumando
+    `amount_real_usd` de TODAS las líneas del billing, **sin filtrar por
+    `is_billable`** (está explícito y comentado en
+    `app/actions/plan-billing.ts`). O sea que destildar Google no achica la base
+    del fee ni ahora ni cuando alguien vuelva a editar el mes desde la UI. La
+    VERIFICACIÓN A lo expone en la columna `base_del_fee`, y en la prueba local
+    los fees quedaron idénticos al centavo antes y después.
+  - **🔒 VENTANA CERRADA a 2026-03/04/05 — junio y julio NO se tocan** (pedido
+    explícito). Por eso el arreglo de la causa raíz
+    (`publishers.agency_pays = false` para Google) va **COMENTADO** en el
+    PASO 3: es lo único que se escapaba de la ventana, porque ese flag lo lee el
+    PDF de finanzas **en vivo** y cambiaría también cómo se renderizan los PDFs
+    de junio y julio. Costo de dejarlo apagado: cada mes NUEVO sigue naciendo
+    con Google tildado como facturable (`ensureBillingForMonth` copia
+    `is_billable` de ese flag). Hacerlo cuando junio y julio estén resueltos.
+  - **Verificado** en Postgres local con el schema real, con junio y julio
+    cargados a propósito: quedaron byte-idénticos (totales, líneas facturables,
+    estado y factura), el catálogo intacto, las facturas y estados sin tocar,
+    `amount_real_usd` preservado, los totales corregidos cierran contra la suma
+    de lo facturable, y re-correr el script es no-op (solo re-inserta la fila de
+    audit, inofensivo).
 - **Pendiente**: correr el bloque 2b para saber si es MODO 1 (catálogo mal
-  configurado) o MODO 2 (bug de la app), corregir los meses en `sent` antes de
-  facturar, y decidir la nota de crédito de lo ya facturado.
+  configurado) o MODO 2 (bug de la app); resolver junio y julio; y recién ahí
+  activar el PASO 3 (o hacerlo desde /configuracion/clientes/copa).
 - **Pendiente de código (no hecho en esta sesión)**: `recalcBillingTotals` filtra
   solo por `is_billable` mientras que el PDF filtra por `agencyPays &&
   isBillable`. Habría que unificar el predicado para que el total del mes y el
