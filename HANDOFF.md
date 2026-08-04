@@ -55,13 +55,13 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   - Total expuesto: **174.648,45**.
   - Los fees **no** cambian: por decisión de negocio (#182) el management fee se
     cobra sobre TODA la media, incluida la que paga el cliente directo.
-- **⚠️ A confirmar antes de tocar nada: ¿YouTube cuenta como Google?** El patrón
-  de la auditoría incluye la familia entera (YouTube, DV360, PMax, Search…), y
-  `COPA.m1177.VideoViews` es justamente YouTube. Si a Copa **sí** se le factura
-  YouTube, los tres meses de m1177 son falsos positivos y lo ya facturado baja
-  de 31.831,56 a **6.856,90** (solo m1172). `m1149StopoverDGEN` (DemandGen) y el
-  bloque Google de m1172 no tienen ambigüedad. El bloque 2b desglosa por
-  publisher para resolverlo.
+- **✅ CONFIRMADO (04/ago): YouTube también es no facturable.** Era la única
+  ambigüedad abierta —`COPA.m1177.VideoViews` es YouTube y dependía de esto— y
+  quedó resuelta: la regla cubre a la **familia Google completa** (Google,
+  DemandGen, YouTube, DV360, PMax, Search, GDN, Discovery, Ad Manager). El
+  patrón `ILIKE` de la auditoría y de la corrección ya la contempla tal cual
+  está: **no hay que editar nada**. Los montos de arriba quedan firmes
+  (31.831,56 ya facturado + 142.816,89 en `sent`).
 - **DECISIÓN DEL DUEÑO DEL NEGOCIO (04/ago)**: **las facturas emitidas y sus
   números están bien** — lo que se le cobró a Copa es correcto, Google nunca se
   facturó. El error es de la **base**, que quedó registrando como facturable

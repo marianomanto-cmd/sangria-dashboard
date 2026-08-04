@@ -47,11 +47,12 @@
 --      alguien vuelva a tocar el mes desde la UI. La VERIFICACIÓN A de abajo lo
 --      muestra en la columna `base_del_fee`.
 --
--- ⚠️ ANTES DE CORRER: definí la lista de publishers en el PASO 0. Por defecto
---    incluye la familia Google COMPLETA (Google, DemandGen, YouTube, DV360,
---    PMax, Search…). Si a Copa SÍ se le factura alguno de esos —YouTube es el
---    caso a confirmar, `COPA.m1177.VideoViews` depende de eso— sacalo del
---    patrón antes de seguir.
+-- ✅ ALCANCE CONFIRMADO (04/ago): no facturable = **familia Google completa**
+--    (Google, Google DemandGen, YouTube, DV360, PMax, Search, GDN, Discovery,
+--    Ad Manager). YouTube entra — quedó confirmado explícitamente, y de eso
+--    dependía `COPA.m1177.VideoViews`. El patrón ILIKE de abajo ya está así:
+--    **no hace falta editar nada**. Igual corré el PASO 0 primero y mirá la
+--    columna `lineas_a_destildar` antes de seguir.
 -- ════════════════════════════════════════════════════════════════════════════
 
 
