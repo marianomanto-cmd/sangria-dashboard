@@ -156,7 +156,7 @@ components/                 # UI compartida
   billing-table.tsx         # /billing: tabla (desktop) + cards (mobile) con buscador en vivo por N° de factura o nombre de plan (client-side, sobre las filas ya cargadas; case-insensitive, no recarga)
   plan-billing-progress.tsx # billing del plan: card "Avance de facturación" (client, recharts). KPIs + hero % + barra segmentada medios/fee + burn-up acumulado por mes con línea de referencia del total del plan. Datos: getPlanBillingProgress (db/queries/billing.ts). Medios=accent, fee=accent-2 (par CVD-válido)
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
-  reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila)
+  reporting-calendar-client.tsx  # /reportes/calendario: pending list + Gantt + sent reports (con link PPT por fila). Filtros client-side: año + budget origin arriba (pendientes/Gantt) y año + mes por fecha de envío en la sección de enviados (chips ChipGroup/FilterChip)
   reporting-gantt.tsx       # Gantt diario -30/+30 días para reporting calendar
   report-comments.tsx       # tablerito de comentarios por reporte del calendario (botón + modal con autor/fecha/hora)
   report-generator-form.tsx # /reportes/generador: filtros cascading + column picker URL-based
@@ -290,6 +290,10 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   las filas sin fechas cuentan como año actual. En el calendario el reporte se
   ubica por su **fecha de entrega** (o el cierre del proyecto si todavía no la
   tiene). Opción **"Todos"** en los tres.
+- En el calendario ese filtro cubre **pendientes + en curso (el Gantt)**: son
+  los que se ubican por fecha objetivo. El listado de **Reportes enviados**
+  tiene el suyo propio (Año + Mes, ver abajo) porque filtra por **fecha de
+  envío** — cada listado usa la fecha que le corresponde y no se pisan.
 - Helpers puros en `lib/year-filter.ts` (`periodMatchesYear`, `availableYears`,
   `resolveYearParam`). Planes/Proyectos usan `components/year-selector.tsx`
   (pills URL-based vía `?year=`; el año actual va sin param). El Calendario lo
@@ -1495,8 +1499,14 @@ Idempotente: limpia las tablas antes de insertar.
   proyecto a `reportado`. **Requiere `npm run db:push` + `npm run db:backfill-reports`**
   en prod para sembrar la nueva tabla y dar de alta los closed existentes.
   Debajo del Gantt hay un listado de **Reportes enviados** (`delivered_at != null`)
-  con fecha de envío + fecha objetivo y un filtro de texto libre por proyecto o
-  campaña (`getSentReports` en `db/queries/reports.ts`). Cada fila tiene un
+  con fecha de envío + fecha objetivo, filtros de **Año** y **Mes** y un filtro
+  de texto libre por proyecto o campaña (`getSentReports` en
+  `db/queries/reports.ts`). Los de año/mes van por **fecha de envío**
+  (`delivered_at`, la misma que muestra "Enviado el"), arrancan en el **año y
+  el mes en curso** y tienen "Todos" los dos; el de Mes vive adentro del año
+  elegido (con año "Todos" queda deshabilitado, así "Ago" no mezcla agosto de
+  todos los años). Se combinan con el buscador y el contador del header muestra
+  `visibles / total`. Cada fila tiene un
   **link opcional al PPT final** (`project_reports.report_ppt_url`, en Drive u
   otro): el analista lo carga/edita/quita desde un modal (acción
   `setReportPptUrl`) para encontrar el reporte rápido a futuro. **Requiere

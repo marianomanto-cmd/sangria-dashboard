@@ -1,6 +1,37 @@
-# Handoff — jueves 24/jul/2026
+# Handoff — martes 04/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 04/ago/2026 — Reportes enviados: filtros de Año y Mes
+
+- **Pedido**: que el listado de **Reportes enviados** de `/reportes/calendario`
+  tenga un **filtro de año** con el año en curso por default, y además un
+  **filtro de mes** con el mes en curso por default y opción de ver **todos**
+  los meses del año.
+- **Cómo quedó** (`components/reporting-calendar-client.tsx`, todo client-side
+  sobre las filas ya cargadas, como el resto de los filtros de la página):
+  - Dos grupos de chips arriba del buscador de texto que ya existía: **Año**
+    (años con envíos, desc, con el actual siempre presente + "Todos") y **Mes**
+    (los 12 + "Todos"). Default: **año y mes en curso**.
+  - Los dos filtran por **fecha de envío** (`delivered_at`), que es la que
+    muestra la columna "Enviado el" — el filtro y la tabla no se pisan.
+  - El **mes vive adentro del año elegido**: con año "Todos" el grupo de Mes
+    queda deshabilitado y sin efecto (y elegir "Todos" en Año resetea el mes),
+    así "Ago" nunca mezcla agosto de todos los años. Es el mismo criterio que se
+    aplicó en la tab Estimación del portal (#184).
+  - El contador del header pasa a `visibles / total` siempre que haya algo
+    filtrado (antes solo cuando había texto).
+- **Cambio de alcance del filtro de año de arriba**: ya **no** se aplica a los
+  enviados. Ese filtro mira la **fecha objetivo** (o el cierre) porque sirve a
+  pendientes + Gantt; los enviados van por fecha de envío. Cada listado filtra
+  por la fecha que le corresponde. El de **budget origin** sigue aplicando a los
+  tres listados.
+- Los chips de año de la barra superior se extrajeron a `ChipGroup` /
+  `FilterChip` (mismo markup y clases de siempre) y los reusan las dos secciones.
+- **Sin cambios de schema ni acciones en prod.**
+- **Verificación**: `tsc` + `eslint` + `next build` en verde; el bloque de
+  filtros se chequeó renderizado a 1280 / 900 / 420 px (en desktop entra todo en
+  una fila; en mobile los meses wrapean a dos líneas).
 
 ### Cambios de la sesión 03/ago/2026 — Lo facturado ya no se borra cuando cambia el plan
 
@@ -3049,6 +3080,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+9b0021c  Reportes enviados: filtros de Año y Mes por fecha de envío (default: año y mes en curso) (#207)
 cccba65  Billing: lo facturado deja de borrarse cuando cambia el plan — FK sin cascade + revert no destructivo (#203)
 0b3ebdd  Billing report (PDF de finanzas): sin fondo bordó, una sola tipografía, todo legible (#201)
 6178824  Planes: descargar las versiones viejas del historial de aprobaciones (#200)
@@ -3718,6 +3750,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Geometría de columnas hardcodeada en el objeto `COL` (`{x, w}` relativo a `MARGIN`) + paleta/tamaños en las constantes de arriba del archivo; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). **Estilo (pedido explícito)**: header gris claro **sin bordó**, una sola tipografía (Helvetica) y mismo size en todas las celdas del cuerpo, y la Description hace wrap (fila de alto dinámico) en vez de truncarse — si tocás anchos, no vuelvas a truncar ni a meter Courier. |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
+| Tocar los filtros del Reporting Calendar | Todos client-side en `components/reporting-calendar-client.tsx`. Arriba de la página: **año** (por fecha objetivo / cierre, helpers en `lib/year-filter.ts`) + **budget origin**; aplican a pendientes y Gantt (el de budget origin también a enviados). Adentro de `SentReportsSection`: **año + mes por fecha de envío** (`delivered_at`, helper `sentDate`) + buscador de texto; el de Mes se deshabilita con año "Todos" a propósito. Los chips son `ChipGroup` / `FilterChip` en el mismo archivo. |
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
