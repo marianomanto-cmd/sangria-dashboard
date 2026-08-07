@@ -15,6 +15,7 @@ import {
   Receipt,
   LineChart,
   Globe2,
+  Palette,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +34,7 @@ export const PRIMARY_NAV: NavEntry[] = [
   { href: "/reportes/calendario", label: "Calendario de reportes", icon: CalendarClock },
   { href: "/reportes", label: "Reportes", icon: BarChart3, exact: true },
   { href: "/billing-tracker", label: "Billing Tracker", icon: Receipt },
+  { href: "/creative", label: "Creative", icon: Palette },
   { href: "/campaign-tracker", label: "Campaign Tracker", icon: LineChart },
   { href: "/analisis", label: "Análisis x mercado", icon: Globe2 },
   { href: "/reportes/simulador", label: "Simulador", icon: FlaskConical },
