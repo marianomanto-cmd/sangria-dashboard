@@ -2,6 +2,43 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 07/ago/2026 (3) — Portal: filtro Año/Mes en Billing Tracker · /billing: chart medios+fees
+
+#### Portal · Billing Tracker: filtro de Año y Mes (multi)
+
+- **Pedido**: que el Billing Tracker del portal tenga filtro de **año y mes**,
+  con el año y mes **en curso por default**, y que permita elegir varios años,
+  varios meses o todos.
+- **Params nuevos y propios: `?byr=` (años) y `?bmo=` (meses 01..12).** NO se
+  reusaron `year`/`month`, que son los de Estimación y Reportes — cambiarles la
+  semántica habría movido esas dos vistas. Convención: **vacío = default (año /
+  mes en curso)**, `all` = todos, o lista separada por coma.
+- Los dos ejes son **independientes**: la ventana es el producto cartesiano
+  año × mes (`billingMonthWindow` en `portal-content.tsx`). Eso permite pedir
+  "todos los meses de 2025 y 2026" o "los agostos de todos los años".
+- El multi de meses elige **mes del año** (Enero…Diciembre), no `YYYY-MM`, que
+  es lo que hace posible cruzar varios años. Los nombres salen de `Intl`.
+- Campos nuevos en `PortalFilters`: `years` y `monthnum` (`portal-filters.tsx`).
+  Deseleccionar todo escribe `all`, no vuelve al default.
+- **Ojo con el default**: hoy la base llega hasta 2026-07, así que con el mes en
+  curso el tracker puede abrir vacío. El empty state lo dice y sugiere ampliar
+  el filtro.
+
+#### `/billing`: chart de facturación del período
+
+- **Pedido**: un gráfico del período filtrado que separe **medios y fees dentro
+  de cada columna**, con etiqueta de dato en cada segmento y los subtotales
+  sumados abajo a la derecha.
+- `components/billing-media-fee-chart.tsx`: barras apiladas por mes, `LabelList`
+  en cada segmento + total arriba de la columna, y la fila de subtotales
+  (Medios · Fees · Total) alineada a la derecha bajo el gráfico.
+- **Los datos salen de las MISMAS filas que muestra la tabla** (`mediaFeeByMonth`
+  agrupa `rows` ya filtradas en `app/(app)/billing/page.tsx`), así el gráfico
+  nunca se desincroniza de la tabla ni de los filtros.
+- Con más de 14 meses las etiquetas se apagan (se pisan); el detalle queda en el
+  tooltip.
+- **Sin cambios de schema ni acciones en prod.**
+
 ### Cambios de la sesión 07/ago/2026 (2) — Backfill de facturación 2024-2025 + sección Creative
 
 #### Backfill de facturación (ACCIÓN MANUAL SOBRE PROD, ya ejecutada)
@@ -3878,6 +3915,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar los filtros del Reporting Calendar | Todos client-side en `components/reporting-calendar-client.tsx`. Arriba de la página: **año** (por fecha objetivo / cierre, helpers en `lib/year-filter.ts`) + **budget origin**; aplican a pendientes y Gantt (el de budget origin también a enviados). Adentro de `SentReportsSection`: **año + mes por fecha de envío** (`delivered_at`, helper `sentDate`) + buscador de texto; el de Mes se deshabilita con año "Todos" a propósito. Los chips son `ChipGroup` / `FilterChip` en el mismo archivo. |
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
+| Cambiar el filtro de Año/Mes del Billing Tracker del PORTAL | Params `?byr=` (años) y `?bmo=` (meses 01..12), propios de esa tab — **no** son `year`/`month`, que pertenecen a Estimación y Reportes. Vacío = año/mes EN CURSO, `all` = todos, o lista con coma. La ventana la arma `billingMonthWindow` en `app/(portal)/[clientSlug]/portal-content.tsx` (producto cartesiano año × mes). Los campos `years` / `monthnum` del multi-select viven en `portal-filters.tsx`. |
+| Tocar el chart de facturación de /billing | `components/billing-media-fee-chart.tsx` (barras apiladas medios+fees, LabelList por segmento + total arriba, subtotales abajo a la derecha). Los datos los agrupa `mediaFeeByMonth` en `app/(app)/billing/page.tsx` a partir de las MISMAS filas que muestra la tabla — si cambiás el filtrado, el chart lo sigue solo. Con >14 meses las etiquetas se apagan a propósito. |
 | Tocar la facturación de CREATIVE | Tabla propia `creative_billings` (`db/schema.ts`) — **no** cuelga de `media_plans`. Query: `db/queries/creative.ts` (`getCreativeBillings` devuelve lista + totales por mes + KPIs). UI: `app/(app)/creative/page.tsx`, `components/creative-chart.tsx` (barras apiladas cobrado/pendiente), `components/creative-table.tsx` (tabla + botón de cobro). Action: `app/actions/creative-billing.ts` (`setCreativeBillingPaid`, `invoiced ↔ paid`, con audit). Los códigos `c####` del Excel de facturación tienen numeración PROPIA: no se matchean por número contra los `m####` de `media_plans`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (denominador: MEDIOS = media facturable Σtotal_planned where agencia paga; FEE = mgmt sobre media TOTAL — se cobra sobre toda la media aunque el cliente pague directo; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). El fee mensual lo imputa `autoRecomputeMgmtFees` en `app/actions/plan-billing.ts` (prorratea por consumo TOTAL). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Render en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |

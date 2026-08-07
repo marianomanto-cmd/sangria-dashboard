@@ -1,5 +1,29 @@
 import { BillingFilters } from "@/components/billing-filters";
+import {
+  BillingMediaFeeChart,
+  type MediaFeeMonth,
+} from "@/components/billing-media-fee-chart";
 import { BillingTable } from "@/components/billing-table";
+import type { BillingListRow } from "@/db/queries/billing";
+
+// Agrupa por mes las MISMAS filas que muestra la tabla (ya filtradas), así el
+// gráfico refleja exactamente el período filtrado y no se desincroniza.
+function mediaFeeByMonth(rows: BillingListRow[]): MediaFeeMonth[] {
+  const map = new Map<string, MediaFeeMonth>();
+  for (const r of rows) {
+    const m = map.get(r.month) ?? {
+      month: r.month,
+      media: 0,
+      fee: 0,
+      total: 0,
+    };
+    m.media += r.totalNetUsd;
+    m.fee += r.totalFeeUsd;
+    m.total += r.totalUsd;
+    map.set(r.month, m);
+  }
+  return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month));
+}
 import { PageShell } from "@/components/page-shell";
 import {
   getBillingFilterOptions,
@@ -105,6 +129,10 @@ export default async function BillingPage({ searchParams }: Props) {
         monthsList={monthsList}
         lang={lang}
       />
+
+      {rows.length > 0 && (
+        <BillingMediaFeeChart data={mediaFeeByMonth(rows)} lang={lang} />
+      )}
 
       {rows.length === 0 ? (
         <div className="rounded-lg border border-line border-dashed bg-paper-2 px-5 py-12 text-center">

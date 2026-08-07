@@ -82,6 +82,8 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
     proj: one(sp.proj),
     month: one(sp.month),
     year: one(sp.year),
+    byr: one(sp.byr),
+    bmo: one(sp.bmo),
     dateFrom: one(sp.pfrom),
     dateTo: one(sp.pto),
     plan: one(sp.plan),
@@ -161,10 +163,13 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
       <main className="max-w-[1400px] mx-auto px-6 py-6">
         {tab === "billing" && (
           <PortalFilters
-            fields={["origin", "project", "month"]}
+            fields={["origin", "project", "years", "monthnum"]}
             budgetOrigins={opts.budgetOrigins}
             projects={opts.projects}
             months={opts.months}
+            years={Array.from(
+              new Set(opts.months.map((m) => m.slice(0, 4))),
+            ).sort()}
             lang={lang}
           />
         )}
@@ -203,6 +208,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
             clientSlug={client.slug}
             lang={lang}
             params={portalParams}
+            availableMonths={opts.months}
           />
         )}
         {tab === "estimacion" && (

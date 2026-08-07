@@ -12,7 +12,28 @@ export type PortalFilterField =
   | "project"
   | "campaign"
   | "daterange"
-  | "month";
+  | "month"
+  // Billing Tracker: año y mes MULTI-select, independientes entre sí
+  // (?byr= y ?bmo=). No comparten params con `year`/`month`, que son los de
+  // Estimación y Reportes, para no cambiarles el comportamiento.
+  | "years"
+  | "monthnum";
+
+// Nombres de mes localizados a partir del índice (0-11). El multi de meses del
+// Billing Tracker elige MES (01..12), no mes-de-un-año, así se puede cruzar
+// "varios años × varios meses".
+function monthNames(lang: Language): { id: string; name: string }[] {
+  const fmt = new Intl.DateTimeFormat(lang === "es" ? "es-AR" : "en-US", {
+    month: "long",
+  });
+  return Array.from({ length: 12 }, (_, i) => {
+    const name = fmt.format(new Date(2000, i, 1));
+    return {
+      id: String(i + 1).padStart(2, "0"),
+      name: name.charAt(0).toUpperCase() + name.slice(1),
+    };
+  });
+}
 
 // Filtros URL-based del portal (read-only). Preserva el ?tab= y solo toca los
 // params de filtro (bo / proj / camp / month / pstatus / pfrom / pto). Mismo
@@ -65,6 +86,8 @@ export function PortalFilters({
     next.delete("pfrom");
     next.delete("pto");
     next.delete("pstatus");
+    next.delete("byr"); // vuelve al default (año en curso)
+    next.delete("bmo"); // vuelve al default (mes en curso)
     next.delete("plan"); // colapsa también el pacing expandido
     const qs = next.toString();
     router.push(qs ? `${pathname}?${qs}` : pathname);
@@ -78,6 +101,19 @@ export function PortalFilters({
   const boValues = list("bo");
   const projValues = list("proj");
   const monthValues = list("month");
+
+  // Billing Tracker. Default (sin params) = año y mes EN CURSO; "all" = todos.
+  // El valor vacío en el MultiSelect significa "todos", así que cuando no hay
+  // param mostramos el default explícito y al elegir "todos" escribimos "all".
+  const thisYear = String(new Date().getFullYear());
+  const thisMonth = String(new Date().getMonth() + 1).padStart(2, "0");
+  const rawYr = cur("byr");
+  const rawMo = cur("bmo");
+  const yrValues = rawYr === "all" ? [] : rawYr ? rawYr.split(",").filter(Boolean) : [thisYear];
+  const moValues = rawMo === "all" ? [] : rawMo ? rawMo.split(",").filter(Boolean) : [thisMonth];
+  // Si el usuario deselecciona todo queda "all" (todos), no el default.
+  const writeMulti = (k: string, arr: string[]) =>
+    update(k, arr.length === 0 ? "all" : arr.join(","));
   const allLabel = lang === "es" ? "Todos" : "All";
 
   const isFiltered =
@@ -87,7 +123,9 @@ export function PortalFilters({
     (fields.includes("project") && projValues.length > 0) ||
     (fields.includes("campaign") && campValues.length > 0) ||
     (fields.includes("daterange") && (!!cur("pfrom") || !!cur("pto"))) ||
-    (fields.includes("month") && monthValues.length > 0);
+    (fields.includes("month") && monthValues.length > 0) ||
+    (fields.includes("years") && !!rawYr) ||
+    (fields.includes("monthnum") && !!rawMo);
 
   return (
     <div className="rounded-lg border border-line bg-white dark:bg-paper-2 px-4 py-3 mb-5 flex items-end gap-3 flex-wrap">
@@ -202,6 +240,35 @@ export function PortalFilters({
             options={months.map((m) => ({ id: m, name: formatMonth(m, lang) }))}
             values={monthValues}
             onChange={(arr) => update("month", arr.join(","))}
+            lang={lang}
+            allLabel={allLabel}
+            widthClass="min-w-[150px] max-w-[240px]"
+          />
+        </Field>
+      )}
+
+      {fields.includes("years") && (
+        <Field label={lang === "es" ? "Año" : "Year"}>
+          <MultiSelect
+            options={Array.from(new Set([thisYear, ...years]))
+              .sort()
+              .reverse()
+              .map((y) => ({ id: y, name: y }))}
+            values={yrValues}
+            onChange={(arr) => writeMulti("byr", arr)}
+            lang={lang}
+            allLabel={allLabel}
+            widthClass="min-w-[130px] max-w-[220px]"
+          />
+        </Field>
+      )}
+
+      {fields.includes("monthnum") && (
+        <Field label={lang === "es" ? "Mes" : "Month"}>
+          <MultiSelect
+            options={monthNames(lang)}
+            values={moValues}
+            onChange={(arr) => writeMulti("bmo", arr)}
             lang={lang}
             allLabel={allLabel}
             widthClass="min-w-[150px] max-w-[240px]"
