@@ -527,9 +527,16 @@ export async function setFeeImputation(input: {
 //
 // El paso sent → invoiced está en markBillingInvoiced porque requiere un
 // número de factura del sistema de finanzas y no es una transición "vacía".
+//
+// `actorEmail` es opcional y SOLO se usa para la auditoría cuando el que
+// dispara la transición no tiene sesión de Supabase — hoy, el botón "Marcar
+// pagado" del portal de cliente (ver app/api/portal/billing/mark-paid). Desde
+// la app interna nunca se pasa: el actor sale de la sesión, que siempre gana
+// en recordAudit, así que no es spoofeable.
 export async function transitionBillingStatus(input: {
   billingId: string;
   to: "draft" | "ready" | "sent" | "paid" | "invoiced";
+  actorEmail?: string | null;
 }): Promise<Result> {
   const [before] = await db
     .select()
@@ -564,7 +571,7 @@ export async function transitionBillingStatus(input: {
   // timestamps "que limpiar" — quedan como historial.
   if (before.status === "paid" && input.to !== "paid") update.paidAt = null;
 
-  return persistTransition(before, update, input.billingId);
+  return persistTransition(before, update, input.billingId, input.actorEmail);
 }
 
 // Marca el billing como facturado: el manager recibió el número de factura
@@ -671,6 +678,7 @@ async function persistTransition(
   before: typeof planBillings.$inferSelect,
   update: Record<string, unknown>,
   billingId: string,
+  actorEmail?: string | null,
 ): Promise<Result> {
   let after: typeof planBillings.$inferSelect;
   try {
@@ -698,6 +706,7 @@ async function persistTransition(
     action: "update",
     beforeJson: before,
     afterJson: after,
+    actorEmail,
   });
 
   const [plan] = await db

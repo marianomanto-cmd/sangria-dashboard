@@ -114,10 +114,11 @@ app/
       simulador/            # Simulador de escenarios con benchmarks históricos
       generador/            # Generador de reportes históricos (Excel) con preview en vivo + column picker
     analisis/               # Análisis publisher × mercado con mapa de América (filtro global de cliente)
-  (portal)/                 # Portal de cliente PÚBLICO, read-only (fuera del gate de Supabase)
+  (portal)/                 # Portal de cliente PÚBLICO (fuera del gate de Supabase). Read-only salvo "Marcar pagado" del Billing Tracker
     [clientSlug]/           # /<slug> — tabs Resumen/Billing/Estimación/Proyectos/Análisis/Reportes/Benchmarks
       page.tsx              # gate por cookie → login o tabs; lookup por slug (404 si no existe/reservado)
       portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
+      portal-mark-paid.tsx  # botón "Marcar pagado" del Billing Tracker (client): 1 click invoiced → paid vía /api/portal/billing/mark-paid. ÚNICA escritura del portal
       portal-login.tsx, portal-logout.tsx, portal-benchmarks-filters.tsx
       portal-filters.tsx      # filtros URL-based del portal: multi-select genérico (MultiSelect, búsqueda opcional) para Budget Origin (?bo) / Proyecto (?proj) / Mes (?month) / Campañas (?camp) — todos listas separadas por coma — + rango de fechas Desde/Hasta (Proyectos, ?pfrom/?pto)
   api/
@@ -126,6 +127,7 @@ app/
       export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). ?v=N → versión aprobada histórica. Acceso: sesión interna O cookie de portal del cliente dueño
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
+      billing/mark-paid/route.ts # POST invoiced → paid de una factura del portal. Público + canWriteAsClientPortal + ownership (plan vivo del cliente) + sólo esa transición
       pacing.xlsx/route.ts  # XLSX CONSOLIDADO del pacing de varias campañas (Resumen/Detalle/Por mercado). Público + canAccessClientExport + ownership
       estimate.xlsx/route.ts # XLSX de la tab Estimación con los mismos meses/filtros que la ventana: hojas Resumen + Detalle + Proyección (thin handler → lib/portal-estimate-xlsx.ts). Público + canAccessClientExport
       analysis.xlsx/route.ts # XLSX de la sección Análisis (mapa) con los mismos filtros que la vista: detalle línea por línea (campaña/mercado/budget origin/inversión) + hoja Por mercado (thin handler → lib/portal-analysis-xlsx.ts). Público + canAccessClientExport
@@ -862,9 +864,11 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - **Setup de prod** (no automático): ver `.env.example` para los
   pasos en Supabase dashboard y Google Cloud Console.
 
-### Portal de cliente (público, read-only)
-- **Qué es**: una vista de solo lectura para compartir con cada cliente en
-  `/<slug>` (el mismo slug interno del cliente, ej. `/copa-airlines`). Tabs:
+### Portal de cliente (público, read-only salvo "Marcar pagado")
+- **Qué es**: una vista para compartir con cada cliente en
+  `/<slug>` (el mismo slug interno del cliente, ej. `/copa-airlines`).
+  Read-only con **una sola excepción**: el botón "Marcar pagado" del Billing
+  Tracker (ver más abajo). Tabs:
   **Resumen** (KPIs + chart de inversión mensual + **inversión por publisher
   planeado vs real** + **facturado acumulado vs estimado YTD**), **Billing
   Tracker**, **Estimación**, **Proyectos**
@@ -903,7 +907,10 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     abriéramos POST en `/<slug>`, cualquiera podría invocar acciones internas sin
     sesión. Por eso el portal **no usa Server Actions**: login/logout son route
     handlers públicos y todo lo interactivo (filtros, benchmarks, pacing) es
-    URL-based (GET).
+    URL-based (GET). **La única escritura del portal** ("Marcar pagado") sale
+    por el mismo canal: un route handler dedicado en `/api/portal/*` que se
+    autovalida. **Si mañana hace falta otra escritura desde el portal, va por
+    ahí — nunca abriendo POST en `/<slug>`.**
   - **Slugs reservados**: el proxy considera portal a cualquier primer segmento
     top-level que NO esté en `RESERVED_TOP_LEVEL_SLUGS` (`lib/client-portal.ts`).
     **Si agregás una sección nueva con ruta top-level, sumala a esa lista** o
@@ -912,6 +919,37 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   - **Cookie**: `setPortalSession(slug)` guarda el slug desbloqueado (httpOnly).
     El export (`/api/plans/[id]/export.*`) valida `canAccessClientExport(slug)`:
     pasa si hay sesión interna O cookie de portal del cliente dueño del plan.
+    `canWriteAsClientPortal(slug)` (mismo chequeo, nombre propio) es la barrera
+    de las escrituras del portal — quien la use tiene que validar **además** que
+    la entidad tocada sea de ese cliente.
+- **"Marcar pagado" (Billing Tracker del portal)**: al lado del badge de estado,
+  cada factura en estado **facturado** muestra un botón que con **un click** la
+  pasa a **pagado** en la DB (`plan_billings.status` + `paid_at`). Sin
+  confirmación: es de un solo click a propósito, y se revierte desde la app
+  interna ("Revertir a facturado" en el editor de billing del plan).
+  - **UI**: `app/(portal)/[clientSlug]/portal-mark-paid.tsx` (client). Pega por
+    `fetch` a `POST /api/portal/billing/mark-paid` con `{clientSlug, billingId}`
+    y hace `router.refresh()` (el portal es `force-dynamic`, así que el badge
+    pasa a "pagado" solo). Está en la tabla desktop **y** en las tarjetas mobile.
+  - **Backend**: `app/api/portal/billing/mark-paid/route.ts`. Tres barreras:
+    (1) `canWriteAsClientPortal(slug)`; (2) la factura tiene que colgar de un
+    plan **vivo** de un proyecto de **ese** cliente (si no, 404 — no filtra si el
+    id existe); (3) **sólo** `invoiced → paid` (cualquier otro estado → 409; si
+    ya está `paid`, responde ok — es idempotente para el doble click). El
+    lifecycle sigue en `transitionBillingStatus` (fuente única: validación,
+    `paidAt`, auditoría y `revalidatePath` de las vistas internas).
+  - **Auditoría**: `recordAudit` acepta `actorEmail` como **fallback** cuando no
+    hay sesión de Supabase (si hay user logueado, gana el user → no es
+    spoofeable desde la app interna). El portal manda
+    `portal-<slug>@sangria.portal`, así que en `/auditoria` el cambio aparece
+    como "Portal Copa Airlines editó el billing del plan …" en vez de "Sistema".
+  - **Riesgo asumido**: el gate del portal es de baja seguridad a propósito
+    (password compartido `sangriaagency` + usuario = slug/nombre del cliente),
+    así que cualquiera con el link y el password de ese cliente puede marcar sus
+    facturas como pagadas. Se acotó al mínimo: una sola transición, sólo hacia
+    adelante, scopeada al cliente, auditada y reversible desde la app interna.
+  - **Sin cambios de schema**: reusa `plan_billings.status`/`paid_at`. No
+    requiere acción en prod.
 - **Pacing del portal (Proyectos)**: cada campaña tiene un toggle "Ver pacing"
   (URL-based vía `?plan=<ids>` separados por coma → **varios expandidos a la
   vez**). El filtro **multi-select de campañas** (`?camp=<ids>`,

@@ -42,6 +42,7 @@ import {
 } from "@/lib/project-period";
 import { PortalBenchmarksFilters } from "./portal-benchmarks-filters";
 import { PortalFilters } from "./portal-filters";
+import { PortalMarkPaidButton } from "./portal-mark-paid";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Secciones (tabs) del portal de cliente. Todas read-only y scopeadas al
@@ -135,10 +136,12 @@ function splitList(v: string | null | undefined): string[] {
 
 export async function BillingSection({
   clientId,
+  clientSlug,
   lang,
   params,
 }: {
   clientId: string;
+  clientSlug: string;
   lang: Language;
   params: PortalParams;
 }) {
@@ -230,7 +233,17 @@ export async function BillingSection({
                         {formatUsd(inv.totalUsd)}
                       </td>
                       <td className="px-5 py-2">
-                        <BillingStatusBadge status={inv.status} lang={lang} size="sm" />
+                        <span className="inline-flex items-center gap-2 flex-wrap">
+                          <BillingStatusBadge status={inv.status} lang={lang} size="sm" />
+                          {inv.status === "invoiced" && (
+                            <PortalMarkPaidButton
+                              billingId={inv.id}
+                              clientSlug={clientSlug}
+                              invoiceNumber={inv.invoiceNumber}
+                              lang={lang}
+                            />
+                          )}
+                        </span>
                       </td>
                     </tr>
                   )),
@@ -251,8 +264,16 @@ export async function BillingSection({
                         {inv.invoiceNumber} · {formatMonth(inv.month, lang)}
                       </p>
                     </div>
-                    <span className="shrink-0">
+                    <span className="shrink-0 flex flex-col items-end gap-1.5">
                       <BillingStatusBadge status={inv.status} lang={lang} size="sm" />
+                      {inv.status === "invoiced" && (
+                        <PortalMarkPaidButton
+                          billingId={inv.id}
+                          clientSlug={clientSlug}
+                          invoiceNumber={inv.invoiceNumber}
+                          lang={lang}
+                        />
+                      )}
                     </span>
                   </div>
                   <div className="mt-3 grid grid-cols-3 gap-2">
