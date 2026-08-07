@@ -847,3 +847,48 @@ export const auditLog = pgTable(
     index("idx_audit_created_at").on(t.createdAt),
   ],
 );
+
+// ════════════════════════════════════════════════════════════════════════════
+// Facturación de CREATIVE — tabla propia, NO cuelga de un media plan.
+//
+// El trabajo creativo se factura por campaña pero no tiene plan de medios
+// (ni publishers, ni placements, ni fees prorrateados), así que meterlo en
+// `plan_billings` obligaría a inventar planes vacíos. Vive aparte y se
+// consulta desde /creative.
+//
+// `campaignCode` guarda el código tal cual viene del Excel de facturación
+// (ej. "COPA.c1055.MejoresTarifasCreative"); `projectName` es el nombre
+// legible cuando se conoce. Ambos nullable: hay facturas sueltas sin campaña.
+//
+// Reusa el enum `billing_status` para que el badge y el botón de pago sean
+// los mismos que en el resto de la app, pero en la práctica sólo se usan
+// 'invoiced' (emitida) y 'paid' (cobrada).
+// ════════════════════════════════════════════════════════════════════════════
+
+export const creativeBillings = pgTable(
+  "creative_billings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "restrict" }),
+    invoiceNumber: text("invoice_number").notNull().unique(),
+    campaignCode: text("campaign_code"),
+    projectName: text("project_name"),
+    month: varchar("month", { length: 7 }).notNull(), // YYYY-MM
+    invoiceDate: date("invoice_date"),
+    amountUsd: numeric("amount_usd", { precision: 14, scale: 2 })
+      .notNull()
+      .default("0"),
+    status: billingStatus("status").notNull().default("invoiced"),
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    notesMd: text("notes_md"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index("idx_creative_billings_month").on(t.month),
+    index("idx_creative_billings_client").on(t.clientId),
+  ],
+);

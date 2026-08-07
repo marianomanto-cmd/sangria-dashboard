@@ -101,6 +101,7 @@ app/
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + buscador en vivo por N°/plan + click-to-edit
     billing-tracker/        # /billing-tracker — tabs "Tracker" (proyecto→plan→facturas emitidas) + "Estimates" (estimación de facturación)
+    creative/               # /creative — facturación de trabajo creativo (tabla creative_billings, SIN media plan detrás): KPIs + chart mensual cobrado/pendiente + tabla con botón de cobro
     campaign-tracker/       # /campaign-tracker — hub con filtro vigentes/concluidos/todos + vista de carga de consumo real vs goal
       [planId]/             # vista de carga: tabla editable (autosave) + chart de progreso
     auditoria/              # /auditoria — log legible + papelera (/auditoria/papelera)
@@ -968,6 +969,28 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   proxy (`/api/portal/*`); valida `canAccessClientExport` + ownership de cada
   plan. Reusa `getCampaignTrackerPlan` por plan (tope `MAX_PLANS`).
 - **Sin cambios de schema**: reusa `clients.slug`. No requiere acción en prod.
+
+### Creative (`/creative`)
+- **Qué es**: la facturación del trabajo **creativo**, separada de la de medios.
+- **Por qué tabla propia (`creative_billings`)**: el creativo se factura por
+  campaña pero **no tiene media plan** — ni publishers, ni placements, ni fees
+  prorrateados. Meterlo en `plan_billings` (que cuelga de `media_plans` con
+  `unique(media_plan_id, month)`) obligaría a inventar planes vacíos. Por eso
+  vive aparte. Reusa el enum `billing_status`, pero en la práctica sólo se usan
+  `invoiced` (emitida) y `paid` (cobrada).
+- **Columnas**: `invoice_number` (único), `campaign_code` (el código tal cual
+  viene del Excel, ej. `COPA.c1055.MejoresTarifasCreative`), `project_name`
+  (nombre legible, nullable), `month`, `invoice_date`, `amount_usd`, `status`,
+  `paid_at`.
+- **La vista**: 3 KPIs (total facturado / cobrado / pendiente), chart de barras
+  apiladas por mes (cobrado vs pendiente, `components/creative-chart.tsx`) y la
+  tabla con **botón de cobro inline** que hace `invoiced ↔ paid`
+  (`components/creative-table.tsx` + `app/actions/creative-billing.ts`).
+  Filtro de estado URL-based (`?status=invoiced|paid`) y respeta el filtro
+  global de cliente (`?client=`).
+- **Ojo**: `/creative` es ruta top-level, así que está sumada a
+  `RESERVED_TOP_LEVEL_SLUGS` (`lib/client-portal.ts`). Sin eso el proxy la
+  trataría como portal de cliente y quedaría accesible sin login.
 
 ### Análisis por publisher × mercado (mapa de América)
 - **Qué es**: una vista que mapea las "activaciones" (placements de planes

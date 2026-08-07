@@ -32,6 +32,7 @@ export const RESERVED_TOP_LEVEL_SLUGS = new Set<string>([
   "billing",
   "billing-tracker",
   "campaign-tracker",
+  "creative",
   "auditoria",
   "configuracion",
   "reportes",

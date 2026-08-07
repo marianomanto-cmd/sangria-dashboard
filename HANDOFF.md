@@ -2,6 +2,82 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 07/ago/2026 (2) — Backfill de facturación 2024-2025 + sección Creative
+
+#### Backfill de facturación (ACCIÓN MANUAL SOBRE PROD, ya ejecutada)
+
+Se cargó a mano, vía SQL en el editor de Supabase, la facturación histórica que
+vivía en un Excel (`2025_billing.xlsx`, 137 bloques, 256 filas de factura).
+**No hay script en el repo**: fueron queries generadas para esa carga puntual.
+Lo que quedó en prod:
+
+- **220 facturas** en `plan_billings` con estado `invoiced` y su número.
+  - 183 fueron **UPDATE** de billings que ya existían en `sent` sin número.
+  - 37 fueron **INSERT** (7 en la primera pasada + 30 de campañas nuevas).
+- **11 proyectos nuevos** + **18 planes nuevos** para campañas que no estaban
+  cargadas. 6 de esos planes entraron a proyectos que ya existían, como etapa
+  faltante del funnel (ej. `m1001 StopoverAwareness` → `stopover-2025`,
+  `m1016 PuertoRicoPerformance` → `puerto-rico-2025`).
+- **255 facturas pasadas a `paid`** ($5.625.432,31) a partir del reporte de
+  Open Invoices de QuickBooks: se marcaron todas menos las 31 impagas listadas.
+
+**Criterios que costó descubrir y conviene no volver a deducir:**
+
+- **El código de campaña del Excel (`COPA.m1024.StopoverPerformanceASC`) NO es
+  `projects.code`, es `media_plans.name`.** `projects.code` son slugs
+  (`stopover-2025`, `puerto-plata`). El match se hace por el **número** de 4
+  dígitos, porque los nombres difieren (`CPA.` en vez de `COPA.`, sin la `m`,
+  espacios por puntos).
+- **Los códigos `c####` (creative) tienen numeración propia**, independiente de
+  los `m####`. Matchear sólo por número los manda a campañas ajenas
+  (`c1110.CopaCourierCreative` caía en `m1110 RestartSalta`). Van aparte → ver
+  la sección Creative, abajo.
+- **Mes**: las celdas tipo "October 24" (formato `mmmmd`) son `mmm-yy` mal
+  parseadas por Excel → octubre **2024**. Los meses de texto heredan el año de
+  la fila anterior del bloque y **suman un año cuando el mes baja**, así que un
+  bloque `October·November·December·January` cierra ese January en 2026.
+  Verificado contra el orden de los números de factura (1,00% de inversiones
+  con esta lectura vs 17,28% leyendo las celdas literal).
+- **Los montos son los del Excel (lo facturado)**, no el consumo que había
+  cargado. Se pisaron 179 filas donde diferían. **Esas filas no tienen
+  sublíneas** (`plan_billing_publishers` / `plan_billing_fees`): el Excel no
+  traía desglose por publisher. Si alguien edita un consumo o un fee de esos
+  meses desde el editor del plan, `recalcBillingTotals` recalcula desde
+  sublíneas vacías y **deja el total en 0**. Son campañas viejas y cerradas,
+  pero está la trampa.
+
+**Quedó pendiente a propósito** (no se cargó): 6 facturas en 3 pares que
+comparten plan+mes (`plan_billings` tiene `unique(media_plan_id, month)`), el
+tramo ene-25 de la factura 1029 (comparte número con el de dic-24), 7 filas del
+Excel sin número de factura, y `m1017 BoostingInfluencer` (el único plan con ese
+número es `PuertoRico.Consideration`, que no es la misma campaña).
+
+#### Sección Creative (`/creative`)
+
+- **Pedido**: una sección propia con la facturación de todo lo creativo —
+  número de factura, proyecto, estado de pago, botón de pago, fecha, monto y
+  un chart de totales por mes.
+- **Tabla nueva `creative_billings`** (ver README). No cuelga de `media_plans`
+  a propósito: el creativo no tiene plan de medios.
+- **Archivos**: `app/(app)/creative/page.tsx`, `components/creative-chart.tsx`,
+  `components/creative-table.tsx`, `db/queries/creative.ts`,
+  `app/actions/creative-billing.ts`.
+- **`/creative` se sumó a `RESERVED_TOP_LEVEL_SLUGS`** (`lib/client-portal.ts`)
+  y a `PRIMARY_NAV` (`lib/nav.ts`).
+- **ACCIÓN REQUERIDA EN PROD**: la tabla se crea con el SQL de la sesión
+  (`CREATE TABLE creative_billings` + índices) y se siembran las **21 facturas
+  creative de 2025** ($172.054,39). Si no se corrió, `/creative` rompe al
+  consultar una tabla inexistente. `npm run db:push` también la crea desde el
+  schema, pero **no siembra** las facturas.
+
+#### Lo que NO entró en esta sesión (pedido y pendiente)
+
+- **Portal · Billing Tracker**: filtro de **año y mes** con el año y mes
+  corrientes por default, multi-select de varios años / varios meses / todos.
+- **`/billing`**: chart de facturación del período filtrado con **media y fees
+  apilados dentro de cada columna**, etiquetas de datos en cada segmento y los
+  subtotales sumados abajo a la derecha del gráfico.
+
 ### Cambios de la sesión 07/ago/2026 — Portal (Billing Tracker): botón "Marcar pagado"
 
 - **Pedido**: en el **Billing Tracker de la vista de cliente** (el portal), al
@@ -3802,6 +3878,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar los filtros del Reporting Calendar | Todos client-side en `components/reporting-calendar-client.tsx`. Arriba de la página: **año** (por fecha objetivo / cierre, helpers en `lib/year-filter.ts`) + **budget origin**; aplican a pendientes y Gantt (el de budget origin también a enviados). Adentro de `SentReportsSection`: **año + mes por fecha de envío** (`delivered_at`, helper `sentDate`) + buscador de texto; el de Mes se deshabilita con año "Todos" a propósito. Los chips son `ChipGroup` / `FilterChip` en el mismo archivo. |
 | Tocar los comentarios de reportes del calendario | UI: `components/report-comments.tsx` (`ReportCommentsButton` + `ReportCommentsModal`). Actions: `app/actions/report-comments.ts` (list/add/update/delete, con audit). Schema: `report_comments` (FKs nullable a project/manual report). Counts: `commentsCount` en `CalendarReport`/`SentReport` (`db/queries/reports.ts`). El seed de la descripción como primer comentario vive en `createManualReport`. |
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
+| Tocar la facturación de CREATIVE | Tabla propia `creative_billings` (`db/schema.ts`) — **no** cuelga de `media_plans`. Query: `db/queries/creative.ts` (`getCreativeBillings` devuelve lista + totales por mes + KPIs). UI: `app/(app)/creative/page.tsx`, `components/creative-chart.tsx` (barras apiladas cobrado/pendiente), `components/creative-table.tsx` (tabla + botón de cobro). Action: `app/actions/creative-billing.ts` (`setCreativeBillingPaid`, `invoiced ↔ paid`, con audit). Los códigos `c####` del Excel de facturación tienen numeración PROPIA: no se matchean por número contra los `m####` de `media_plans`. |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (denominador: MEDIOS = media facturable Σtotal_planned where agencia paga; FEE = mgmt sobre media TOTAL — se cobra sobre toda la media aunque el cliente pague directo; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). El fee mensual lo imputa `autoRecomputeMgmtFees` en `app/actions/plan-billing.ts` (prorratea por consumo TOTAL). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Render en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |
 | Tocar la tab Estimación (portal + interno) | Datos: `getBillingEstimate` en `db/queries/dashboard.ts` (una fila por mes; devuelve **facturado real** aunque no haya gross → sirve para meses cerrados). Cards: `components/billing-estimate-card.tsx` (`isPast` via `currentMonth` → lidera con el facturado real). Portal: `EstimateSection` en `app/(portal)/[clientSlug]/portal-content.tsx` con filtros **Año + Mes** (el Mes se scopea al año). La **ventana de meses** (vista y export) sale de `lib/estimate-window.ts` (`estimateWindowMonths` / `estimationMonthOptions(billingMonths, year)` / `estimationYearOptions`), fuente única compartida — el filtro de Año evita que el de Mes traiga meses de otros años. |
