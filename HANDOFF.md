@@ -1,6 +1,53 @@
-# Handoff — martes 04/ago/2026
+# Handoff — viernes 07/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 07/ago/2026 — Portal (Billing Tracker): botón "Marcar pagado"
+
+- **Pedido**: en el **Billing Tracker de la vista de cliente** (el portal), al
+  lado del estado de cada factura, un botón que con **un click** pase la factura
+  de **facturado** a **pagado** y lo persista en la DB.
+- **Cómo quedó**:
+  - **UI** (`app/(portal)/[clientSlug]/portal-mark-paid.tsx`, client): botón
+    chico al lado del `BillingStatusBadge`, sólo cuando el estado es `invoiced`
+    (si ya está pagada, el badge alcanza). Está en la **tabla desktop** y en las
+    **tarjetas mobile** de `BillingSection` (`portal-content.tsx`). Sin diálogo
+    de confirmación: es de un click a propósito. Muestra "guardando…" mientras
+    va y el error inline si falla.
+  - **Backend** (`app/api/portal/billing/mark-paid/route.ts`): route handler
+    dedicado, **no** Server Action — el proxy sólo abre GET para `/<slug>` y ese
+    gate es el que protege las mutaciones internas; `/api/portal/*` es el canal
+    público autovalidante (mismo patrón que login/logout y los exports).
+  - **Tres barreras server-side**: (1) `canWriteAsClientPortal(slug)` — nuevo en
+    `lib/client-portal.server.ts`, mismo chequeo que `canAccessClientExport`
+    (sesión interna O cookie de portal del mismo cliente) pero con nombre propio
+    porque acá se escribe; (2) la factura tiene que colgar de un plan **vivo** de
+    un proyecto de **ese** cliente (si no, 404 — no filtra si el id existe);
+    (3) **sólo** `invoiced → paid`: cualquier otro estado devuelve 409 y si ya
+    está `paid` responde ok (idempotente para el doble click / dos pestañas).
+  - **El lifecycle sigue siendo uno solo**: la escritura pasa por
+    `transitionBillingStatus` (`app/actions/plan-billing.ts`), que ya valida la
+    transición, setea `paid_at`, audita y hace `revalidatePath` de las vistas
+    internas. No se duplicó nada de eso en el route.
+  - **Auditoría**: `recordAudit` (`lib/audit.ts`) acepta ahora `actorEmail` como
+    **fallback** cuando no hay sesión de Supabase — si hay user logueado, gana el
+    user, así que no se puede falsear desde la app interna. El portal manda
+    `portal-<slug>@sangria.portal` y `/auditoria` lo muestra como "Portal Copa
+    Airlines editó el billing del plan …" en vez de "Sistema".
+- **Riesgo asumido (a la vista)**: el gate del portal es de baja seguridad a
+  propósito — password compartido `sangriaagency` para todos los clientes +
+  usuario = slug/nombre del cliente. Con esto, cualquiera que tenga el link y el
+  password de un cliente puede marcar **sus** facturas como pagadas. Se acotó al
+  mínimo: una sola transición, sólo hacia adelante, scopeada al cliente, auditada
+  y reversible desde la app interna ("Revertir a facturado" en el editor de
+  billing del plan). Si el negocio no quiere que el cliente pueda hacerlo, lo
+  correcto es mover el botón al `/billing-tracker` interno, no aflojar el gate.
+- **Sin cambios de schema ni acciones en prod** (reusa `plan_billings.status` /
+  `paid_at`).
+- **Verificación**: `tsc --noEmit` + `eslint` + `next build` en verde; la ruta
+  aparece en el build como `ƒ /api/portal/billing/mark-paid` (dinámica). **No se
+  probó contra la DB de prod** — el flujo end-to-end (click → 200 → badge en
+  "pagado") queda por validar en el deploy.
 
 ### Cambios de la sesión 04/ago/2026 — Reportes enviados: filtros de Año y Mes
 
@@ -3747,7 +3794,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el disclaimer legal / texto de firma | Keys i18n `export.signatureDisclaimer`, `export.signaturePrompt`, `export.dateLabel`, `export.initials` en `lib/i18n.ts`. |
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
 | Tocar algo que borre/recree fees de un plan | **Regla dura: lo facturado ya está facturado.** `plan_billing_fees.media_plan_fee_id` es `no action` (no cascade) — ver `db/schema.ts`. `revertPlanToApprovedSnapshot` reconcilia los fees en vez de borrarlos y `removeFee` bloquea el borrado si hay imputaciones > 0 (`app/actions/plans.ts`). Si agregás un camino nuevo que toque `media_plan_fees`, no uses delete+insert: rompe el histórico de billing. Migración de la FK: `db/billing-fees-no-cascade.sql`. |
-| Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. |
+| Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert; param opcional `actorEmail` **sólo** para auditar al portal), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. **Ojo**: el portal también dispara `invoiced → paid` (ver la fila de abajo) — cualquier cambio de reglas tiene que contemplar ese camino. |
+| Tocar el botón "Marcar pagado" del portal (o agregar OTRA escritura al portal) | UI: `app/(portal)/[clientSlug]/portal-mark-paid.tsx` (client, se rendea al lado del badge en `BillingSection` de `portal-content.tsx`, desktop + mobile). Backend: `app/api/portal/billing/mark-paid/route.ts` (público en el proxy vía `/api/portal/*`, autovalidante). Barrera: `canWriteAsClientPortal` en `lib/client-portal.server.ts` + ownership de la factura + **sólo** `invoiced → paid`. Auditoría: `actorEmail` (`portal-<slug>@sangria.portal`) como fallback en `recordAudit` (`lib/audit.ts`). **Regla**: una escritura nueva del portal va SIEMPRE por un route handler en `/api/portal/*` con su propio chequeo de ownership — nunca abriendo POST en `/<slug>` (rompería el gate de los Server Actions internos). |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Geometría de columnas hardcodeada en el objeto `COL` (`{x, w}` relativo a `MARGIN`) + paleta/tamaños en las constantes de arriba del archivo; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). **Estilo (pedido explícito)**: header gris claro **sin bordó**, una sola tipografía (Helvetica) y mismo size en todas las celdas del cuerpo, y la Description hace wrap (fila de alto dinámico) en vez de truncarse — si tocás anchos, no vuelvas a truncar ni a meter Courier. |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Tocar los filtros del Reporting Calendar | Todos client-side en `components/reporting-calendar-client.tsx`. Arriba de la página: **año** (por fecha objetivo / cierre, helpers en `lib/year-filter.ts`) + **budget origin**; aplican a pendientes y Gantt (el de budget origin también a enviados). Adentro de `SentReportsSection`: **año + mes por fecha de envío** (`delivered_at`, helper `sentDate`) + buscador de texto; el de Mes se deshabilita con año "Todos" a propósito. Los chips son `ChipGroup` / `FilterChip` en el mismo archivo. |
@@ -3784,7 +3832,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el render del log de auditoría / papelera | `app/(app)/auditoria/page.tsx` (log), `app/(app)/auditoria/papelera/page.tsx` (papelera). Sustantivos / verbos / labels de timestamp en `lib/audit-format.ts` — agregar nuevos entityType acá. El render de cada evento (oración + diff) vive en `components/audit-entry.tsx` (compartido con el modal del plan). |
 | Tocar el chip "Última edición" / modal de cambios del plan | UI: `app/(app)/proyectos/[code]/planes/[planId]/plan-history.tsx` (`PlanLastEdit` + modal read-only). Datos: `getPlanAuditEvents` en `db/queries/audit-log.ts`. La ventana de la versión vigente la computa `…/planes/[planId]/page.tsx` con `detail.snapshots`. |
 | Tocar la auth (login con Google, dominio permitido, sign-out) | `lib/supabase/{server,client,middleware}.ts` (cliente Supabase), `lib/auth.ts` (`getCurrentUser`), `proxy.ts` (route protection — Next.js 16 reemplaza middleware.ts), `app/login/`, `app/auth/{callback,signout}/`. El dominio `@sangria.agency` está hardcodeado en `proxy.ts` y `callback/route.ts` — cambiarlo en ambos. |
-| Tocar el portal de cliente (público, read-only) | `app/(portal)/[clientSlug]/` (page + secciones + filtros), `app/api/portal/{login,logout}/route.ts`, `lib/client-portal.ts` (password/reservados/helpers edge-safe), `lib/client-portal.server.ts` (cookie + `canAccessClientExport`), `db/queries/client-portal.ts` (lookup + filtros). El gate público (solo GET) está en `lib/supabase/middleware.ts`. **Toda ruta top-level nueva de la app → sumala a `RESERVED_TOP_LEVEL_SLUGS`.** |
+| Tocar el portal de cliente (público; read-only salvo "Marcar pagado") | `app/(portal)/[clientSlug]/` (page + secciones + filtros + `portal-mark-paid.tsx`), `app/api/portal/{login,logout,billing/mark-paid}/route.ts`, `lib/client-portal.ts` (password/reservados/helpers edge-safe), `lib/client-portal.server.ts` (cookie + `canAccessClientExport` + `canWriteAsClientPortal`), `db/queries/client-portal.ts` (lookup + filtros). El gate público (solo GET para `/<slug>`) está en `lib/supabase/middleware.ts`. **Toda ruta top-level nueva de la app → sumala a `RESERVED_TOP_LEVEL_SLUGS`.** |
 | Cambiar el password / usuario del portal de cliente | `CLIENT_PORTAL_PASSWORD` en `lib/client-portal.ts` (compartido para todos). El usuario es el slug o el nombre del cliente. El admin (`/configuracion/clientes`) muestra link + usuario + password con copiar. |
 | Cambiar el favicon | `app/icon.svg` (App Router lo toma como icono; hoy "S" blanca sobre negro). No hay `favicon.ico`. |
 | Tocar el análisis por publisher × mercado (mapa) | `components/market-analysis.tsx` (filtros + mapa + ranking + tabla, URL-based), `components/americas-map.tsx` (mapa **Leaflet** — burbujas divIcon; nivel país en azul vía `.mkt-bubble--country` en `globals.css`), `lib/market-geo.ts` (centroides + `level` país/ciudad/región — agregá acá un mercado nuevo), `db/queries/analysis.ts` (`getMarketActivations`, `getAnalysisFilterOptions`). Páginas: `/analisis` (interna) y el tab Análisis del portal. |

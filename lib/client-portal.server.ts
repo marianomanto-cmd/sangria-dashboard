@@ -46,3 +46,17 @@ export async function canAccessClientExport(
   if (user) return true;
   return hasPortalAccess(clientSlug);
 }
+
+// ¿Puede el request actual ESCRIBIR en nombre de este cliente desde el portal?
+// Misma barrera que el export (sesión interna O cookie de portal del mismo
+// cliente), pero con nombre propio porque acá se muta la DB y el que la use
+// tiene que chequear ADEMÁS que la entidad tocada sea del cliente.
+//
+// El portal es público con password compartido: todo lo que pase por acá tiene
+// que ser una mutación acotada y reversible desde la app interna. Hoy la única
+// es marcar una factura facturada → pagada.
+export async function canWriteAsClientPortal(
+  clientSlug: string,
+): Promise<boolean> {
+  return canAccessClientExport(clientSlug);
+}

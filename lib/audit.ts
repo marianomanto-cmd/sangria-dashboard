@@ -19,6 +19,11 @@ export async function recordAudit(entry: {
   action: "create" | "update" | "delete" | (string & {});
   beforeJson?: unknown;
   afterJson?: unknown;
+  // Actor a grabar cuando NO hay sesión de Supabase. Lo usa el portal de
+  // cliente (público, sin login de Sangria) para que el cambio no quede como
+  // "Sistema" en /auditoria. Es SOLO fallback: si hay user logueado, gana el
+  // user — así nadie puede falsear el actor desde una acción interna.
+  actorEmail?: string | null;
 }): Promise<void> {
   let userId: string | null = null;
   let userEmail: string | null = null;
@@ -32,6 +37,7 @@ export async function recordAudit(entry: {
     // getCurrentUser puede fallar si lo llaman fuera de un contexto de
     // request (ej: script de seed). En ese caso queda como "Sistema".
   }
+  if (!userEmail) userEmail = entry.actorEmail ?? null;
 
   try {
     await db.insert(auditLog).values({

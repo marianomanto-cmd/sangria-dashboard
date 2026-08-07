@@ -198,7 +198,12 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
           <ResumenSection clientId={client.id} lang={lang} />
         )}
         {tab === "billing" && (
-          <BillingSection clientId={client.id} lang={lang} params={portalParams} />
+          <BillingSection
+            clientId={client.id}
+            clientSlug={client.slug}
+            lang={lang}
+            params={portalParams}
+          />
         )}
         {tab === "estimacion" && (
           <EstimateSection
