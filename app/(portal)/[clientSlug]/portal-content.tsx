@@ -60,6 +60,10 @@ export type PortalParams = {
   // entra si alguno de sus planes tiene un período que INTERSECTA el rango.
   dateFrom: string;
   dateTo: string;
+  // Billing Tracker: año(s) y mes(es) multi-select, independientes entre sí.
+  // "" = default (año / mes EN CURSO) · "all" = todos · "2025,2026" / "01,08".
+  byr: string;
+  bmo: string;
   // Pacing expandido: lista de planIds separados por coma (varios a la vez).
   plan: string;
   pstatus: string; // "" (abiertos, default) | "cerrados" | "todos"
@@ -134,22 +138,58 @@ function splitList(v: string | null | undefined): string[] {
   return (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+// Ventana de meses del Billing Tracker = producto cartesiano año × mes.
+// Sin params manda el default pedido: año y mes EN CURSO. "all" abre cada eje
+// por separado, así se puede pedir "todos los meses de 2025 y 2026" o
+// "los agostos de todos los años". Nunca devuelve [] con los defaults, y si lo
+// hiciera getBillingTracker lo interpreta como "sin filtro de mes".
+export function billingMonthWindow(
+  params: PortalParams,
+  availableMonths: string[],
+): string[] {
+  const now = new Date();
+  const curYear = String(now.getFullYear());
+  const curMonth = String(now.getMonth() + 1).padStart(2, "0");
+
+  const yrRaw = (params.byr ?? "").trim();
+  const moRaw = (params.bmo ?? "").trim();
+
+  const allYears = Array.from(
+    new Set([curYear, ...availableMonths.map((m) => m.slice(0, 4))]),
+  ).sort();
+
+  const years =
+    yrRaw === "all" ? allYears : yrRaw ? splitList(yrRaw) : [curYear];
+  const monthsOfYear =
+    moRaw === "all"
+      ? Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"))
+      : moRaw
+        ? splitList(moRaw)
+        : [curMonth];
+
+  const out: string[] = [];
+  for (const y of years) for (const m of monthsOfYear) out.push(`${y}-${m}`);
+  return out;
+}
+
 export async function BillingSection({
   clientId,
   clientSlug,
   lang,
   params,
+  availableMonths = [],
 }: {
   clientId: string;
   clientSlug: string;
   lang: Language;
   params: PortalParams;
+  availableMonths?: string[];
 }) {
   const projects = await getBillingTracker({
     clientId,
     budgetOriginIds: splitList(params.bo),
     projectIds: splitList(params.proj),
-    months: splitList(params.month),
+    months: billingMonthWindow(params, availableMonths),
   });
 
   if (projects.length === 0) {
@@ -157,8 +197,8 @@ export async function BillingSection({
       <EmptyPortal
         text={
           lang === "es"
-            ? "Sin facturas emitidas para los filtros aplicados."
-            : "No emitted invoices for the current filters."
+            ? "Sin facturas emitidas para los filtros aplicados. Por default se muestra el mes en curso — ampliá el filtro de Año o Mes para ver el resto."
+            : "No emitted invoices for the current filters. The current month is shown by default — widen the Year or Month filter to see more."
         }
       />
     );
