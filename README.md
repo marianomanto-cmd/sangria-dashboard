@@ -150,6 +150,7 @@ components/                 # UI compartida
   market-analysis.tsx       # vista de análisis publisher × mercado (filtros multi-select + mapa + ranking + tabla + botón export a Excel); /analisis y portal
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
+  client-projects-table.tsx      # sección "Proyectos" de /clientes/[slug] (tab Resumen): tabla desktop + cards mobile con orden client-side por código (default) / fecha / monto / nombre — pills "Ordenar" + headers clickeables, click en la opción activa invierte la dirección
   project-status-selector.tsx    # filtro por estado del proyecto (pills URL-based, server) en /proyectos — planning/active/paused/closed/reportado + Todos. Colores de dot espejan status-badge.tsx. Exporta PROJECT_STATUS_VALUES para validar el searchParam
   dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
   topbar-nav.tsx            # título de sección (Archivo), SOLO mobile (<lg) — en desktop manda la TopNav del header
@@ -285,6 +286,26 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (client-side sobre las filas ya cargadas, case-insensitive). Los filtros
   duros de `/billing` (budget origin / proyecto / estado / rango de meses)
   siguen siendo URL-based y el buscador acota lo que esos filtros ya dejaron.
+
+### Proyectos del cliente (`/clientes/[slug]`): orden por fecha / monto / nombre
+- La sección **Proyectos** de la vista de cliente (tab Resumen) se puede ordenar
+  por **fecha**, **monto (Budget)** o **nombre**, además del **código** que es el
+  default (el orden que devuelve `getClientDetail`).
+- Los tres arrancan **de mayor a menor** (fecha = más reciente primero, monto =
+  más caro primero, nombre = Z→A); **click en la opción activa invierte** la
+  dirección y la flecha del pill muestra cuál está aplicada.
+- Dos accesos al mismo estado: las pills **"Ordenar"** en el header de la sección
+  (único acceso en mobile, donde las filas son tarjetas sin header) y los
+  **headers clickeables** Proyecto / Período / Budget en la tabla de desktop
+  (mismo patrón que `/planes`).
+- Todo es **client-side** sobre las filas ya cargadas (`ClientProjectsTable` en
+  `components/client-projects-table.tsx`) — no recarga la página ni toca la URL,
+  igual que los órdenes de `/planes` y `/proyectos`.
+- **Fecha** = inicio del proyecto, con fallback al fin derivado de los placements
+  si no tiene inicio. Los proyectos **sin ninguna fecha van siempre al final**,
+  en las dos direcciones. Empates: desempata por código.
+- El orden es de la sección Proyectos únicamente: la tab **Línea de tiempo**
+  sigue con su orden propio (cronológico del gantt).
 
 ### Filtro de año (Planes, Proyectos, Calendario)
 - Las tabs `/planes`, `/proyectos` y `/reportes/calendario` filtran por **año**,
