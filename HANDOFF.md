@@ -3268,6 +3268,9 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+197bf5e  Clientes: ordenar los proyectos por fecha, monto y nombre (#213)
+a3c46e9  Portal: filtro Año/Mes en Billing Tracker · /billing: chart medios+fees (#212)
+c4fd823  Creative: sección propia de facturación de trabajo creativo (/creative) (#211)
 d528c43  Portal (Billing Tracker): botón "Marcar pagado" — 1 click facturado → pagado, vía route handler público autovalidante (#209)
 9b0021c  Reportes enviados: filtros de Año y Mes por fecha de envío (default: año y mes en curso) (#207)
 cccba65  Billing: lo facturado deja de borrarse cuando cambia el plan — FK sin cascade + revert no destructivo (#203)
