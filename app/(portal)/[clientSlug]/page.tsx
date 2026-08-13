@@ -89,6 +89,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
     plan: one(sp.plan),
     pstatus: one(sp.pstatus),
     camp: one(sp.camp),
+    psort: one(sp.psort),
   };
 
   const benchParams: BenchmarkParams = {
@@ -190,7 +191,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
         )}
         {tab === "proyectos" && (
           <PortalFilters
-            fields={["pstatus", "campaign", "origin", "daterange"]}
+            fields={["pstatus", "campaign", "origin", "daterange", "psort"]}
             budgetOrigins={opts.budgetOrigins}
             projects={opts.projects}
             campaigns={opts.campaigns}
