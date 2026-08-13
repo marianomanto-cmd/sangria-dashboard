@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { StatusBadge } from "@/components/status-badge";
+import { ClientProjectsTable } from "@/components/client-projects-table";
 import { getClientDetail } from "@/db/queries/client-detail";
-import { formatPct, formatUsd, formatUsdCompact } from "@/lib/format";
+import { formatPct, formatUsdCompact } from "@/lib/format";
 import {
   DEFAULT_LANGUAGE,
   formatDate,
@@ -134,186 +134,12 @@ function ResumenTab({
         />
       </section>
 
-      {/* Projects table */}
-      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-        <div className="px-5 py-3 border-b border-line flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">
-            {lang === "es" ? "Proyectos" : "Projects"}
-          </h2>
-          <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            {projects.length}{" "}
-            {detail.selectedOriginId
-              ? lang === "es"
-                ? "en este origen"
-                : "in this origin"
-              : lang === "es"
-                ? "totales"
-                : "total"}
-          </span>
-        </div>
-        {projects.length === 0 ? (
-          <div className="px-5 py-12 text-center text-sm text-muted">
-            {lang === "es"
-              ? "No hay proyectos para esta selección."
-              : "No projects match this selection."}
-          </div>
-        ) : (
-          <>
-          {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
-          <div className="hidden lg:block overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead className="bg-paper">
-              <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-                <th className="text-left font-medium px-5 py-2.5">
-                  {lang === "es" ? "Proyecto" : "Project"}
-                </th>
-                <th className="text-left font-medium px-5 py-2.5">
-                  {lang === "es" ? "Estado" : "Status"}
-                </th>
-                <th className="text-left font-medium px-5 py-2.5">
-                  {lang === "es" ? "Período" : "Period"}
-                </th>
-                <th className="text-right font-medium px-5 py-2.5">Budget</th>
-                <th className="text-right font-medium px-5 py-2.5">
-                  {lang === "es" ? "Gastado" : "Spent"}
-                </th>
-                <th className="text-left font-medium px-5 py-2.5 w-[180px]">
-                  {lang === "es" ? "Avance" : "Progress"}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((p) => {
-                const overConsumed = p.consumptionPct > 100;
-                const barWidth = Math.min(p.consumptionPct, 100);
-                return (
-                  <tr
-                    key={p.id}
-                    className="border-t border-line-soft hover:bg-paper-2 transition-colors"
-                  >
-                    <td className="px-5 py-3">
-                      <Link
-                        href={`/proyectos/${p.code}`}
-                        className="font-medium text-ink hover:underline"
-                      >
-                        {p.name}
-                      </Link>
-                      <div className="font-mono text-[11px] text-muted">
-                        {p.code}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <StatusBadge status={p.status} />
-                    </td>
-                    <td className="px-5 py-3 text-ink-2 font-mono text-xs whitespace-nowrap">
-                      {formatDate(p.startDate, lang)} →{" "}
-                      {formatDate(p.endDate, lang)}
-                    </td>
-                    <td className="px-5 py-3 text-right font-mono text-ink-2 tabular-nums">
-                      {formatUsd(p.totalBudgetUsd)}
-                    </td>
-                    <td className="px-5 py-3 text-right font-mono text-ink-2 tabular-nums">
-                      {p.spentUsd > 0 ? formatUsd(p.spentUsd) : "—"}
-                    </td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${
-                              overConsumed ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"
-                            }`}
-                            style={{ width: `${barWidth}%` }}
-                          />
-                        </div>
-                        <span
-                          className={`font-mono text-xs ${
-                            overConsumed ? "text-warn font-medium" : "text-ink-2"
-                          }`}
-                        >
-                          {formatPct(p.consumptionPct, 0)}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          </div>
-
-          {/* Mobile: tarjetas (sin scroll horizontal). */}
-          <div className="lg:hidden divide-y divide-line-soft">
-            {projects.map((p) => {
-              const overConsumed = p.consumptionPct > 100;
-              const barWidth = Math.min(p.consumptionPct, 100);
-              return (
-                <Link
-                  key={p.id}
-                  href={`/proyectos/${p.code}`}
-                  className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <span className="font-medium text-ink">{p.name}</span>
-                      <p className="font-mono text-[11px] text-muted">{p.code}</p>
-                    </div>
-                    <span className="shrink-0">
-                      <StatusBadge status={p.status} />
-                    </span>
-                  </div>
-
-                  <div className="mt-2.5 flex items-center gap-3">
-                    <div className="flex-1 h-1.5 rounded-full bg-paper-2 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${
-                          overConsumed ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"
-                        }`}
-                        style={{ width: `${barWidth}%` }}
-                      />
-                    </div>
-                    <span
-                      className={`font-mono text-xs tabular-nums ${
-                        overConsumed ? "text-warn font-medium" : "text-ink-2"
-                      }`}
-                    >
-                      {formatPct(p.consumptionPct, 0)}
-                    </span>
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                        Budget
-                      </p>
-                      <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">
-                        {formatUsd(p.totalBudgetUsd)}
-                      </p>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                        {lang === "es" ? "Gastado" : "Spent"}
-                      </p>
-                      <p className="font-mono text-xs text-ink-2 tabular-nums mt-0.5">
-                        {p.spentUsd > 0 ? formatUsd(p.spentUsd) : "—"}
-                      </p>
-                    </div>
-                    <div className="min-w-0 col-span-2 sm:col-span-1">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted">
-                        {lang === "es" ? "Período" : "Period"}
-                      </p>
-                      <p className="font-mono text-[11px] text-ink-2 mt-0.5">
-                        {formatDate(p.startDate, lang)} →{" "}
-                        {formatDate(p.endDate, lang)}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-          </>
-        )}
-      </section>
+      {/* Projects table — el orden (código/fecha/monto/nombre) es client-side */}
+      <ClientProjectsTable
+        projects={projects}
+        lang={lang}
+        scopedToOrigin={Boolean(detail.selectedOriginId)}
+      />
     </>
   );
 }

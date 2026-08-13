@@ -157,6 +157,7 @@ const DICT: Record<string, Record<Language, string>> = {
   "common.rate": { en: "Rate", es: "Tarifa" },
   "common.type": { en: "Type", es: "Tipo" },
   "common.name": { en: "Name", es: "Nombre" },
+  "common.code": { en: "Code", es: "Código" },
   "common.language": { en: "Language", es: "Idioma" },
   "common.create": { en: "Create", es: "Crear" },
   "common.save": { en: "Save", es: "Guardar" },

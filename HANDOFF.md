@@ -1,6 +1,34 @@
-# Handoff — viernes 07/ago/2026
+# Handoff — jueves 13/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 13/ago/2026 — Clientes: ordenar los proyectos por fecha / monto / nombre
+
+- **Pedido**: en la vista de clientes, sección **Proyectos**, poder ordenar **de
+  mayor a menor** por **fecha**, por **monto** y por **nombre**.
+- La sección salió de `app/(app)/clientes/[slug]/page.tsx` a un componente
+  client propio: `components/client-projects-table.tsx` (`ClientProjectsTable`).
+  La tabla de desktop y las tarjetas de mobile se movieron **tal cual** — el
+  único cambio visual es el control de orden en el header de la sección.
+- **Orden client-side**, sobre las filas ya cargadas: no recarga la página ni
+  escribe la URL. Es la misma convención que `/planes` y `/proyectos` (ver
+  README, "Listados de Planes y Proyectos"). No se tocó `getClientDetail`.
+- **Default = código asc** (el orden que ya devolvía la query), así la vista abre
+  igual que antes. Fecha / Monto / Nombre arrancan en **desc** ("de mayor a
+  menor", como se pidió) y un **segundo click sobre la opción activa invierte**
+  la dirección; la flecha del pill muestra cuál está aplicada.
+- Dos accesos al mismo estado: las pills **"Ordenar"** del header (único acceso
+  en mobile, donde las filas son tarjetas sin header clickeable) y los headers
+  **Proyecto / Período / Budget** de la tabla de desktop.
+- **Fecha** = `startDate` del proyecto, con fallback a `endDate` (el derivado del
+  placement más lejano) cuando no tiene inicio. Los proyectos **sin ninguna
+  fecha quedan siempre al final**, en las dos direcciones — si no, en desc
+  coparían el tope. Desempate por código en todos los órdenes (localeCompare con
+  `sensitivity: "base"` no es estable ante empates).
+- Key i18n nueva: `common.code` en `lib/i18n.ts` (las otras tres —
+  `common.date` / `common.amount` / `common.name` — ya existían).
+- La tab **Línea de tiempo** no se tocó: sigue con el orden del gantt.
+- **Sin cambios de schema ni acciones en prod.**
 
 ### Cambios de la sesión 07/ago/2026 (3) — Portal: filtro Año/Mes en Billing Tracker · /billing: chart medios+fees
 
@@ -3896,6 +3924,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar la navegación (drawer mobile <lg) | `components/sidebar.tsx` (mismo `lib/nav.ts`). En ≥lg el `<aside>` no se renderiza. |
 | Cambiar el topbar                      | `components/topbar.tsx` (marca + `TopNav` desktop; `topbar-nav.tsx` = título de sección solo mobile). |
 | Cambiar la tabla expandible (Proyectos) | `components/projects-table-expandable.tsx` — el prop `searchable` activa buscador (nombre/código) + orden A-Z; el dashboard la usa SIN `searchable` (sin buscador, orden de la query). |
+| Cambiar el orden de los Proyectos de un CLIENTE (`/clientes/[slug]`) | `components/client-projects-table.tsx` (`ClientProjectsTable`) — tabla desktop + cards mobile + control de orden. Client-side sobre las filas ya cargadas (no toca la URL ni `getClientDetail`): default **código asc**; **fecha / monto / nombre** arrancan **desc** y el click en la opción activa invierte. Fecha = `startDate` con fallback a `endDate`, y los proyectos sin fechas van SIEMPRE al final. Dos accesos al mismo estado: pills "Ordenar" (único en mobile) + headers Proyecto/Período/Budget en desktop. La page (`app/(app)/clientes/[slug]/page.tsx`) solo le pasa `projects` + `lang` + `scopedToOrigin`. |
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
