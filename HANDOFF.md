@@ -2,32 +2,36 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 13/ago/2026 — Clientes: ordenar los proyectos por fecha / monto / nombre
+### Cambios de la sesión 13/ago/2026 — Portal (Proyectos): ordenar por fecha, monto y nombre
 
-- **Pedido**: en la vista de clientes, sección **Proyectos**, poder ordenar **de
-  mayor a menor** por **fecha**, por **monto** y por **nombre**.
-- La sección salió de `app/(app)/clientes/[slug]/page.tsx` a un componente
-  client propio: `components/client-projects-table.tsx` (`ClientProjectsTable`).
-  La tabla de desktop y las tarjetas de mobile se movieron **tal cual** — el
-  único cambio visual es el control de orden en el header de la sección.
-- **Orden client-side**, sobre las filas ya cargadas: no recarga la página ni
-  escribe la URL. Es la misma convención que `/planes` y `/proyectos` (ver
-  README, "Listados de Planes y Proyectos"). No se tocó `getClientDetail`.
-- **Default = código asc** (el orden que ya devolvía la query), así la vista abre
-  igual que antes. Fecha / Monto / Nombre arrancan en **desc** ("de mayor a
-  menor", como se pidió) y un **segundo click sobre la opción activa invierte**
-  la dirección; la flecha del pill muestra cuál está aplicada.
-- Dos accesos al mismo estado: las pills **"Ordenar"** del header (único acceso
-  en mobile, donde las filas son tarjetas sin header clickeable) y los headers
-  **Proyecto / Período / Budget** de la tabla de desktop.
-- **Fecha** = `startDate` del proyecto, con fallback a `endDate` (el derivado del
-  placement más lejano) cuando no tiene inicio. Los proyectos **sin ninguna
-  fecha quedan siempre al final**, en las dos direcciones — si no, en desc
-  coparían el tope. Desempate por código en todos los órdenes (localeCompare con
-  `sensitivity: "base"` no es estable ante empates).
-- Key i18n nueva: `common.code` en `lib/i18n.ts` (las otras tres —
-  `common.date` / `common.amount` / `common.name` — ya existían).
-- La tab **Línea de tiempo** no se tocó: sigue con el orden del gantt.
+- **Pedido**: en la **vista de cliente** (el PORTAL, `/<slug>` → tab Proyectos),
+  poder ordenar los proyectos **de mayor a menor** por **fecha**, **monto** y
+  **nombre**.
+- **Ojo con la lectura del pedido**: en la primera pasada esto se implementó en
+  la vista INTERNA `/clientes/[slug]` (PR #213) — **vista equivocada**. Se
+  revirtió por completo en este mismo PR (se borró
+  `components/client-projects-table.tsx`, se restauró
+  `app/(app)/clientes/[slug]/page.tsx` y se sacó la key i18n `common.code`).
+  Cuando el pedido diga "vista de cliente", es el **portal**.
+- **Param nuevo `?psort=`** en `PortalParams`, con select **"Ordenar"** en la
+  barra de filtros del tab (`portal-filters.tsx`, field `psort`). Opciones:
+  nombre A→Z (default, `""`) · `nombre_desc` · `fecha_desc` · `fecha_asc` ·
+  `monto_desc` · `monto_asc`. En el select, cada criterio lista **primero la
+  dirección de mayor a menor**, que es lo que se pidió.
+- **Server-side, URL-based** (no client-side como `/planes` y `/proyectos`): la
+  sección es un server component y cada campaña puede expandir su pacing, que
+  también se resuelve en el server. `resolveProjectSort` valida el param y un
+  valor basura cae al default.
+- **Monto del proyecto = suma de sus campañas VISIBLES** (las que quedaron
+  después de los filtros de estado/campañas/origin/fechas), que es exactamente
+  lo que el cliente ve en pantalla. **Fecha** = inicio del período del proyecto
+  con fallback al fin; los proyectos **sin fechas van siempre al final**, en las
+  dos direcciones. Desempate por código.
+- El orden se aplica **después de filtrar y antes de armar `visiblePlanIds`**,
+  así el **Excel de pacing baja en el mismo orden que la pantalla** (regla dura
+  de `AGENTS.md`).
+- El select se limpia con el botón **"Limpiar"** (vuelve al default) y cuenta
+  para el `isFiltered` de la barra.
 - **Sin cambios de schema ni acciones en prod.**
 
 ### Cambios de la sesión 07/ago/2026 (3) — Portal: filtro Año/Mes en Billing Tracker · /billing: chart medios+fees
@@ -3268,7 +3272,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-197bf5e  Clientes: ordenar los proyectos por fecha, monto y nombre (#213)
+197bf5e  Clientes: ordenar los proyectos por fecha, monto y nombre (#213) — revertido por #214 (vista equivocada: iba en el portal)
 a3c46e9  Portal: filtro Año/Mes en Billing Tracker · /billing: chart medios+fees (#212)
 c4fd823  Creative: sección propia de facturación de trabajo creativo (/creative) (#211)
 d528c43  Portal (Billing Tracker): botón "Marcar pagado" — 1 click facturado → pagado, vía route handler público autovalidante (#209)
@@ -3927,7 +3931,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar la navegación (drawer mobile <lg) | `components/sidebar.tsx` (mismo `lib/nav.ts`). En ≥lg el `<aside>` no se renderiza. |
 | Cambiar el topbar                      | `components/topbar.tsx` (marca + `TopNav` desktop; `topbar-nav.tsx` = título de sección solo mobile). |
 | Cambiar la tabla expandible (Proyectos) | `components/projects-table-expandable.tsx` — el prop `searchable` activa buscador (nombre/código) + orden A-Z; el dashboard la usa SIN `searchable` (sin buscador, orden de la query). |
-| Cambiar el orden de los Proyectos de un CLIENTE (`/clientes/[slug]`) | `components/client-projects-table.tsx` (`ClientProjectsTable`) — tabla desktop + cards mobile + control de orden. Client-side sobre las filas ya cargadas (no toca la URL ni `getClientDetail`): default **código asc**; **fecha / monto / nombre** arrancan **desc** y el click en la opción activa invierte. Fecha = `startDate` con fallback a `endDate`, y los proyectos sin fechas van SIEMPRE al final. Dos accesos al mismo estado: pills "Ordenar" (único en mobile) + headers Proyecto/Período/Budget en desktop. La page (`app/(app)/clientes/[slug]/page.tsx`) solo le pasa `projects` + `lang` + `scopedToOrigin`. |
+| Cambiar el ORDEN de la lista de Proyectos del PORTAL | Param `?psort=` (`PortalParams` en `app/(portal)/[clientSlug]/portal-content.tsx`). El select "Ordenar" es el field `psort` de `portal-filters.tsx` (`PROJECT_SORT_OPTIONS` = labels; los values los valida `resolveProjectSort`). El orden lo aplica `sortPortalProjects` en `ProjectsSection`, **después** de filtrar y **antes** de armar `visiblePlanIds` — así el Excel de pacing sale en el mismo orden que la pantalla. Monto = suma de las campañas visibles; fecha = inicio del período (fallback al fin) y los proyectos sin fechas van SIEMPRE al final. |
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |

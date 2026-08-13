@@ -121,7 +121,7 @@ app/
       portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
       portal-mark-paid.tsx  # botón "Marcar pagado" del Billing Tracker (client): 1 click invoiced → paid vía /api/portal/billing/mark-paid. ÚNICA escritura del portal
       portal-login.tsx, portal-logout.tsx, portal-benchmarks-filters.tsx
-      portal-filters.tsx      # filtros URL-based del portal: multi-select genérico (MultiSelect, búsqueda opcional) para Budget Origin (?bo) / Proyecto (?proj) / Mes (?month) / Campañas (?camp) — todos listas separadas por coma — + rango de fechas Desde/Hasta (Proyectos, ?pfrom/?pto)
+      portal-filters.tsx      # filtros URL-based del portal: multi-select genérico (MultiSelect, búsqueda opcional) para Budget Origin (?bo) / Proyecto (?proj) / Mes (?month) / Campañas (?camp) — todos listas separadas por coma — + rango de fechas Desde/Hasta (Proyectos, ?pfrom/?pto) + orden de Proyectos (?psort=: fecha/monto/nombre en las dos direcciones, default nombre A→Z)
   api/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + mercado + fechas por publisher/placement). ?v=N → versión aprobada histórica
@@ -150,7 +150,6 @@ components/                 # UI compartida
   market-analysis.tsx       # vista de análisis publisher × mercado (filtros multi-select + mapa + ranking + tabla + botón export a Excel); /analisis y portal
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
-  client-projects-table.tsx      # sección "Proyectos" de /clientes/[slug] (tab Resumen): tabla desktop + cards mobile con orden client-side por código (default) / fecha / monto / nombre — pills "Ordenar" + headers clickeables, click en la opción activa invierte la dirección
   project-status-selector.tsx    # filtro por estado del proyecto (pills URL-based, server) en /proyectos — planning/active/paused/closed/reportado + Todos. Colores de dot espejan status-badge.tsx. Exporta PROJECT_STATUS_VALUES para validar el searchParam
   dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
   topbar-nav.tsx            # título de sección (Archivo), SOLO mobile (<lg) — en desktop manda la TopNav del header
@@ -286,26 +285,6 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (client-side sobre las filas ya cargadas, case-insensitive). Los filtros
   duros de `/billing` (budget origin / proyecto / estado / rango de meses)
   siguen siendo URL-based y el buscador acota lo que esos filtros ya dejaron.
-
-### Proyectos del cliente (`/clientes/[slug]`): orden por fecha / monto / nombre
-- La sección **Proyectos** de la vista de cliente (tab Resumen) se puede ordenar
-  por **fecha**, **monto (Budget)** o **nombre**, además del **código** que es el
-  default (el orden que devuelve `getClientDetail`).
-- Los tres arrancan **de mayor a menor** (fecha = más reciente primero, monto =
-  más caro primero, nombre = Z→A); **click en la opción activa invierte** la
-  dirección y la flecha del pill muestra cuál está aplicada.
-- Dos accesos al mismo estado: las pills **"Ordenar"** en el header de la sección
-  (único acceso en mobile, donde las filas son tarjetas sin header) y los
-  **headers clickeables** Proyecto / Período / Budget en la tabla de desktop
-  (mismo patrón que `/planes`).
-- Todo es **client-side** sobre las filas ya cargadas (`ClientProjectsTable` en
-  `components/client-projects-table.tsx`) — no recarga la página ni toca la URL,
-  igual que los órdenes de `/planes` y `/proyectos`.
-- **Fecha** = inicio del proyecto, con fallback al fin derivado de los placements
-  si no tiene inicio. Los proyectos **sin ninguna fecha van siempre al final**,
-  en las dos direcciones. Empates: desempata por código.
-- El orden es de la sección Proyectos únicamente: la tab **Línea de tiempo**
-  sigue con su orden propio (cronológico del gantt).
 
 ### Filtro de año (Planes, Proyectos, Calendario)
 - Las tabs `/planes`, `/proyectos` y `/reportes/calendario` filtran por **año**,
@@ -980,6 +959,22 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   no las esconda). El bug del "Ver pacing" que perdía `pstatus` (volvía a Abiertos
   y no mostraba el pacing de campañas cerradas) se arregló en `hrefWith`
   (preserva `pstatus` + `camp` + el rango de fechas `pfrom`/`pto`).
+- **Orden de la lista (`?psort=`)**: el tab Proyectos se puede ordenar por
+  **fecha**, **monto** y **nombre**, en las dos direcciones (el select "Ordenar"
+  del filtro lista primero la de *mayor a menor*). Default `""` = **nombre A→Z**.
+  Values: `nombre_desc` · `fecha_desc` · `fecha_asc` · `monto_desc` · `monto_asc`
+  (los valida `resolveProjectSort` en `portal-content.tsx`; un valor basura cae
+  al default). Es **URL-based y server-side**, no client-side como el orden de
+  `/planes` y `/proyectos`: la sección es un server component y cada campaña
+  puede expandir su pacing, que también se resuelve en el server.
+  - **Monto** = suma de las campañas **visibles** del proyecto (las que quedaron
+    después de los filtros), que es lo que el cliente ve en pantalla. **Fecha** =
+    inicio del período del proyecto (`projectPeriod` sobre sus planes visibles),
+    con fallback al fin; los proyectos **sin fechas van siempre al final**, en
+    las dos direcciones. Desempate por código.
+  - El orden se aplica **después** de filtrar y **antes** de armar
+    `visiblePlanIds`, así el **Excel de pacing sale en el mismo orden que la
+    pantalla** (regla dura de `AGENTS.md`: el export espeja la vista).
 - **Export consolidado de pacing**
   (`GET /api/portal/pacing.xlsx?client=<slug>&plans=<ids>`): baja en un solo
   Excel el pacing de **varias campañas a la vez** (las visibles/seleccionadas),

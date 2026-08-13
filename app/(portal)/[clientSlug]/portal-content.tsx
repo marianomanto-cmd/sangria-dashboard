@@ -69,7 +69,82 @@ export type PortalParams = {
   pstatus: string; // "" (abiertos, default) | "cerrados" | "todos"
   // Filtro multi-select de campañas (planIds separados por coma).
   camp: string;
+  // Orden de la lista de Proyectos: "" = nombre A→Z (default) · ver
+  // PROJECT_SORTS. Los tres criterios que pidió el cliente (fecha / monto /
+  // nombre) están en las dos direcciones; el default es el que ya se veía.
+  psort: string;
 };
+
+// ─── Orden de la lista de Proyectos (?psort=) ───────────────────────────────
+//
+// Server-side, URL-based: la sección es un server component (cada plan puede
+// expandir su pacing, que se resuelve en el server), así que el orden viaja por
+// la URL como el resto de los filtros del portal — no es client-side como en
+// /planes o /proyectos.
+
+export const PROJECT_SORT_VALUES = [
+  "nombre_desc",
+  "fecha_desc",
+  "fecha_asc",
+  "monto_desc",
+  "monto_asc",
+] as const;
+
+type ProjectSort = (typeof PROJECT_SORT_VALUES)[number] | "nombre";
+
+function resolveProjectSort(raw: string): ProjectSort {
+  return (PROJECT_SORT_VALUES as readonly string[]).includes(raw)
+    ? (raw as ProjectSort)
+    : "nombre";
+}
+
+// Monto del proyecto = suma de las campañas VISIBLES (las que quedaron después
+// de los filtros), que es exactamente lo que el cliente ve en pantalla.
+function projectAmountUsd(plans: { totalUsd: number }[]): number {
+  return plans.reduce((s, p) => s + p.totalUsd, 0);
+}
+
+// Fecha de referencia = inicio del período del proyecto, con fallback al fin.
+function projectDateKey(
+  plans: { periodStart: string | null; periodEnd: string | null }[],
+): string | null {
+  const { start, end } = projectPeriod(plans);
+  return start ?? end ?? null;
+}
+
+function sortPortalProjects<
+  T extends {
+    code: string;
+    name: string;
+    plans: {
+      totalUsd: number;
+      periodStart: string | null;
+      periodEnd: string | null;
+    }[];
+  },
+>(rows: T[], sort: ProjectSort): T[] {
+  const tie = (a: T, b: T) => a.code.localeCompare(b.code);
+  const sign = sort.endsWith("_asc") || sort === "nombre" ? 1 : -1;
+
+  return [...rows].sort((a, b) => {
+    if (sort.startsWith("fecha")) {
+      const ka = projectDateKey(a.plans);
+      const kb = projectDateKey(b.plans);
+      // Los proyectos sin fechas van siempre al final, en las dos direcciones.
+      if (ka === null || kb === null) {
+        if (ka === kb) return tie(a, b);
+        return ka === null ? 1 : -1;
+      }
+      return ka.localeCompare(kb) * sign || tie(a, b);
+    }
+    const cmp = sort.startsWith("monto")
+      ? projectAmountUsd(a.plans) - projectAmountUsd(b.plans)
+      : a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    // Desempate por código: localeCompare con sensitivity "base" (y los empates
+    // de monto) no ordenan estable entre renders.
+    return cmp * sign || tie(a, b);
+  });
+}
 
 // ─── Resumen ────────────────────────────────────────────────────────────────
 
@@ -754,7 +829,7 @@ export async function ProjectsSection({
   // (draft/ready/archived).
   const dateFrom = selectedCampaigns ? null : params.dateFrom || null;
   const dateTo = selectedCampaigns ? null : params.dateTo || null;
-  const visible = rows
+  const filtered = rows
     .filter((proj) => STATUSES.has(proj.status))
     .map((proj) => {
       let plans = proj.plans.filter((p) => p.status === "approved");
@@ -769,6 +844,10 @@ export async function ProjectsSection({
       return { ...proj, plans };
     })
     .filter((proj) => proj.plans.length > 0);
+
+  // Orden elegido en el filtro "Ordenar" (?psort=). Se aplica DESPUÉS de
+  // filtrar, así el monto de cada proyecto suma solo las campañas visibles.
+  const visible = sortPortalProjects(filtered, resolveProjectSort(params.psort));
 
   if (visible.length === 0) {
     return (

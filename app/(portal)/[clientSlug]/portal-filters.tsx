@@ -7,6 +7,8 @@ import { formatMonth, type Language } from "@/lib/i18n";
 
 export type PortalFilterField =
   | "pstatus"
+  // Orden de la lista de Proyectos (?psort=). Default "" = nombre A→Z.
+  | "psort"
   | "year"
   | "origin"
   | "project"
@@ -35,9 +37,22 @@ function monthNames(lang: Language): { id: string; name: string }[] {
   });
 }
 
+// Opciones del orden de Proyectos (?psort=). El valor "" es el default (nombre
+// A→Z) y no escribe param. Los tres criterios pedidos —fecha, monto y nombre—
+// están en las dos direcciones, arrancando por la de "mayor a menor".
+// Los values los valida `resolveProjectSort` en portal-content.tsx.
+const PROJECT_SORT_OPTIONS: { value: string; es: string; en: string }[] = [
+  { value: "", es: "Nombre (A → Z)", en: "Name (A → Z)" },
+  { value: "nombre_desc", es: "Nombre (Z → A)", en: "Name (Z → A)" },
+  { value: "fecha_desc", es: "Fecha (más reciente)", en: "Date (newest)" },
+  { value: "fecha_asc", es: "Fecha (más antigua)", en: "Date (oldest)" },
+  { value: "monto_desc", es: "Monto (mayor a menor)", en: "Amount (high → low)" },
+  { value: "monto_asc", es: "Monto (menor a mayor)", en: "Amount (low → high)" },
+];
+
 // Filtros URL-based del portal (read-only). Preserva el ?tab= y solo toca los
-// params de filtro (bo / proj / camp / month / pstatus / pfrom / pto). Mismo
-// patrón que los filtros internos pero scopeado al portal.
+// params de filtro (bo / proj / camp / month / pstatus / pfrom / pto / psort).
+// Mismo patrón que los filtros internos pero scopeado al portal.
 export function PortalFilters({
   fields,
   budgetOrigins,
@@ -86,6 +101,7 @@ export function PortalFilters({
     next.delete("pfrom");
     next.delete("pto");
     next.delete("pstatus");
+    next.delete("psort"); // vuelve al default (nombre A→Z)
     next.delete("byr"); // vuelve al default (año en curso)
     next.delete("bmo"); // vuelve al default (mes en curso)
     next.delete("plan"); // colapsa también el pacing expandido
@@ -118,6 +134,7 @@ export function PortalFilters({
 
   const isFiltered =
     (fields.includes("pstatus") && !!cur("pstatus")) ||
+    (fields.includes("psort") && !!cur("psort")) ||
     (fields.includes("year") && !!cur("year")) ||
     (fields.includes("origin") && boValues.length > 0) ||
     (fields.includes("project") && projValues.length > 0) ||
@@ -232,6 +249,22 @@ export function PortalFilters({
             />
           </Field>
         </>
+      )}
+
+      {fields.includes("psort") && (
+        <Field label={lang === "es" ? "Ordenar" : "Sort"}>
+          <select
+            value={cur("psort")}
+            onChange={(e) => update("psort", e.target.value)}
+            className="rounded-md border border-line bg-white dark:bg-paper-2 px-2.5 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-[190px]"
+          >
+            {PROJECT_SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {lang === "es" ? o.es : o.en}
+              </option>
+            ))}
+          </select>
+        </Field>
       )}
 
       {fields.includes("month") && (
