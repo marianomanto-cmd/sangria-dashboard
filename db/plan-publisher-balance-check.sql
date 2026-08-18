@@ -22,6 +22,13 @@
 --   publisher no cuadra (barrera real en `transitionPlanStatus`). Esta query
 --   sirve para los planes que se congelaron ANTES de esa regla.
 --
+-- EL UMBRAL ES $1, igual que `BALANCE_TOLERANCE_USD` en la regla.
+--   Repartir un budget entre N líneas deja restos de redondeo inevitables (un
+--   bloque de $4.250 en 3 líneas de $1.416,67 suma $4.250,01). El barrido de
+--   prod de ago/2026 encontró 10 bloques descuadrados y los 10 eran ruido de
+--   ese tipo, entre $0,01 y $0,34. Bajá el `>= 1` a `>= 0.01` si querés ver
+--   también ese ruido; para buscar plata de verdad, dejalo en 1.
+--
 -- QUÉ HACER CON EL RESULTADO:
 --   ⚠️ NO hay query de reparación a propósito. Cuál de los dos números está
 --   bien es una decisión de negocio por plan: puede faltar cargar un placement
@@ -53,7 +60,7 @@ where mp.deleted_at is null
   and mp.status in ('ready_to_send', 'approved', 'qa_done', 'live')
 group by c.name, p.code, mp.name, mp.status, mp.current_version,
          pub.name, mpp.id, mpp.total_planned_usd
-having abs(mpp.total_planned_usd - coalesce(sum(pl.amount_usd), 0)) >= 0.01
+having abs(mpp.total_planned_usd - coalesce(sum(pl.amount_usd), 0)) >= 1
 order by abs(mpp.total_planned_usd - coalesce(sum(pl.amount_usd), 0)) desc;
 
 
@@ -78,7 +85,7 @@ from (
   where mp.deleted_at is null
     and mp.status in ('ready_to_send', 'approved', 'qa_done', 'live')
   group by mp.id, mp.status, mpp.id, mpp.total_planned_usd
-  having abs(mpp.total_planned_usd - coalesce(sum(pl.amount_usd), 0)) >= 0.01
+  having abs(mpp.total_planned_usd - coalesce(sum(pl.amount_usd), 0)) >= 1
 ) t
 group by t.status
 order by t.status;

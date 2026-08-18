@@ -20,8 +20,8 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   ningún mes**. El caso inverso (placements de más) hace que los meses facturen
   más que el total del plan.
 - **Fix**: regla nueva en `lib/plan-readiness.ts` — la suma de los placements de
-  cada publisher tiene que dar su `total_planned_usd`, con tolerancia de **1
-  centavo** (`BALANCE_TOLERANCE_USD`, exportada). El mensaje dice los números
+  cada publisher tiene que dar su `total_planned_usd`, con tolerancia de **$1**
+  (`BALANCE_TOLERANCE_USD`, exportada). El mensaje dice los números
   concretos: *"cuadrar los placements con el total del publisher: suman $39.000
   contra un total de $40.455 (faltan $1.455)"*. Cubre los dos sentidos (faltan /
   sobran) y muestra centavos sólo cuando los hay (una diferencia de $0,50 no se
@@ -32,6 +32,15 @@ Estado del repo al cierre y plan para retomar en otra sesión.
   para poder marcar Listo/Aprobado — así no sorprende recién al apretar el
   botón. El editor importa `BALANCE_TOLERANCE_USD` en vez de repetir el `0.01`,
   para que el aviso y la barrera no puedan divergir.
+- **La tolerancia arrancó en 1 centavo y se subió a $1 con el dato de prod.** El
+  barrido encontró 10 bloques descuadrados y **los 10 eran ruido de redondeo**
+  (de $0,01 a $0,34; el error no escalaba con la cantidad de líneas: 16 líneas →
+  $0,01, 5 líneas → $0,34). Repartir un budget entre N líneas deja restos que no
+  se pueden cuadrar sin ensuciar una línea con un centavo arbitrario. Con el
+  umbral de un centavo, esos 10 planes habrían quedado trabados al re-aprobarse
+  y el aviso ámbar habría seguido gritando por monedas — que es probablemente
+  **por qué el descuadre de $1.455 pasó de largo**: la alarma ya venía
+  desacreditada. A $1 los 10 pasan y el bug de $1.455 se bloquea.
 - **Planes ya congelados antes de la regla**: diagnóstico en
   **`db/plan-publisher-balance-check.sql`** (bloques descuadrados + resumen de
   cuánta plata implica, por estado). **Sin query de reparación a propósito**:

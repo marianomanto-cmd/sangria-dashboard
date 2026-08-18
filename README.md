@@ -351,8 +351,8 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   barrera real) y el editor (el diálogo). Exige:
   - **publisher**: `total_planned_usd` > 0 y al menos un placement;
   - **cuadre del publisher**: la suma de los montos de sus placements tiene que
-    dar el `total_planned_usd` del bloque (tolerancia 1 centavo,
-    `BALANCE_TOLERANCE_USD`, que el editor importa para pintar el aviso con el
+    dar el `total_planned_usd` del bloque, con **tolerancia de $1**
+    (`BALANCE_TOLERANCE_USD`, que el editor importa para pintar el aviso con el
     mismo criterio con el que la regla bloquea);
   - **placement**: no puede estar vacío, y necesita `placement_name`,
     `amount_usd` > 0, `cost_method`, `start_date` y `end_date`;
@@ -377,6 +377,16 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   total del plan. En `draft` el descuadre se tolera (estás armando el plan) y el
   bloque muestra el aviso ámbar con el botón **"Balancear"**; para pasar a
   Listo/Aprobado hay que cuadrarlo.
+
+  **Por qué la tolerancia es $1 y no un centavo**: repartir un budget entre N
+  líneas deja restos de redondeo inevitables — un bloque de $4.250 en 3 líneas
+  de $1.416,67 suma $4.250,01, y no hay forma de cuadrarlo sin ensuciar una
+  línea con un centavo arbitrario. El barrido de prod (ago/2026) encontró 10
+  bloques descuadrados y **los 10 eran ruido de redondeo**, entre $0,01 y $0,34;
+  el error que la regla ataja era de $1.455. Un dólar separa limpiamente las dos
+  poblaciones. Hay además una razón de producto: con tolerancia de un centavo el
+  aviso ámbar se prendía en planes perfectos, y una alarma que salta por monedas
+  es una alarma que se aprende a ignorar.
 
   Para los planes que se congelaron **antes** de esta regla hay un diagnóstico
   en [`db/plan-publisher-balance-check.sql`](db/plan-publisher-balance-check.sql)

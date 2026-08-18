@@ -49,12 +49,30 @@ export type ReadinessIssue = {
 
 const UNNAMED = "(placement sin nombre)";
 
-// Tolerancia del cuadre publisher ↔ placements: un centavo. Los montos son
-// numeric(14,2), así que cualquier diferencia real es >= 0.01; el margen existe
-// solo para no pelearse con el redondeo binario de los floats.
+// Tolerancia del cuadre publisher ↔ placements: UN DÓLAR.
+//
+// Por qué no un centavo, que sería lo "exacto": repartir un budget entre N
+// líneas produce restos de redondeo inevitables. Un bloque de $4.250 en 3
+// líneas de $1.416,67 suma $4.250,01, y no hay forma de que el planner lo
+// cuadre sin ensuciar una línea con un centavo arbitrario. El barrido de prod
+// lo confirmó: los 10 bloques descuadrados que había eran TODOS ruido de
+// redondeo, entre $0,01 y $0,34 — ninguno pasaba del peso, y el error no
+// escalaba con la cantidad de líneas (16 líneas → $0,01; 5 líneas → $0,34).
+//
+// El error que esta regla existe para atajar es de otro orden de magnitud: el
+// caso que la motivó eran $1.455 sin línea. Un dólar separa limpiamente las dos
+// poblaciones.
+//
+// Y hay una razón de producto además de una aritmética: con tolerancia de un
+// centavo, el aviso ámbar del editor gritaba "faltan $0,01" en planes que
+// estaban perfectos. Una alarma que se prende por monedas es una alarma que se
+// aprende a ignorar — probablemente por eso el descuadre de $1.455 pasó de
+// largo. Que el aviso aparezca sólo cuando hay plata de verdad es lo que lo
+// vuelve creíble.
+//
 // La exporta el editor para pintar el aviso con el MISMO criterio con el que la
 // regla bloquea (si divergieran, el aviso diría "cuadrado" y el pase fallaría).
-export const BALANCE_TOLERANCE_USD = 0.01;
+export const BALANCE_TOLERANCE_USD = 1;
 
 // Plata para los mensajes: sin decimales cuando es redondo (lo normal) y con
 // centavos cuando los hay, para que una diferencia de $0.50 no se muestre como
