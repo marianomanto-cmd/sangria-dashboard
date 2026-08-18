@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlanDetail } from "@/db/queries/project-detail";
 import { getPlanAuditEvents } from "@/db/queries/audit-log";
+import { getPlanQaState, getPlanVersionHistory } from "@/db/queries/plan-qa";
 import {
   listMarketsForClient,
   listMetricsForClient,
@@ -10,6 +11,7 @@ import {
 import { DEFAULT_LANGUAGE, formatDate, type Language } from "@/lib/i18n";
 import { getCurrentUser } from "@/lib/auth";
 import { canApprovePlans } from "@/lib/permissions";
+import { isPlanSigned } from "@/lib/plan-status";
 import { PlanEditor } from "./editor";
 
 type Props = {
@@ -26,24 +28,36 @@ export default async function PlanDetailPage({ params }: Props) {
   // Ventana de la "versión vigente" para el historial de cambios:
   // - draft / ready_to_send → el borrador en curso: cambios desde la última
   //   aprobación (o desde la creación si nunca se aprobó).
-  // - approved / archived → los cambios que produjeron la versión aprobada
-  //   vigente: desde la aprobación ANTERIOR (v−1), incluida la aprobación.
+  // - firmados (approved / qa_done / live) y archived → los cambios que
+  //   produjeron la versión aprobada vigente: desde la aprobación ANTERIOR
+  //   (v−1), incluida la aprobación.
   const locked =
-    detail.plan.status === "approved" || detail.plan.status === "archived";
+    isPlanSigned(detail.plan.status) || detail.plan.status === "archived";
   const sinceVersion = locked
     ? detail.plan.currentVersion - 1
     : detail.plan.currentVersion;
   const sinceSnap =
     detail.snapshots.find((s) => s.versionNumber === sinceVersion) ?? null;
 
-  const [allPublishers, allMarkets, allMetrics, user, editEvents] =
-    await Promise.all([
-      listPublishersForClient(detail.client.id),
-      listMarketsForClient(detail.client.id),
-      listMetricsForClient(detail.client.id),
-      getCurrentUser(),
-      getPlanAuditEvents(planId, { since: sinceSnap?.approvedAt ?? null }),
-    ]);
+  const [
+    allPublishers,
+    allMarkets,
+    allMetrics,
+    user,
+    editEvents,
+    qaState,
+    versionHistory,
+  ] = await Promise.all([
+    listPublishersForClient(detail.client.id),
+    listMarketsForClient(detail.client.id),
+    listMetricsForClient(detail.client.id),
+    getCurrentUser(),
+    getPlanAuditEvents(planId, { since: sinceSnap?.approvedAt ?? null }),
+    // Estado del QA de la versión vigente (alimenta el modal de QA) e historial
+    // de versiones con su diff (el desplegable de abajo del editor).
+    getPlanQaState(planId, detail.plan.currentVersion),
+    getPlanVersionHistory(planId),
+  ]);
   const canApprove = canApprovePlans(user?.email);
 
   const windowNote = sinceSnap
@@ -82,6 +96,8 @@ export default async function PlanDetailPage({ params }: Props) {
         lang={lang}
         canApprove={canApprove}
         editHistory={{ events: editEvents, windowNote }}
+        qaState={qaState}
+        versionHistory={versionHistory}
       />
     </main>
   );

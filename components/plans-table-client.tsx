@@ -15,6 +15,7 @@ import {
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { formatDate, type Language } from "@/lib/i18n";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
+import { PLAN_STATUSES } from "@/lib/plan-status";
 
 export type PlanRow = {
   id: string;
@@ -83,7 +84,10 @@ function sortPlans(plans: PlanRow[], col: SortCol, dir: SortDir): PlanRow[] {
       case "client":
         return cmpStr(a.clientName, b.clientName);
       case "status":
-        return cmpStr(a.status, b.status);
+        // Por ORDEN DEL LIFECYCLE (draft → … → live → archived), no alfabético:
+        // ordenar por estado sirve para ver en qué etapa está cada plan, y
+        // alfabéticamente "approved" caía antes que "draft".
+        return cmpNum(statusRank(a.status), statusRank(b.status));
       case "period":
         return cmpStr(a.periodStart ?? "", b.periodStart ?? "");
       case "media":
@@ -726,4 +730,11 @@ function CardField({
       <div className="text-xs mt-0.5">{children}</div>
     </div>
   );
+}
+
+// Posición del estado en el lifecycle del plan, para ordenar la columna Estado.
+// Un estado desconocido (data vieja) va al final en vez de romper el orden.
+function statusRank(status: string): number {
+  const i = (PLAN_STATUSES as readonly string[]).indexOf(status);
+  return i === -1 ? PLAN_STATUSES.length : i;
 }

@@ -1,26 +1,44 @@
 // Badge del estado de un PLAN de medios (draft / ready_to_send / approved /
-// archived). Fuente de verdad ÚNICA del label + color: antes el mapa de
-// estilos vivía duplicado en el editor, el detalle de proyecto y las tablas de
-// Planes/Proyectos, y el label de `ready_to_send` había driftado entre "ready"
-// y "ready to send". Espejo de `StatusBadge` (estados de proyecto).
+// qa_done / live / archived). Fuente de verdad ÚNICA del label + color: antes
+// el mapa de estilos vivía duplicado en el editor, el detalle de proyecto y las
+// tablas de Planes/Proyectos, y el label de `ready_to_send` había driftado
+// entre "ready" y "ready to send". Espejo de `StatusBadge` (estados de
+// proyecto).
+//
+// Los labels y el significado de cada estado salen de lib/plan-status.ts (el
+// mismo módulo que usan las queries y las transiciones), acá vive sólo el look.
+//
+// Lectura de los colores: `approved` es azul y NO verde a propósito — el plan
+// está firmado pero todavía no al aire: le falta el QA. El verde queda para
+// `live`, que es lo único que significa "campaña corriendo".
 //
 // `size`: `md` (default) para headers y la tabla de planes; `sm` para las
 // filas compactas del breakdown de la tabla de proyectos.
-type PlanStatus = "draft" | "ready_to_send" | "approved" | "archived";
+import {
+  PLAN_STATUS_HINTS,
+  PLAN_STATUS_LABELS,
+  type PlanStatus,
+} from "@/lib/plan-status";
 
-const STYLES: Record<PlanStatus, { label: string; className: string; dot: string }> = {
-  draft: { label: "draft", className: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
+const STYLES: Record<PlanStatus, { className: string; dot: string }> = {
+  draft: { className: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
   ready_to_send: {
-    label: "ready to send",
     className: "bg-warn-soft text-warn border-warn-soft",
     dot: "bg-warn",
   },
   approved: {
-    label: "approved",
+    className: "bg-info-soft text-info border-info-soft",
+    dot: "bg-info",
+  },
+  qa_done: {
+    className: "bg-accent-soft text-accent border-accent-soft",
+    dot: "bg-accent",
+  },
+  live: {
     className: "bg-success-soft text-success border-success-soft",
     dot: "bg-success",
   },
-  archived: { label: "archived", className: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
+  archived: { className: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
 };
 
 const SIZES = {
@@ -35,14 +53,16 @@ export function PlanStatusBadge({
   status: string;
   size?: keyof typeof SIZES;
 }) {
-  const style = STYLES[status as PlanStatus] ?? STYLES.draft;
+  const key = (status in STYLES ? status : "draft") as PlanStatus;
+  const style = STYLES[key];
   const dim = SIZES[size];
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-sm border font-medium ${dim.badge} ${style.className}`}
+      title={PLAN_STATUS_HINTS[key]}
+      className={`inline-flex items-center gap-1.5 rounded-sm border font-medium whitespace-nowrap ${dim.badge} ${style.className}`}
     >
       <span className={`inline-block rounded-full ${dim.dot} ${style.dot}`} />
-      {style.label}
+      {PLAN_STATUS_LABELS[key]}
     </span>
   );
 }

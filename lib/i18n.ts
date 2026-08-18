@@ -201,6 +201,9 @@ const DICT: Record<string, Record<Language, string>> = {
   "status.draft": { en: "draft", es: "borrador" },
   "status.ready_to_send": { en: "ready to send", es: "listo para enviar" },
   "status.approved": { en: "approved", es: "aprobado" },
+  // Paso de QA del plan: aprobado → QA realizado → live. Ver lib/plan-status.ts.
+  "status.qa_done": { en: "QA done", es: "QA realizado" },
+  "status.live": { en: "live", es: "live" },
   "status.archived": { en: "archived", es: "archivado" },
   "status.planning": { en: "planning", es: "planificación" },
   "status.active": { en: "active", es: "activo" },

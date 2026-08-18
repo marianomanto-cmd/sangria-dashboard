@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, isNull, lte } from "drizzle-orm";
 import { db } from "@/db";
+import { isPlanCommitted } from "@/lib/plan-status";
 import {
   campaignActualSnapshots,
   clients,
@@ -425,9 +426,9 @@ export async function listCompareablePlans(
       and(
         eq(projects.clientId, clientId),
         isNull(mediaPlans.deletedAt),
-        // Aceptamos tanto approved como ready_to_send: el ready ya está
-        // congelado por el MM y tiene sentido compararlo.
-        // archivados y drafts no.
+        // Aceptamos los planes comprometidos (ready_to_send + firmados:
+        // approved / qa_done / live): el ready ya está congelado por el MM y
+        // tiene sentido compararlo. Archivados y drafts no.
       ),
     );
 
@@ -444,7 +445,7 @@ export async function listCompareablePlans(
   };
   const byPlan = new Map<string, Agg>();
   for (const r of rows) {
-    if (r.planStatus !== "approved" && r.planStatus !== "ready_to_send") continue;
+    if (!isPlanCommitted(r.planStatus)) continue;
     let agg = byPlan.get(r.planId);
     if (!agg) {
       agg = {

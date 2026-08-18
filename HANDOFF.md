@@ -1,6 +1,72 @@
-# Handoff — jueves 13/ago/2026
+# Handoff — martes 18/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 18/ago/2026 — Planes: QA obligatorio antes de Live + historial de versiones desplegable
+
+- **Pedido**: sumar una instancia de **QA** al lifecycle del plan. Una vez
+  aprobado, el planner tiene que verificar que la campaña esté **armada tal cual
+  se planificó**; recién con el QA hecho el plan puede pasar a **Live**.
+  Obligatorio para el plan nuevo **y para cada versión nueva**. Además, que el
+  historial de versiones se **despliegue** y muestre qué cambió en cada una y
+  cuándo.
+- **Lifecycle nuevo**: `draft → ready_to_send → approved → qa_done → live →
+  archived`. **`approved` cambió de significado**: ya no es "al aire" sino
+  "firmado por el cliente, falta el QA". A `live` **sólo se llega desde
+  `qa_done`** — no hay atajo.
+- **Fuente única `lib/plan-status.ts`**: estados, sets (`PLAN_SIGNED_STATUSES` =
+  approved+qa_done+live, `PLAN_COMMITTED_STATUSES` = esos + ready_to_send),
+  transiciones y labels. **Todas** las queries que hardcodeaban
+  `status = 'approved'` como "plan vigente" pasaron a los sets: portal,
+  analysis, campaign tracker, pendings, dashboard (estimación y pacing) y
+  simulador. Sin eso, un plan `live` habría desaparecido en silencio del portal
+  del cliente y del estimado — era el riesgo grande del cambio.
+- **Modal de QA** (`qa-modal.tsx`): preview **tipo Excel** del plan (grupos de
+  publisher con subtotales, todas las columnas + métricas, fees y grand total)
+  con casilla **"Controlado"** por línea. Con todas tildadas se habilita
+  **"QA realizado"**. Sin "marcar todas" a propósito. Cada tilde **se persiste
+  sola** con quién y cuándo (`media_plan_qa_checks` colgando de
+  `media_plan_qa_runs`, unique `(media_plan_id, version_number)`), así el
+  progreso sobrevive a cerrar el modal y dos planners pueden repartirse un plan
+  largo. UI optimista que revierte si el server rechaza.
+- **Barreras server-side** (`app/actions/plan-qa.ts` + `transitionPlanStatus`):
+  sólo se tilda sobre un plan `approved` y sólo líneas **de ese plan**;
+  `completePlanQa` re-cuenta contra la base antes de cerrar; `qa_done`/`live`
+  exigen el run de la versión vigente cerrado (se re-chequea al pasar a `live`
+  por si el status vino de una corrección manual en la base).
+- **Es por versión**: aprobar la v(N+1) deja el plan en `approved` sin run para
+  esa versión → el QA se rehace entero. `revertPlanToApprovedSnapshot` ahora
+  devuelve el plan a `qa_done` si el QA de esa versión estaba cerrado, y a
+  `approved` si no — **nunca directo a `live`**.
+- **Escape hatches** (para que ningún click sea irreversible): **"Reabrir QA"**
+  (`qa_done → approved`, conservando los tildes como registro) y **"Sacar de
+  Live"** (`live → qa_done`).
+- **Historial de versiones** (`version-history.tsx`): reemplaza a "Snapshots de
+  aprobación". Una fila por versión con número, fecha, chip de QA y resumen
+  (`+3 · 2 modificadas · −1` con el delta de total); **se despliega** para ver
+  totales antes→después, quién cerró el QA y el diff agrupado en Plan ·
+  Publishers · Líneas · Fees con `campo: antes → después`. El diff lo computa
+  `lib/plan-version-diff.ts` comparando los **snapshots** de v(N−1) y vN (no el
+  audit_log), con matching por **id de fila**.
+- **Excel del plan**: hoja nueva **"Historial de versiones"** (Tab 3, antes de
+  los tabs auxiliares) que espeja ese desplegable — regla dura de `AGENTS.md`.
+  Sólo en el export del plan vigente; con `?v=N` no va (sería engañoso listar
+  versiones posteriores dentro del archivo de una versión vieja).
+- **UI del sistema**: `PlanStatusBadge` suma `qa_done` (accent) y `live`
+  (success) y **`approved` pasó de verde a azul** — el verde queda reservado
+  para lo que está realmente al aire. `/planes` suma filtros **QA done** y
+  **Live**, cambia el KPI "Draft" por **"Esperando QA"** y valida el `?status=`
+  contra el enum. La columna Estado ordena por **orden del lifecycle**, no
+  alfabético. Keys i18n `status.qa_done` / `status.live` (las usan Excel, PDF y
+  el xlsx de Estimación del portal).
+- **⚠️ ACCIÓN REQUERIDA EN PROD**: correr **`db/plan-qa-status.sql`** en el SQL
+  Editor de Supabase, **paso por paso** (el PASO 1 agrega valores al enum y
+  tiene que estar commiteado antes de que los pasos 3–4 puedan usarlos; si se
+  pega todo junto, falla con *"unsafe use of new value of enum type"*). El
+  archivo trae: enum, tablas + índices + **RLS**, una query de **preview** del
+  backfill, el backfill (los planes hoy `approved` → **`live` con el QA dado por
+  hecho**, con su run cerrado y un check por línea) y queries de verificación.
+  `db/rls.sql` también quedó actualizado con las dos tablas nuevas.
 
 ### Cambios de la sesión 13/ago/2026 — Portal (Proyectos): ordenar por fecha, monto y nombre
 
@@ -3272,6 +3338,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+aea9cc8  Planes: QA obligatorio antes de Live + historial de versiones desplegable
 197bf5e  Clientes: ordenar los proyectos por fecha, monto y nombre (#213) — revertido por #214 (vista equivocada: iba en el portal)
 a3c46e9  Portal: filtro Año/Mes en Billing Tracker · /billing: chart medios+fees (#212)
 c4fd823  Creative: sección propia de facturación de trabajo creativo (/creative) (#211)
@@ -3936,7 +4003,10 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
-| Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + tabs 3+ auxiliares si el plan tiene). |
+| Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Historial de versiones (sólo en el export del plan vigente, `buildVersionHistorySheet`) + tabs 4+ auxiliares si el plan tiene). |
+| Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES`, los sets `PLAN_SIGNED_STATUSES` (approved+qa_done+live = "plan firmado, vigente") y `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata"), `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |
+| Tocar el **QA del plan** (paso obligatorio approved → live) | UI: `app/(app)/proyectos/[code]/planes/[planId]/qa-modal.tsx` (preview tipo Excel + casilla "Controlado" por línea + botón "QA realizado"), abierto desde el header/franja del `editor.tsx`. Actions: `app/actions/plan-qa.ts` (`setPlanQaCheck`, `completePlanQa`, `reopenPlanQa`). Lectura: `getPlanQaState` en `db/queries/plan-qa.ts`. Schema: `media_plan_qa_runs` (uno por plan **y por versión**, unique `(media_plan_id, version_number)`) + `media_plan_qa_checks` (`placement_id` **sin FK** a propósito: la línea puede borrarse en una versión futura y el QA histórico tiene que sobrevivir). **El QA es por versión**: aprobar la v(N+1) lo obliga de nuevo. |
+| Tocar el **historial de versiones** del plan (qué cambió en cada una) | UI: `app/(app)/proyectos/[code]/planes/[planId]/version-history.tsx` (filas desplegables). Datos: `getPlanVersionHistory` en `db/queries/plan-qa.ts`. Diff: `lib/plan-version-diff.ts` (`buildPlanVersionDiff`), que compara los **snapshots** de v(N−1) y vN — no el audit_log — con matching por **id de fila**. Los nombres de publisher/market/métrica se resuelven contra el catálogo actual. El espejo en Excel es `buildVersionHistorySheet` en `export.xlsx/route.ts`. |
 | Tocar los tabs auxiliares del plan (grillas libres con fórmulas / tabs extra del Excel) | UI: `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx` (botón "Crear tab auxiliar" + una sección colapsable por tab en el editor). CRUD: `app/actions/aux-sheets.ts`. Límites + helpers + **evaluador de fórmulas** (refs A1, SUM/AVERAGE/MIN/MAX/COUNT, errores `#REF!`/`#CIRC!`/…): `lib/aux-sheet.ts` (`evalAuxFormula`). Schema: `media_plan_aux_sheets` (N por plan, `sort_order`). **Insertar/eliminar filas y columnas en cualquier posición**: menú click-derecho en el editor → `insertAuxRow/Col` + `deleteAuxRow/Col` en `lib/aux-sheet.ts` (mueven data + uniones y reescriben refs con `shiftAuxFormula`). Los tabs del export: `buildAuxSheet` en `export.xlsx/route.ts` (fórmulas → fórmulas reales de Excel; **formato** header/subtotal/total/banding + anchos auto + congelado, parecido al Tab 1). |
 | Qué métricas se muestran / cómo se computan en los exports | `lib/plan-metrics.ts` — `resolveMetricColumns` (qué columnas: directs presentes + calculated que resuelven), `placementMetricValue` (valor por placement: guardado o computado), `evalFormula`. Lo usan **PDF y Excel**. Las calculated NO están en `metrics_json`. |
 | Cambiar el logo de los exports         | Reemplazar `public/sangria-logo.png` (o `.jpg`). Lo carga `lib/brand-logo.ts`; el tracing está en `next.config.ts` (`outputFileTracingIncludes`). Posición/tamaño: PDF en `lib/plan-pdf.ts`, XLSX en `export.xlsx/route.ts`. |

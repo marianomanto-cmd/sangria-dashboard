@@ -121,8 +121,8 @@ export default async function BillingTrackerPage({ searchParams }: Props) {
             }
             hint={
               lang === "es"
-                ? "Aparecen acá los planes con status approved o ready_to_send dentro del período."
-                : "Plans with status approved or ready_to_send within the period show here."
+                ? "Aparecen acá los planes comprometidos (ready to send, approved, QA done o live) dentro del período."
+                : "Committed plans (ready to send, approved, QA done or live) within the period show here."
             }
           />
         ) : (

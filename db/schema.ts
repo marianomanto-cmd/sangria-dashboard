@@ -47,12 +47,24 @@ export const projectStatus = pgEnum("project_status", [
 // Lifecycle de un plan dentro de un proyecto:
 //   draft         → editable por el MM
 //   ready_to_send → MM lo congeló, AM puede bajar el PDF y mandarlo a firma
-//   approved      → cliente firmó, plan vigente, ediciones futuras crean nueva versión
+//   approved      → cliente firmó, plan vigente, ediciones futuras crean nueva
+//                   versión. Falta el QA de esta versión → NO puede ir a live
+//   qa_done       → el planner controló línea por línea que la campaña esté
+//                   armada tal cual el plan (ver media_plan_qa_runs)
+//   live          → campaña al aire. Solo se llega desde qa_done
 //   archived      → reemplazado por una nueva versión approved o cancelado
+//
+// El QA es obligatorio y es POR VERSIÓN: aprobar la v(N+1) devuelve el plan a
+// `approved`, así que hay que volver a controlarlo antes de marcarlo live.
+// Los sets de estado ("firmado", "comprometido") y el mapa de transiciones
+// viven en lib/plan-status.ts — las queries importan de ahí en vez de
+// hardcodear 'approved'.
 export const planStatus = pgEnum("plan_status", [
   "draft",
   "ready_to_send",
   "approved",
+  "qa_done",
+  "live",
   "archived",
 ]);
 
@@ -460,6 +472,71 @@ export const mediaPlanSnapshots = pgTable(
   (t) => [
     unique("uq_mps_plan_version").on(t.mediaPlanId, t.versionNumber),
     index("idx_mps_plan_approved_at").on(t.mediaPlanId, t.approvedAt),
+  ],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// QA del plan — obligatorio para pasar a `live`, y POR VERSIÓN.
+//
+// Cuando el cliente firma (status `approved`), el planner tiene que verificar
+// que la campaña esté ARMADA en las plataformas tal cual se planificó. Abre el
+// modal de QA (preview tipo Excel del plan), tilda "controlado" en cada línea
+// y recién con todas tildadas puede cerrar el QA → status `qa_done`. De ahí,
+// cualquiera puede marcarlo `live`.
+//
+// Se guarda un RUN por (plan, versión):
+//   • Aprobar la v(N+1) crea un run nuevo y vacío → el QA se rehace entero.
+//   • Los checks son por placement, con quién y cuándo — así el progreso
+//     sobrevive a cerrar el modal y dos planners pueden repartirse el plan.
+//   • `placement_id` NO tiene FK: una versión posterior puede borrar la línea,
+//     y el registro de QA de la versión vieja se conserva igual.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const mediaPlanQaRuns = pgTable(
+  "media_plan_qa_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaPlanId: uuid("media_plan_id")
+      .notNull()
+      .references(() => mediaPlans.id, { onDelete: "cascade" }),
+    // Versión aprobada que se está controlando (= media_plans.current_version
+    // al momento de abrir el QA).
+    versionNumber: integer("version_number").notNull(),
+    // null = QA en curso. Seteado = QA cerrado (todas las líneas controladas).
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    completedByUserId: uuid("completed_by_user_id"),
+    completedByEmail: text("completed_by_email"),
+    // Observaciones libres del planner al cerrar el QA (opcional).
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("uq_mpqr_plan_version").on(t.mediaPlanId, t.versionNumber),
+    index("idx_mpqr_plan").on(t.mediaPlanId, t.versionNumber),
+  ],
+);
+
+export const mediaPlanQaChecks = pgTable(
+  "media_plan_qa_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    qaRunId: uuid("qa_run_id")
+      .notNull()
+      .references(() => mediaPlanQaRuns.id, { onDelete: "cascade" }),
+    // Sin FK a media_plan_placements a propósito: la línea puede desaparecer en
+    // una versión futura y el QA histórico tiene que seguir existiendo.
+    placementId: uuid("placement_id").notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    checkedByUserId: uuid("checked_by_user_id"),
+    checkedByEmail: text("checked_by_email"),
+  },
+  (t) => [
+    unique("uq_mpqc_run_placement").on(t.qaRunId, t.placementId),
+    index("idx_mpqc_run").on(t.qaRunId),
   ],
 );
 

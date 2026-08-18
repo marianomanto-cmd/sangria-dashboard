@@ -1,6 +1,10 @@
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  PLAN_COMMITTED_STATUSES,
+  PLAN_SIGNED_STATUSES,
+} from "@/lib/plan-status";
+import {
   clients,
   mediaPlanFees,
   mediaPlanPlacements,
@@ -629,8 +633,11 @@ export async function getMonthlyTotals(
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(
       filterClient
-        ? and(eq(mediaPlans.status, "approved"), eq(projects.clientId, filterClient))
-        : eq(mediaPlans.status, "approved"),
+        ? and(
+            inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
+            eq(projects.clientId, filterClient),
+          )
+        : inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
     );
 
   const projectedByMonth: Record<string, number> = {};
@@ -726,8 +733,7 @@ export async function getBillingEstimate(options: {
   ];
 
   const planStatusFilter = inArray(mediaPlans.status, [
-    "approved",
-    "ready_to_send",
+    ...PLAN_COMMITTED_STATUSES,
   ]);
 
   // 1. Placements con info de proyecto (planes approved / ready_to_send).
@@ -1169,7 +1175,7 @@ export async function getClientBillingProjections(options: {
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(
       and(
-        inArray(mediaPlans.status, ["approved", "ready_to_send"]),
+        inArray(mediaPlans.status, [...PLAN_COMMITTED_STATUSES]),
         ...scopeConds,
       ),
     );
@@ -1504,7 +1510,7 @@ export async function getClientBillingReconciliation(options: {
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(
       and(
-        inArray(mediaPlans.status, ["approved", "ready_to_send"]),
+        inArray(mediaPlans.status, [...PLAN_COMMITTED_STATUSES]),
         ...scopeConds,
       ),
     );

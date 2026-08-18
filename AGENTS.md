@@ -47,3 +47,13 @@ desglose media/fees/bruto y, en el desplegable de cada proyecto, la proyección
 por plan (facturas emitidas + lo que falta por mes). El Excel replica todo eso
 en tres hojas (Resumen · Detalle · Proyección) —
 `lib/portal-estimate-xlsx.ts`.
+
+Ejemplo (detalle del plan): el historial de versiones se despliega por versión y
+muestra qué cambió contra la anterior; el Excel del plan lo replica en la hoja
+"Historial de versiones" — `buildVersionHistorySheet` en
+`app/api/plans/[planId]/export.xlsx/route.ts`.
+
+**Única excepción — el PDF del plan**: es el documento que se manda al cliente a
+firmar (bloque de firma + disclaimer legal), no una copia de la pantalla. El
+proceso interno (historial de versiones, QA) va al Excel y **no** al PDF. La
+regla de paridad sigue aplicando a todo lo demás.
