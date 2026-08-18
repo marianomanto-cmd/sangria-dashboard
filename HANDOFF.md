@@ -3386,6 +3386,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+085c61e  Planes: subir la tolerancia del cuadre a $1 — el centavo era ruido (#219)
 a925974  Planes: no se puede marcar Listo/Aprobado con un publisher descuadrado (#217)
 67fefd0  Planes: QA obligatorio antes de Live + historial de versiones desplegable (#215)
 197bf5e  Clientes: ordenar los proyectos por fecha, monto y nombre (#213) — revertido por #214 (vista equivocada: iba en el portal)
