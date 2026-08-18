@@ -3338,7 +3338,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
-aea9cc8  Planes: QA obligatorio antes de Live + historial de versiones desplegable
+67fefd0  Planes: QA obligatorio antes de Live + historial de versiones desplegable (#215)
 197bf5e  Clientes: ordenar los proyectos por fecha, monto y nombre (#213) — revertido por #214 (vista equivocada: iba en el portal)
 a3c46e9  Portal: filtro Año/Mes en Billing Tracker · /billing: chart medios+fees (#212)
 c4fd823  Creative: sección propia de facturación de trabajo creativo (/creative) (#211)
