@@ -43,6 +43,7 @@ import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm-dialog";
 import {
+  BALANCE_TOLERANCE_USD,
   findPlanReadinessIssues,
   formatReadinessIssues,
 } from "@/lib/plan-readiness";
@@ -976,8 +977,11 @@ function PublisherGroup({
 }) {
   const toast = useToast();
   const confirm = useConfirm();
+  // Mismo umbral que la regla de readiness (lib/plan-readiness.ts): si el aviso
+  // y la barrera usaran tolerancias distintas, el bloque podría verse "cuadrado"
+  // y el pase a Listo fallar igual.
   const balance = pub.totalPlannedUsd - pub.placementsTotalUsd;
-  const balanced = Math.abs(balance) < 0.01;
+  const balanced = Math.abs(balance) < BALANCE_TOLERANCE_USD;
 
   const onUpdateTotal = (newTotal: number) => {
     startTransition(async () => {
@@ -1088,12 +1092,22 @@ function PublisherGroup({
         )}
       </div>
 
+      {/* Descuadre del bloque. No es cosmético: BLOQUEA el pase a Listo/Aprobado
+          (lib/plan-readiness.ts), porque el total del publisher alimenta el
+          total del plan y el management fee mientras que el prorrateo mensual
+          sale de los placements — la diferencia sería plata que nunca se
+          factura. El aviso lo dice para que no sorprenda recién al apretar
+          "Marcar listo". */}
       {!balanced && (
         <div className="flex items-center gap-2 border-b border-warn-soft bg-warn-soft/40 px-4 py-1.5 text-[11px] text-warn font-medium">
           <span className="flex-1">
             {balance > 0
               ? `Faltan ${formatUsd(balance)} para llegar al total del publisher`
               : `Hay ${formatUsd(-balance)} de más en los placements vs el total`}
+            <span className="font-normal opacity-90">
+              {" "}
+              — hay que cuadrarlo para poder marcar el plan Listo/Aprobado.
+            </span>
           </span>
           {editable && (
             <button

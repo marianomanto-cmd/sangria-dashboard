@@ -2,6 +2,45 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 18/ago/2026 (2) — Planes: no se puede marcar Listo/Aprobado con un publisher descuadrado
+
+- **Bug reportado**: el planner podía marcar un plan **Listo para enviar** con
+  el total del publisher sin cuadrar contra sus placements (caso real:
+  `COPA.m1201.SanDiegoOutbound Refuerzo|Awareness`, Meta con subtotal **$39.000**
+  contra un total de **$40.455** — $1.455 de diferencia). El editor ya mostraba
+  el aviso ámbar *"Faltan $1.455 para llegar al total del publisher"*, pero era
+  **sólo cosmético**: `findPlanReadinessIssues` chequeaba campos y métricas,
+  nunca el cuadre.
+- **Por qué era grave y no cosmético**: los dos números alimentan cosas
+  distintas. El **total del plan** —y con él la base del management fee, los
+  KPIs, la estimación y la cobertura vs budget— sale de
+  `sum(media_plan_publishers.total_planned_usd)`; el **prorrateo mensual**, el
+  pacing, el campaign tracker y las líneas del Excel salen de los
+  **placements**. Esos $1.455 figuraban en el total pero **no se prorrateaban a
+  ningún mes**. El caso inverso (placements de más) hace que los meses facturen
+  más que el total del plan.
+- **Fix**: regla nueva en `lib/plan-readiness.ts` — la suma de los placements de
+  cada publisher tiene que dar su `total_planned_usd`, con tolerancia de **1
+  centavo** (`BALANCE_TOLERANCE_USD`, exportada). El mensaje dice los números
+  concretos: *"cuadrar los placements con el total del publisher: suman $39.000
+  contra un total de $40.455 (faltan $1.455)"*. Cubre los dos sentidos (faltan /
+  sobran) y muestra centavos sólo cuando los hay (una diferencia de $0,50 no se
+  redondea a "$1"). Barrera real en `transitionPlanStatus`; el editor usa el
+  mismo helper para el diálogo.
+- **En `draft` se sigue tolerando** (estás armando el plan): el aviso ámbar con
+  el botón **"Balancear"** queda igual, pero ahora dice que hay que cuadrarlo
+  para poder marcar Listo/Aprobado — así no sorprende recién al apretar el
+  botón. El editor importa `BALANCE_TOLERANCE_USD` en vez de repetir el `0.01`,
+  para que el aviso y la barrera no puedan divergir.
+- **Planes ya congelados antes de la regla**: diagnóstico en
+  **`db/plan-publisher-balance-check.sql`** (bloques descuadrados + resumen de
+  cuánta plata implica, por estado). **Sin query de reparación a propósito**:
+  cuál de los dos números manda es una decisión por plan (¿falta cargar una
+  línea, o quedó un total viejo?), y mover el total cambia la base del
+  management fee. Se arreglan desde el editor y se re-aprueban.
+- **Sin cambios de schema. No requiere acción en prod** más allá de correr el
+  diagnóstico si se quiere saber qué quedó descuadrado de antes.
+
 ### Cambios de la sesión 18/ago/2026 — Planes: QA obligatorio antes de Live + historial de versiones desplegable
 
 - **Pedido**: sumar una instancia de **QA** al lifecycle del plan. Una vez
@@ -4002,6 +4041,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
+| Tocar la regla de "plan completo" (qué bloquea marcar Listo/Aprobado) | **Fuente única: `lib/plan-readiness.ts`** (`findPlanReadinessIssues`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y el diálogo del editor. Chequea campos del placement, la métrica principal del cost method y el **cuadre publisher ↔ placements** (`BALANCE_TOLERANCE_USD` = 1 centavo, que el editor importa para el aviso ámbar del bloque). **Ojo con el cuadre**: el total del plan sale de `total_planned_usd` y el prorrateo mensual de los placements — si divergen, hay plata que no se factura. Diagnóstico de lo viejo: `db/plan-publisher-balance-check.sql`. |
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
 | Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Historial de versiones (sólo en el export del plan vigente, `buildVersionHistorySheet`) + tabs 4+ auxiliares si el plan tiene). |
 | Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES`, los sets `PLAN_SIGNED_STATUSES` (approved+qa_done+live = "plan firmado, vigente") y `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata"), `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |

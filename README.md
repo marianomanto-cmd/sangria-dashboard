@@ -179,6 +179,7 @@ db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
   rls.sql                   # ENABLE ROW LEVEL SECURITY en todas las tablas (cierra la REST API pública de Supabase)
+  plan-publisher-balance-check.sql # diagnóstico: publishers cuyo total no cuadra con la suma de placements, en planes ya congelados (previos a la regla de cuadre)
   plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
@@ -214,7 +215,7 @@ lib/
   audit-format.ts           # entityNoun / actionVerb / entityLabel / actorLabel / formatRelativeDateTime
   auth.ts                   # getCurrentUser() (server-side)
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
-  plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado. Fuente única: server action (barrera) + editor (diálogo)
+  plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado (campos + métrica principal + CUADRE publisher↔placements). Fuente única: server action (barrera) + editor (diálogo y aviso de descuadre)
   plan-status.ts            # lifecycle del plan: PLAN_STATUSES, sets PLAN_SIGNED_/PLAN_COMMITTED_STATUSES, mapa de transiciones y labels. Fuente única: queries + actions + badges
   plan-version-diff.ts      # buildPlanVersionDiff — qué cambió entre dos versiones aprobadas, comparando sus snapshots (plan/publishers/líneas/fees)
   plan-export-version.ts    # parseVersionParam(?v=N) de los exports del plan: null = plan vigente, N = versión aprobada histórica, "invalid" = 400
@@ -349,6 +350,10 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (`findPlanReadinessIssues`), fuente única que comparten la server action (la
   barrera real) y el editor (el diálogo). Exige:
   - **publisher**: `total_planned_usd` > 0 y al menos un placement;
+  - **cuadre del publisher**: la suma de los montos de sus placements tiene que
+    dar el `total_planned_usd` del bloque (tolerancia 1 centavo,
+    `BALANCE_TOLERANCE_USD`, que el editor importa para pintar el aviso con el
+    mismo criterio con el que la regla bloquea);
   - **placement**: no puede estar vacío, y necesita `placement_name`,
     `amount_usd` > 0, `cost_method`, `start_date` y `end_date`;
   - **métrica principal**: la que mapea el cost method en
@@ -361,6 +366,23 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `getBillingEstimate` (`if (!startDate || !endDate) continue`), así que su media
   —y el management fee sobre esa media— desaparecen del estimado. **No** se
   bloquea por mercado vacío: la app tolera "Sin mercado" por diseño.
+
+  El **cuadre del publisher** merece su propio párrafo porque el daño es
+  silencioso: el **total del plan** (y con él la base del management fee, los
+  KPIs, la estimación y la cobertura vs budget del proyecto) sale de
+  `sum(media_plan_publishers.total_planned_usd)`, mientras que el **prorrateo
+  mensual**, el pacing, el campaign tracker y las líneas del Excel salen de los
+  **placements**. Si no coinciden, la diferencia es plata que figura en el total
+  pero no se prorratea a ningún mes — o, al revés, meses que facturan más que el
+  total del plan. En `draft` el descuadre se tolera (estás armando el plan) y el
+  bloque muestra el aviso ámbar con el botón **"Balancear"**; para pasar a
+  Listo/Aprobado hay que cuadrarlo.
+
+  Para los planes que se congelaron **antes** de esta regla hay un diagnóstico
+  en [`db/plan-publisher-balance-check.sql`](db/plan-publisher-balance-check.sql)
+  (lista los bloques descuadrados + un resumen de cuánta plata implica). **No**
+  trae query de reparación a propósito: cuál de los dos números manda es una
+  decisión por plan, y mover el total cambia la base del management fee.
 
   Al intentarlo, el editor abre un **diálogo** con la lista de lo que falta
   (`• Publisher · Placement: falta …`) en vez de disparar la acción; además marca
