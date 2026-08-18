@@ -12,10 +12,15 @@ import {
   readinessErrorMessage,
 } from "@/lib/plan-readiness";
 import {
+  PLAN_STATUS_TRANSITIONS,
+  type PlanStatus,
+} from "@/lib/plan-status";
+import {
   markets,
   mediaPlanFees,
   mediaPlanPlacements,
   mediaPlanPublishers,
+  mediaPlanQaRuns,
   mediaPlans,
   mediaPlanSnapshots,
   metricsCatalog,
@@ -419,7 +424,7 @@ export async function updatePlanMetadata(input: {
 
 export async function transitionPlanStatus(input: {
   planId: string;
-  to: "draft" | "ready_to_send" | "approved" | "archived";
+  to: PlanStatus;
   notes?: string;
 }): Promise<Result> {
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
@@ -445,18 +450,44 @@ export async function transitionPlanStatus(input: {
     .limit(1);
   if (!before) return { ok: false, error: "Plan no encontrado" };
 
-  // Validar transiciones permitidas
-  const valid: Record<string, string[]> = {
-    draft: ["ready_to_send", "archived"],
-    ready_to_send: ["draft", "approved", "archived"],
-    approved: ["draft", "archived"], // editar = volver a draft de v(N+1)
-    archived: [], // terminal
-  };
-  if (!valid[before.status].includes(input.to)) {
+  // Validar transiciones permitidas (mapa en lib/plan-status.ts).
+  if (!PLAN_STATUS_TRANSITIONS[before.status].includes(input.to)) {
     return {
       ok: false,
       error: `Transición ${before.status} → ${input.to} no permitida`,
     };
+  }
+
+  // Regla dura del QA: `qa_done` y `live` exigen que el QA de la versión
+  // vigente esté CERRADO. Es lo que hace obligatorio el control del planner
+  // antes de que una campaña salga al aire — para el plan nuevo y para cada
+  // versión nueva.
+  //
+  //   • approved → qa_done  lo cierra `completePlanQa` (marca el run como
+  //     completo cuando están todas las líneas tildadas); llamar acá con
+  //     to='qa_done' sin el QA hecho rebota.
+  //   • live sólo se alcanza desde qa_done, y re-chequeamos el run por si el
+  //     status llegó de una corrección manual en la base.
+  if (input.to === "qa_done" || input.to === "live") {
+    const [qaRun] = await db
+      .select()
+      .from(mediaPlanQaRuns)
+      .where(
+        and(
+          eq(mediaPlanQaRuns.mediaPlanId, input.planId),
+          eq(mediaPlanQaRuns.versionNumber, before.currentVersion),
+        ),
+      )
+      .limit(1);
+    if (!qaRun?.completedAt) {
+      return {
+        ok: false,
+        error:
+          input.to === "live"
+            ? `Falta el QA de la v${before.currentVersion}. Abrí "Realizar QA", controlá todas las líneas y recién ahí se habilita Live.`
+            : `El QA de la v${before.currentVersion} no está cerrado. Se cierra desde "Realizar QA", con todas las líneas controladas.`,
+      };
+    }
   }
 
   // Regla dura: un plan NO puede pasar a "listo" ni "aprobado" incompleto —
@@ -613,10 +644,11 @@ type CapturedSnapshot = {
 
 // Descarta el borrador (draft) de la versión siguiente y vuelve al plan
 // aprobado vigente. Es la contraparte de "Editar (nueva versión)" (que pasa
-// approved → draft de v(N+1)): si el planner abrió un draft sobre un MP ya
-// firmado y se arrepiente, esto tira TODOS los cambios del draft y restaura el
-// plan al snapshot de la última versión aprobada (version = currentVersion),
-// dejándolo de nuevo en 'approved'. Sólo aplica a un draft con
+// approved/qa_done/live → draft de v(N+1)): si el planner abrió un draft sobre
+// un MP ya firmado y se arrepiente, esto tira TODOS los cambios del draft y
+// restaura el plan al snapshot de la última versión aprobada (version =
+// currentVersion), dejándolo en 'qa_done' si el QA de esa versión ya estaba
+// cerrado, o en 'approved' (QA pendiente) si no. Sólo aplica a un draft con
 // currentVersion > 0 (tiene un snapshot al cual volver). Irreversible.
 export async function revertPlanToApprovedSnapshot(input: {
   planId: string;
@@ -663,6 +695,24 @@ export async function revertPlanToApprovedSnapshot(input: {
       error: "El snapshot de la versión aprobada está vacío o corrupto.",
     };
   }
+
+  // A qué estado vuelve el plan. Descartar el borrador restaura EXACTAMENTE la
+  // vN, así que si el QA de esa versión ya estaba cerrado sigue siendo válido y
+  // el plan vuelve a `qa_done` (listo para marcar Live). Si nunca se cerró,
+  // vuelve a `approved` con el QA pendiente. Nunca volvemos directo a `live`:
+  // que alguien confirme que la campaña está al aire es un click barato y evita
+  // dar por viva una campaña que se bajó mientras se editaba el borrador.
+  const [qaRun] = await db
+    .select({ completedAt: mediaPlanQaRuns.completedAt })
+    .from(mediaPlanQaRuns)
+    .where(
+      and(
+        eq(mediaPlanQaRuns.mediaPlanId, input.planId),
+        eq(mediaPlanQaRuns.versionNumber, plan.currentVersion),
+      ),
+    )
+    .limit(1);
+  const restoredStatus = qaRun?.completedAt ? "qa_done" : "approved";
 
   // Si el draft renombró el plan y otro plan VIVO del proyecto ya tomó el
   // nombre aprobado, restaurarlo violaría el partial unique index
@@ -841,14 +891,16 @@ export async function revertPlanToApprovedSnapshot(input: {
         await tx.delete(mediaPlanFees).where(eq(mediaPlanFees.id, feeId));
       }
 
-      // Restaurar metadata (nombre + notas) y volver a 'approved'. currentVersion
-      // no cambia: seguimos en la versión aprobada vigente.
+      // Restaurar metadata (nombre + notas) y volver al estado firmado que
+      // corresponda (`qa_done` si el QA de la vN ya estaba cerrado, si no
+      // `approved`). currentVersion no cambia: seguimos en la versión aprobada
+      // vigente.
       await tx
         .update(mediaPlans)
         .set({
           name: data.plan.name,
           notesMd: data.plan.notesMd,
-          status: "approved",
+          status: restoredStatus,
         })
         .where(eq(mediaPlans.id, input.planId));
     });
@@ -870,7 +922,7 @@ export async function revertPlanToApprovedSnapshot(input: {
       ...plan,
       name: data.plan.name,
       notesMd: data.plan.notesMd,
-      status: "approved",
+      status: restoredStatus,
       revertedToVersion: plan.currentVersion,
       // Fees del draft que se conservaron por tener imputaciones ya cargadas.
       keptBilledFees,

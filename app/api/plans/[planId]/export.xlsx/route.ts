@@ -4,6 +4,10 @@ import {
   getPlanDetail,
   getPlanDetailAtVersion,
 } from "@/db/queries/project-detail";
+import {
+  getPlanVersionHistory,
+  type PlanVersionEntry,
+} from "@/db/queries/plan-qa";
 import { listMetricsForClient } from "@/app/actions/plans";
 import {
   parseVersionParam,
@@ -521,7 +525,26 @@ export async function GET(
   buildBudgetByMarketSheet(wb, detail, lang);
 
   // ─────────────────────────────────────────────────────────────────────────
-  // TABS 3+ — Tabs auxiliares del plan (uno por sheet creado, en orden)
+  // TAB 3 — Historial de versiones (qué cambió en cada versión + su QA)
+  //
+  // Regla dura del repo: el Excel espeja la pantalla desde donde se descarga,
+  // incluida la data detrás de los desplegables. En el detalle del plan el
+  // historial se despliega por versión y muestra el diff contra la anterior;
+  // acá va lo mismo.
+  //
+  // Solo en el export del plan VIGENTE: bajar el Excel de una versión vieja
+  // (?v=N) representa el plan tal como se aprobó en esa versión, y listar
+  // versiones posteriores dentro de ese archivo sería engañoso.
+  // ─────────────────────────────────────────────────────────────────────────
+  if (version == null) {
+    const versionHistory = await getPlanVersionHistory(planId);
+    if (versionHistory.length > 0) {
+      buildVersionHistorySheet(wb, versionHistory, lang);
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // TABS 4+ — Tabs auxiliares del plan (uno por sheet creado, en orden)
   // ─────────────────────────────────────────────────────────────────────────
   for (const aux of detail.auxSheets) buildAuxSheet(wb, detail, aux, lang);
 
@@ -543,6 +566,200 @@ export async function GET(
     },
   });
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// Tab 3 — Historial de versiones
+//
+// Espejo del desplegable del editor: una sección por versión aprobada con su
+// fecha, el QA de esa versión, los totales y el detalle de qué cambió respecto
+// de la anterior (líneas agregadas / modificadas / eliminadas, publishers y
+// fees). El diff lo computa lib/plan-version-diff.ts desde los snapshots.
+// ────────────────────────────────────────────────────────────────────────────
+
+function buildVersionHistorySheet(
+  wb: ExcelJS.Workbook,
+  entries: PlanVersionEntry[],
+  lang: Language,
+) {
+  const title = lang === "es" ? "Historial de versiones" : "Version history";
+  const ws = wb.addWorksheet(title);
+  ws.columns = [
+    { width: 12 }, // Versión
+    { width: 14 }, // Fecha
+    { width: 24 }, // Sección
+    { width: 52 }, // Detalle
+    { width: 26 }, // Antes
+    { width: 26 }, // Después
+  ];
+
+  const banner = ws.addRow([title]);
+  ws.mergeCells(banner.number, 1, banner.number, 6);
+  banner.getCell(1).font = { bold: true, size: 14, color: { argb: WHITE } };
+  banner.getCell(1).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: ACCENT },
+  };
+  banner.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
+  banner.height = 26;
+
+  const head = ws.addRow(
+    lang === "es"
+      ? ["Versión", "Fecha", "Sección", "Detalle", "Antes", "Después"]
+      : ["Version", "Date", "Section", "Detail", "Before", "After"],
+  );
+  head.eachCell((cell) => {
+    cell.font = { bold: true, size: 9, color: { argb: WHITE } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ACCENT } };
+    cell.border = allBorders;
+    cell.alignment = { vertical: "middle", horizontal: "left" };
+  });
+
+  const usd = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+
+  const addRow = (
+    values: (string | number | null)[],
+    opts: { fill?: string; bold?: boolean } = {},
+  ) => {
+    const row = ws.addRow(values);
+    for (let c = 1; c <= 6; c++) {
+      const cell = row.getCell(c);
+      cell.border = allBorders;
+      cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+      if (opts.bold) cell.font = { bold: true };
+      if (opts.fill) {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: opts.fill },
+        };
+      }
+    }
+    return row;
+  };
+
+  for (const entry of entries) {
+    const { diff } = entry;
+    const vLabel = `v${entry.versionNumber}`;
+    const dateLabel = formatDate(
+      entry.approvedAt.toISOString().slice(0, 10),
+      lang,
+    );
+
+    // Cabecera de la versión.
+    const summary = diff.isInitial
+      ? lang === "es"
+        ? `Versión inicial · ${diff.counts.linesAfter} líneas`
+        : `Initial version · ${diff.counts.linesAfter} lines`
+      : diff.changeCount === 0
+        ? lang === "es"
+          ? "Re-aprobación sin cambios"
+          : "Re-approval with no changes"
+        : lang === "es"
+          ? `+${diff.counts.added} agregadas · ${diff.counts.changed} modificadas · −${diff.counts.removed} eliminadas`
+          : `+${diff.counts.added} added · ${diff.counts.changed} changed · −${diff.counts.removed} removed`;
+    addRow(
+      [vLabel, dateLabel, lang === "es" ? "Aprobación" : "Approval", summary, "", ""],
+      { fill: ACCENT_SOFT, bold: true },
+    );
+
+    if (entry.notes) {
+      addRow(["", "", lang === "es" ? "Nota" : "Note", entry.notes, "", ""]);
+    }
+
+    // QA de la versión.
+    addRow([
+      "",
+      "",
+      "QA",
+      entry.qa?.completedAt
+        ? `${lang === "es" ? "QA realizado" : "QA done"} · ${entry.qa.checkedCount} ${lang === "es" ? "líneas controladas" : "lines checked"}${entry.qa.notes ? ` · ${entry.qa.notes}` : ""}`
+        : lang === "es"
+          ? "Sin QA cerrado para esta versión"
+          : "No QA closed for this version",
+      entry.qa?.completedByEmail ?? "",
+      entry.qa?.completedAt
+        ? formatDate(entry.qa.completedAt.toISOString().slice(0, 10), lang)
+        : "",
+    ]);
+
+    // Totales.
+    addRow([
+      "",
+      "",
+      lang === "es" ? "Totales" : "Totals",
+      `Media · Fees · Total`,
+      diff.isInitial
+        ? ""
+        : `${usd(diff.totals.mediaBefore)} · ${usd(diff.totals.feesBefore)} · ${usd(diff.totals.grandBefore)}`,
+      `${usd(diff.totals.mediaAfter)} · ${usd(diff.totals.feesAfter)} · ${usd(diff.totals.grandAfter)}`,
+    ]);
+
+    // Detalle de los cambios.
+    for (const f of diff.planFields) {
+      addRow(["", "", "Plan", f.label, f.before, f.after]);
+    }
+    for (const p of diff.publishers) {
+      addRow([
+        "",
+        "",
+        "Publisher",
+        `${KIND_ES[p.kind]} · ${p.publisherName}`,
+        p.totalBefore == null ? "" : usd(p.totalBefore),
+        p.totalAfter == null ? "" : usd(p.totalAfter),
+      ]);
+    }
+    for (const l of diff.lines) {
+      const label = `${KIND_ES[l.kind]} · ${l.publisherName} · ${l.placementName}`;
+      if (l.fields.length === 0) {
+        addRow([
+          "",
+          "",
+          lang === "es" ? "Línea" : "Line",
+          label,
+          l.amountBefore == null ? "" : usd(l.amountBefore),
+          l.amountAfter == null ? "" : usd(l.amountAfter),
+        ]);
+      } else {
+        for (const f of l.fields) {
+          addRow([
+            "",
+            "",
+            lang === "es" ? "Línea" : "Line",
+            `${label} → ${f.label}`,
+            f.before,
+            f.after,
+          ]);
+        }
+      }
+    }
+    for (const fe of diff.fees) {
+      const label = `${KIND_ES[fe.kind]} · ${fe.name}`;
+      if (fe.fields.length === 0) {
+        addRow([
+          "",
+          "",
+          "Fee",
+          label,
+          fe.amountBefore == null ? "" : usd(fe.amountBefore),
+          fe.amountAfter == null ? "" : usd(fe.amountAfter),
+        ]);
+      } else {
+        for (const f of fe.fields) {
+          addRow(["", "", "Fee", `${label} → ${f.label}`, f.before, f.after]);
+        }
+      }
+    }
+
+    ws.addRow([]); // aire entre versiones
+  }
+}
+
+const KIND_ES = {
+  added: "Agregada",
+  removed: "Eliminada",
+  changed: "Modificada",
+} as const;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Tab 2 — Budget by market

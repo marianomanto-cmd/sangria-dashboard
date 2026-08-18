@@ -1,5 +1,6 @@
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { PLAN_SIGNED_STATUSES } from "@/lib/plan-status";
 import {
   budgetOrigins,
   clients,
@@ -108,7 +109,7 @@ export async function getPortalFilterOptions(
     .where(
       and(
         eq(projects.clientId, clientId),
-        eq(mediaPlans.status, "approved"),
+        inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
         isNull(mediaPlans.deletedAt),
       ),
     )

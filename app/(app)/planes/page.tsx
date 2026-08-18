@@ -20,6 +20,7 @@ import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { DEFAULT_LANGUAGE } from "@/lib/i18n";
 import { availableYears, periodMatchesYear, resolveYearParam } from "@/lib/year-filter";
+import { isPlanStatus, PLAN_STATUSES, type PlanStatus } from "@/lib/plan-status";
 
 type Props = {
   searchParams: Promise<{ status?: string; origin?: string; client?: string; year?: string }>;
@@ -27,7 +28,11 @@ type Props = {
 
 export default async function PlanesPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const filter = sp.status;
+  // El filtro viene del querystring: lo validamos contra el enum para no armar
+  // un `where status = 'cualquier-cosa'` (y para que un link viejo con un
+  // estado que ya no existe caiga en "Todos" en vez de tirar 0 resultados).
+  const filter: PlanStatus | undefined =
+    sp.status && isPlanStatus(sp.status) ? sp.status : undefined;
   const client = await resolveClientFromSearchParams(sp);
   const clientId = client?.id ?? null;
   const lang = client?.language ?? DEFAULT_LANGUAGE;
@@ -36,7 +41,7 @@ export default async function PlanesPage({ searchParams }: Props) {
     sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
 
   const conds = [isNull(mediaPlans.deletedAt)];
-  if (filter) conds.push(eq(mediaPlans.status, filter as never));
+  if (filter) conds.push(eq(mediaPlans.status, filter));
   if (validOrigin) conds.push(eq(projects.budgetOriginId, validOrigin));
   if (clientId) conds.push(eq(projects.clientId, clientId));
   const where = conds.length === 1 ? conds[0] : and(...conds);
@@ -147,12 +152,9 @@ export default async function PlanesPage({ searchParams }: Props) {
           periodMatchesYear({ start: p.periodStart, end: p.periodEnd }, selectedYear, currentYear),
         );
 
-  const counts = {
-    draft: allPlans.filter((p) => p.status === "draft").length,
-    ready_to_send: allPlans.filter((p) => p.status === "ready_to_send").length,
-    approved: allPlans.filter((p) => p.status === "approved").length,
-    archived: allPlans.filter((p) => p.status === "archived").length,
-  };
+  const counts = Object.fromEntries(
+    PLAN_STATUSES.map((st) => [st, allPlans.filter((p) => p.status === st).length]),
+  ) as Record<PlanStatus, number>;
 
   // KPIs del set filtrado (todo lo que vaya a aparecer en la tabla, antes del
   // search client-side).
@@ -166,7 +168,11 @@ export default async function PlanesPage({ searchParams }: Props) {
   );
   const kpiPctConsumed =
     kpiTotalMedia > 0 ? (kpiSpent / kpiTotalMedia) * 100 : 0;
-  const kpiActive = counts.approved + counts.ready_to_send;
+  // "Vigentes" = todo lo comprometido: el ready congelado + los firmados
+  // (approved / QA done / live). El desglose del hint separa lo que ya está al
+  // aire de lo que está trabado esperando el QA.
+  const kpiActive =
+    counts.ready_to_send + counts.approved + counts.qa_done + counts.live;
 
   const titleLabel =
     lang === "es"
@@ -228,15 +234,21 @@ export default async function PlanesPage({ searchParams }: Props) {
           <KpiCard
             label={lang === "es" ? "Vigentes" : "Active"}
             value={`${kpiActive}`}
-            hint={`${counts.approved} approved · ${counts.ready_to_send} ready`}
+            hint={`${counts.live} live · ${counts.qa_done} QA done · ${counts.ready_to_send} ready`}
           />
           <KpiCard
-            label="Draft"
-            value={`${counts.draft}`}
+            label={lang === "es" ? "Esperando QA" : "Awaiting QA"}
+            value={`${counts.approved}`}
             hint={
-              counts.archived > 0
-                ? `${counts.archived} ${lang === "es" ? "archivados" : "archived"}`
-                : undefined
+              counts.approved > 0
+                ? lang === "es"
+                  ? "aprobados sin QA — no pueden ir a Live"
+                  : "approved without QA — cannot go Live"
+                : `${counts.draft} draft${
+                    counts.archived > 0
+                      ? ` · ${counts.archived} ${lang === "es" ? "archivados" : "archived"}`
+                      : ""
+                  }`
             }
           />
         </section>
@@ -271,7 +283,23 @@ export default async function PlanesPage({ searchParams }: Props) {
           <FilterChoice
             current={filter}
             value="approved"
-            label={`Approved (${counts.approved})`}
+            label={`${lang === "es" ? "Esperando QA" : "Awaiting QA"} (${counts.approved})`}
+            originId={validOrigin}
+            clientSlug={client?.slug ?? null}
+            yearParam={sp.year}
+          />
+          <FilterChoice
+            current={filter}
+            value="qa_done"
+            label={`QA done (${counts.qa_done})`}
+            originId={validOrigin}
+            clientSlug={client?.slug ?? null}
+            yearParam={sp.year}
+          />
+          <FilterChoice
+            current={filter}
+            value="live"
+            label={`Live (${counts.live})`}
             originId={validOrigin}
             clientSlug={client?.slug ?? null}
             yearParam={sp.year}

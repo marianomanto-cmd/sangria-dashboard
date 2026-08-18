@@ -28,6 +28,7 @@ import { BillingStatusBadge } from "@/components/billing-status-badge";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { ReportingGantt } from "@/components/reporting-gantt";
 import { formatUsd, formatUsdCompact, formatPct } from "@/lib/format";
+import { isPlanSigned } from "@/lib/plan-status";
 import { formatDate, formatMonth, type Language } from "@/lib/i18n";
 import {
   currentYear,
@@ -824,15 +825,16 @@ export async function ProjectsSection({
 
   // Filtro de rango de fechas: dejamos proyectos con al menos un plan cuyo
   // período INTERSECTA el rango [pfrom, pto]; dentro de cada proyecto mostramos
-  // solo esos planes. Se ignora si hay campañas elegidas. Solo planes APROBADOS:
-  // el portal es para el cliente, no mostramos borradores ni versiones viejas
-  // (draft/ready/archived).
+  // solo esos planes. Se ignora si hay campañas elegidas. Solo planes FIRMADOS
+  // (approved / qa_done / live): el portal es para el cliente, no mostramos
+  // borradores ni versiones viejas (draft/ready/archived). El paso de QA es
+  // interno — para el cliente los tres estados son "su plan aprobado".
   const dateFrom = selectedCampaigns ? null : params.dateFrom || null;
   const dateTo = selectedCampaigns ? null : params.dateTo || null;
   const filtered = rows
     .filter((proj) => STATUSES.has(proj.status))
     .map((proj) => {
-      let plans = proj.plans.filter((p) => p.status === "approved");
+      let plans = proj.plans.filter((p) => isPlanSigned(p.status));
       if (selectedCampaigns) {
         plans = plans.filter((p) => selectedCampaigns.has(p.id));
       }

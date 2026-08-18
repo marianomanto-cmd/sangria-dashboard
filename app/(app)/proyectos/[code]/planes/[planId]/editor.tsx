@@ -7,11 +7,12 @@ import {
   ChevronDown,
   Copy,
   Download,
-  FileSpreadsheet,
   FileText,
   Plus,
+  Radio,
   Receipt,
   Scale,
+  ShieldCheck,
   Table,
   Trash2,
   X,
@@ -32,8 +33,11 @@ import {
   updatePlanMetadata,
   updatePlanPublisher,
 } from "@/app/actions/plans";
+import { reopenPlanQa } from "@/app/actions/plan-qa";
 import { AuxSheetSection } from "./aux-sheet";
 import { PlanLastEdit, type PlanEditHistory } from "./plan-history";
+import { PlanQaModal } from "./qa-modal";
+import { PlanVersionHistory } from "./version-history";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
@@ -48,6 +52,7 @@ import type {
   PlanPlacement,
   PlanPublisherGroup,
 } from "@/db/queries/project-detail";
+import type { PlanQaState, PlanVersionEntry } from "@/db/queries/plan-qa";
 import type {
   markets as marketsTable,
   metricsCatalog as metricsTable,
@@ -102,6 +107,8 @@ export function PlanEditor({
   lang = "en",
   canApprove = false,
   editHistory,
+  qaState,
+  versionHistory = [],
 }: {
   detail: PlanDetail;
   allPublishers: PublisherCatalog[];
@@ -115,12 +122,31 @@ export function PlanEditor({
   // Historial de la versión vigente (audit_log, ya acotado por page.tsx):
   // alimenta el chip "Última edición" + su modal read-only.
   editHistory?: PlanEditHistory;
+  // Estado del QA de la versión vigente: qué líneas ya se controlaron. Alimenta
+  // el modal de QA y el contador del header.
+  qaState?: PlanQaState;
+  // Una entrada por versión aprobada, con el diff contra la anterior.
+  versionHistory?: PlanVersionEntry[];
 }) {
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
+  const [qaOpen, setQaOpen] = useState(false);
   const editable = detail.plan.status === "draft";
+
+  // Progreso del QA de la versión vigente, para el header (el detalle vive en
+  // el modal). Solo cuentan los checks de líneas que siguen existiendo.
+  const qaTotalLines = detail.publishers.reduce(
+    (n, p) => n + p.placements.length,
+    0,
+  );
+  const livePlacementIds = new Set(
+    detail.publishers.flatMap((p) => p.placements.map((pl) => pl.id)),
+  );
+  const qaCheckedLines = (qaState?.checks ?? []).filter((c) =>
+    livePlacementIds.has(c.placementId),
+  ).length;
 
   const refresh = () => router.refresh();
 
@@ -236,6 +262,63 @@ export function PlanEditor({
       const r = await transitionPlanStatus({ planId: detail.plan.id, to: "approved" });
       if (!r.ok) toast.error(r.error);
       else toast.success("Plan aprobado");
+      refresh();
+    });
+  };
+
+  // ── QA → Live ─────────────────────────────────────────────────────────────
+  // El QA se cierra desde el modal (completePlanQa). Acá vive lo que pasa
+  // DESPUÉS: marcar live, reabrir el QA y deshacer un live marcado de más.
+  const onMarkLive = async () => {
+    if (
+      !(await confirm({
+        title: `¿Marcar ${detail.plan.name} como Live?`,
+        body: `El QA de la v${detail.plan.currentVersion} está cerrado. Marcar Live indica que la campaña está corriendo en las plataformas.`,
+        confirmLabel: "Marcar Live",
+      }))
+    )
+      return;
+    startTransition(async () => {
+      const r = await transitionPlanStatus({ planId: detail.plan.id, to: "live" });
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Plan marcado como Live");
+      refresh();
+    });
+  };
+
+  const onReopenQa = async () => {
+    if (
+      !(await confirm({
+        title: "¿Reabrir el QA de esta versión?",
+        body: "El plan vuelve a “aprobado · QA pendiente” y hay que cerrar el QA de nuevo para poder marcarlo Live. Las líneas ya controladas quedan tildadas: destildá solo las que haya que volver a verificar.",
+        confirmLabel: "Reabrir QA",
+      }))
+    )
+      return;
+    startTransition(async () => {
+      const r = await reopenPlanQa({ planId: detail.plan.id });
+      if (!r.ok) toast.error(r.error);
+      else toast.success("QA reabierto");
+      refresh();
+    });
+  };
+
+  const onUndoLive = async () => {
+    if (
+      !(await confirm({
+        title: "¿Sacar el plan de Live?",
+        body: "Vuelve a “QA realizado”. El QA de esta versión sigue siendo válido, así que podés volver a marcarlo Live cuando quieras.",
+        confirmLabel: "Sacar de Live",
+      }))
+    )
+      return;
+    startTransition(async () => {
+      const r = await transitionPlanStatus({
+        planId: detail.plan.id,
+        to: "qa_done",
+      });
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Plan de vuelta en QA realizado");
       refresh();
     });
   };
@@ -382,18 +465,150 @@ export function PlanEditor({
               )}
             </>
           )}
+          {/* Aprobado = firmado por el cliente, con el QA de esta versión
+              pendiente. Es el único camino a Live: el botón abre el modal que
+              obliga a controlar línea por línea. */}
           {detail.plan.status === "approved" && (
-            <button
-              type="button"
-              onClick={onBackToDraft}
-              disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
-            >
-              Editar (nueva versión)
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onBackToDraft}
+                disabled={pending}
+                className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
+              >
+                Editar (nueva versión)
+              </button>
+              <button
+                type="button"
+                onClick={() => setQaOpen(true)}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md bg-accent text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                title={`Controlar que la campaña esté armada tal cual la v${detail.plan.currentVersion} del plan`}
+              >
+                <ShieldCheck size={14} strokeWidth={2} />
+                Realizar QA
+                {qaCheckedLines > 0 && qaCheckedLines < qaTotalLines && (
+                  <span className="font-mono text-[11px] opacity-90">
+                    {qaCheckedLines}/{qaTotalLines}
+                  </span>
+                )}
+              </button>
+            </>
+          )}
+
+          {/* QA cerrado: cualquiera puede pasarlo a Live. */}
+          {detail.plan.status === "qa_done" && (
+            <>
+              <button
+                type="button"
+                onClick={onBackToDraft}
+                disabled={pending}
+                className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
+              >
+                Editar (nueva versión)
+              </button>
+              <button
+                type="button"
+                onClick={onReopenQa}
+                disabled={pending}
+                className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
+                title="Volver a abrir el QA de esta versión para corregirlo"
+              >
+                Reabrir QA
+              </button>
+              <button
+                type="button"
+                onClick={onMarkLive}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"
+              >
+                <Radio size={14} strokeWidth={2} />
+                Marcar Live
+              </button>
+            </>
+          )}
+
+          {detail.plan.status === "live" && (
+            <>
+              <button
+                type="button"
+                onClick={onUndoLive}
+                disabled={pending}
+                className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
+                title="Sacar el plan de Live (vuelve a QA realizado)"
+              >
+                Sacar de Live
+              </button>
+              <button
+                type="button"
+                onClick={onBackToDraft}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
+              >
+                Editar (nueva versión)
+              </button>
+            </>
           )}
         </div>
       </header>
+
+      {/* Aviso del paso de QA. El status por sí solo no dice qué falta hacer:
+          esta franja lo dice con todas las letras y da el botón, para que nadie
+          se quede esperando a que "approved" se convierta solo en "live". */}
+      {detail.plan.status === "approved" && (
+        <section className="rounded-lg border border-info-soft bg-info-soft/60 px-5 py-3.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <ShieldCheck size={18} strokeWidth={2} className="text-info shrink-0" />
+          <div className="flex-1 min-w-[260px]">
+            <p className="text-sm font-medium text-ink">
+              Falta el QA de la v{detail.plan.currentVersion} para poder marcar
+              el plan como Live
+            </p>
+            <p className="text-xs text-muted mt-0.5">
+              Controlá en el modal que la campaña esté armada en las plataformas
+              tal cual estas {qaTotalLines} línea
+              {qaTotalLines === 1 ? "" : "s"}.{" "}
+              {qaCheckedLines > 0
+                ? `Ya controlaste ${qaCheckedLines} de ${qaTotalLines}.`
+                : "Ninguna línea controlada todavía."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setQaOpen(true)}
+            disabled={pending}
+            className="inline-flex items-center gap-1.5 rounded-md bg-accent text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 shrink-0"
+          >
+            <ShieldCheck size={14} strokeWidth={2} />
+            {qaCheckedLines > 0 ? "Continuar QA" : "Realizar QA"}
+          </button>
+        </section>
+      )}
+
+      {detail.plan.status === "qa_done" && (
+        <section className="rounded-lg border border-accent-soft bg-accent-soft/60 px-5 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <ShieldCheck size={18} strokeWidth={2} className="text-accent shrink-0" />
+          <p className="flex-1 min-w-[260px] text-sm text-ink">
+            <span className="font-medium">
+              QA de la v{detail.plan.currentVersion} realizado
+            </span>
+            <span className="text-muted">
+              {" "}
+              · {qaTotalLines} línea{qaTotalLines === 1 ? "" : "s"} controladas
+              {qaState?.completedByEmail ? ` por ${qaState.completedByEmail}` : ""}
+              . Listo para marcar Live.
+            </span>
+          </p>
+          <button
+            type="button"
+            onClick={onMarkLive}
+            disabled={pending}
+            className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 shrink-0"
+          >
+            <Radio size={14} strokeWidth={2} />
+            Marcar Live
+          </button>
+        </section>
+      )}
 
       {/* Plan metadata strip — todas las fechas son derivadas de los placements */}
       <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-3">
@@ -588,65 +803,29 @@ export function PlanEditor({
         </div>
       </section>
 
-      {/* Snapshots */}
-      {detail.snapshots.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold mb-2">Snapshots de aprobación</h2>
-          <p className="text-xs text-muted mb-2">
-            Cada versión aprobada se puede descargar tal como se aprobó (Excel o
-            PDF), sin afectar al plan vigente.
-          </p>
-          <ul className="rounded-lg border border-line bg-white dark:bg-paper-2 divide-y divide-line-soft">
-            {detail.snapshots.map((s) => (
-              <li
-                key={s.id}
-                className="px-5 py-2.5 flex items-center gap-3 text-sm flex-wrap"
-              >
-                <span className="font-mono text-ink-2">v{s.versionNumber}</span>
-                <span className="font-mono text-xs text-muted">
-                  {s.approvedAt.toISOString().slice(0, 10)}
-                </span>
-                {s.notes && (
-                  <span className="text-muted text-xs flex-1 truncate">
-                    {s.notes}
-                  </span>
-                )}
-                {/* Descarga de la versión histórica: reconstruida desde el
-                    snapshot (?v=N), no del plan vigente. */}
-                <span className="ml-auto flex items-center gap-3 shrink-0">
-                  <a
-                    href={`/api/plans/${detail.plan.id}/export.xlsx?v=${s.versionNumber}`}
-                    className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent"
-                    title={`Descargar el Excel del plan tal como se aprobó en v${s.versionNumber}`}
-                  >
-                    <FileSpreadsheet size={13} />
-                    Excel
-                  </a>
-                  <a
-                    href={`/api/plans/${detail.plan.id}/export.pdf?v=${s.versionNumber}`}
-                    className="inline-flex items-center gap-1 text-xs text-muted hover:text-accent"
-                    title={`Descargar el PDF del plan tal como se aprobó en v${s.versionNumber}`}
-                  >
-                    <Download size={13} />
-                    PDF
-                  </a>
-                  {s.signedPdfUrl ? (
-                    <a
-                      href={s.signedPdfUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-accent text-xs hover:underline"
-                    >
-                      PDF firmado
-                    </a>
-                  ) : (
-                    <span className="text-line text-xs">sin PDF firmado</span>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
+      {/* Historial de versiones: cada versión aprobada se despliega y muestra
+          qué cambió respecto de la anterior, cuándo se aprobó y su QA. */}
+      <PlanVersionHistory
+        planId={detail.plan.id}
+        entries={versionHistory}
+        lang={lang}
+      />
+
+      {/* Modal de QA — el control obligatorio antes de Live. */}
+      {qaOpen && (
+        <PlanQaModal
+          detail={detail}
+          allMetrics={allMetrics}
+          initialChecks={qaState?.checks ?? []}
+          lang={lang}
+          onClose={() => {
+            setQaOpen(false);
+            // Refrescar al cerrar: los tildes se guardan uno a uno, así que sin
+            // esto reabrir el modal mostraría el estado viejo (props del último
+            // render del server) y parecería que se perdió el progreso.
+            refresh();
+          }}
+        />
       )}
     </div>
   );

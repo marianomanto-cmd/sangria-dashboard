@@ -97,6 +97,8 @@ app/
         editor.tsx          # editor del plan (publishers + placements + fees)
         aux-sheet.tsx       # tabs auxiliares del plan: grillas libres tipo Excel con fórmulas, insertar/eliminar filas y columnas en cualquier posición (menú click-derecho) (tabs extra del export)
         plan-history.tsx    # chip "Última edición" + modal read-only con los cambios de la versión vigente (audit_log)
+        qa-modal.tsx        # modal de QA del plan: preview tipo Excel con casilla "Controlado" por línea; con todas tildadas habilita "QA realizado" (approved → qa_done)
+        version-history.tsx # historial de versiones desplegable: qué cambió en cada versión vs la anterior (diff de snapshots) + fecha + QA + descargas ?v=N
         billing/            # editor de facturación mensual + gráfico "Avance de facturación" (facturado medios/fee acumulado vs total del plan) arriba de todo
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + buscador en vivo por N°/plan + click-to-edit
@@ -138,7 +140,8 @@ app/
       historical.xlsx/route.ts  # XLSX del generador (misma query que el preview, mismo resolveReportColumns)
   actions/                  # Server Actions (CRUD)
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
-    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts, aux-sheets.ts
+    budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts, aux-sheets.ts,
+    plan-qa.ts              # QA del plan: tildar/destildar línea, cerrar QA (→ qa_done) y reabrirlo
   globals.css
 
 components/                 # UI compartida
@@ -164,7 +167,7 @@ components/                 # UI compartida
   report-comments.tsx       # tablerito de comentarios por reporte del calendario (botón + modal con autor/fecha/hora)
   report-generator-form.tsx # /reportes/generador: filtros cascading + column picker URL-based
   button.tsx                # Button + buttonVariants() — primitivo único para CTAs (primary/secondary/ghost/danger, xs/sm/md/lg). NO volver a escribir bg-ink inline
-  plan-status-badge.tsx     # PlanStatusBadge — badge de estado del plan (draft/ready_to_send/approved/archived), prop size md/sm. Fuente única; no duplicar
+  plan-status-badge.tsx     # PlanStatusBadge — badge de estado del plan (draft/ready_to_send/approved/qa_done/live/archived), prop size md/sm. Labels de lib/plan-status.ts. Fuente única; no duplicar
   billing-status-badge.tsx  # BillingStatusBadge — badge de estado del billing, lang-aware es/en, prop size md/sm. Fuente única; no duplicar
   toast.tsx                 # ToastProvider + useToast() — feedback no bloqueante success/error/info con live-region (role=alert/status)
   confirm-dialog.tsx        # ConfirmProvider + useConfirm() — confirmación promise-based con focus-trap, Escape, backdrop. No usar confirm() nativo
@@ -176,6 +179,7 @@ db/
   schema.ts                 # tablas + enums
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
   rls.sql                   # ENABLE ROW LEVEL SECURITY en todas las tablas (cierra la REST API pública de Supabase)
+  plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
@@ -186,6 +190,7 @@ db/
     pendings.ts (tablero de pendientes del dashboard)
     analysis.ts             # activaciones por mercado (mapa /analisis + portal): getMarketActivations + getAnalysisFilterOptions
     client-portal.ts        # portal: getPortalClient, getPortalFilterOptions, getClientSpendByPublisher
+    plan-qa.ts              # getPlanQaState (QA de una versión: run + líneas controladas) + getPlanVersionHistory (versiones con su diff y su QA)
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -210,6 +215,8 @@ lib/
   auth.ts                   # getCurrentUser() (server-side)
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
   plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado. Fuente única: server action (barrera) + editor (diálogo)
+  plan-status.ts            # lifecycle del plan: PLAN_STATUSES, sets PLAN_SIGNED_/PLAN_COMMITTED_STATUSES, mapa de transiciones y labels. Fuente única: queries + actions + badges
+  plan-version-diff.ts      # buildPlanVersionDiff — qué cambió entre dos versiones aprobadas, comparando sus snapshots (plan/publishers/líneas/fees)
   plan-export-version.ts    # parseVersionParam(?v=N) de los exports del plan: null = plan vigente, N = versión aprobada histórica, "invalid" = 400
   client-portal.ts          # portal público: password compartido, slugs reservados, helpers PUROS (edge-safe, los usa el proxy)
   client-portal.server.ts   # cookie de sesión del portal (set/clear/has) + canAccessClientExport
@@ -322,8 +329,20 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 
 ### El plan vive dentro del proyecto, peer con otros planes
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).
-- Cada plan tiene su propio lifecycle: `draft` → `ready_to_send` → `approved` → `archived`.
-- Los planes pueden solapar fechas y estar todos `approved` al mismo tiempo.
+- Cada plan tiene su propio lifecycle:
+  `draft` → `ready_to_send` → `approved` → `qa_done` → `live` → `archived`.
+  Los sets de estado, el mapa de transiciones y los labels viven en
+  **`lib/plan-status.ts`** — fuente única que importan queries, actions y UI.
+- **`approved` ya NO significa "al aire"**: significa *firmado por el cliente,
+  falta el QA*. La campaña sale al aire recién en `live`, y **sólo se llega a
+  `live` desde `qa_done`** (ver "QA del plan" abajo).
+- **Nunca hardcodear `status = 'approved'` en una query nueva.** Usar los sets:
+  - `PLAN_SIGNED_STATUSES` (`approved` + `qa_done` + `live`) = "plan firmado,
+    vigente" — es el reemplazo del viejo `= 'approved'` en portal, analysis,
+    campaign tracker, pendings y dashboard;
+  - `PLAN_COMMITTED_STATUSES` (los firmados + `ready_to_send`) = "compromete
+    plata" — estimación, pacing y comparables del simulador.
+- Los planes pueden solapar fechas y estar todos vigentes al mismo tiempo.
 - **Regla dura — el plan tiene que estar COMPLETO para pasar a Listo/Aprobado**:
   `transitionPlanStatus` bloquea el pase a `ready_to_send` **y** a `approved` si
   el plan tiene algo sin cargar. La regla vive en **`lib/plan-readiness.ts`**
@@ -356,8 +375,8 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - "Editar (nueva versión)" vuelve el plan `approved` → `draft` para trabajar la
   v(N+1) sin tocar el snapshot aprobado (`current_version` no cambia hasta la
   próxima aprobación).
-- **Descargar una versión vieja**: en el editor, la sección "Snapshots de
-  aprobación" tiene links **Excel** y **PDF** por versión. Van a las rutas de
+- **Descargar una versión vieja**: en el editor, la sección "Historial de
+  versiones" tiene links **Excel** y **PDF** por versión. Van a las rutas de
   export con **`?v=N`**, que reconstruyen el plan desde el snapshot vía
   `getPlanDetailAtVersion` (`db/queries/project-detail.ts`) — misma forma que
   `getPlanDetail`, así los builders de Excel/PDF se reusan sin cambios. Sin `?v`
@@ -368,11 +387,12 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `capturePlanSnapshot`; retroactivamente no se puede recuperar).
 - Si el planner se arrepiente, **"Descartar borrador"** (botón visible en el
   editor solo en un `draft` con `current_version > 0`) tira todos los cambios y
-  restaura el plan al snapshot de la versión aprobada vigente, dejándolo de
-  nuevo en `approved`. Lo hace `revertPlanToApprovedSnapshot` en
+  restaura el plan al snapshot de la versión aprobada vigente, dejándolo en
+  `qa_done` (si el QA de esa versión ya estaba cerrado) o en `approved` (si no).
+  Lo hace `revertPlanToApprovedSnapshot` en
   `app/actions/plans.ts`: restore **en transacción** (borra el contenido del
   draft y reinserta el del snapshot, mapeando old→new ids), restaura nombre +
-  notas y vuelve a `approved`. Pre-chequea colisión de nombre con el partial
+  notas y vuelve al estado firmado que corresponda. Pre-chequea colisión de nombre con el partial
   unique index si el draft había renombrado el plan. Es irreversible.
 - **Los fees NO se borran en el revert** (regla dura: lo facturado ya está
   facturado). Publishers y placements sí se borran y reinsertan, porque el
@@ -392,6 +412,65 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (`onDelete: restrict`: un publisher en uso no se puede borrar). Si algo falla
   igual, la action captura el error y devuelve `{ok:false}` (toast) en vez de
   propagar y romper la vista.
+
+### QA del plan: obligatorio para pasar a Live, y por versión
+- Entre `approved` y `live` hay una **instancia de QA**: el planner verifica que
+  la campaña esté **armada en las plataformas tal cual se planificó**. Es
+  **obligatoria** — no hay transición `approved → live`.
+- **Cómo se hace**: en el editor, un plan `approved` muestra la franja "Falta el
+  QA de la vN" y el botón **"Realizar QA"**. Abre un modal
+  (`app/(app)/proyectos/[code]/planes/[planId]/qa-modal.tsx`) que muestra el
+  plan **con el mismo layout que el Excel** (grupos de publisher con subtotales,
+  columnas Mercado / Inicio / Fin / Audiencia / Notas / Cost method / Inversión
+  + una columna por métrica, bloque de fees y grand total) con una casilla
+  **"Controlado"** al final de cada línea. Con **todas** tildadas se habilita
+  **"QA realizado"** → el plan pasa a `qa_done`. De ahí, **cualquiera** puede
+  marcarlo **Live**.
+- **Es por versión**: aprobar la v(N+1) deja el plan en `approved` **sin** run de
+  QA para esa versión, así que el control se rehace entero. Un plan nunca vuelve
+  a live sin QA de la versión vigente.
+- **Persistencia**: cada tilde se guarda sola en `media_plan_qa_checks` con
+  **quién y cuándo**, colgando del run de `media_plan_qa_runs`
+  (unique `(media_plan_id, version_number)`). Así el progreso sobrevive a cerrar
+  el modal, y dos planners pueden repartirse un plan largo. La UI es optimista y
+  **revierte** el tilde si el server rechaza. `placement_id` **no tiene FK** a
+  propósito: una versión futura puede borrar la línea y el QA histórico tiene
+  que seguir existiendo.
+- **Barreras reales (server-side)**, en `app/actions/plan-qa.ts` y
+  `transitionPlanStatus`:
+  - sólo se tilda sobre un plan `approved`, y sólo líneas **de ese plan**;
+  - `completePlanQa` **re-cuenta contra la base** antes de cerrar: si falta una
+    línea, no cierra;
+  - `qa_done` y `live` exigen que el run de la versión vigente esté cerrado —
+    también se re-chequea al pasar a `live`, por si el status llegó de una
+    corrección manual en la base.
+- **No hay "marcar todas"**: tildar *es* el acto de controlar. Para planes
+  largos hay "Ir a la primera pendiente" y un contador `N/M` con barra.
+- **Escape hatches**: **"Reabrir QA"** (`qa_done` → `approved`, conserva los
+  tildes como registro de lo controlado) y **"Sacar de Live"** (`live` →
+  `qa_done`, el QA de esa versión sigue valiendo).
+- **Descartar borrador** vuelve el plan a `qa_done` si el QA de esa versión ya
+  estaba cerrado, o a `approved` si no. Nunca vuelve directo a `live`: que
+  alguien confirme que la campaña está al aire es un click barato y evita dar
+  por viva una campaña que se bajó mientras se editaba el borrador.
+
+### Historial de versiones: qué cambió en cada una
+- Abajo del editor, **"Historial de versiones"**
+  (`version-history.tsx`) lista una fila por versión aprobada — número, fecha,
+  chip de QA y un resumen (`+3 · 2 modificadas · −1`, con el delta de total) — y
+  **cada una se despliega** para ver el detalle: totales antes→después, quién
+  cerró el QA y cuándo, y el diff agrupado en **Plan · Publishers · Líneas ·
+  Fees** con `campo: antes → después`. La última versión abre desplegada.
+- El diff se computa en **`lib/plan-version-diff.ts`** comparando los
+  **snapshots inmutables** de v(N−1) y vN, **no** el audit_log: el snapshot es
+  exactamente lo que se aprobó, así que el diff es determinístico. El matching
+  entre versiones es por **`id` de fila** (los uuid sobreviven a las ediciones:
+  `updatePlacement` muta la misma row), así una línea nueva sale como "agregada"
+  y una que desapareció como "eliminada".
+- Los nombres de publisher / market / métrica se resuelven contra el catálogo
+  **actual** (el snapshot congela ids), mismo criterio que
+  `getPlanDetailAtVersion`.
+- Las descargas por versión (`?v=N`, Excel / PDF) siguen viviendo en cada fila.
 
 ### Tabs auxiliares del plan (tabs extra del Excel, con fórmulas)
 - Cada plan puede tener **N tabs auxiliares** opcionales
@@ -443,7 +522,8 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   descenso recursivo en `lib/aux-sheet.ts` (NO usa `eval()`).
 - `grid_json` es un `string[][]` (filas × celdas) y `merges_json` un
   `{r0,c0,r1,c1}[]`. Solo se guardan strings; el **export Excel** agrega cada
-  tab **después del "Budget por mercado"** (en orden), castea a número las
+  tab **al final del workbook** (después del "Budget por mercado" y del
+  "Historial de versiones", en orden), castea a número las
   celdas que parsean limpio (US format), escribe las fórmulas que resuelven como
   **fórmulas reales de Excel** (con resultado cacheado; las que no parsean van
   como texto crudo) y aplica las uniones con `ws.mergeCells`. El nombre del tab
@@ -1151,6 +1231,14 @@ edición sigue en la grilla + inspector; el preview es solo visualización. (Una
 
 ### Rutas
 
+**Por qué el historial de versiones va al Excel y NO al PDF**: el PDF del plan
+es el **documento que se manda al cliente a firmar** (tiene bloque de firma y
+disclaimer legal). El historial de versiones y el QA son **proceso interno**:
+meterlos ahí ensuciaría un entregable del cliente con información que no le
+corresponde. El Excel, en cambio, es la copia de trabajo del equipo y sí espeja
+la pantalla completa (regla dura de `AGENTS.md`). Si algún día el PDF deja de
+ser el documento de firma, revisar esta decisión.
+
 - `GET /api/plans/[planId]/export.pdf` — **thin handler**: hace `getPlanDetail`
   + `listMetricsForClient`, delega el render a `lib/plan-pdf.ts`
   (`renderPlanPdf(detail, allMetrics)`) y arma la `Response`. La separación
@@ -1268,7 +1356,16 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
   días entre los meses que cubre `[startDate, endDate]` y la agrega por
   mercado × mes (los sin fecha caen en una columna "Undated"/"Sin fecha"). Solo
   USD, sin métricas.
-- **Tabs 3+ — Tabs auxiliares (uno por cada tab creado en el plan)**: las
+- **Tab 3 "Historial de versiones"**: espejo del desplegable del editor (regla
+  dura de `AGENTS.md`: el Excel muestra también lo que está detrás de los
+  expandibles de la pantalla desde donde se descarga). Una sección por versión
+  aprobada — fecha, resumen del cambio, QA de esa versión (quién lo cerró,
+  cuándo, cuántas líneas), totales antes→después — y una fila por cambio, con
+  columnas `Versión · Fecha · Sección · Detalle · Antes · Después`. El diff sale
+  de `lib/plan-version-diff.ts`. **Solo en el export del plan vigente**: un
+  export con `?v=N` representa el plan tal como se aprobó en esa versión, y
+  listar versiones posteriores adentro sería engañoso.
+- **Tabs 4+ — Tabs auxiliares (uno por cada tab creado en el plan)**: las
   grillas libres que el planner editó en el editor, con la misma metadata del
   plan arriba (proyecto, período, budget origin). El nombre de cada tab es el
   que le puso el planner (sanitizado: sin `[]:*?/\`, máx. 31 chars, sufijo
@@ -1552,6 +1649,12 @@ Idempotente: limpia las tablas antes de insertar.
   (`canApprovePlans`). El chequeo real está en la server action
   `transitionPlanStatus`; el editor esconde el botón "Aprobar (firmado)" para
   el resto. Cuando se arme el modelo de roles, migrar esta allowlist a roles.
+  **El QA del plan (`approved` → `qa_done`) y el pase a `live` NO están
+  restringidos**: los hace cualquier usuario logueado, como se pidió ("el
+  planner hace el QA, y después cualquiera lo marca Live"). Igual queda
+  registrado **quién** tildó cada línea y **quién** cerró el QA
+  (`media_plan_qa_checks` / `media_plan_qa_runs`), así que si más adelante se
+  quiere limitar el QA a un rol Planner, el dato para auditarlo ya existe.
 - **Reportes**: la sección `/reportes` tiene tres herramientas funcionando:
   Reporting Calendar (`/reportes/calendario`), Simulador (`/reportes/simulador`)
   y Generador de reportes históricos (`/reportes/generador`, ver sección

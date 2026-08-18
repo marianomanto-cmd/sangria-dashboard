@@ -77,8 +77,8 @@ export function BillingEstimateCard({
         </h2>
         <p className="text-xs text-muted">
           {lang === "es"
-            ? "Prorrateo lineal de placements (media) y fees de planes approved / ready_to_send sobre sus meses activos. Falta facturar = bruto − ya facturado."
-            : "Linear proration of placements (media) and fees from approved / ready_to_send plans across their active months. Left to invoice = gross − already invoiced."}
+            ? "Prorrateo lineal de placements (media) y fees de planes comprometidos (ready to send, approved, QA done, live) sobre sus meses activos. Falta facturar = bruto − ya facturado."
+            : "Linear proration of placements (media) and fees from committed plans (ready to send, approved, QA done, live) across their active months. Left to invoice = gross − already invoiced."}
         </p>
         {projectionsById && !hideProjectBreakdown && (
           <p className="text-xs text-muted mt-1">

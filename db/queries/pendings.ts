@@ -1,5 +1,6 @@
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
+import { PLAN_SIGNED_STATUSES } from "@/lib/plan-status";
 import {
   campaignActualSnapshots,
   clients,
@@ -194,7 +195,10 @@ async function getPendingBillings(
   clientId: string | null | undefined,
   lastClosedMonth: string,
 ): Promise<PendingBilling[]> {
-  const conds = [eq(mediaPlans.status, "approved"), isNull(mediaPlans.deletedAt)];
+  const conds = [
+    inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
+    isNull(mediaPlans.deletedAt),
+  ];
   if (clientId) conds.push(eq(projects.clientId, clientId));
 
   const planRows = await db
@@ -274,7 +278,10 @@ async function getPendingTracking(
   clientId: string | null | undefined,
   today: string,
 ): Promise<PendingTracking[]> {
-  const conds = [eq(mediaPlans.status, "approved"), isNull(mediaPlans.deletedAt)];
+  const conds = [
+    inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
+    isNull(mediaPlans.deletedAt),
+  ];
   if (clientId) conds.push(eq(projects.clientId, clientId));
 
   // 1. Período de cada plan (min start / max end). El join publishers→placements

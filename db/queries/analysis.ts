@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, inArray, isNull, lte, type SQL } from "drizzle-orm";
 import { db } from "@/db";
+import { PLAN_SIGNED_STATUSES } from "@/lib/plan-status";
 import {
   budgetOrigins,
   markets,
@@ -65,7 +66,7 @@ export async function getMarketActivations(
   const conds: SQL[] = [
     eq(projects.clientId, filters.clientId),
     isNull(mediaPlans.deletedAt),
-    eq(mediaPlans.status, "approved"),
+    inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
   ];
   if (filters.publisherIds?.length)
     conds.push(inArray(mediaPlanPublishers.publisherId, filters.publisherIds));
@@ -173,7 +174,7 @@ export async function getAnalysisFilterOptions(
         and(
           eq(projects.clientId, clientId),
           isNull(mediaPlans.deletedAt),
-          eq(mediaPlans.status, "approved"),
+          inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
         ),
       )
       .orderBy(asc(publishers.name));
@@ -194,7 +195,7 @@ export async function getAnalysisFilterOptions(
       and(
         eq(projects.clientId, clientId),
         isNull(mediaPlans.deletedAt),
-        eq(mediaPlans.status, "approved"),
+        inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
       ),
     )
     .orderBy(asc(markets.name));
