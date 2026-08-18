@@ -12,6 +12,15 @@
 // estimación y los exports. Un publisher sin monto, un placement vacío o sin su
 // métrica principal se propaga como plata que no se factura o como una línea
 // incompleta en el plan que ve el cliente.
+//
+// Lo mismo vale para el CUADRE del publisher (placements vs total del bloque),
+// y ahí el daño es silencioso: el total del plan —y con él la base del
+// management fee, los KPIs y la estimación— sale de
+// `sum(media_plan_publishers.total_planned_usd)`, mientras que el prorrateo
+// mensual, el pacing, el campaign tracker y las líneas del Excel salen de los
+// PLACEMENTS. Si no cuadran, la diferencia es plata que figura en el total pero
+// no se prorratea a ningún mes (o al revés: meses que facturan más que el
+// total). Por eso cuadrar es requisito para Listo/Aprobado, no una sugerencia.
 
 import { COST_METHOD_PRIMARY_METRIC } from "@/lib/cost-methods";
 
@@ -39,6 +48,24 @@ export type ReadinessIssue = {
 };
 
 const UNNAMED = "(placement sin nombre)";
+
+// Tolerancia del cuadre publisher ↔ placements: un centavo. Los montos son
+// numeric(14,2), así que cualquier diferencia real es >= 0.01; el margen existe
+// solo para no pelearse con el redondeo binario de los floats.
+// La exporta el editor para pintar el aviso con el MISMO criterio con el que la
+// regla bloquea (si divergieran, el aviso diría "cuadrado" y el pase fallaría).
+export const BALANCE_TOLERANCE_USD = 0.01;
+
+// Plata para los mensajes: sin decimales cuando es redondo (lo normal) y con
+// centavos cuando los hay, para que una diferencia de $0.50 no se muestre como
+// "$1" y mande al planner a buscar un peso que no existe.
+function money(value: number): string {
+  const hasCents = Math.round(value * 100) % 100 !== 0;
+  return `$${value.toLocaleString("en-US", {
+    minimumFractionDigits: hasCents ? 2 : 0,
+    maximumFractionDigits: hasCents ? 2 : 0,
+  })}`;
+}
 
 // Un placement "vacío" es una fila que quedó sin cargar del todo (típico: se
 // agregó la línea y nunca se completó). Se reporta como una sola cosa en vez de
@@ -74,6 +101,30 @@ export function findPlanReadinessIssues(
     if (pub.placements.length === 0) {
       pubMissing.push("cargar al menos un placement");
     }
+
+    // Cuadre del bloque: la suma de los placements tiene que dar el total del
+    // publisher. Solo se chequea cuando hay algo con qué cuadrar — si falta el
+    // monto o no hay placements, ya se reportó arriba y agregar el descuadre
+    // sería ruido.
+    if (pub.totalPlannedUsd > 0 && pub.placements.length > 0) {
+      const placementsTotal = pub.placements.reduce(
+        (sum, pl) => sum + (Number.isFinite(pl.amountUsd) ? pl.amountUsd : 0),
+        0,
+      );
+      const balance = pub.totalPlannedUsd - placementsTotal;
+      if (Math.abs(balance) >= BALANCE_TOLERANCE_USD) {
+        const gap =
+          balance > 0
+            ? `faltan ${money(balance)}`
+            : `sobran ${money(-balance)}`;
+        pubMissing.push(
+          `cuadrar los placements con el total del publisher: suman ${money(
+            placementsTotal,
+          )} contra un total de ${money(pub.totalPlannedUsd)} (${gap})`,
+        );
+      }
+    }
+
     if (pubMissing.length > 0) {
       issues.push({
         publisherName: pub.publisherName,
@@ -157,6 +208,6 @@ export function readinessErrorMessage(
   return [
     `No se puede marcar el plan como ${label} — falta completar:`,
     formatReadinessIssues(issues),
-    "Un plan Listo/Aprobado alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados.",
+    "Un plan Listo/Aprobado alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados, y el total de cada publisher tiene que coincidir con la suma de sus placements.",
   ].join("\n\n");
 }
