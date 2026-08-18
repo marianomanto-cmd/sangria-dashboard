@@ -180,6 +180,7 @@ db/
   index.ts                  # cliente Drizzle (lazy con Proxy + Transaction Pooler)
   rls.sql                   # ENABLE ROW LEVEL SECURITY en todas las tablas (cierra la REST API pública de Supabase)
   plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
+  panama-2026-audit.sql     # auditoría read-only: planes de 2026 que usan un mercado "Panamá" (catálogo + plan × mercado + detalle por placement) para separar ciudad vs país
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
