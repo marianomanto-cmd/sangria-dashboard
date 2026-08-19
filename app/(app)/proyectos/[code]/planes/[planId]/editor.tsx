@@ -39,6 +39,8 @@ import { PlanLastEdit, type PlanEditHistory } from "./plan-history";
 import { PlanQaModal } from "./qa-modal";
 import { PlanVersionHistory } from "./version-history";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
+import { AudienceHoverCard } from "@/components/audience-hover-card";
+import { AutoGrowTextarea } from "@/components/auto-grow-textarea";
 import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -895,7 +897,7 @@ function PlanWorkspace({
           {allPlacements.length} placements · {detail.publishers.length} publishers
         </span>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] gap-3 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_440px] xl:grid-cols-[1fr_520px] gap-3 items-start">
       {/* Planilla */}
       <div className="space-y-3 min-w-0">
         {detail.publishers.map((pub) => (
@@ -927,7 +929,7 @@ function PlanWorkspace({
       </div>
 
       {/* Inspector */}
-      <div className="lg:sticky lg:top-4">
+      <div className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
         {selected ? (
           <PlacementInspector
             key={selected.id}
@@ -1245,12 +1247,14 @@ function PlacementGridRow({
       }`}
     >
       <td className="pl-5 pr-2 py-1">
-        <TextInput
-          value={placement.placementName}
-          onCommit={(v) => update({ placementName: v })}
-          disabled={!editable}
-          className="w-full"
-        />
+        <AudienceHoverCard audience={placement.audience} className="w-full">
+          <TextInput
+            value={placement.placementName}
+            onCommit={(v) => update({ placementName: v })}
+            disabled={!editable}
+            className="w-full min-w-0"
+          />
+        </AudienceHoverCard>
       </td>
       <td className="px-2 py-1">
         <select
@@ -1434,16 +1438,13 @@ function PlacementInspector({
         </div>
 
         <Field label="Audiencia">
-          <textarea
-            defaultValue={placement.audience ?? ""}
+          <AutoGrowTextarea
+            value={placement.audience ?? ""}
             disabled={!editable}
-            rows={3}
             placeholder="25-44 viajeros frecuentes, lookalike, retargeting, etc."
-            onBlur={(e) =>
-              e.target.value !== (placement.audience ?? "") &&
-              update({ audience: e.target.value || null })
-            }
-            className="w-full text-sm leading-relaxed bg-white dark:bg-paper-2 border border-line rounded-md px-2.5 py-2 resize-y min-h-[4.5rem] focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50 disabled:resize-none"
+            minHeight="11rem"
+            maxHeight="30rem"
+            onCommit={(v) => update({ audience: v || null })}
           />
         </Field>
 
@@ -1469,16 +1470,13 @@ function PlacementInspector({
         />
 
         <Field label="Notas / formatos / detalles">
-          <textarea
-            defaultValue={placement.notesMd ?? ""}
+          <AutoGrowTextarea
+            value={placement.notesMd ?? ""}
             disabled={!editable}
-            rows={3}
             placeholder="Formato: video vertical 15-30s, 3 versiones rotativas, etc."
-            onBlur={(e) =>
-              e.target.value !== (placement.notesMd ?? "") &&
-              update({ notesMd: e.target.value || null })
-            }
-            className="w-full text-sm leading-relaxed bg-white dark:bg-paper-2 border border-line rounded-md px-2.5 py-2 resize-y min-h-[4.5rem] focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft disabled:opacity-50 disabled:resize-none"
+            minHeight="7rem"
+            maxHeight="24rem"
+            onCommit={(v) => update({ notesMd: v || null })}
           />
         </Field>
       </div>
@@ -2297,8 +2295,8 @@ function ExcelPreview({
     noPlacements: lang === "es" ? "Sin placements" : "No placements",
     note:
       lang === "es"
-        ? "Read-only. Audiencia, notas y fees no se muestran acá; sí salen en el Excel/PDF."
-        : "Read-only. Audience, notes and fees are omitted here; they do appear in the Excel/PDF.",
+        ? "Read-only. Notas y fees no se muestran acá; sí salen en el Excel/PDF. La audiencia aparece dejando el mouse sobre el placement."
+        : "Read-only. Notes and fees are omitted here; they do appear in the Excel/PDF. Audience shows up on hover over the placement.",
     tabPlan: lang === "es" ? "Plan de medios" : "Media plan",
     tabSplit: lang === "es" ? "Budget por mercado" : "Budget by market",
     splitNote:
@@ -2406,7 +2404,14 @@ function ExcelPreview({
                             key={pl.id}
                             className="border-t border-line-soft hover:bg-paper-2/40"
                           >
-                            <td className="px-3 py-1.5 pl-7">{pl.placementName}</td>
+                            <td className="px-3 py-1.5 pl-7">
+                              <AudienceHoverCard
+                                audience={pl.audience}
+                                lang={lang}
+                              >
+                                {pl.placementName}
+                              </AudienceHoverCard>
+                            </td>
                             <td className="px-3 py-1.5 text-muted">
                               {pl.marketName ?? ""}
                             </td>

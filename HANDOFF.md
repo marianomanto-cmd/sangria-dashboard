@@ -1,6 +1,49 @@
-# Handoff — martes 18/ago/2026
+# Handoff — miércoles 19/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 19/ago/2026 — Planes: audiencia del placement al hover + caja de audiencia cómoda en el inspector
+
+- **Pedido**: en la vista de un plan de medios, ver la **audiencia de un
+  placement haciendo hover** sobre él, en un cuadrito chico. Después, sobre la
+  marcha: que el cuadrito **tarde 2s** en aparecer, y que la **caja de edición
+  de audiencia del inspector** deje de ser tan chica (obligaba a scrollear
+  adentro para leer lo que ya estaba escrito).
+- **`components/audience-hover-card.tsx`** (nuevo): cuadrito flotante con la
+  audiencia. Se usa en los dos lugares donde la vista del plan lista
+  placements: la **planilla editable** (`PlacementGridRow`) y la **vista previa
+  tipo Excel** (`ExcelPreview`). Decisiones: delay de **2s** (la planilla se
+  recorre con el mouse todo el tiempo; instantáneo sería ruido),
+  `pointer-events: none` (nunca tapa un click ni un input), `position: fixed`
+  con coordenadas del ancla —dentro de las tablas un `absolute` lo recortaría
+  el `overflow`— con flip arriba y clamp contra el borde derecho, y cierre
+  automático al salir/scrollear/clickear/redimensionar. Un ícono `Users`
+  chiquito en la celda marca qué placements tienen audiencia cargada; los que
+  no, muestran "Sin audiencia cargada" (que falte también es dato).
+- La nota de la vista previa decía *"Audiencia, notas y fees no se muestran
+  acá"* — ahora dice que la audiencia aparece al hover. Es la única línea de
+  copy que cambió.
+- **`components/auto-grow-textarea.tsx`** (nuevo): textarea que se estira con
+  su contenido hasta un tope y recién ahí scrollea. El inspector la usa para
+  **audiencia** (11rem → 30rem) y **notas** (7rem → 24rem), que eran `rows={3}`
+  con `min-h-[4.5rem]`. Sigue siendo no controlada (`defaultValue` + commit en
+  el blur, como el resto del editor) así ningún re-render de las server actions
+  pisa una edición en curso. Detalle fino: `height = scrollHeight + bordes`,
+  porque con `box-sizing: border-box` faltaban 2px y la caja scrolleaba por un
+  pelo justo cuando debía entrar justa.
+- **Reacomodo del inspector**: la columna pasa a **520px en `xl`** (sigue en
+  440px entre `lg` y `xl`, para no comerle ancho a la planilla en pantallas
+  chicas) y, como es `sticky`, ahora tiene `max-h-[calc(100vh-2rem)]` con
+  scroll propio: por más que crezcan las cajas, siempre se llega al final (antes
+  un inspector más alto que la pantalla dejaba el fondo inalcanzable).
+- **Sin cambios de schema ni de queries. No requiere acción en prod.** La
+  audiencia ya estaba en `media_plan_placements.audience`; esto es sólo UI.
+- **Verificación**: `tsc --noEmit`, `eslint` y `next build` limpios, más una
+  página harness temporal (borrada antes del commit) manejada con Playwright:
+  se confirmó que el cuadrito NO aparece a los 1,2s y sí a los 2,5s, el flip
+  contra el borde inferior/derecho, el cierre al salir, el multilínea y el dark
+  mode; y que la caja de audiencia abre mostrando todo el texto sin scroll y
+  crece sola al tipear.
 
 ### Cambios de la sesión 18/ago/2026 (2) — Planes: no se puede marcar Listo/Aprobado con un publisher descuadrado
 
@@ -4052,7 +4095,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
-| Tocar la regla de "plan completo" (qué bloquea marcar Listo/Aprobado) | **Fuente única: `lib/plan-readiness.ts`** (`findPlanReadinessIssues`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y el diálogo del editor. Chequea campos del placement, la métrica principal del cost method y el **cuadre publisher ↔ placements** (`BALANCE_TOLERANCE_USD` = 1 centavo, que el editor importa para el aviso ámbar del bloque). **Ojo con el cuadre**: el total del plan sale de `total_planned_usd` y el prorrateo mensual de los placements — si divergen, hay plata que no se factura. Diagnóstico de lo viejo: `db/plan-publisher-balance-check.sql`. |
+| Tocar el **cuadrito de audiencia al hover** (vista del plan) | `components/audience-hover-card.tsx` — envuelve el nombre del placement en la **planilla** (`PlacementGridRow`) y en la **vista previa tipo Excel** (`ExcelPreview`), ambas en `editor.tsx`. El delay (2s) es `AUDIENCE_HOVER_DELAY_MS`. Es `fixed` con coordenadas del ancla porque dentro de las tablas un `absolute` lo recorta el `overflow`; `pointer-events: none` para no comerse clicks. |
+| Agrandar / achicar las cajas de texto libre del **inspector** del plan (audiencia, notas) | `components/auto-grow-textarea.tsx` (props `minHeight`/`maxHeight`), usado por `PlacementInspector` en `editor.tsx`. El ancho de la columna sale del grid de `PlanWorkspace` (`lg:[1fr_440px]`, `xl:[1fr_520px]`), que además scrollea solo (`max-h-[calc(100vh-2rem)]`) por ser `sticky`. |
+| Tocar la regla de "plan completo" (qué bloquea marcar Listo/Aprobado) | **Fuente única: `lib/plan-readiness.ts`** (`findPlanReadinessIssues`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y el diálogo del editor. Chequea campos del placement, la métrica principal del cost method y el **cuadre publisher ↔ placements** (`BALANCE_TOLERANCE_USD` = $1 — arrancó en 1 centavo y se subió con el dato de prod, ver sesión 18/ago (2); el editor lo importa para el aviso ámbar del bloque). **Ojo con el cuadre**: el total del plan sale de `total_planned_usd` y el prorrateo mensual de los placements — si divergen, hay plata que no se factura. Diagnóstico de lo viejo: `db/plan-publisher-balance-check.sql`. |
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
 | Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Historial de versiones (sólo en el export del plan vigente, `buildVersionHistorySheet`) + tabs 4+ auxiliares si el plan tiene). |
 | Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES`, los sets `PLAN_SIGNED_STATUSES` (approved+qa_done+live = "plan firmado, vigente") y `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata"), `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |
