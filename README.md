@@ -173,6 +173,8 @@ components/                 # UI compartida
   confirm-dialog.tsx        # ConfirmProvider + useConfirm() — confirmación promise-based con focus-trap, Escape, backdrop. No usar confirm() nativo
   app-providers.tsx         # monta ToastProvider + ConfirmProvider — en el layout, envuelve el contenido de la app
   audit-entry.tsx           # render de un evento del audit_log (oración + diff de campos) — lo usan /auditoria y el modal de cambios del plan
+  audience-hover-card.tsx   # cuadrito flotante con la audiencia de un placement al hacer hover (2s de delay). Vista del plan: planilla + preview tipo Excel
+  auto-grow-textarea.tsx    # textarea que se estira con su contenido (min/max configurables) — campos de texto libre del inspector del plan
   mobile-nav.tsx            # MobileNavProvider + MobileNavToggle + useMobileNav() — sidebar drawer en mobile (< lg)
   sidebar.tsx               # navegación como DRAWER mobile (< lg); en ≥lg no se renderiza (la nav vive en top-nav.tsx)
 db/
@@ -263,9 +265,14 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `DeliveryInput`) usan caja blanca con borde (`text-sm`, ancho holgado:
   `w-32`/`w-36`) para que entren cifras de millones sin recortarse. El monto del
   placement quedó consistente con tarifa/delivery. El **inspector** del placement
-  es más ancho (`lg:grid-cols-[1fr_440px]`) para dar aire a las métricas
-  secundarias, y las textareas de **audiencia** y **notas** son más altas
-  (`rows={3}` + `resize-y`). `RateInput`/`DeliveryInput` aceptan un prop
+  es más ancho (`lg:grid-cols-[1fr_440px]`, `xl:[1fr_520px]`) para dar aire a las
+  métricas secundarias, y las textareas de **audiencia** y **notas** usan
+  `AutoGrowTextarea` (`components/auto-grow-textarea.tsx`): arrancan altas
+  (11rem / 7rem) y **se estiran solas con el contenido** hasta 30rem / 24rem —
+  el texto guardado se lee entero sin scrollear adentro de la caja. Como el
+  inspector es `sticky`, tiene `max-h-[calc(100vh-2rem)] overflow-y-auto`
+  propio: por más que crezca, siempre se llega al final.
+  `RateInput`/`DeliveryInput` aceptan un prop
   `className` (default `w-full` en inspector; en la **planilla** se angostan a
   `w-24`/`w-28` right-aligned para no comerse el ancho de la fila).
 
@@ -1257,9 +1264,32 @@ Excel:
   `lib/budget-split.ts` (`buildBudgetSplit` + `prorateByMonth`) y la usan
   **tanto el preview como el Tab 2 del export** — cero divergencia.
 
-Es colapsable; audiencia/notas/fees se omiten (sí salen en el Excel/PDF). La
-edición sigue en la grilla + inspector; el preview es solo visualización. (Una
+Es colapsable; notas/fees se omiten (sí salen en el Excel/PDF) y la **audiencia
+aparece al hacer hover** sobre el nombre del placement (ver abajo). La edición
+sigue en la grilla + inspector; el preview es solo visualización. (Una
 "planilla 100% editable" se evaluará aparte en otra branch.)
+
+### Audiencia al hover (vista del plan)
+
+En la vista del plan, dejar el mouse quieto sobre el nombre de un placement
+—tanto en la **planilla** como en la **vista previa tipo Excel**— abre un
+cuadrito con su **audiencia** (`components/audience-hover-card.tsx`). Antes ese
+dato sólo se veía abriendo el inspector placement por placement.
+
+- **Delay de 2s** a propósito: la planilla se recorre con el mouse todo el
+  tiempo (seleccionar filas, editar montos) y un tooltip instantáneo sería
+  ruido. Sólo aparece si el mouse se queda quieto ahí.
+- `pointer-events: none` → nunca intercepta un click ni tapa un input; la fila
+  se sigue seleccionando normal.
+- `position: fixed` con coordenadas calculadas del ancla (misma técnica que el
+  menú contextual de `aux-sheet.tsx` y el "Más ▾" del top-nav): dentro de las
+  tablas, un `absolute` quedaría recortado por el `overflow`. Si no entra
+  abajo, el cuadrito **flipea arriba**; se clampea contra el borde derecho.
+- Un ícono chiquito de audiencia (`Users`, `lucide-react`) al final de la celda
+  marca qué placements tienen audiencia cargada. Sin audiencia el cuadrito
+  igual aparece, diciendo "Sin audiencia cargada" (que falte también es dato).
+- Se cierra solo al salir, al scrollear, al clickear y al redimensionar la
+  ventana — nunca queda flotando desanclado de su fila.
 
 ### Rutas
 
