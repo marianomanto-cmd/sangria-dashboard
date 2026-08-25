@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Plus } from "lucide-react";
+import { FolderOpen, Plus } from "lucide-react";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { budgetOrigins } from "@/db/schema";
@@ -72,12 +72,35 @@ export default async function ProjectDetailPage({ params }: Props) {
             {project.name}
             <StatusBadge status={project.status} />
           </h1>
-          <div className="mt-3">
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <ProjectStatusChanger
               projectId={project.id}
               currentStatus={project.status}
               lang={lang}
             />
+            {/* Carpeta de Drive del proyecto: el link lo carga el AM al crear
+                el proyecto (o después, desde "Editar proyecto"). Sin link no
+                hay botón — se avisa dónde cargarlo en vez de dejar un botón
+                muerto. */}
+            {project.driveFolderUrl ? (
+              <a
+                href={project.driveFolderUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonVariants({ variant: "secondary", size: "xs" })}
+                title={project.driveFolderUrl}
+              >
+                <FolderOpen size={13} strokeWidth={2} />
+                {lang === "es" ? "Carpeta de Drive" : "Drive folder"}
+              </a>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-muted italic">
+                <FolderOpen size={13} strokeWidth={2} />
+                {lang === "es"
+                  ? "Sin carpeta de Drive — cargala en “Editar proyecto”"
+                  : "No Drive folder — add it under “Edit project”"}
+              </span>
+            )}
           </div>
         </div>
         <Link
@@ -96,6 +119,7 @@ export default async function ProjectDetailPage({ params }: Props) {
           budgetOriginId={project.budgetOriginId}
           totalGrossBudgetUsd={project.totalGrossBudgetUsd}
           startDate={project.startDate}
+          driveFolderUrl={project.driveFolderUrl}
           notesMd={project.notesMd}
           budgetOrigins={clientOrigins}
         />

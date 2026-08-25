@@ -1,6 +1,78 @@
-# Handoff — miércoles 19/ago/2026
+# Handoff — martes 25/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 25/ago/2026 — Planes: cambio masivo de fechas de los placements · Proyectos: botón a la carpeta de Drive
+
+- **Pedido 1**: un botón en el editor del plan que permita **actualizar de una
+  vez las fechas de todos los placements** — solo inicio, solo fin o ambos. El
+  botón abre un modal, el planner pone las fechas, le da "Cambiar" y listo.
+  Condición explícita: **tiene que estar editando una nueva versión del plan**,
+  o sea que después del cambio el plan requiere de nuevo aprobación para volver
+  a QA e ir Live.
+- **Pedido 2**: que cada proyecto tenga un **botón que lleve a su carpeta de
+  Drive**, y un **campo para el link al crear el proyecto**.
+
+**Fechas masivas (editor del plan)**
+
+- **`app/actions/plans.ts` → `bulkUpdatePlacementDates`** (nueva action): una
+  sola pasada sobre todos los placements del plan. `undefined` en un extremo =
+  no tocarlo, así "solo inicio / solo fin / ambos" es la misma action.
+- **La regla del pedido es una barrera server-side, no sólo UI**: la action
+  rebota si el plan no está en `draft`. Como editar un plan firmado obliga a
+  pasar por "Editar (nueva versión)" (`approved|qa_done|live → draft`), el
+  cambio de fechas hereda el camino completo: aprobar congela la v(N+1) y el
+  QA es **por versión** (`transitionPlanStatus` exige un `media_plan_qa_runs`
+  cerrado de la `current_version` para `qa_done`/`live`), así que hay que
+  rehacerlo antes de volver a Live. No hizo falta lógica nueva de lifecycle:
+  alcanzó con anclar la action al borrador.
+- **Dos guardas de plata**, ambas con el mismo razonamiento que la regla de
+  readiness: (1) **no se vacían fechas en masa** — un placement sin fechas se
+  cae del prorrateo y su plata desaparece del estimado; (2) **nunca queda un
+  rango invertido** — aplicando un solo extremo el otro queda como estaba en
+  cada línea, así que se valida línea por línea que no quede `fin < inicio`
+  (con el rango dado vuelta `prorateByMonth` manda todo a `NO_DATE_KEY`).
+- **`bulk-dates-modal.tsx`** (nuevo): un checkbox + una fecha por extremo,
+  el estado actual de las líneas arriba ("todas 20/ago" vs "3 fechas
+  distintas"), el aviso de rango invertido **con los nombres** de las líneas
+  afectadas antes de mandar, y el recordatorio de que se está editando el
+  borrador de la v(N+1) (aprobación + QA nuevos). El footer dice cuántas líneas
+  cambian de verdad antes de apretar. Mismo patrón a11y que el modal de QA
+  (Escape, focus-trap, scroll-lock, foco restaurado).
+- **Botón** en el strip de metadata del editor, pegado al **período derivado**
+  (que es justo lo que mueve). En un plan firmado **no se esconde**: queda
+  deshabilitado diciendo que hay que abrir una nueva versión — enseña la regla
+  en vez de dejar al planner buscando el botón.
+- **Auditoría: una sola row a nivel `media_plan`**, no una por placement. Son N
+  updates de un mismo acto y `recordAudit` hace un lookup de auth por llamada
+  (40 líneas = 40 round-trips + 40 renglones de ruido en "Última edición"). La
+  row lleva el resumen "antes → después" y cuántas líneas cambiaron; el detalle
+  fino por línea ya lo da el **historial de versiones** (diff de snapshots,
+  `lib/plan-version-diff.ts` ya diffea Inicio/Fin).
+
+**Carpeta de Drive (proyecto)**
+
+- La columna **`projects.drive_folder_url` ya existía en `db/schema.ts` pero no
+  la usaba nadie** (ni el alta, ni la edición, ni la vista). Ahora se carga en
+  `/proyectos/nuevo` y en "Editar proyecto", y el detalle del proyecto muestra
+  un botón **"Carpeta de Drive"** al lado de los botones de status, que abre la
+  carpeta en una pestaña nueva. Sin link no hay botón: un texto muted dice
+  dónde cargarlo, en vez de dejar un botón muerto.
+- **`lib/external-url.ts`** (nuevo, `normalizeExternalUrl`): agrega `https://`
+  cuando el que pega el link se lo olvida (sin eso el navegador lo trata como
+  path relativo y el botón lleva a `/proyectos/drive.google.com/…`) y **rechaza
+  cualquier esquema que no sea http/https** — el valor se renderiza como
+  `href`, y un `javascript:` guardado ahí sería XSS al primer click. Lo usan
+  `createProject`/`updateProject` (barrera real) y los dos forms.
+- **No requiere acción en prod**: la columna ya está en la base. Se puede
+  afirmar porque `getProjectWithPlans` viene seleccionando `projects` entero
+  (drizzle expande todas las columnas del schema) — si `drive_folder_url` no
+  existiera en prod, el detalle de proyecto ya estaría roto hoy.
+- **Verificación**: `tsc --noEmit`, `eslint` y `next build` limpios, más un test
+  de mesa de `normalizeExternalUrl` (https, sin esquema, con espacios, vacío,
+  `javascript:`, `mailto:`, basura). **No se pudo probar contra la base**: esta
+  sesión no tiene `.env.local` con credenciales, así que las dos actions nuevas
+  están verificadas por tipos/lint/build y por lectura, no ejecutadas.
 
 ### Cambios de la sesión 19/ago/2026 — Planes: audiencia del placement al hover + caja de audiencia cómoda en el inspector
 
@@ -4096,6 +4168,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
+| Tocar el **cambio masivo de fechas** de los placements | UI: `app/(app)/proyectos/[code]/planes/[planId]/bulk-dates-modal.tsx`, abierto desde el botón "Cambiar fechas de todos" del strip de metadata del `editor.tsx` (pegado al período derivado). Action: `bulkUpdatePlacementDates` en `app/actions/plans.ts`. **Regla dura: sólo sobre un plan en `draft`** — la action lo chequea server-side, así el cambio pasa sí o sí por "Editar (nueva versión)" → aprobación de la v(N+1) → QA nuevo → Live. No se pueden **vaciar** fechas en masa ni dejar un rango invertido (`fin < inicio`): en los dos casos `prorateByMonth` manda la plata a `NO_DATE_KEY` y desaparece del estimado. Auditoría: **una** row a nivel `media_plan` (no una por línea). |
+| Tocar la **carpeta de Drive** de un proyecto | Columna `projects.drive_folder_url`. Se carga en `app/(app)/proyectos/nuevo/form.tsx` (alta) y `app/(app)/proyectos/[code]/edit-panel.tsx` (edición); el botón vive en el header de `app/(app)/proyectos/[code]/page.tsx`, al lado del `ProjectStatusChanger`. Validación/normalización: **`normalizeExternalUrl` en `lib/external-url.ts`** (agrega `https://` si falta, rechaza esquemas ≠ http/https porque el valor sale como `href`), usada por `createProject`/`updateProject` y por los forms. |
 | Tocar el **cuadrito de audiencia al hover** (vista del plan) | `components/audience-hover-card.tsx` — envuelve el nombre del placement en la **planilla** (`PlacementGridRow`) y en la **vista previa tipo Excel** (`ExcelPreview`), ambas en `editor.tsx`. El delay (2s) es `AUDIENCE_HOVER_DELAY_MS`. Es `fixed` con coordenadas del ancla porque dentro de las tablas un `absolute` lo recorta el `overflow`; `pointer-events: none` para no comerse clicks. |
 | Agrandar / achicar las cajas de texto libre del **inspector** del plan (audiencia, notas) | `components/auto-grow-textarea.tsx` (props `minHeight`/`maxHeight`), usado por `PlacementInspector` en `editor.tsx`. El ancho de la columna sale del grid de `PlanWorkspace` (`lg:[1fr_440px]`, `xl:[1fr_520px]`), que además scrollea solo (`max-h-[calc(100vh-2rem)]`) por ser `sticky`. |
 | Tocar la regla de "plan completo" (qué bloquea marcar Listo/Aprobado) | **Fuente única: `lib/plan-readiness.ts`** (`findPlanReadinessIssues`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y el diálogo del editor. Chequea campos del placement, la métrica principal del cost method y el **cuadre publisher ↔ placements** (`BALANCE_TOLERANCE_USD` = $1 — arrancó en 1 centavo y se subió con el dato de prod, ver sesión 18/ago (2); el editor lo importa para el aviso ámbar del bloque). **Ojo con el cuadre**: el total del plan sale de `total_planned_usd` y el prorrateo mensual de los placements — si divergen, hay plata que no se factura. Diagnóstico de lo viejo: `db/plan-publisher-balance-check.sql`. |

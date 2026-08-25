@@ -16,6 +16,7 @@ export function ProjectEditPanel({
   budgetOriginId,
   totalGrossBudgetUsd,
   startDate,
+  driveFolderUrl,
   notesMd,
   budgetOrigins,
 }: {
@@ -24,6 +25,7 @@ export function ProjectEditPanel({
   budgetOriginId: string;
   totalGrossBudgetUsd: string | null;
   startDate: string | null;
+  driveFolderUrl: string | null;
   notesMd: string | null;
   budgetOrigins: Origin[];
 }) {
@@ -38,6 +40,7 @@ export function ProjectEditPanel({
     budgetOriginId,
     totalGrossBudget: totalGrossBudgetUsd ?? "",
     startDate: startDate ?? "",
+    driveFolderUrl: driveFolderUrl ?? "",
     notes: notesMd ?? "",
   });
 
@@ -47,6 +50,7 @@ export function ProjectEditPanel({
       budgetOriginId,
       totalGrossBudget: totalGrossBudgetUsd ?? "",
       startDate: startDate ?? "",
+      driveFolderUrl: driveFolderUrl ?? "",
       notes: notesMd ?? "",
     });
     setError(null);
@@ -67,6 +71,7 @@ export function ProjectEditPanel({
         ? Number.parseFloat(draft.totalGrossBudget)
         : null,
       startDate: draft.startDate || null,
+      driveFolderUrl: draft.driveFolderUrl || null,
       notesMd: draft.notes || null,
     });
     setPending(false);
@@ -167,6 +172,22 @@ export function ProjectEditPanel({
           />
         </Field>
       </div>
+      <Field label="Carpeta de Drive">
+        <input
+          type="url"
+          inputMode="url"
+          value={draft.driveFolderUrl}
+          onChange={(e) =>
+            setDraft({ ...draft, driveFolderUrl: e.target.value })
+          }
+          placeholder="https://drive.google.com/drive/folders/…"
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+        />
+        <p className="mt-1 text-[11px] text-muted">
+          Alimenta el botón “Carpeta de Drive” del header. Vacío = sin botón.
+        </p>
+      </Field>
+
       <Field label="Notas">
         <textarea
           value={draft.notes}

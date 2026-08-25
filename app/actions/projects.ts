@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
+import { normalizeExternalUrl } from "@/lib/external-url";
 import {
   budgetOrigins,
   clients,
@@ -47,11 +48,17 @@ export async function createProject(input: {
   name: string;
   totalGrossBudgetUsd?: number;
   startDate?: string | null;
+  // Link a la carpeta de Drive del proyecto (opcional). Alimenta el botón
+  // "Carpeta de Drive" del detalle del proyecto.
+  driveFolderUrl?: string | null;
   notesMd?: string | null;
 }): Promise<Result<{ projectId: string; code: string }>> {
   if (!input.name.trim()) return { ok: false, error: "Nombre requerido" };
   if (!input.clientId) return { ok: false, error: "Falta cliente" };
   if (!input.budgetOriginId) return { ok: false, error: "Falta budget origin" };
+
+  const drive = normalizeExternalUrl(input.driveFolderUrl);
+  if (!drive.ok) return { ok: false, error: `Carpeta de Drive: ${drive.error}` };
 
   // Validar que el budget origin pertenezca al cliente
   const [origin] = await db
@@ -82,6 +89,7 @@ export async function createProject(input: {
           input.totalGrossBudgetUsd != null
             ? input.totalGrossBudgetUsd.toFixed(2)
             : null,
+        driveFolderUrl: drive.url,
         notesMd: input.notesMd ?? null,
       })
       .returning();
@@ -107,6 +115,7 @@ export async function updateProject(input: {
   budgetOriginId?: string;
   totalGrossBudgetUsd?: number | null;
   startDate?: string | null;
+  driveFolderUrl?: string | null;
   notesMd?: string | null;
 }): Promise<Result> {
   const [before] = await db
@@ -148,6 +157,12 @@ export async function updateProject(input: {
 
   if (input.startDate !== undefined) {
     update.startDate = input.startDate || null;
+  }
+
+  if (input.driveFolderUrl !== undefined) {
+    const drive = normalizeExternalUrl(input.driveFolderUrl);
+    if (!drive.ok) return { ok: false, error: `Carpeta de Drive: ${drive.error}` };
+    update.driveFolderUrl = drive.url;
   }
 
   if (input.notesMd !== undefined) {
