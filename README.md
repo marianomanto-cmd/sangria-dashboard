@@ -96,6 +96,7 @@ app/
       [code]/planes/[planId]/
         editor.tsx          # editor del plan (publishers + placements + fees)
         aux-sheet.tsx       # tabs auxiliares del plan: grillas libres tipo Excel con fórmulas, insertar/eliminar filas y columnas en cualquier posición (menú click-derecho) (tabs extra del export)
+        bulk-dates-modal.tsx # cambio masivo de fechas: mueve inicio y/o fin de TODOS los placements del plan de una vez (solo sobre el borrador)
         plan-history.tsx    # chip "Última edición" + modal read-only con los cambios de la versión vigente (audit_log)
         qa-modal.tsx        # modal de QA del plan: preview tipo Excel con casilla "Controlado" por línea; con todas tildadas habilita "QA realizado" (approved → qa_done)
         version-history.tsx # historial de versiones desplegable: qué cambió en cada versión vs la anterior (diff de snapshots) + fecha + QA + descargas ?v=N
@@ -225,6 +226,7 @@ lib/
   client-portal.server.ts   # cookie de sesión del portal (set/clear/has) + canAccessClientExport
   market-geo.ts             # geocoding de mercados → centroide (match exacto + por token); para el mapa de Análisis
   project-period.ts         # período del proyecto (min/max de placements) + aviso "termina pronto" (≤7 días)
+  external-url.ts           # normalizeExternalUrl — normaliza links pegados a mano (agrega https:// si falta) y rechaza esquemas que no sean http/https. Lo usan las actions de proyecto (carpeta de Drive) y los forms
   supabase/
     server.ts               # cliente Supabase para Server Components / route handlers
     client.ts               # cliente Supabase para Client Components
@@ -605,6 +607,33 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `min/max` de las fechas de placements.
 - El **proyecto** guarda `start_date` (estimado del AM) pero no `end_date`:
   se deriva del placement más lejano de todos sus planes.
+
+### Cambio masivo de fechas de los placements
+- Botón **"Cambiar fechas de todos"** en el strip de metadata del editor
+  (pegado al período derivado, que es justo lo que mueve) → abre
+  `bulk-dates-modal.tsx`. El planner elige **solo inicio, solo fin o ambos**
+  (cada fecha tiene su checkbox; la destildada no se toca) y con "Cambiar"
+  aplica a **todas las líneas del plan** de una vez. Antes eran dos fechas por
+  placement, a mano, en el inspector.
+- **Regla dura: sólo sobre un plan en `draft`.** La barrera está en
+  `bulkUpdatePlacementDates` (`app/actions/plans.ts`), no sólo en la UI: en un
+  plan firmado hay que apretar **"Editar (nueva versión)"** primero, y esa
+  versión vuelve a pasar por **aprobación** (que congela la v(N+1)) y por el
+  **QA de la versión nueva** antes de poder marcarse Live. Mover fechas cambia
+  el compromiso con el cliente: tiene que dejar rastro de versión como
+  cualquier otra edición. En un plan firmado el botón no se esconde — queda
+  deshabilitado diciendo qué hay que hacer primero.
+- **No se pueden vaciar fechas en masa** (dejar el campo vacío = "no tocar"):
+  un placement sin fechas se cae del prorrateo mensual y su plata desaparece
+  del estimado (`prorateByMonth` la manda a `NO_DATE_KEY`).
+- **Nunca deja un rango invertido.** Aplicando un solo extremo, el otro queda
+  como estaba en cada línea, así que se valida placement por placement que no
+  quede `fin < inicio` — con el rango dado vuelta `prorateByMonth` también
+  manda todo a `NO_DATE_KEY`. El modal lo avisa con los nombres de las líneas
+  afectadas antes de mandar; la action lo rebota igual.
+- **Auditoría**: una sola row a nivel `media_plan` (no una por placement) con
+  el resumen "antes → después" y cuántas líneas cambiaron. Son N updates de un
+  mismo acto del planner, y `recordAudit` hace un lookup de auth por llamada.
 
 ### Management fee como % (rate-based)
 - `media_plan_fees.fee_type = 'management'` con `rate_pct` numérico (ej. 15.00).
@@ -1769,7 +1798,16 @@ Idempotente: limpia las tablas antes de insertar.
   hardcodeados en formularios secundarios (`/proyectos/nuevo`, editor
   del plan en lo más profundo, `/auditoria`, billing editor del plan).
   Plan: ir traduciendo a medida que se toque cada archivo.
-- **Drive integration**: en discusión, fuera del scope MVP.
+- **Drive integration**: sólo el **link a la carpeta del proyecto**
+  (`projects.drive_folder_url`, ya existía en el schema pero no se usaba). Se
+  carga al crear el proyecto (`/proyectos/nuevo`) o después desde "Editar
+  proyecto", y el detalle del proyecto muestra un botón **"Carpeta de Drive"**
+  que la abre en una pestaña nueva. Sin link no hay botón: se avisa dónde
+  cargarlo en vez de dejar un botón muerto. La URL se normaliza y valida con
+  `normalizeExternalUrl` (`lib/external-url.ts`) — agrega `https://` si falta y
+  rechaza esquemas que no sean http/https (el campo se renderiza como `href`).
+  Integración real con la API de Drive (listar/crear archivos): sigue fuera del
+  scope.
 - **Campaign Tracker** (`/campaign-tracker`): hub de planes con filtro de
   estado (Vigentes / Concluidos / Todos) + vista de carga de consumo real
   vs goal con autosave, chart de progreso, cierre de día (snapshot al

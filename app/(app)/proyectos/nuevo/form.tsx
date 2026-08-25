@@ -18,6 +18,7 @@ export function NewProjectForm({
   const [name, setName] = useState("");
   const [totalGrossBudget, setTotalGrossBudget] = useState("");
   const [startDate, setStartDate] = useState("");
+  const [driveFolderUrl, setDriveFolderUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -47,6 +48,7 @@ export function NewProjectForm({
         ? Number.parseFloat(totalGrossBudget)
         : undefined,
       startDate: startDate || null,
+      driveFolderUrl: driveFolderUrl || null,
       notesMd: notes || null,
     });
     if (!r.ok) {
@@ -127,6 +129,21 @@ export function NewProjectForm({
         <p className="mt-1 text-[11px] text-muted">
           La fecha de finalización del proyecto se calcula automáticamente
           desde el placement con la fecha más lejana entre todos los planes.
+        </p>
+      </Field>
+
+      <Field label="Carpeta de Drive (opcional)">
+        <input
+          type="url"
+          inputMode="url"
+          value={driveFolderUrl}
+          onChange={(e) => setDriveFolderUrl(e.target.value)}
+          placeholder="https://drive.google.com/drive/folders/…"
+          className="w-full rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-3 focus:ring-accent-soft"
+        />
+        <p className="mt-1 text-[11px] text-muted">
+          El detalle del proyecto muestra un botón que abre esta carpeta. Se
+          puede cargar después desde “Editar proyecto”.
         </p>
       </Field>
 

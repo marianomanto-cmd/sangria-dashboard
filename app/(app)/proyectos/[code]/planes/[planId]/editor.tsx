@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useState, useTransition } from "react";
 import {
+  CalendarRange,
   ChevronDown,
   Copy,
   Download,
@@ -35,6 +36,7 @@ import {
 } from "@/app/actions/plans";
 import { reopenPlanQa } from "@/app/actions/plan-qa";
 import { AuxSheetSection } from "./aux-sheet";
+import { BulkDatesModal } from "./bulk-dates-modal";
 import { PlanLastEdit, type PlanEditHistory } from "./plan-history";
 import { PlanQaModal } from "./qa-modal";
 import { PlanVersionHistory } from "./version-history";
@@ -136,6 +138,7 @@ export function PlanEditor({
   const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [qaOpen, setQaOpen] = useState(false);
+  const [bulkDatesOpen, setBulkDatesOpen] = useState(false);
   const editable = detail.plan.status === "draft";
 
   // Progreso del QA de la versión vigente, para el header (el detalle vive en
@@ -624,6 +627,37 @@ export function PlanEditor({
           <p className="text-[10px] text-muted mt-0.5">
             min/max de los placements
           </p>
+          {/* Cambio masivo de fechas. Vive acá, pegado al período que mueve.
+              En un plan firmado el botón NO se esconde: queda deshabilitado
+              diciendo qué hay que hacer primero (abrir la versión siguiente),
+              que es la regla que hace que el cambio pase de nuevo por
+              aprobación y QA. */}
+          {editable ? (
+            <button
+              type="button"
+              onClick={() => setBulkDatesOpen(true)}
+              disabled={pending || allPlacements.length === 0}
+              className="mt-1.5 inline-flex items-center gap-1.5 rounded border border-line px-2 py-1 text-[11px] font-medium text-ink-2 hover:border-ink-2 hover:text-ink disabled:opacity-40 disabled:pointer-events-none"
+              title={
+                allPlacements.length === 0
+                  ? "El plan todavía no tiene placements"
+                  : "Cambiar de una vez el inicio y/o el fin de todos los placements"
+              }
+            >
+              <CalendarRange size={12} strokeWidth={2} />
+              Cambiar fechas de todos
+            </button>
+          ) : (
+            detail.plan.status !== "archived" && (
+              <span
+                className="mt-1.5 inline-flex items-center gap-1.5 rounded border border-line-soft px-2 py-1 text-[11px] text-muted cursor-not-allowed"
+                title={`Para cambiar las fechas abrí una nueva versión con "Editar (nueva versión)": el plan vuelve a borrador y, al aprobarlo, hay que rehacer el QA antes de marcarlo Live.`}
+              >
+                <CalendarRange size={12} strokeWidth={2} />
+                Cambiar fechas · requiere nueva versión
+              </span>
+            )
+          )}
         </Field>
         <Field label="Total media + fees">
           <span className="font-mono text-sm font-semibold tabular-nums">
@@ -813,6 +847,17 @@ export function PlanEditor({
         entries={versionHistory}
         lang={lang}
       />
+
+      {/* Cambio masivo de fechas — solo sobre el borrador (la action lo
+          re-chequea server-side). */}
+      {bulkDatesOpen && (
+        <BulkDatesModal
+          detail={detail}
+          lang={lang}
+          onClose={() => setBulkDatesOpen(false)}
+          onDone={refresh}
+        />
+      )}
 
       {/* Modal de QA — el control obligatorio antes de Live. */}
       {qaOpen && (

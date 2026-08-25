@@ -12,6 +12,7 @@ import {
   readinessErrorMessage,
 } from "@/lib/plan-readiness";
 import {
+  PLAN_STATUS_LABELS,
   PLAN_STATUS_TRANSITIONS,
   type PlanStatus,
 } from "@/lib/plan-status";
@@ -1309,6 +1310,190 @@ export async function removePlacement(placementId: string): Promise<Result> {
   });
 
   return { ok: true };
+}
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// Cambio masivo de fechas — una sola pasada sobre TODOS los placements del
+// plan. El caso real: el cliente corre la campaña dos semanas y hay que mover
+// 40 líneas a mano, una por una, desde el inspector.
+//
+// Reglas, todas con barrera server-side (la UI las repite como conveniencia):
+//
+//   • SOLO sobre un plan en `draft`. Si el plan está firmado (approved /
+//     qa_done / live) hay que apretar "Editar (nueva versión)" primero: mover
+//     las fechas de un plan firmado cambia el compromiso con el cliente, así
+//     que tiene que pasar por el mismo camino que cualquier otra edición —
+//     re-aprobación (que congela la v(N+1)), QA de la versión nueva y recién
+//     ahí Live. Esta guarda es lo que garantiza eso: sin ella el botón sería
+//     un atajo para editar un plan aprobado sin dejar rastro de versión.
+//   • Se puede aplicar solo inicio, solo fin o ambos. `undefined` = no tocar
+//     ese campo; NO se pueden borrar fechas en masa (un placement sin fechas
+//     se cae del prorrateo mensual, ver lib/budget-split.ts).
+//   • Nunca deja un rango invertido (fin < inicio). Si se aplica un solo
+//     extremo, se valida contra la fecha que YA tiene cada placement: con
+//     fin < inicio, `prorateByMonth` manda todo el monto a NO_DATE_KEY y la
+//     plata desaparece del split por mes sin avisar.
+//
+// Auditoría: una sola row a nivel plan (no una por placement). Son N updates
+// de un mismo acto del planner, y `recordAudit` hace un lookup de auth por
+// llamada — 40 rows serían 40 round-trips y 40 líneas de ruido en el modal de
+// "Última edición" para un cambio que se cuenta en una oración.
+// ════════════════════════════════════════════════════════════════════════════
+
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function bulkUpdatePlacementDates(input: {
+  planId: string;
+  // undefined = no tocar ese extremo. Formato ISO "YYYY-MM-DD".
+  startDate?: string;
+  endDate?: string;
+}): Promise<Result<{ updated: number; total: number }>> {
+  if (!input.planId) return { ok: false, error: "Falta plan_id" };
+
+  const startDate = input.startDate?.trim() || undefined;
+  const endDate = input.endDate?.trim() || undefined;
+
+  if (!startDate && !endDate) {
+    return { ok: false, error: "Elegí al menos una fecha para cambiar" };
+  }
+  if (startDate && !ISO_DATE_RE.test(startDate)) {
+    return { ok: false, error: "Fecha de inicio inválida" };
+  }
+  if (endDate && !ISO_DATE_RE.test(endDate)) {
+    return { ok: false, error: "Fecha de fin inválida" };
+  }
+  if (startDate && endDate && endDate < startDate) {
+    return {
+      ok: false,
+      error: "La fecha de fin no puede ser anterior a la de inicio",
+    };
+  }
+
+  const [plan] = await db
+    .select()
+    .from(mediaPlans)
+    .where(eq(mediaPlans.id, input.planId))
+    .limit(1);
+  if (!plan) return { ok: false, error: "Plan no encontrado" };
+  if (plan.deletedAt) return { ok: false, error: "El plan está en la papelera" };
+
+  // La regla del enunciado: para tocar las fechas en masa hay que estar
+  // editando un borrador. Un plan firmado se edita abriendo la versión
+  // siguiente, y esa versión vuelve a pasar por aprobación y QA.
+  if (plan.status !== "draft") {
+    return {
+      ok: false,
+      error:
+        plan.status === "archived"
+          ? "Plan archivado, no se puede editar"
+          : `El plan está en "${PLAN_STATUS_LABELS[plan.status]}". Para cambiar las fechas abrí una nueva versión con "Editar (nueva versión)": el plan vuelve a borrador y, al aprobarlo, hay que rehacer el QA antes de marcarlo Live.`,
+    };
+  }
+
+  const rows = await db
+    .select({
+      id: mediaPlanPlacements.id,
+      placementName: mediaPlanPlacements.placementName,
+      startDate: mediaPlanPlacements.startDate,
+      endDate: mediaPlanPlacements.endDate,
+    })
+    .from(mediaPlanPlacements)
+    .innerJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .where(eq(mediaPlanPublishers.mediaPlanId, input.planId))
+    .orderBy(asc(mediaPlanPublishers.sortOrder), asc(mediaPlanPlacements.sortOrder));
+
+  if (rows.length === 0) {
+    return { ok: false, error: "El plan no tiene placements" };
+  }
+
+  // Rango invertido: solo puede pasar cuando se aplica UN extremo y el otro
+  // queda como estaba en cada línea.
+  const inverted = rows.filter((r) => {
+    const s = startDate ?? r.startDate;
+    const e = endDate ?? r.endDate;
+    return !!s && !!e && e < s;
+  });
+  if (inverted.length > 0) {
+    const names = inverted.slice(0, 3).map((r) => `“${r.placementName}”`).join(", ");
+    const rest = inverted.length > 3 ? ` y ${inverted.length - 3} más` : "";
+    return {
+      ok: false,
+      error: startDate
+        ? `El inicio ${startDate} queda después del fin de ${inverted.length} placement${inverted.length === 1 ? "" : "s"} (${names}${rest}). Cambiá también la fecha de fin.`
+        : `El fin ${endDate} queda antes del inicio de ${inverted.length} placement${inverted.length === 1 ? "" : "s"} (${names}${rest}). Cambiá también la fecha de inicio.`,
+    };
+  }
+
+  const changed = rows.filter(
+    (r) =>
+      (startDate !== undefined && r.startDate !== startDate) ||
+      (endDate !== undefined && r.endDate !== endDate),
+  );
+  if (changed.length === 0) {
+    return { ok: true, updated: 0, total: rows.length };
+  }
+
+  const update: Record<string, unknown> = {};
+  if (startDate !== undefined) update.startDate = startDate;
+  if (endDate !== undefined) update.endDate = endDate;
+
+  await db
+    .update(mediaPlanPlacements)
+    .set(update)
+    .where(
+      inArray(
+        mediaPlanPlacements.id,
+        changed.map((r) => r.id),
+      ),
+    );
+
+  await recordAudit({
+    entityType: "media_plan",
+    entityId: input.planId,
+    action: "update",
+    beforeJson: {
+      name: plan.name,
+      ...(startDate !== undefined && {
+        placementsStartDate: summarizeDates(rows.map((r) => r.startDate)),
+      }),
+      ...(endDate !== undefined && {
+        placementsEndDate: summarizeDates(rows.map((r) => r.endDate)),
+      }),
+    },
+    afterJson: {
+      name: plan.name,
+      ...(startDate !== undefined && { placementsStartDate: startDate }),
+      ...(endDate !== undefined && { placementsEndDate: endDate }),
+      placementsActualizados: `${changed.length} de ${rows.length}`,
+    },
+  });
+
+  const [proj] = await db
+    .select({ code: projects.code })
+    .from(projects)
+    .where(eq(projects.id, plan.projectId))
+    .limit(1);
+  if (proj) {
+    revalidatePath(`/proyectos/${proj.code}`);
+    revalidatePath(`/proyectos/${proj.code}/planes/${input.planId}`);
+  }
+
+  return { ok: true, updated: changed.length, total: rows.length };
+}
+
+// Resumen legible del "antes" para el audit: una sola fecha si todas
+// coincidían, el rango si estaban mezcladas, "—" si no había ninguna.
+function summarizeDates(dates: (string | null)[]): string {
+  const set = [...new Set(dates.filter((d): d is string => !!d))].sort();
+  const blanks = dates.length - dates.filter(Boolean).length;
+  if (set.length === 0) return "—";
+  const base =
+    set.length === 1 ? set[0] : `${set[0]} … ${set[set.length - 1]} (mixtas)`;
+  return blanks > 0 ? `${base} + ${blanks} sin fecha` : base;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
