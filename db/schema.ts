@@ -541,6 +541,91 @@ export const mediaPlanQaChecks = pgTable(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
+// TRÁFICO del plan — lo que el trafficker necesita para armar los adsets.
+//
+// El plan dice QUÉ se compra (publisher, placement, mercado, monto, fechas).
+// El tráfico dice CÓMO se arma en la plataforma: cuántos adsets tiene cada
+// placement, con qué creatividad, qué copy/título/subtítulo/CTA, a qué landing
+// y dónde están los archivos. Vive en su propia ventana dentro del plan
+// (/proyectos/[code]/planes/[planId]/trafico).
+//
+// Igual que los tabs auxiliares, es material OPERATIVO: no entra en los
+// snapshots ni en el diff de versiones, y se edita en cualquier estado vivo del
+// plan (el brief se llena justamente DESPUÉS de aprobar, mientras se arma la
+// campaña — si dependiera de `status === "draft"` sería inutilizable).
+//
+// Lo que SÍ hace es cerrar el paso a Live: un plan no puede marcarse `live`
+// hasta que todos sus placements tengan el brief completo y todos sus anuncios
+// estén marcados como cargados. La regla vive en lib/plan-traffic.ts y la
+// barrera real en `transitionPlanStatus`.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Tipo de anuncio. "other" habilita el campo libre `adFormatOther` para que el
+// planner escriba a mano el formato que la lista no cubre.
+export const trafficAdFormat = pgEnum("traffic_ad_format", [
+  "single_image",
+  "carousel",
+  "video",
+  "dgen_set",
+  "other",
+]);
+
+// Brief de tráfico de UN placement (1:1). Los campos de acá son los que
+// aplican a todo el placement: cuántos adsets hay que armar y dónde están los
+// archivos. Lo específico de cada creatividad vive en media_plan_traffic_ads.
+export const mediaPlanTrafficBriefs = pgTable(
+  "media_plan_traffic_briefs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    placementId: uuid("placement_id")
+      .notNull()
+      .references(() => mediaPlanPlacements.id, { onDelete: "cascade" }),
+    // Cuántos adsets tiene adentro el placement. 0 = todavía sin definir.
+    adsetsCount: integer("adsets_count").notNull().default(0),
+    // Carpeta (Drive u otra) donde el trafficker encuentra los archivos.
+    trafficFolderUrl: text("traffic_folder_url"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [unique("uq_mptb_placement").on(t.placementId)],
+);
+
+// Un anuncio del brief. Un placement puede tener varias creatividades
+// distintas; cada una es una fila con su copy y su propio "Cargado".
+export const mediaPlanTrafficAds = pgTable(
+  "media_plan_traffic_ads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    briefId: uuid("brief_id")
+      .notNull()
+      .references(() => mediaPlanTrafficBriefs.id, { onDelete: "cascade" }),
+    adFormat: trafficAdFormat("ad_format"),
+    adFormatOther: text("ad_format_other"), // libre, sólo si adFormat = 'other'
+    copy: text("copy"),
+    headline: text("headline"),             // título
+    subheadline: text("subheadline"),       // subtítulo
+    cta: text("cta"),
+    landingUrl: text("landing_url"),
+    // Registro del trafficker: cargado en la plataforma. null = pendiente.
+    loadedAt: timestamp("loaded_at", { withTimezone: true }),
+    loadedByUserId: uuid("loaded_by_user_id"),
+    loadedByEmail: text("loaded_by_email"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_mpta_brief").on(t.briefId, t.sortOrder)],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
 // Billings del plan, mes a mes. AM carga el consumo por publisher + imputa
 // los fees del plan en cada mes (prorrateo manual).
 // ════════════════════════════════════════════════════════════════════════════

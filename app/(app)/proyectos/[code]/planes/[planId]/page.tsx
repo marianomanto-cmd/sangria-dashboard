@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getPlanDetail } from "@/db/queries/project-detail";
 import { getPlanAuditEvents } from "@/db/queries/audit-log";
 import { getPlanQaState, getPlanVersionHistory } from "@/db/queries/plan-qa";
+import { getPlanTraffic, toTrafficPlacements } from "@/db/queries/plan-traffic";
 import {
   listMarketsForClient,
   listMetricsForClient,
@@ -12,6 +13,10 @@ import { DEFAULT_LANGUAGE, formatDate, type Language } from "@/lib/i18n";
 import { getCurrentUser } from "@/lib/auth";
 import { canApprovePlans } from "@/lib/permissions";
 import { isPlanSigned } from "@/lib/plan-status";
+import {
+  computeTrafficProgress,
+  findPlanTrafficIssues,
+} from "@/lib/plan-traffic";
 import { PlanEditor } from "./editor";
 
 type Props = {
@@ -47,6 +52,7 @@ export default async function PlanDetailPage({ params }: Props) {
     editEvents,
     qaState,
     versionHistory,
+    trafficRows,
   ] = await Promise.all([
     listPublishersForClient(detail.client.id),
     listMarketsForClient(detail.client.id),
@@ -57,7 +63,16 @@ export default async function PlanDetailPage({ params }: Props) {
     // de versiones con su diff (el desplegable de abajo del editor).
     getPlanQaState(planId, detail.plan.currentVersion),
     getPlanVersionHistory(planId),
+    // Brief de tráfico: el editor sólo necesita el resumen (avance + qué
+    // falta) para el contador del botón "Tráfico" y el aviso del gate de Live.
+    getPlanTraffic(planId),
   ]);
+
+  const trafficPlacements = toTrafficPlacements(trafficRows);
+  const traffic = {
+    progress: computeTrafficProgress(trafficPlacements),
+    issues: findPlanTrafficIssues(trafficPlacements),
+  };
   const canApprove = canApprovePlans(user?.email);
 
   const windowNote = sinceSnap
@@ -98,6 +113,7 @@ export default async function PlanDetailPage({ params }: Props) {
         editHistory={{ events: editEvents, windowNote }}
         qaState={qaState}
         versionHistory={versionHistory}
+        traffic={traffic}
       />
     </main>
   );
