@@ -1,6 +1,107 @@
-# Handoff — martes 25/ago/2026
+# Handoff — viernes 28/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 28/ago/2026 — Planner: tarifa para métricas custom (tickets / LC tickets) · Tráfico del plan
+
+- **Pedido 1**: en los "indicadores estimados" del planificador, métricas como
+  `clicks` dejan cargar **costo o delivery** y la app calcula el otro. Tickets y
+  LC tickets no: mostraban un `—` en la columna Tarifa. Que se comporten igual,
+  para poder poner el CPA **o** el delivery.
+- **Pedido 2**: una ventana **"Tráfico"** dentro de cada plan donde el planner
+  deje, por placement, lo que el trafficker necesita para armar los adsets, con
+  un **"marcar cargado"** por anuncio; y que el plan **no pueda ir a Live** sin
+  eso completo.
+
+**Tarifa ↔ delivery para cualquier métrica del catálogo**
+
+- **El diagnóstico**: `DIRECT_METRIC_RATES` (`lib/cost-methods.ts`) es un
+  diccionario **hardcodeado** con los 10 slugs canónicos
+  (`impressions→cpm`, `clicks→cpc`, …). El `MetricsEditor` del `editor.tsx`
+  buscaba ahí el par de cada fila; si no lo encontraba pintaba un `—` fijo. Como
+  tickets y LC tickets son métricas **custom del catálogo per-cliente**
+  (`metrics_catalog`), nunca iban a tener columna Tarifa.
+- **La solución no es sumar dos entradas a la lista**: el catálogo YA tiene la
+  relación. Una métrica `calculated` con fórmula `amount / tickets` **es**, por
+  definición, el costo unitario de `tickets`. Nuevo
+  **`buildMetricRatePairs(metrics)`** en `lib/cost-methods.ts` deriva el par de
+  ahí, con este orden: (1) catálogo — la calculada define el par **y reserva su
+  slug de tarifa**, para que dos deliveries no terminen escribiendo la misma key
+  (un cliente que defina `cpa = amount / tickets` ya no hereda `cpa` para
+  `conversions`); (2) fallback canónico para lo que el catálogo no cubra;
+  (3) direct sin métrica de costo → `rate: null`. Métrica custom nueva = par
+  nuevo, **sin deploy**.
+- **El caso (3) es la red de seguridad**, no un agujero: la columna Tarifa se
+  habilita igual (editarla define el delivery, que sí se persiste) pero el valor
+  se **deriva al vuelo** de `amount / delivery` en vez de guardarse. Lo único que
+  falta hasta crear la calculada es el **rate-anchoring** al cambiar el monto. El
+  input lo explica en su tooltip y dice dónde crearla.
+- **Los ratios siguen sin tarifa**, que era el comportamiento anterior y hay que
+  no romperlo: `parseCostFormula` sólo acepta `amount / X` (deja afuera
+  `ctr = clicks/impressions`), y el paso (3) excluye las *direct* que son ratios
+  — `frequency` por slug (su `unit` del seed es `"freq"`, no la delata) y las
+  custom por unidad (`%`, `x`, `$`). Siguen mostrando `—`.
+- **Dos trampas que el orden de precedencia evita**, verificadas caso por caso:
+  una calculada extra sobre `impressions` ordenada antes de `cpm` **no** le roba
+  el par (paso 1), y un cliente que defina `cpa = amount / tickets` le da la
+  tarifa a `tickets` sin que `conversions` herede igual `cpa` (slug reservado).
+- **En el editor**: los pares se arman **una vez** en `PlanEditor`
+  (`useMemo(buildMetricRatePairs)`) y bajan por props hasta `MetricsEditor` y
+  `PlacementGridRow`; `recomputeMetricsForAmount` ahora los recibe y **saltea**
+  los que no tienen key de tarifa (no hay nada persistido que anclar). Ya no
+  queda ninguna lectura de `DIRECT_METRIC_RATES` en el editor.
+
+**Tráfico del plan (ventana nueva)**
+
+- **Ruta**: `/proyectos/[code]/planes/[planId]/trafico` (`page.tsx` +
+  `traffic-editor.tsx`), con botón **"Tráfico"** en el header del plan al lado de
+  "Billing del plan", con contador `cargados/anuncios`.
+- **Schema** (`db/schema.ts` + `db/plan-traffic.sql`): enum
+  `traffic_ad_format` (`single_image`, `carousel`, `video`, `dgen_set`, `other`)
+  + **`media_plan_traffic_briefs`** (1:1 con el placement: `adsets_count`,
+  `traffic_folder_url`) + **`media_plan_traffic_ads`** (N por brief: tipo (+
+  texto libre para "otro"), copy, headline, subheadline, cta, landing_url,
+  `loaded_at`/`loaded_by_email`, `sort_order`). Dos niveles porque un placement
+  puede tener varias creatividades distintas y cada una se carga por separado.
+- **Se edita en cualquier estado VIVO del plan**, no sólo en `draft`: el brief se
+  llena justamente *después* de aprobar, mientras se arma la campaña. Atarlo a
+  `editable` habría obligado a abrir una versión nueva —y rehacer el QA— sólo
+  para escribir un copy. Sólo `archived` lo congela. Es material operativo: no
+  entra en snapshots ni en el diff de versiones (mismo criterio que los tabs
+  auxiliares).
+- **Regla dura de Live** (`lib/plan-traffic.ts`, módulo puro como
+  `plan-readiness.ts`): `transitionPlanStatus` rechaza `→ live` si algún
+  placement no tiene brief completo (cantidad de adsets, carpeta, y cada anuncio
+  con tipo/copy/título/subtítulo/CTA/landing) **o** si queda algún anuncio sin
+  marcar como cargado. La misma regla alimenta el aviso de la franja `qa_done`,
+  el diálogo de "Marcar Live" y los contadores de la ventana — barrera y UI nunca
+  se desincronizan.
+- **"Marcar cargado"** guarda **quién y cuándo**. No se puede marcar un anuncio
+  incompleto (el botón se deshabilita explicando por qué).
+- **El brief sobrevive a "Descartar borrador"**: ese revert borra los publishers
+  (cascade → placements) y los reinserta con **ids nuevos**, así que el brief se
+  habría perdido entero — incluyendo lo que el trafficker ya había marcado, que
+  no es parte del borrador que se descarta. `rescuePlanTraffic` /
+  `restorePlanTraffic` (en `app/actions/plans.ts`) lo rescatan **antes** del
+  delete y lo devuelven a su línea, apareando por **publisher del catálogo +
+  nombre del placement** (nombres repetidos se aparean en orden).
+- **Export** (regla de paridad pantalla↔archivo):
+  `/api/plans/[planId]/traffic.xlsx` — una fila por anuncio con el contexto del
+  placement, el estado de carga y la columna "Falta completar", más el bloque de
+  avance de arriba de la pantalla. **No** está en `isPublicPlanExportPath`, así
+  que el proxy exige sesión interna: el brief es material de producción, no algo
+  que se le manda al cliente.
+
+**Acción requerida en prod**: correr **`db/plan-traffic.sql`** en el SQL Editor
+de Supabase (crea el enum, las dos tablas, el índice y su RLS) **antes** de que
+el deploy quede vivo. Equivalente: `npm run db:push`. `db/rls.sql` también quedó
+actualizado con las dos tablas nuevas (regla del repo: toda tabla nueva necesita
+su `ENABLE ROW LEVEL SECURITY`).
+
+**Ojo con el cambio de comportamiento**: a partir de este deploy, marcar un plan
+como `live` exige el brief de tráfico completo **además** del QA. Los planes que
+ya están `live` no se tocan (la regla corre sobre la transición), pero cualquier
+plan en `qa_done` va a quedar frenado hasta que se le cargue el tráfico.
 
 ### Cambios de la sesión 25/ago/2026 — Planes: cambio masivo de fechas de los placements · Proyectos: botón a la carpeta de Drive
 
@@ -4177,6 +4278,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
 | Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Historial de versiones (sólo en el export del plan vigente, `buildVersionHistorySheet`) + tabs 4+ auxiliares si el plan tiene). |
 | Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES`, los sets `PLAN_SIGNED_STATUSES` (approved+qa_done+live = "plan firmado, vigente") y `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata"), `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |
+| Tocar la sección **Tráfico** del plan (brief de armado de adsets) | UI: `app/(app)/proyectos/[code]/planes/[planId]/trafico/` (`page.tsx` + `traffic-editor.tsx`), con el botón "Tráfico" en el header del `editor.tsx`. Actions: `app/actions/plan-traffic.ts` (`updateTrafficBrief`, `addTrafficAd`, `updateTrafficAd`, `removeTrafficAd`, `setTrafficAdLoaded`). Lectura: `getPlanTraffic` en `db/queries/plan-traffic.ts`. Schema: `media_plan_traffic_briefs` (1:1 placement) + `media_plan_traffic_ads` (N por brief). **Se edita en cualquier estado vivo del plan, no sólo `draft`** (el brief se llena después de aprobar). Export: `app/api/plans/[planId]/traffic.xlsx/route.ts` — interno, NO público. |
+| Tocar la regla de "tráfico completo" (qué bloquea marcar Live) | **Fuente única: `lib/plan-traffic.ts`** (`findPlanTrafficIssues`, `computeTrafficProgress`, `TRAFFIC_AD_FORMATS`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y la UI (contadores de la ventana + franja `qa_done` + diálogo de "Marcar Live" en `editor.tsx`). Live exige brief completo **y** todos los anuncios marcados como cargados. |
+| Entender por qué el brief de tráfico no se pierde al **descartar un borrador** | `rescuePlanTraffic` / `restorePlanTraffic` en `app/actions/plans.ts`. `revertPlanToApprovedSnapshot` borra los publishers (cascade → placements) y los reinserta con **ids nuevos**; el brief se rescata antes del delete y se reapareja por **publisher del catálogo + nombre del placement**. |
 | Tocar el **QA del plan** (paso obligatorio approved → live) | UI: `app/(app)/proyectos/[code]/planes/[planId]/qa-modal.tsx` (preview tipo Excel + casilla "Controlado" por línea + botón "QA realizado"), abierto desde el header/franja del `editor.tsx`. Actions: `app/actions/plan-qa.ts` (`setPlanQaCheck`, `completePlanQa`, `reopenPlanQa`). Lectura: `getPlanQaState` en `db/queries/plan-qa.ts`. Schema: `media_plan_qa_runs` (uno por plan **y por versión**, unique `(media_plan_id, version_number)`) + `media_plan_qa_checks` (`placement_id` **sin FK** a propósito: la línea puede borrarse en una versión futura y el QA histórico tiene que sobrevivir). **El QA es por versión**: aprobar la v(N+1) lo obliga de nuevo. |
 | Tocar el **historial de versiones** del plan (qué cambió en cada una) | UI: `app/(app)/proyectos/[code]/planes/[planId]/version-history.tsx` (filas desplegables). Datos: `getPlanVersionHistory` en `db/queries/plan-qa.ts`. Diff: `lib/plan-version-diff.ts` (`buildPlanVersionDiff`), que compara los **snapshots** de v(N−1) y vN — no el audit_log — con matching por **id de fila**. Los nombres de publisher/market/métrica se resuelven contra el catálogo actual. El espejo en Excel es `buildVersionHistorySheet` en `export.xlsx/route.ts`. |
 | Tocar los tabs auxiliares del plan (grillas libres con fórmulas / tabs extra del Excel) | UI: `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx` (botón "Crear tab auxiliar" + una sección colapsable por tab en el editor). CRUD: `app/actions/aux-sheets.ts`. Límites + helpers + **evaluador de fórmulas** (refs A1, SUM/AVERAGE/MIN/MAX/COUNT, errores `#REF!`/`#CIRC!`/…): `lib/aux-sheet.ts` (`evalAuxFormula`). Schema: `media_plan_aux_sheets` (N por plan, `sort_order`). **Insertar/eliminar filas y columnas en cualquier posición**: menú click-derecho en el editor → `insertAuxRow/Col` + `deleteAuxRow/Col` en `lib/aux-sheet.ts` (mueven data + uniones y reescriben refs con `shiftAuxFormula`). Los tabs del export: `buildAuxSheet` en `export.xlsx/route.ts` (fórmulas → fórmulas reales de Excel; **formato** header/subtotal/total/banding + anchos auto + congelado, parecido al Tab 1). |
@@ -4244,7 +4348,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Agregar/traducir strings nuevas        | `DICT` en `lib/i18n.ts` + usar `t(key, lang)` en JSX       |
 | Cambiar formato de fechas en la app    | `formatDate` / `formatMonth` en `lib/i18n.ts`              |
 | Cambiar cómo se calcula el management fee | `db/schema.ts:357-359` (fórmula), `db/queries/project-detail.ts`, `db/queries/dashboard.ts`, `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`, `app/actions/plan-billing.ts` (todos aplican la misma fórmula) |
-| Agregar/cambiar pares rate↔delivery del editor | `DIRECT_METRIC_RATES` en `lib/cost-methods.ts` + nueva calculated metric en `scripts/seed.ts` con fórmula `amount / <delivery>` |
+| Agregar/cambiar pares rate↔delivery del editor | **Normalmente no se toca código**: el par lo deriva `buildMetricRatePairs` (`lib/cost-methods.ts`) del catálogo del cliente — alcanza con crear una métrica **calculated** con fórmula `amount / <delivery>` (Configuración → Cliente → Métricas, o `scripts/seed.ts`) y esa delivery gana su columna Tarifa. `DIRECT_METRIC_RATES` quedó como **fallback** de los 10 slugs canónicos. Sin la calculada, la Tarifa igual se puede editar pero no se persiste (se deriva de `amount / delivery`) y se pierde el rate-anchoring al cambiar el monto. Los ratios (`ctr`, `frequency`) nunca generan par. |
 | Editor de métricas del placement       | `MetricsEditor` y `PrincipalPairEditor` en `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx` |
 | Tocar la **descarga de versiones viejas** del plan (historial de aprobaciones) | `getPlanDetailAtVersion(planId, version)` en `db/queries/project-detail.ts` (reconstruye un `PlanDetail` desde `media_plan_snapshots.snapshot_json`; fuerza `currentVersion = version` + `status = approved` porque el snapshot se captura ANTES del bump). Param `?v=N`: `parseVersionParam` en `lib/plan-export-version.ts`, consumido por `export.xlsx/route.ts` y `export.pdf/route.ts` (sin `v` → plan vigente; `v` inválido → 400). Links por versión: sección "Snapshots de aprobación" de `…/planes/[planId]/editor.tsx`. **Los snapshots no capturan tabs auxiliares** → el export histórico va sin ellos. |
 | Tocar qué se exige para marcar un plan **Listo/Aprobado** | `lib/plan-readiness.ts` (`findPlanReadinessIssues` — publisher sin monto o sin placements, placement vacío, nombre/monto/cost method/fechas, y la métrica principal del cost method vía `COST_METHOD_PRIMARY_METRIC`; Flat/Other no la piden). **Barrera real**: `transitionPlanStatus` en `app/actions/plans.ts`. **Diálogo** con lo que falta: `blockedByReadiness` en `…/planes/[planId]/editor.tsx` + `hideCancel`/`wide` de `components/confirm-dialog.tsx`. Agregar/sacar una exigencia = tocar SOLO el helper (lo comparten UI y server). |

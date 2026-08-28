@@ -17,13 +17,20 @@ import {
   type PlanStatus,
 } from "@/lib/plan-status";
 import {
+  findPlanTrafficIssues,
+  trafficErrorMessage,
+} from "@/lib/plan-traffic";
+import { getPlanTraffic, toTrafficPlacements } from "@/db/queries/plan-traffic";
+import {
   markets,
   mediaPlanFees,
   mediaPlanPlacements,
   mediaPlanPublishers,
   mediaPlanQaRuns,
-  mediaPlans,
   mediaPlanSnapshots,
+  mediaPlanTrafficAds,
+  mediaPlanTrafficBriefs,
+  mediaPlans,
   metricsCatalog,
   planBillingFees,
   planBillings,
@@ -491,6 +498,26 @@ export async function transitionPlanStatus(input: {
     }
   }
 
+  // Regla dura del TRÁFICO: `live` exige que la sección Tráfico esté completa
+  // —cada placement con su cantidad de adsets, su carpeta y sus anuncios con
+  // tipo, copy, título, subtítulo, CTA y landing— y que TODOS los anuncios
+  // estén marcados como cargados por el trafficker.
+  //
+  // Es la contracara del QA: el QA controla que lo comprado sea lo planeado;
+  // esto controla que lo que hay que armar esté definido y efectivamente
+  // cargado en la plataforma. Sin esto, "live" podía marcarse sobre una
+  // campaña que nadie sabía cómo montar.
+  //
+  // La regla vive en lib/plan-traffic.ts porque la ventana de Tráfico la usa
+  // también, para mostrar qué falta antes de llegar acá.
+  if (input.to === "live") {
+    const trafficRows = await getPlanTraffic(input.planId);
+    const issues = findPlanTrafficIssues(toTrafficPlacements(trafficRows));
+    if (issues.length > 0) {
+      return { ok: false, error: trafficErrorMessage(issues) };
+    }
+  }
+
   // Regla dura: un plan NO puede pasar a "listo" ni "aprobado" incompleto —
   // publisher sin monto o sin placements, placement vacío, o placement al que le
   // falta un campo principal (nombre, monto, cost method, fechas) o la métrica
@@ -643,6 +670,134 @@ type CapturedSnapshot = {
   fees: (typeof mediaPlanFees.$inferSelect)[];
 };
 
+// ── Rescate del brief de tráfico durante el revert ──────────────────────────
+//
+// `revertPlanToApprovedSnapshot` borra los publishers (cascade → placements) y
+// los reinserta desde el snapshot con ids nuevos. El brief de tráfico cuelga
+// del placement, así que sin estas dos funciones se perdería en cada
+// "Descartar borrador". Ver el comentario en la transacción.
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Clave humana de una línea: el publisher del catálogo + el nombre del
+// placement. Es lo que se mantiene estable entre el draft y el snapshot.
+function trafficKey(publisherId: string, placementName: string | null): string {
+  return `${publisherId}\u0000${(placementName ?? "").trim().toLowerCase()}`;
+}
+
+type RescuedBrief = {
+  adsetsCount: number;
+  trafficFolderUrl: string | null;
+  ads: (typeof mediaPlanTrafficAds.$inferSelect)[];
+};
+
+async function rescuePlanTraffic(
+  tx: Tx,
+  planId: string,
+): Promise<Map<string, RescuedBrief[]>> {
+  const rows = await tx
+    .select({
+      placementId: mediaPlanPlacements.id,
+      placementName: mediaPlanPlacements.placementName,
+      sortOrder: mediaPlanPlacements.sortOrder,
+      publisherId: mediaPlanPublishers.publisherId,
+      brief: mediaPlanTrafficBriefs,
+    })
+    .from(mediaPlanTrafficBriefs)
+    .innerJoin(
+      mediaPlanPlacements,
+      eq(mediaPlanTrafficBriefs.placementId, mediaPlanPlacements.id),
+    )
+    .innerJoin(
+      mediaPlanPublishers,
+      eq(mediaPlanPlacements.mediaPlanPublisherId, mediaPlanPublishers.id),
+    )
+    .where(eq(mediaPlanPublishers.mediaPlanId, planId))
+    .orderBy(asc(mediaPlanPlacements.sortOrder));
+
+  const out = new Map<string, RescuedBrief[]>();
+  if (rows.length === 0) return out;
+
+  const ads = await tx
+    .select()
+    .from(mediaPlanTrafficAds)
+    .where(
+      inArray(
+        mediaPlanTrafficAds.briefId,
+        rows.map((r) => r.brief.id),
+      ),
+    )
+    .orderBy(asc(mediaPlanTrafficAds.sortOrder));
+
+  const adsByBrief = new Map<string, (typeof mediaPlanTrafficAds.$inferSelect)[]>();
+  for (const a of ads) {
+    const list = adsByBrief.get(a.briefId) ?? [];
+    list.push(a);
+    adsByBrief.set(a.briefId, list);
+  }
+
+  for (const r of rows) {
+    const key = trafficKey(r.publisherId, r.placementName);
+    const list = out.get(key) ?? [];
+    list.push({
+      adsetsCount: r.brief.adsetsCount,
+      trafficFolderUrl: r.brief.trafficFolderUrl,
+      ads: adsByBrief.get(r.brief.id) ?? [],
+    });
+    out.set(key, list);
+  }
+  return out;
+}
+
+async function restorePlanTraffic(
+  tx: Tx,
+  rescued: Map<string, RescuedBrief[]>,
+  targets: {
+    placementId: string;
+    publisherId: string;
+    placementName: string | null;
+  }[],
+): Promise<void> {
+  if (rescued.size === 0) return;
+  // Copia consumible: cada línea nueva se lleva el primer brief libre de su
+  // clave, así los nombres repetidos dentro de un publisher se aparean en orden.
+  const pool = new Map<string, RescuedBrief[]>();
+  for (const [k, v] of rescued) pool.set(k, [...v]);
+
+  for (const t of targets) {
+    const key = trafficKey(t.publisherId, t.placementName);
+    const brief = pool.get(key)?.shift();
+    if (!brief) continue;
+
+    const [newBrief] = await tx
+      .insert(mediaPlanTrafficBriefs)
+      .values({
+        placementId: t.placementId,
+        adsetsCount: brief.adsetsCount,
+        trafficFolderUrl: brief.trafficFolderUrl,
+      })
+      .returning({ id: mediaPlanTrafficBriefs.id });
+
+    if (brief.ads.length === 0) continue;
+    await tx.insert(mediaPlanTrafficAds).values(
+      brief.ads.map((a) => ({
+        briefId: newBrief.id,
+        adFormat: a.adFormat,
+        adFormatOther: a.adFormatOther,
+        copy: a.copy,
+        headline: a.headline,
+        subheadline: a.subheadline,
+        cta: a.cta,
+        landingUrl: a.landingUrl,
+        loadedAt: a.loadedAt,
+        loadedByUserId: a.loadedByUserId,
+        loadedByEmail: a.loadedByEmail,
+        sortOrder: a.sortOrder,
+      })),
+    );
+  }
+}
+
 // Descarta el borrador (draft) de la versión siguiente y vuelve al plan
 // aprobado vigente. Es la contraparte de "Editar (nueva versión)" (que pasa
 // approved/qa_done/live → draft de v(N+1)): si el planner abrió un draft sobre
@@ -773,6 +928,20 @@ export async function revertPlanToApprovedSnapshot(input: {
 
   try {
     await db.transaction(async (tx) => {
+      // ── Tráfico: se rescata ANTES del delete y se reinserta después ───────
+      // El brief de tráfico cuelga del placement (FK onDelete cascade), y acá
+      // los placements se borran y se vuelven a crear con ids NUEVOS. Sin este
+      // rescate, descartar un borrador se llevaría puesto todo lo que el
+      // planner briefeó y todo lo que el trafficker marcó como cargado — que
+      // no es parte del borrador que se está descartando.
+      //
+      // La correspondencia vieja↔nueva se hace por (publisher del catálogo +
+      // nombre del placement), que es lo que un humano reconoce como "la misma
+      // línea". Si hay nombres repetidos dentro de un publisher, se aparean en
+      // orden. Una línea que el snapshot no tenga simplemente pierde su brief
+      // (su placement tampoco vuelve).
+      const rescuedTraffic = await rescuePlanTraffic(tx, input.planId);
+
       // El delete de publishers cascadea a sus placements (FK onDelete cascade).
       // Los consumos del billing (plan_billing_publishers) NO cuelgan de acá:
       // apuntan al catálogo de publishers, así que sobreviven al revert.
@@ -803,19 +972,37 @@ export async function revertPlanToApprovedSnapshot(input: {
         idMap.has(p.mediaPlanPublisherId),
       );
       if (placements.length > 0) {
-        await tx.insert(mediaPlanPlacements).values(
-          placements.map((p) => ({
-            mediaPlanPublisherId: idMap.get(p.mediaPlanPublisherId)!,
+        const inserted = await tx
+          .insert(mediaPlanPlacements)
+          .values(
+            placements.map((p) => ({
+              mediaPlanPublisherId: idMap.get(p.mediaPlanPublisherId)!,
+              placementName: p.placementName,
+              marketId: p.marketId && liveMarketIds.has(p.marketId) ? p.marketId : null,
+              audience: p.audience,
+              amountUsd: p.amountUsd,
+              costMethod: p.costMethod,
+              startDate: p.startDate,
+              endDate: p.endDate,
+              metricsJson: p.metricsJson ?? {},
+              notesMd: p.notesMd,
+              sortOrder: p.sortOrder,
+            })),
+          )
+          .returning({ id: mediaPlanPlacements.id });
+
+        // Devolver el tráfico a su línea. `inserted` respeta el orden del
+        // VALUES, así que la posición i corresponde a placements[i].
+        const snapPublisherId = new Map(
+          (data.publishers ?? []).map((pub) => [pub.id, pub.publisherId]),
+        );
+        await restorePlanTraffic(
+          tx,
+          rescuedTraffic,
+          placements.map((p, i) => ({
+            placementId: inserted[i].id,
+            publisherId: snapPublisherId.get(p.mediaPlanPublisherId) ?? "",
             placementName: p.placementName,
-            marketId: p.marketId && liveMarketIds.has(p.marketId) ? p.marketId : null,
-            audience: p.audience,
-            amountUsd: p.amountUsd,
-            costMethod: p.costMethod,
-            startDate: p.startDate,
-            endDate: p.endDate,
-            metricsJson: p.metricsJson ?? {},
-            notesMd: p.notesMd,
-            sortOrder: p.sortOrder,
           })),
         );
       }

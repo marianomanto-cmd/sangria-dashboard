@@ -100,6 +100,7 @@ app/
         plan-history.tsx    # chip "Última edición" + modal read-only con los cambios de la versión vigente (audit_log)
         qa-modal.tsx        # modal de QA del plan: preview tipo Excel con casilla "Controlado" por línea; con todas tildadas habilita "QA realizado" (approved → qa_done)
         version-history.tsx # historial de versiones desplegable: qué cambió en cada versión vs la anterior (diff de snapshots) + fecha + QA + descargas ?v=N
+        trafico/            # ventana "Tráfico" del plan: brief de armado de adsets por placement (cantidad de adsets, carpeta, y N anuncios con tipo/copy/título/subtítulo/CTA/landing) + "Marcar cargado" por anuncio. Requisito para pasar a Live
         billing/            # editor de facturación mensual + gráfico "Avance de facturación" (facturado medios/fee acumulado vs total del plan) arriba de todo
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + buscador en vivo por N°/plan + click-to-edit
@@ -129,6 +130,7 @@ app/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + mercado + fechas por publisher/placement). ?v=N → versión aprobada histórica
       export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). ?v=N → versión aprobada histórica. Acceso: sesión interna O cookie de portal del cliente dueño
+      traffic.xlsx/route.ts # XLSX del brief de tráfico (espejo de la ventana /trafico: una fila por anuncio + bloque de avance). SOLO interno — no está en isPublicPlanExportPath
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
       billing/mark-paid/route.ts # POST invoiced → paid de una factura del portal. Público + canWriteAsClientPortal + ownership (plan vivo del cliente) + sólo esa transición
@@ -143,6 +145,7 @@ app/
     plans.ts, plan-billing.ts, projects.ts, markets.ts, metrics.ts, publishers.ts,
     budget-origins.ts, clients.ts, reports.ts, campaign-tracker.ts, aux-sheets.ts,
     plan-qa.ts              # QA del plan: tildar/destildar línea, cerrar QA (→ qa_done) y reabrirlo
+    plan-traffic.ts         # brief de tráfico: cantidad de adsets + carpeta por placement, alta/edición/borrado de anuncios y "Marcar cargado". Editable en todo estado vivo del plan (no sólo draft)
   globals.css
 
 components/                 # UI compartida
@@ -184,6 +187,7 @@ db/
   rls.sql                   # ENABLE ROW LEVEL SECURITY en todas las tablas (cierra la REST API pública de Supabase)
   plan-publisher-balance-check.sql # diagnóstico: publishers cuyo total no cuadra con la suma de placements, en planes ya congelados (previos a la regla de cuadre)
   plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
+  plan-traffic.sql          # migración del Tráfico del plan: enum traffic_ad_format + tablas media_plan_traffic_briefs/_ads + índices + RLS
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
@@ -195,6 +199,7 @@ db/
     analysis.ts             # activaciones por mercado (mapa /analisis + portal): getMarketActivations + getAnalysisFilterOptions
     client-portal.ts        # portal: getPortalClient, getPortalFilterOptions, getClientSpendByPublisher
     plan-qa.ts              # getPlanQaState (QA de una versión: run + líneas controladas) + getPlanVersionHistory (versiones con su diff y su QA)
+    plan-traffic.ts         # getPlanTraffic (un placement del plan por fila, con su brief de tráfico y sus anuncios) + toTrafficPlacements (vista mínima para la regla de lib/plan-traffic)
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
@@ -212,7 +217,7 @@ lib/
   historical-report-columns.ts  # IDs canónicos + labels + parse/serialize del column picker del generador de reportes
   client-filter.ts          # helpers puros del filtro global ?client=slug
   client-filter.server.ts   # resolver server-only slug → {id, slug, name, language}
-  cost-methods.ts           # mapping cost method → métrica principal
+  cost-methods.ts           # mapping cost method → métrica principal + buildMetricRatePairs (par tarifa↔delivery derivado del catálogo del cliente, con fallback canónico)
   campaign-metrics.ts       # Campaign Tracker: métricas calculadas + pace + buildMetricRows
   audit.ts                  # recordAudit() — wrapper para insertar en audit_log con autor
   audit-format.ts           # entityNoun / actionVerb / entityLabel / actorLabel / formatRelativeDateTime
@@ -220,6 +225,7 @@ lib/
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
   plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado (campos + métrica principal + CUADRE publisher↔placements). Fuente única: server action (barrera) + editor (diálogo y aviso de descuadre)
   plan-status.ts            # lifecycle del plan: PLAN_STATUSES, sets PLAN_SIGNED_/PLAN_COMMITTED_STATUSES, mapa de transiciones y labels. Fuente única: queries + actions + badges
+  plan-traffic.ts           # regla del brief de tráfico (módulo puro): tipos de anuncio, qué falta por placement/anuncio, progreso y mensajes. Fuente única de la barrera de Live (server) y del aviso del editor
   plan-version-diff.ts      # buildPlanVersionDiff — qué cambió entre dos versiones aprobadas, comparando sus snapshots (plan/publishers/líneas/fees)
   plan-export-version.ts    # parseVersionParam(?v=N) de los exports del plan: null = plan vigente, N = versión aprobada histórica, "invalid" = 400
   client-portal.ts          # portal público: password compartido, slugs reservados, helpers PUROS (edge-safe, los usa el proxy)
@@ -346,6 +352,10 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 - **`approved` ya NO significa "al aire"**: significa *firmado por el cliente,
   falta el QA*. La campaña sale al aire recién en `live`, y **sólo se llega a
   `live` desde `qa_done`** (ver "QA del plan" abajo).
+- **`live` tiene dos requisitos**, los dos server-side en `transitionPlanStatus`:
+  el **QA** de la versión vigente cerrado, y la sección **Tráfico** completa —
+  cada placement briefeado y todos sus anuncios marcados como cargados (ver
+  "Tráfico del plan" abajo).
 - **Nunca hardcodear `status = 'approved'` en una query nueva.** Usar los sets:
   - `PLAN_SIGNED_STATUSES` (`approved` + `qa_done` + `live`) = "plan firmado,
     vigente" — es el reemplazo del viejo `= 'approved'` en portal, analysis,
@@ -494,6 +504,42 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   estaba cerrado, o a `approved` si no. Nunca vuelve directo a `live`: que
   alguien confirme que la campaña está al aire es un click barato y evita dar
   por viva una campaña que se bajó mientras se editaba el borrador.
+
+### Tráfico del plan: el brief con el que se arman los adsets
+- Cada plan tiene su ventana **Tráfico**
+  (`/proyectos/[code]/planes/[planId]/trafico`, botón en el header del plan al
+  lado de "Billing del plan"). El plan dice **qué** se compra; Tráfico dice
+  **cómo** se monta en la plataforma.
+- **Por placement** (`media_plan_traffic_briefs`, 1:1 con el placement):
+  cantidad de **adsets** y **link a la carpeta de tráfico** (donde están los
+  archivos). **Por anuncio** (`media_plan_traffic_ads`, N por brief): tipo de
+  anuncio (`single image` / `carrusel` / `video` / `Dgen set` / `otro` + campo
+  libre), **copy, título, subtítulo, CTA y landing page**. Un placement puede
+  tener varias creatividades: una fila por cada una.
+- **"Marcar cargado"**: cada anuncio tiene su botón, y queda registrado **quién
+  y cuándo** (`loaded_at` / `loaded_by_email`). Es el registro del trafficker de
+  que ya lo montó en la plataforma. No se puede marcar un anuncio incompleto.
+- **Es requisito para Live** (regla dura): `transitionPlanStatus` rechaza
+  `→ live` si algún placement no tiene el brief completo **o** si queda algún
+  anuncio sin marcar como cargado. La regla vive en
+  [`lib/plan-traffic.ts`](lib/plan-traffic.ts) (módulo puro, sin DB ni React),
+  igual que `plan-readiness.ts`: la usan la barrera server-side y la UI, que
+  muestra qué falta **antes** de intentar la transición (aviso en la franja de
+  `qa_done` + diálogo en "Marcar Live").
+- **Material operativo, no del snapshot**: se edita en **cualquier** estado vivo
+  del plan (sólo `archived` lo congela) — el brief se llena justamente *después*
+  de aprobar, mientras se arma la campaña. No entra en los snapshots ni en el
+  diff de versiones, igual que los tabs auxiliares.
+- **Sobrevive a "Descartar borrador"**: ese revert borra los publishers (cascade
+  → placements) y los reinserta con ids nuevos, así que `rescuePlanTraffic` /
+  `restorePlanTraffic` (en `app/actions/plans.ts`) rescatan los briefs antes del
+  delete y los devuelven a su línea, apareando por **publisher + nombre del
+  placement**. Sin eso, descartar un borrador se llevaba puesto todo lo
+  briefeado y todo lo marcado como cargado.
+- **Export**: `/api/plans/[planId]/traffic.xlsx` — espejo de la pantalla, una
+  fila por anuncio con el contexto del placement, el estado de carga y qué
+  falta. **No** es público (no está en `isPublicPlanExportPath`): el brief es
+  material de producción, no algo que se le manda al cliente.
 
 ### Historial de versiones: qué cambió en cada una
 - Abajo del editor, **"Historial de versiones"**
@@ -674,17 +720,30 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 
 ### Indicadores estimados (métricas secundarias)
 - El bloque debajo de la métrica principal permite agregar métricas
-  adicionales (reach, engagements, leads, etc.).
-- Cada secundaria con rate canónico tiene el **mismo editor bidireccional**
-  que la principal: ingresás tarifa o delivery, la app calcula el otro
-  desde `amount × multiplier`. Mapping en `DIRECT_METRIC_RATES` de
-  [`lib/cost-methods.ts`](lib/cost-methods.ts):
-  - `impressions ↔ cpm` (×1000)
-  - `clicks ↔ cpc`, `views ↔ cpv`, `conversions ↔ cpa`
-  - `reach ↔ cpr`, `engagements ↔ cpe`, `followers ↔ cpf`
-  - `leads ↔ cpl`, `installs ↔ cpi`, `visits ↔ cpvis`
-- `frequency` no tiene par (es un ratio `impressions/reach`) → solo input
-  de delivery.
+  adicionales (reach, engagements, leads, tickets, etc.).
+- **TODA métrica direct del catálogo** tiene el mismo editor bidireccional que
+  la principal: ingresás tarifa o delivery y la app calcula el otro desde
+  `amount × multiplier`. El par sale de `buildMetricRatePairs`
+  ([`lib/cost-methods.ts`](lib/cost-methods.ts)), con este orden de precedencia:
+  1. **Catálogo del cliente** — una métrica `calculated` con fórmula
+     `amount / <delivery>` (con `× N` opcional) ES la tarifa de esa delivery:
+     `cpt = amount / tickets` habilita la tarifa de `tickets` y la persiste bajo
+     `cpt`. Métrica custom nueva = par nuevo, **sin tocar código**. La calculada
+     además reserva su slug (dos deliveries no pueden pisarse la misma key).
+  2. **Fallback canónico** (`DIRECT_METRIC_RATES`) para las delivery que el
+     catálogo no cubre: `impressions ↔ cpm` (×1000), `clicks ↔ cpc`,
+     `views ↔ cpv`, `conversions ↔ cpa`, `reach ↔ cpr`, `engagements ↔ cpe`,
+     `followers ↔ cpf`, `leads ↔ cpl`, `installs ↔ cpi`, `visits ↔ cpvis`.
+  3. **Sin métrica de costo en el catálogo** → `rate: null`. La columna Tarifa
+     se habilita igual (editarla define el delivery), pero el valor se deriva al
+     vuelo de `amount / delivery` en vez de persistirse: lo único que se pierde
+     hasta crear la calculada es el rate-anchoring al cambiar el monto. El input
+     lo dice en su tooltip.
+- **Los ratios nunca generan par**, por dos vías: las *calculated* que no son
+  `amount / X` (`ctr = clicks/impressions`) las rechaza `parseCostFormula`; y las
+  *direct* que son ratios quedan excluidas del paso 3 — `frequency` por slug
+  (su `unit` del seed, `"freq"`, no la delata) y cualquier custom del cliente por
+  unidad (`%`, `x`, `$`). Esas siguen mostrando `—` en la columna Tarifa.
 - La métrica principal del cost method queda **excluida del dropdown Y del
   draft inicial** de secundarias para no duplicarse.
 

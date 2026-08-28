@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useState, useTransition } from "react";
+import { Fragment, useMemo, useState, useTransition } from "react";
 import {
   CalendarRange,
   ChevronDown,
   Copy,
   Download,
   FileText,
+  Megaphone,
   Plus,
   Radio,
   Receipt,
@@ -71,13 +72,19 @@ import {
   formatUsdCompact,
 } from "@/lib/format";
 import {
+  buildMetricRatePairs,
   COST_METHOD_PRIMARY_METRIC,
   COST_METHOD_PAIR,
   COST_METHODS,
-  DIRECT_METRIC_RATES,
   type CostMethod,
+  type MetricRatePair,
 } from "@/lib/cost-methods";
 import { formatDate, formatMonth, t, type Language } from "@/lib/i18n";
+import {
+  formatTrafficIssues,
+  type TrafficIssue,
+  type TrafficProgress,
+} from "@/lib/plan-traffic";
 import { buildBudgetSplit, NO_DATE_KEY } from "@/lib/budget-split";
 import {
   evalFormula,
@@ -104,6 +111,14 @@ type UpdatePlacementPartial = Omit<
 >;
 type StartTransition = ReturnType<typeof useTransition>[1];
 
+// Lo que el editor necesita saber del brief de tráfico: el avance (para el
+// contador del botón) y qué falta (para el aviso del gate de Live). Se calcula
+// server-side en page.tsx y baja ya resumido — el editor no carga los briefs.
+export type PlanTrafficSummary = {
+  progress: TrafficProgress;
+  issues: TrafficIssue[];
+};
+
 export function PlanEditor({
   detail,
   allPublishers,
@@ -114,6 +129,7 @@ export function PlanEditor({
   editHistory,
   qaState,
   versionHistory = [],
+  traffic,
 }: {
   detail: PlanDetail;
   allPublishers: PublisherCatalog[];
@@ -132,6 +148,10 @@ export function PlanEditor({
   qaState?: PlanQaState;
   // Una entrada por versión aprobada, con el diff contra la anterior.
   versionHistory?: PlanVersionEntry[];
+  // Resumen del brief de tráfico (ventana /trafico): avance + qué falta. El
+  // paso a Live lo exige completo, así que el editor lo muestra acá en vez de
+  // dejar que el planner se entere recién con el error de la action.
+  traffic?: PlanTrafficSummary;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -140,6 +160,23 @@ export function PlanEditor({
   const [qaOpen, setQaOpen] = useState(false);
   const [bulkDatesOpen, setBulkDatesOpen] = useState(false);
   const editable = detail.plan.status === "draft";
+
+  // Pares tarifa↔delivery derivados del catálogo del cliente: qué indicador
+  // estimado admite cargar "costo o delivery, y la app calcula el otro". Se
+  // arma una sola vez acá y baja por props — antes cada fila leía la lista
+  // hardcodeada DIRECT_METRIC_RATES, que dejaba afuera toda métrica custom
+  // (tickets, LC tickets…). Ver lib/cost-methods.ts.
+  const ratePairs = useMemo(() => buildMetricRatePairs(allMetrics), [allMetrics]);
+
+  const trafficProgress = traffic?.progress ?? {
+    placements: 0,
+    placementsComplete: 0,
+    ads: 0,
+    adsComplete: 0,
+    adsLoaded: 0,
+  };
+  const trafficIssues = traffic?.issues ?? [];
+  const trafficBlocking = trafficIssues.length;
 
   // Progreso del QA de la versión vigente, para el header (el detalle vive en
   // el modal). Solo cuentan los checks de líneas que siguen existiendo.
@@ -276,10 +313,27 @@ export function PlanEditor({
   // El QA se cierra desde el modal (completePlanQa). Acá vive lo que pasa
   // DESPUÉS: marcar live, reabrir el QA y deshacer un live marcado de más.
   const onMarkLive = async () => {
+    // Aviso temprano: la barrera real está en transitionPlanStatus, pero
+    // mostrar acá qué falta evita el viaje de ida y vuelta al servidor para
+    // enterarse de que hay un copy sin escribir.
+    if (trafficIssues.length > 0) {
+      await confirm({
+        title: "Falta completar la sección Tráfico",
+        body: [
+          "Un plan no puede marcarse Live hasta que cada placement tenga su brief completo y todos los anuncios estén marcados como cargados.",
+          formatTrafficIssues(trafficIssues),
+          'Completalo en la ventana "Tráfico" del plan.',
+        ].join("\n\n"),
+        confirmLabel: "Entendido",
+        hideCancel: true,
+        wide: true,
+      });
+      return;
+    }
     if (
       !(await confirm({
         title: `¿Marcar ${detail.plan.name} como Live?`,
-        body: `El QA de la v${detail.plan.currentVersion} está cerrado. Marcar Live indica que la campaña está corriendo en las plataformas.`,
+        body: `El QA de la v${detail.plan.currentVersion} está cerrado y el tráfico está cargado. Marcar Live indica que la campaña está corriendo en las plataformas.`,
         confirmLabel: "Marcar Live",
       }))
     )
@@ -417,6 +471,23 @@ export function PlanEditor({
             <FileText size={14} strokeWidth={2} />
             PDF
           </a>
+          <Link
+            href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/trafico`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
+            title="Brief de tráfico: lo que el trafficker necesita para armar los adsets"
+          >
+            <Megaphone size={14} strokeWidth={2} />
+            Tráfico
+            {trafficProgress.ads > 0 && (
+              <span
+                className={`font-mono text-[11px] ${
+                  trafficBlocking === 0 ? "text-success" : "text-warn"
+                }`}
+              >
+                {trafficProgress.adsLoaded}/{trafficProgress.ads}
+              </span>
+            )}
+          </Link>
           <Link
             href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/billing`}
             className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
@@ -601,14 +672,34 @@ export function PlanEditor({
               {" "}
               · {qaTotalLines} línea{qaTotalLines === 1 ? "" : "s"} controladas
               {qaState?.completedByEmail ? ` por ${qaState.completedByEmail}` : ""}
-              . Listo para marcar Live.
+              .{" "}
+              {trafficBlocking === 0
+                ? "Tráfico cargado. Listo para marcar Live."
+                : `Falta completar el tráfico de ${trafficBlocking} placement${
+                    trafficBlocking === 1 ? "" : "s"
+                  } antes de poder marcarlo Live.`}
             </span>
           </p>
+          {trafficBlocking > 0 && (
+            <Link
+              href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/trafico`}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 shrink-0"
+            >
+              <Megaphone size={14} strokeWidth={2} />
+              Completar tráfico
+            </Link>
+          )}
           <button
             type="button"
             onClick={onMarkLive}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 shrink-0"
+            title={
+              trafficBlocking > 0
+                ? "Falta completar la sección Tráfico"
+                : undefined
+            }
+            className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 shrink-0 aria-disabled:opacity-50"
+            aria-disabled={trafficBlocking > 0}
           >
             <Radio size={14} strokeWidth={2} />
             Marcar Live
@@ -733,6 +824,7 @@ export function PlanEditor({
           editable={editable}
           allMarkets={allMarkets}
           allMetrics={allMetrics}
+          ratePairs={ratePairs}
           onChange={refresh}
           startTransition={startTransition}
           availablePublishers={availablePublishers}
@@ -891,6 +983,7 @@ function PlanWorkspace({
   editable,
   allMarkets,
   allMetrics,
+  ratePairs,
   onChange,
   startTransition,
   availablePublishers,
@@ -901,6 +994,7 @@ function PlanWorkspace({
   editable: boolean;
   allMarkets: Market[];
   allMetrics: MetricCatalog[];
+  ratePairs: Record<string, MetricRatePair>;
   onChange: () => void;
   startTransition: StartTransition;
   availablePublishers: PublisherCatalog[];
@@ -951,6 +1045,7 @@ function PlanWorkspace({
             pub={pub}
             editable={editable}
             allMarkets={allMarkets}
+            ratePairs={ratePairs}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onChange={onChange}
@@ -981,6 +1076,7 @@ function PlanWorkspace({
             placement={selected}
             editable={editable}
             allMetrics={allMetrics}
+            ratePairs={ratePairs}
             update={updateSelected}
           />
         ) : (
@@ -1009,6 +1105,7 @@ function PublisherGroup({
   pub,
   editable,
   allMarkets,
+  ratePairs,
   selectedId,
   onSelect,
   onChange,
@@ -1017,6 +1114,7 @@ function PublisherGroup({
   pub: PlanPublisherGroup;
   editable: boolean;
   allMarkets: Market[];
+  ratePairs: Record<string, MetricRatePair>;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onChange: () => void;
@@ -1197,6 +1295,7 @@ function PublisherGroup({
                 placement={pl}
                 editable={editable}
                 allMarkets={allMarkets}
+                ratePairs={ratePairs}
                 selected={pl.id === selectedId}
                 onSelect={onSelect}
                 onChange={onChange}
@@ -1233,6 +1332,7 @@ function PlacementGridRow({
   placement,
   editable,
   allMarkets,
+  ratePairs,
   selected,
   onSelect,
   onChange,
@@ -1241,6 +1341,7 @@ function PlacementGridRow({
   placement: PlanPlacement;
   editable: boolean;
   allMarkets: Market[];
+  ratePairs: Record<string, MetricRatePair>;
   selected: boolean;
   onSelect: (id: string) => void;
   onChange: () => void;
@@ -1337,7 +1438,11 @@ function PlacementGridRow({
           onCommit={(v) =>
             update({
               amountUsd: v,
-              metricsJson: recomputeMetricsForAmount(placement.metricsJson, v),
+              metricsJson: recomputeMetricsForAmount(
+                placement.metricsJson,
+                v,
+                ratePairs,
+              ),
             })
           }
           disabled={!editable}
@@ -1429,11 +1534,13 @@ function PlacementInspector({
   placement,
   editable,
   allMetrics,
+  ratePairs,
   update,
 }: {
   placement: PlanPlacement;
   editable: boolean;
   allMetrics: MetricCatalog[];
+  ratePairs: Record<string, MetricRatePair>;
   update: (partial: UpdatePlacementPartial) => void;
 }) {
   const primarySlug = placement.costMethod
@@ -1508,6 +1615,7 @@ function PlacementInspector({
         <MetricsEditor
           metrics={placement.metricsJson}
           allMetrics={allMetrics}
+          ratePairs={ratePairs}
           amountUsd={placement.amountUsd}
           editable={editable}
           primaryMetricSlug={primarySlug}
@@ -1599,10 +1707,14 @@ function applyPrimaryPairChange(
 function recomputeMetricsForAmount(
   metricsJson: Record<string, number>,
   newAmount: number,
+  ratePairs: Record<string, MetricRatePair>,
 ): Record<string, number> {
   if (!Number.isFinite(newAmount) || newAmount <= 0) return metricsJson;
   const next: Record<string, number> = { ...metricsJson };
-  for (const [deliverySlug, pair] of Object.entries(DIRECT_METRIC_RATES)) {
+  for (const [deliverySlug, pair] of Object.entries(ratePairs)) {
+    // Sin key de tarifa no hay nada persistido que anclar: el delivery queda
+    // como está y la tarifa mostrada se re-deriva del monto nuevo.
+    if (!pair.rate) continue;
     const rateVal = next[pair.rate];
     if (typeof rateVal === "number" && rateVal > 0) {
       next[deliverySlug] = Math.round((newAmount * pair.multiplier) / rateVal);
@@ -1817,6 +1929,7 @@ function formatRateDisplay(v: number): string {
 function MetricsEditor({
   metrics,
   allMetrics,
+  ratePairs,
   amountUsd,
   editable,
   primaryMetricSlug,
@@ -1824,6 +1937,11 @@ function MetricsEditor({
 }: {
   metrics: Record<string, number>;
   allMetrics: MetricCatalog[];
+  // Par tarifa↔delivery de cada métrica direct, derivado del catálogo del
+  // cliente (lib/cost-methods.ts). Es lo que habilita la columna Tarifa para
+  // las conversiones custom (tickets, LC tickets…), no sólo para los 10 slugs
+  // canónicos.
+  ratePairs: Record<string, MetricRatePair>;
   amountUsd: number;
   editable: boolean;
   primaryMetricSlug: string | null;
@@ -1839,8 +1957,8 @@ function MetricsEditor({
     Object.entries(metrics)
       .filter(([k]) => directBySlug.has(k) && k !== primaryMetricSlug)
       .map(([k, v]) => {
-        const pair = DIRECT_METRIC_RATES[k];
-        const rateVal = pair ? metrics[pair.rate] : undefined;
+        const pair = ratePairs[k];
+        const rateVal = pair?.rate ? metrics[pair.rate] : undefined;
         return {
           slug: k,
           delivery: String(v),
@@ -1868,8 +1986,8 @@ function MetricsEditor({
       const next = current.map((row) => {
         if (!row.slug) return row;
         const stored = metrics[row.slug];
-        const pair = DIRECT_METRIC_RATES[row.slug];
-        const storedRate = pair ? metrics[pair.rate] : undefined;
+        const pair = ratePairs[row.slug];
+        const storedRate = pair?.rate ? metrics[pair.rate] : undefined;
         const newDelivery =
           typeof stored === "number" && Number.isFinite(stored)
             ? String(stored)
@@ -1894,8 +2012,8 @@ function MetricsEditor({
       if (typeof pd === "number" && Number.isFinite(pd)) {
         obj[primaryMetricSlug] = pd;
       }
-      const primaryPair = DIRECT_METRIC_RATES[primaryMetricSlug];
-      if (primaryPair) {
+      const primaryPair = ratePairs[primaryMetricSlug];
+      if (primaryPair?.rate) {
         const pr = metrics[primaryPair.rate];
         if (typeof pr === "number" && Number.isFinite(pr)) {
           obj[primaryPair.rate] = pr;
@@ -1909,8 +2027,11 @@ function MetricsEditor({
       if (k === primaryMetricSlug) continue;
       const d = Number.parseFloat(delivery);
       if (Number.isFinite(d)) obj[k] = d;
-      const pair = DIRECT_METRIC_RATES[k];
-      if (pair) {
+      // La tarifa sólo se persiste si el catálogo tiene una métrica de costo
+      // para esta delivery. Si no, es un valor de entrada: define el delivery
+      // (que sí se guarda) y después se re-deriva de amount/delivery.
+      const pair = ratePairs[k];
+      if (pair?.rate) {
         const r = Number.parseFloat(rate);
         if (Number.isFinite(r) && r > 0) obj[pair.rate] = Number(r.toFixed(6));
       }
@@ -1920,7 +2041,7 @@ function MetricsEditor({
 
   const onChangeRate = (idx: number, newRate: number) => {
     const row = draft[idx];
-    const pair = DIRECT_METRIC_RATES[row.slug];
+    const pair = ratePairs[row.slug];
     const next = draft.map((r, i) => {
       if (i !== idx) return r;
       if (newRate <= 0) return { ...r, rate: "", delivery: "" };
@@ -1938,7 +2059,7 @@ function MetricsEditor({
 
   const onChangeDelivery = (idx: number, newDelivery: number) => {
     const row = draft[idx];
-    const pair = DIRECT_METRIC_RATES[row.slug];
+    const pair = ratePairs[row.slug];
     const next = draft.map((r, i) => {
       if (i !== idx) return r;
       if (newDelivery <= 0) return { ...r, rate: "", delivery: "" };
@@ -2034,7 +2155,7 @@ function MetricsEditor({
             <tbody>
               {draft.map((row, idx) => {
                 const metric = directBySlug.get(row.slug);
-                const pair = row.slug ? DIRECT_METRIC_RATES[row.slug] : undefined;
+                const pair = row.slug ? ratePairs[row.slug] : undefined;
                 const rateNum = Number.parseFloat(row.rate);
                 const deliveryNum = Number.parseFloat(row.delivery);
                 const hasRate = Number.isFinite(rateNum) && rateNum > 0;
@@ -2072,11 +2193,19 @@ function MetricsEditor({
                     </td>
                     <td className="px-2 py-1">
                       {pair ? (
-                        <RateInput
-                          value={effRate}
-                          disabled={!editable}
-                          onCommit={(v) => onChangeRate(idx, v)}
-                        />
+                        <div
+                          title={
+                            pair.rate
+                              ? `${pair.rateName}: cargá tarifa o delivery y la app calcula el otro con el monto del placement.`
+                              : `Cargá tarifa o delivery y la app calcula el otro. La tarifa no se guarda como métrica propia porque el catálogo de este cliente todavía no tiene una calculada "amount / ${row.slug}" — creándola (Configuración → Cliente → Métricas) queda fija al cambiar el monto y sale en el Excel y el PDF.`
+                          }
+                        >
+                          <RateInput
+                            value={effRate}
+                            disabled={!editable}
+                            onCommit={(v) => onChangeRate(idx, v)}
+                          />
+                        </div>
                       ) : (
                         <span className="block text-right text-[11px] text-line">—</span>
                       )}
