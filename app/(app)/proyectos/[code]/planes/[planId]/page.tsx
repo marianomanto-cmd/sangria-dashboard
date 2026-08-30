@@ -15,7 +15,8 @@ import { canApprovePlans } from "@/lib/permissions";
 import { isPlanSigned } from "@/lib/plan-status";
 import {
   computeTrafficProgress,
-  findPlanTrafficIssues,
+  findPlanAdIssues,
+  findPlanAdsetIssues,
 } from "@/lib/plan-traffic";
 import { PlanEditor } from "./editor";
 
@@ -68,10 +69,16 @@ export default async function PlanDetailPage({ params }: Props) {
     getPlanTraffic(planId),
   ]);
 
+  // Los tres cortes que el editor necesita mostrar, uno por gate:
+  //   adsetIssues → bloquean "Listo para enviar" / "Aprobado" (media planner)
+  //   adIssues    → bloquean cerrar el QA (AM/PM)
+  //   liveIssues  → los anteriores + el "cargado" de cada ad, para Live
   const trafficPlacements = toTrafficPlacements(trafficRows);
   const traffic = {
     progress: computeTrafficProgress(trafficPlacements),
-    issues: findPlanTrafficIssues(trafficPlacements),
+    adsetIssues: findPlanAdsetIssues(trafficPlacements),
+    adIssues: findPlanAdIssues(trafficPlacements),
+    liveIssues: findPlanAdIssues(trafficPlacements, true),
   };
   const canApprove = canApprovePlans(user?.email);
 

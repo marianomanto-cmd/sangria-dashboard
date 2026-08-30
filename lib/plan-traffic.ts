@@ -1,64 +1,49 @@
-// Brief de TRÁFICO del plan — la regla de "está completo" y sus helpers.
+// TRÁFICO del plan — las reglas de "está completo" y sus helpers.
 //
-// Fuente ÚNICA de la regla, compartida por:
-//   • la server action `transitionPlanStatus` (app/actions/plans.ts) — barrera
-//     real, server-side, en el paso a `live`; y
-//   • la ventana de Tráfico y el editor del plan — para mostrar qué falta ANTES
-//     de intentar la transición.
-// Módulo puro (sin DB ni React), igual que lib/plan-readiness.ts, para que las
-// dos lo usen y no se desincronicen.
+// Fuente ÚNICA, compartida por las barreras server-side y la UI. Módulo puro
+// (sin DB ni React), igual que lib/plan-readiness.ts, para que las dos lo usen
+// y no se desincronicen.
 //
-// Por qué es una regla dura: el plan describe QUÉ se compra, pero el trafficker
-// arma los adsets con esto. Un placement sin tipo de anuncio, sin copy o sin
-// carpeta de archivos es una campaña que no se puede montar; marcarla `live`
-// sería decir que está al aire algo que nadie pudo cargar. Por eso, además del
-// brief completo, `live` exige que TODOS los anuncios estén marcados como
-// cargados: el estado `live` y la plataforma tienen que decir lo mismo.
+// Hay DOS gates, porque hay dos roles llenando la sección en dos momentos:
+//
+//   ADSETS → los llena el MEDIA PLANNER, y bloquean `ready_to_send`/`approved`.
+//     Un plan que sale a firma sin los adsets designados (audiencia, budget,
+//     pilar creativo y fechas de cada uno) no se puede comprar ni armar: el
+//     planner tiene que haber decidido cómo se parte cada placement ANTES de
+//     que el cliente firme.
+//
+//   ADS → los llena el AM/PM, y bloquean el QA (y con él, Live). Pueden estar
+//     vacíos cuando el plan se manda a firmar — todavía no hay creatividades —
+//     pero no se puede dar por controlada una campaña cuyos anuncios nadie
+//     definió. Además, para marcar Live cada ad tiene que estar registrado
+//     como cargado en la plataforma.
+//
+// Barreras reales: `transitionPlanStatus` (app/actions/plans.ts) para los
+// adsets y para Live; `completePlanQa` (app/actions/plan-qa.ts) para los ads.
 
-// ── Catálogo de tipos de anuncio ────────────────────────────────────────────
-// Los values espejan el enum `traffic_ad_format` de db/schema.ts.
-
-export const TRAFFIC_AD_FORMATS = [
-  { value: "single_image", label: "Single image" },
-  { value: "carousel", label: "Carrusel" },
-  { value: "video", label: "Video" },
-  { value: "dgen_set", label: "Dgen set" },
-  { value: "other", label: "Otro" },
-] as const;
-
-export type TrafficAdFormat = (typeof TRAFFIC_AD_FORMATS)[number]["value"];
-
-export function isTrafficAdFormat(v: string): v is TrafficAdFormat {
-  return TRAFFIC_AD_FORMATS.some((f) => f.value === v);
-}
-
-// Etiqueta visible del tipo de anuncio. Para "other" gana lo que el planner
-// escribió a mano; si lo dejó vacío, se muestra "Otro" a secas.
-export function adFormatLabel(
-  format: string | null,
-  other: string | null,
-): string {
-  if (!format) return "—";
-  if (format === "other") return (other ?? "").trim() || "Otro";
-  return TRAFFIC_AD_FORMATS.find((f) => f.value === format)?.label ?? format;
-}
-
-// ── Formas mínimas que consume la regla ─────────────────────────────────────
+// ── Formas mínimas que consumen las reglas ──────────────────────────────────
 
 export type TrafficAd = {
-  adFormat: string | null;
-  adFormatOther: string | null;
+  adTypeId: string | null;
+  // Si el tipo elegido pide detalle ("Otro"), hay que escribirlo a mano.
+  adTypeRequiresDetail: boolean;
+  adTypeOther: string | null;
+  creativeUrl: string | null;
   copy: string | null;
   headline: string | null;
   subheadline: string | null;
-  cta: string | null;
+  clickUrl: string | null;
   landingUrl: string | null;
   loadedAt: Date | string | null;
 };
 
-export type TrafficBrief = {
-  adsetsCount: number;
-  trafficFolderUrl: string | null;
+export type TrafficAdset = {
+  name: string | null;
+  audience: string | null;
+  budgetUsd: number | null;
+  creativePillar: string | null;
+  startDate: string | null;
+  endDate: string | null;
   ads: TrafficAd[];
 };
 
@@ -66,7 +51,7 @@ export type TrafficPlacement = {
   publisherName: string;
   placementName: string | null;
   // null = el placement todavía no tiene brief de tráfico creado.
-  brief: TrafficBrief | null;
+  brief: { trafficFolderUrl: string | null; adsets: TrafficAdset[] } | null;
 };
 
 export type TrafficIssue = {
@@ -82,95 +67,125 @@ function blank(v: string | null | undefined): boolean {
   return !(v ?? "").trim();
 }
 
-// ── Completitud de un anuncio ───────────────────────────────────────────────
+function adsetsOf(pl: TrafficPlacement): TrafficAdset[] {
+  return pl.brief?.adsets ?? [];
+}
 
-// Qué le falta a UN anuncio para estar listo para armarse. Array vacío =
-// completo. No incluye el "cargado": eso es el registro del trafficker, que se
-// chequea aparte (un anuncio puede estar perfectamente briefeado y todavía no
-// cargado en la plataforma).
-export function findAdIssues(ad: TrafficAd, index: number): string[] {
+export function adsOf(pl: TrafficPlacement): TrafficAd[] {
+  return adsetsOf(pl).flatMap((a) => a.ads);
+}
+
+// ── Gate 1: ADSETS (bloquean "listo para enviar") ───────────────────────────
+
+// Qué le falta a UN adset. Array vacío = completo. El nombre no es obligatorio
+// (se muestra "Adset N" si está vacío); lo que el trafficker necesita sí.
+export function findAdsetIssues(adset: TrafficAdset, index: number): string[] {
   const missing: string[] = [];
-  const where = `anuncio ${index + 1}`;
-  if (!ad.adFormat) {
-    missing.push(`el tipo de anuncio del ${where}`);
-  } else if (ad.adFormat === "other" && blank(ad.adFormatOther)) {
-    missing.push(`escribir qué tipo de anuncio es el ${where}`);
+  const where = `adset ${index + 1}`;
+  if (blank(adset.audience)) missing.push(`la audiencia del ${where}`);
+  if (!(adset.budgetUsd != null && adset.budgetUsd > 0)) {
+    missing.push(`el budget del ${where}`);
   }
-  if (blank(ad.copy)) missing.push(`el copy del ${where}`);
-  if (blank(ad.headline)) missing.push(`el título del ${where}`);
-  if (blank(ad.subheadline)) missing.push(`el subtítulo del ${where}`);
-  if (blank(ad.cta)) missing.push(`el CTA del ${where}`);
-  if (blank(ad.landingUrl)) missing.push(`la landing page del ${where}`);
+  if (blank(adset.creativePillar)) missing.push(`el pilar creativo del ${where}`);
+  if (blank(adset.startDate)) missing.push(`la fecha de inicio del ${where}`);
+  if (blank(adset.endDate)) missing.push(`la fecha de fin del ${where}`);
+  // Rango invertido: mismo criterio que el resto del plan (ver
+  // bulkUpdatePlacementDates) — un rango dado vuelta rompe el prorrateo.
+  if (
+    !blank(adset.startDate) &&
+    !blank(adset.endDate) &&
+    (adset.endDate as string) < (adset.startDate as string)
+  ) {
+    missing.push(`corregir las fechas del ${where} (el fin es anterior al inicio)`);
+  }
   return missing;
 }
 
-export function isAdComplete(ad: TrafficAd, index = 0): boolean {
-  return findAdIssues(ad, index).length === 0;
+export function isAdsetComplete(adset: TrafficAdset, index = 0): boolean {
+  return findAdsetIssues(adset, index).length === 0;
+}
+
+// Qué le falta a UN placement para que el plan pueda marcarse listo para
+// enviar: al menos un adset, y todos completos.
+export function findPlacementAdsetIssues(pl: TrafficPlacement): string[] {
+  const adsets = adsetsOf(pl);
+  if (adsets.length === 0) {
+    return ["designar los adsets del placement (al menos uno)"];
+  }
+  return adsets.flatMap((a, i) => findAdsetIssues(a, i));
+}
+
+// ── Gate 2: ADS (bloquean el QA y, con él, Live) ────────────────────────────
+
+// Qué le falta a UN ad. No incluye el "cargado": eso es el registro del
+// trafficker, que se chequea aparte (un ad puede estar perfectamente definido
+// y todavía no cargado en la plataforma).
+export function findAdIssues(ad: TrafficAd, label: string): string[] {
+  const missing: string[] = [];
+  if (!ad.adTypeId) {
+    missing.push(`el tipo de ad del ${label}`);
+  } else if (ad.adTypeRequiresDetail && blank(ad.adTypeOther)) {
+    missing.push(`escribir qué tipo de ad es el ${label}`);
+  }
+  if (blank(ad.creativeUrl)) missing.push(`el link del creativo del ${label}`);
+  if (blank(ad.copy)) missing.push(`el copy del ${label}`);
+  if (blank(ad.headline)) missing.push(`el título del ${label}`);
+  if (blank(ad.subheadline)) missing.push(`el subtítulo del ${label}`);
+  if (blank(ad.clickUrl)) missing.push(`la URL del ${label}`);
+  if (blank(ad.landingUrl)) missing.push(`la landing del ${label}`);
+  return missing;
+}
+
+export function isAdComplete(ad: TrafficAd): boolean {
+  return findAdIssues(ad, "ad").length === 0;
 }
 
 export function isAdLoaded(ad: TrafficAd): boolean {
   return ad.loadedAt != null;
 }
 
-// ── Completitud del brief de un placement ───────────────────────────────────
+// Etiqueta de un ad dentro del placement, para que el mensaje de error diga
+// exactamente dónde está: "ad 2 del adset 1".
+function adLabel(adsetIndex: number, adIndex: number): string {
+  return `ad ${adIndex + 1} del adset ${adsetIndex + 1}`;
+}
 
-// `requireLoaded` distingue los dos usos: la ventana de Tráfico muestra el
-// avance del brief (sin exigir el tilde de cargado) y el paso a Live sí lo
-// exige — es la respuesta a "live tiene que significar que está al aire".
-export function findPlacementTrafficIssues(
+// Qué le falta a UN placement para poder cerrar el QA. `requireLoaded` suma la
+// exigencia de Live: que cada ad esté registrado como cargado.
+export function findPlacementAdIssues(
   pl: TrafficPlacement,
-  requireLoaded: boolean,
+  requireLoaded = false,
 ): string[] {
-  const brief = pl.brief;
-  if (!brief || brief.ads.length === 0) {
-    return ["cargar el brief de tráfico (cantidad de adsets, carpeta y anuncios)"];
+  const adsets = adsetsOf(pl);
+  if (adsets.length === 0) {
+    return ["designar los adsets del placement y cargarles sus ads"];
   }
 
   const missing: string[] = [];
-  if (!(brief.adsetsCount > 0)) missing.push("la cantidad de adsets");
-  if (blank(brief.trafficFolderUrl)) missing.push("el link a la carpeta de tráfico");
-
-  brief.ads.forEach((ad, i) => {
-    missing.push(...findAdIssues(ad, i));
-  });
-
-  if (requireLoaded) {
-    const pending = brief.ads
-      .map((ad, i) => (isAdLoaded(ad) ? null : i + 1))
-      .filter((n): n is number => n != null);
-    if (pending.length === brief.ads.length) {
-      missing.push(
-        pending.length === 1
-          ? "marcar el anuncio como cargado"
-          : `marcar los ${pending.length} anuncios como cargados`,
-      );
-    } else if (pending.length > 0) {
-      missing.push(
-        pending.length === 1
-          ? `marcar como cargado el anuncio ${pending[0]}`
-          : `marcar como cargados los anuncios ${pending.join(", ")}`,
-      );
+  adsets.forEach((adset, i) => {
+    if (adset.ads.length === 0) {
+      missing.push(`cargar al menos un ad en el adset ${i + 1}`);
+      return;
     }
-  }
-
+    adset.ads.forEach((ad, j) => {
+      missing.push(...findAdIssues(ad, adLabel(i, j)));
+      if (requireLoaded && !isAdLoaded(ad)) {
+        missing.push(`marcar como cargado el ${adLabel(i, j)}`);
+      }
+    });
+  });
   return missing;
 }
 
-export function isPlacementTrafficComplete(
-  pl: TrafficPlacement,
-  requireLoaded = false,
-): boolean {
-  return findPlacementTrafficIssues(pl, requireLoaded).length === 0;
-}
+// ── Agregados por plan ──────────────────────────────────────────────────────
 
-// Todo lo que falta para que el plan pueda pasar a Live. Array vacío = listo.
-export function findPlanTrafficIssues(
+function collect(
   placements: TrafficPlacement[],
-  requireLoaded = true,
+  per: (pl: TrafficPlacement) => string[],
 ): TrafficIssue[] {
   const issues: TrafficIssue[] = [];
   for (const pl of placements) {
-    const missing = findPlacementTrafficIssues(pl, requireLoaded);
+    const missing = per(pl);
     if (missing.length === 0) continue;
     issues.push({
       publisherName: pl.publisherName,
@@ -181,11 +196,28 @@ export function findPlanTrafficIssues(
   return issues;
 }
 
+// Lo que bloquea "listo para enviar" / "aprobado".
+export function findPlanAdsetIssues(
+  placements: TrafficPlacement[],
+): TrafficIssue[] {
+  return collect(placements, findPlacementAdsetIssues);
+}
+
+// Lo que bloquea cerrar el QA (y, con requireLoaded, marcar Live).
+export function findPlanAdIssues(
+  placements: TrafficPlacement[],
+  requireLoaded = false,
+): TrafficIssue[] {
+  return collect(placements, (pl) => findPlacementAdIssues(pl, requireLoaded));
+}
+
 // ── Progreso, para los contadores de la UI ──────────────────────────────────
 
 export type TrafficProgress = {
   placements: number;
-  placementsComplete: number;
+  placementsWithAdsets: number;
+  adsets: number;
+  adsetsComplete: number;
   ads: number;
   adsComplete: number;
   adsLoaded: number;
@@ -196,18 +228,24 @@ export function computeTrafficProgress(
 ): TrafficProgress {
   const p: TrafficProgress = {
     placements: placements.length,
-    placementsComplete: 0,
+    placementsWithAdsets: 0,
+    adsets: 0,
+    adsetsComplete: 0,
     ads: 0,
     adsComplete: 0,
     adsLoaded: 0,
   };
   for (const pl of placements) {
-    if (isPlacementTrafficComplete(pl)) p.placementsComplete += 1;
-    const ads = pl.brief?.ads ?? [];
-    p.ads += ads.length;
-    ads.forEach((ad, i) => {
-      if (isAdComplete(ad, i)) p.adsComplete += 1;
-      if (isAdLoaded(ad)) p.adsLoaded += 1;
+    if (findPlacementAdsetIssues(pl).length === 0) p.placementsWithAdsets += 1;
+    const adsets = adsetsOf(pl);
+    p.adsets += adsets.length;
+    adsets.forEach((a, i) => {
+      if (isAdsetComplete(a, i)) p.adsetsComplete += 1;
+      p.ads += a.ads.length;
+      for (const ad of a.ads) {
+        if (isAdComplete(ad)) p.adsComplete += 1;
+        if (isAdLoaded(ad)) p.adsLoaded += 1;
+      }
     });
   }
   return p;
@@ -221,19 +259,49 @@ function joinEs(parts: string[]): string {
 }
 
 // Una línea por placement con problemas, lista para el body del diálogo (que
-// respeta saltos de línea) y para el error de la server action.
+// respeta saltos de línea) y para el error de la server action. Se acota la
+// enumeración por línea: un placement con 4 adsets incompletos genera 20
+// ítems y el diálogo se vuelve ilegible.
+const MAX_ITEMS_PER_LINE = 6;
+
 export function formatTrafficIssues(issues: TrafficIssue[]): string {
   return issues
-    .map((i) => `• ${i.publisherName} · ${i.placementName}: falta ${joinEs(i.missing)}`)
+    .map((i) => {
+      const shown = i.missing.slice(0, MAX_ITEMS_PER_LINE);
+      const rest = i.missing.length - shown.length;
+      const tail = rest > 0 ? ` (+${rest} más)` : "";
+      return `• ${i.publisherName} · ${i.placementName}: falta ${joinEs(shown)}${tail}`;
+    })
     .join("\n");
 }
 
-// Mensaje completo del error server-side. La UI muestra el diálogo, pero la
-// action tiene que explicarse sola: la pueden llamar sin pasar por el editor.
-export function trafficErrorMessage(issues: TrafficIssue[]): string {
+// Mensajes completos de error server-side. La UI muestra el diálogo, pero las
+// actions tienen que explicarse solas: las pueden llamar sin pasar por el
+// editor.
+export function adsetsErrorMessage(
+  issues: TrafficIssue[],
+  target: "ready_to_send" | "approved",
+): string {
+  const label = target === "approved" ? "Aprobado" : "Listo para enviar";
   return [
-    "No se puede marcar el plan como Live — falta completar la sección Tráfico:",
+    `No se puede marcar el plan como ${label} — faltan adsets en la sección Tráfico:`,
     formatTrafficIssues(issues),
-    'El trafficker arma los adsets con esta información. Completala en la ventana "Tráfico" del plan y marcá cada anuncio como cargado.',
+    'Cada placement necesita al menos un adset con su audiencia, budget, pilar creativo y fechas. Completalos en la ventana "Tráfico" del plan (el botón "Del placement" copia audiencia, budget y fechas de la línea cuando el adset coincide con el placement).',
+  ].join("\n\n");
+}
+
+export function adsErrorMessage(issues: TrafficIssue[]): string {
+  return [
+    "No se puede cerrar el QA — faltan ads en la sección Tráfico:",
+    formatTrafficIssues(issues),
+    'El AM/PM completa los ads de cada adset (tipo, creativo, copy, título, subtítulo, URL y landing) en la ventana "Tráfico" del plan.',
+  ].join("\n\n");
+}
+
+export function liveErrorMessage(issues: TrafficIssue[]): string {
+  return [
+    "No se puede marcar el plan como Live — la sección Tráfico está incompleta:",
+    formatTrafficIssues(issues),
+    'Todos los ads tienen que estar completos y marcados como cargados en la plataforma.',
   ].join("\n\n");
 }

@@ -2,6 +2,10 @@
 -- TRÁFICO del plan — brief de armado de adsets (tablas + enum + RLS)
 -- ════════════════════════════════════════════════════════════════════════════
 --
+-- ⚠️ SUPERADO POR `db/plan-traffic-adsets.sql`. Este archivo es el primer paso
+-- (crea las tablas base); el otro suma los adsets, el catálogo de tipos de ad
+-- y migra los ads. Si arrancás de cero, corré los dos EN ORDEN.
+--
 -- QUÉ HACE:
 --   1. Crea el enum `traffic_ad_format` (single_image, carousel, video,
 --      dgen_set, other).
