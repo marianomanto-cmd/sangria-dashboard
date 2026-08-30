@@ -103,18 +103,26 @@ casos borderline, el set entero son campañas genuinamente terminadas.
    `puerto-rico-2025` (`m1017` y `m1015`, ambos con fin 2025-02-28). **La causa
    es una regla desalineada**: `findPlanReadinessIssues` exige que las fechas
    EXISTAN pero **no chequea `fin >= inicio`**, mientras que
-   `bulkUpdatePlacementDates` sí lo rechaza. Efecto hoy: `computePacePct` corta
-   en `end <= start` y devuelve 0%, así que esos planes aparecen siempre
-   "adelantados" — no rompe nada, pero el pace no significa nada. **Sumar el
-   chequeo a `lib/plan-readiness.ts` es una barrera de aprobación nueva** y
-   dejaría trabados esos 4 planes hasta corregirles las fechas: se dejó como
-   decisión del usuario, no se aplicó.
+   `bulkUpdatePlacementDates` sí lo rechaza. **RESUELTO en esta misma sesión**:
+   `findPlanReadinessIssues` ahora exige `end_date >= start_date`. El daño que
+   atajaba era peor de lo que parecía — no es sólo el pace: `prorateByMonth`
+   corta en `e < s` y manda el monto entero a `NO_DATE_KEY`, así que la media y
+   el management fee sobre esa media **desaparecían del estimado**, igual que
+   con una fecha faltante. `computePacePct` además corta en `end <= start` y
+   devuelve 0%, con lo que el plan figuraba siempre "adelantado".
+   **Ojo**: es una barrera de aprobación nueva. Los 4 planes de arriba no se
+   rompen (la regla corre sobre la transición, no sobre lo que ya está
+   aprobado), pero si alguno tiene que volver a pasar por Listo/Aprobado va a
+   quedar trabado hasta corregirle las fechas. La query para encontrar los
+   placements exactos está en el ANEXO A de `db/finish-reported-plans.sql`.
 2. **2 planes sin fecha de fin** (`COPA.m1039.BoostingDavid`,
    `COPA.m1078.BoostingStopoverTiktok`), anteriores a la regla que exige fechas
    para aprobar (#191). Un placement sin fechas **no entra al prorrateo de
    `getBillingEstimate`**: su media y el management fee sobre esa media
    desaparecen del estimado. Además el plan queda fuera del campaign tracker,
-   que exige período completo.
+   que exige período completo. **Queda abierto**: hay que cargarles las fechas
+   a mano (query en el ANEXO B de `db/finish-reported-plans.sql`). La regla de
+   readiness ya exige las dos fechas desde #191, así que no entran más nuevos.
 
 ### Cambios de la sesión 28/ago/2026 — Planner: tarifa para métricas custom (tickets / LC tickets) · Tráfico del plan
 

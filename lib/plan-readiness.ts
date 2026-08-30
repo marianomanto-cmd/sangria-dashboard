@@ -13,7 +13,8 @@
 // métrica principal se propaga como plata que no se factura o como una línea
 // incompleta en el plan que ve el cliente.
 //
-// Lo mismo vale para el CUADRE del publisher (placements vs total del bloque),
+// Lo mismo vale para las FECHAS del placement —que tienen que estar las dos y
+// en orden— y para el CUADRE del publisher (placements vs total del bloque),
 // y ahí el daño es silencioso: el total del plan —y con él la base del
 // management fee, los KPIs y la estimación— sale de
 // `sum(media_plan_publishers.total_planned_usd)`, mientras que el prorrateo
@@ -170,6 +171,28 @@ export function findPlanReadinessIssues(
       if (!pl.startDate) missing.push("la fecha de inicio");
       if (!pl.endDate) missing.push("la fecha de fin");
 
+      // Rango INVERTIDO: las dos fechas están cargadas pero el fin es anterior
+      // al inicio. Típicamente un typo de año (un plan de noviembre 2025 con
+      // fin "2024-12-02").
+      //
+      // Hasta acá nadie lo atajaba: esta regla sólo exigía que las fechas
+      // EXISTIERAN, mientras que `bulkUpdatePlacementDates` sí rechazaba
+      // `fin < inicio`. Dos reglas sobre lo mismo diciendo cosas distintas.
+      //
+      // El daño es del mismo orden que el de una fecha faltante, y tan
+      // silencioso como el descuadre del publisher: `prorateByMonth` corta en
+      // `e < s` y manda el monto entero a `NO_DATE_KEY`, así que la media —y el
+      // management fee sobre esa media— desaparecen del estimado. De yapa,
+      // `computePacePct` corta en `end <= start` y devuelve 0%, así que el plan
+      // figura siempre "adelantado" en el campaign tracker.
+      //
+      // Comparación lexicográfica: las fechas son ISO `YYYY-MM-DD`.
+      if (pl.startDate && pl.endDate && pl.endDate < pl.startDate) {
+        missing.push(
+          `corregir las fechas: el fin (${pl.endDate}) es anterior al inicio (${pl.startDate})`,
+        );
+      }
+
       // Métrica principal: la que corresponde al cost method elegido (dCPM →
       // impressions, CPC → clicks, etc.). Flat/Other no tienen una canónica.
       const primary = pl.costMethod
@@ -226,6 +249,6 @@ export function readinessErrorMessage(
   return [
     `No se puede marcar el plan como ${label} — falta completar:`,
     formatReadinessIssues(issues),
-    "Un plan Listo/Aprobado alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados, y el total de cada publisher tiene que coincidir con la suma de sus placements.",
+    "Un plan Listo/Aprobado alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados, las fechas de cada placement tienen que estar completas y en orden (un rango invertido saca la plata del prorrateo mensual), y el total de cada publisher tiene que coincidir con la suma de sus placements.",
   ].join("\n\n");
 }

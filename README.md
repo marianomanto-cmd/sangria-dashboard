@@ -224,7 +224,7 @@ lib/
   audit-format.ts           # entityNoun / actionVerb / entityLabel / actorLabel / formatRelativeDateTime
   auth.ts                   # getCurrentUser() (server-side)
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
-  plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado (campos + métrica principal + CUADRE publisher↔placements). Fuente única: server action (barrera) + editor (diálogo y aviso de descuadre)
+  plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado (campos + fechas completas Y EN ORDEN + métrica principal + CUADRE publisher↔placements). Fuente única: server action (barrera) + editor (diálogo y aviso de descuadre)
   plan-status.ts            # lifecycle del plan: PLAN_STATUSES, sets PLAN_SIGNED_/PLAN_COMMITTED_STATUSES, mapa de transiciones y labels. Fuente única: queries + actions + badges
   plan-traffic.ts           # regla del brief de tráfico (módulo puro): tipos de anuncio, qué falta por placement/anuncio, progreso y mensajes. Fuente única de la barrera de Live (server) y del aviso del editor
   plan-version-diff.ts      # buildPlanVersionDiff — qué cambió entre dos versiones aprobadas, comparando sus snapshots (plan/publishers/líneas/fees)
@@ -390,6 +390,14 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
     mismo criterio con el que la regla bloquea);
   - **placement**: no puede estar vacío, y necesita `placement_name`,
     `amount_usd` > 0, `cost_method`, `start_date` y `end_date`;
+  - **fechas en orden**: `end_date` no puede ser anterior a `start_date`. Un
+    rango invertido (típicamente un typo de año) hace el **mismo daño que una
+    fecha faltante**: `prorateByMonth` corta en `e < s` y manda el monto entero
+    a `NO_DATE_KEY`, así que la media —y el management fee sobre esa media—
+    desaparecen del estimado; y `computePacePct` corta en `end <= start` y
+    devuelve 0%, con lo que el plan figura siempre "adelantado" en el campaign
+    tracker. `bulkUpdatePlacementDates` ya lo rechazaba: hasta agregar esto,
+    las dos reglas sobre lo mismo decían cosas distintas;
   - **métrica principal**: la que mapea el cost method en
     `COST_METHOD_PRIMARY_METRIC` (dCPM/CPM→`impressions`, CPC→`clicks`,
     CPV→`views`, CPA→`conversions`) tiene que estar en `metrics_json` y ser > 0.

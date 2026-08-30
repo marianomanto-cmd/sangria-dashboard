@@ -246,7 +246,7 @@ export function PlanEditor({
     if (readinessIssues.length === 0) return false;
     await confirm({
       title: `Falta completar el plan para marcarlo como ${target}`,
-      body: `${formatReadinessIssues(readinessIssues)}\n\nUn plan ${target} alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados.`,
+      body: `${formatReadinessIssues(readinessIssues)}\n\nUn plan ${target} alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados, y las fechas de cada placement completas y en orden — un rango invertido saca la plata del prorrateo mensual.`,
       confirmLabel: "Entendido",
       hideCancel: true,
       wide: true,
