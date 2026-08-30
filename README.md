@@ -190,6 +190,7 @@ db/
   plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
   plan-traffic.sql          # migración del Tráfico (paso 1): tablas media_plan_traffic_briefs/_ads + índices + RLS. SUPERADO por plan-traffic-adsets.sql
   plan-traffic-adsets.sql   # migración del Tráfico (paso 2): tabla ad_types (+ semilla para todos los clientes) + media_plan_traffic_adsets + migración de los ads del brief al adset + RLS
+  plan-health-check.sql     # chequeo de salud READ-ONLY de todos los planes: 14 controles (una fila cada uno, aunque den 0) — tipos de ad cruzados entre clientes, status drifteados, gates de tráfico que bloquean el avance, live sin cerrar, planes que caen en el año actual por falta de fechas, tarifas huérfanas en metrics_json
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
