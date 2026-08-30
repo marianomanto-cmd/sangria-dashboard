@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  adTypes,
   budgetOrigins,
   clients,
   markets,
@@ -54,6 +55,13 @@ export default async function ClientConfigPage({ params }: Props) {
     .where(eq(markets.clientId, client.id))
     .orderBy(asc(markets.sortOrder), asc(markets.name));
 
+  // Tipos de ad del cliente (alimentan el desplegable de la ventana de Tráfico).
+  const adTypeRows = await db
+    .select()
+    .from(adTypes)
+    .where(eq(adTypes.clientId, client.id))
+    .orderBy(asc(adTypes.sortOrder), asc(adTypes.name));
+
   // Budget origins del cliente.
   const budgetOriginRows = await db
     .select()
@@ -65,7 +73,7 @@ export default async function ClientConfigPage({ params }: Props) {
     <PageShell
       eyebrow="Configuración / Clientes"
       title={`Configuración · ${client.name}`}
-      subtitle={`Publishers, métricas, mercados y budget origins habilitados para ${client.name}. Cada cliente tiene su set propio — podés crear conversiones custom, renombrar mercados, etc.`}
+      subtitle={`Publishers, métricas, tipos de ad, mercados y budget origins habilitados para ${client.name}. Cada cliente tiene su set propio — podés crear conversiones custom, renombrar mercados, definir sus formatos de ad, etc.`}
     >
       <nav
         aria-label="Breadcrumb"
@@ -83,6 +91,7 @@ export default async function ClientConfigPage({ params }: Props) {
         metrics={metricRows}
         markets={marketRows}
         budgetOrigins={budgetOriginRows}
+        adTypes={adTypeRows}
       />
     </PageShell>
   );

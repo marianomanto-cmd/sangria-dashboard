@@ -2,6 +2,75 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 28/ago/2026 (2) — Tráfico v2: adsets del planner, ads del AM/PM, catálogo de tipos de ad
+
+Iteración sobre la sección Tráfico que se había mergeado en #225. El pedido:
+la sección la llenan **dos roles**, no uno, y cada uno tiene su gate.
+
+- **Modelo nuevo: placement → adsets → ads.** Antes había un solo nivel
+  ("anuncios" colgando del brief). Ahora:
+  - **Adsets** (`media_plan_traffic_adsets`) — los designa el **media planner**:
+    nombre, audiencia, budget, pilar creativo y fechas. Un placement puede tener
+    uno o varios.
+  - **Ads** (`media_plan_traffic_ads`, migrados de colgar del brief a colgar del
+    adset) — los completa el **AM/PM**: tipo de ad, link del creativo, copy,
+    título, subtítulo, URL y landing.
+  - El brief del placement queda sólo con la **carpeta de tráfico**: la
+    "cantidad de adsets" ya no se carga a mano, **se deriva**.
+- **Botón "Del placement"**: muchas veces el adset ES el placement. Copia
+  nombre, audiencia, budget y fechas de la línea del plan, tanto al crear
+  ("Adset del placement") como sobre un adset existente. El pilar creativo no
+  tiene equivalente en la línea, así que queda para escribir.
+- **Dos gates, uno por rol** (`lib/plan-traffic.ts`, reescrito):
+  - `ready_to_send`/`approved` → **adsets** completos. Va pegado al chequeo de
+    readiness en `transitionPlanStatus`, y el editor lo muestra en el mismo
+    diálogo de "falta completar" antes de intentar la transición.
+  - **cerrar el QA** → **ads** completos, con al menos uno por adset. La barrera
+    vive en `completePlanQa` (`app/actions/plan-qa.ts`), después del recuento de
+    líneas tildadas. Los ads PUEDEN estar vacíos al mandar a firmar — todavía no
+    hay creatividades — pero no para dar por controlada la campaña.
+  - `live` → lo anterior **más** el "cargado" de cada ad. Se mantiene de #225.
+- **Permisos por nivel, y esto importa**: los **adsets** se editan **sólo sobre
+  el borrador**. Son parte de lo que se manda a firmar: si se pudieran cambiar
+  después de la firma, el gate de `ready_to_send` no significaría nada. Los
+  **ads** y la carpeta siguen editándose en cualquier estado vivo (se completan
+  después de aprobar). La UI lo dice con una franja explícita cuando el plan ya
+  no es borrador, y las barreras están en `app/actions/plan-traffic.ts`.
+- **Catálogo de tipos de ad per-cliente** (`ad_types`), como pidió el pedido:
+  mismo patrón que `metrics_catalog`. Se administra en
+  `/configuracion/clientes/[slug]#tipos-de-ad` con botón **"Cargar los
+  estándar"** (Carrusel, Single image, Video, DGEN set, PMAX set, YT Video,
+  Otro). `requires_detail` marca las entradas tipo "Otro" — esos ads además
+  exigen el texto libre, y hasta entonces bloquean el QA. Borrar un tipo NO
+  borra los ads (FK `set null`): quedan sin tipo, o sea incompletos, que es lo
+  correcto — para sacarlo de circulación conviene deshabilitarlo.
+  `DEFAULT_AD_TYPES` vive en `lib/ad-types.ts` y no en la action porque un
+  archivo `"use server"` sólo puede exportar funciones async (el build lo
+  rebota con "can only export async functions, found object").
+- **La validación del tipo de ad es server-side**: `updateTrafficAd` chequea que
+  el `ad_type_id` pertenezca al catálogo **del cliente del plan**, si no un id de
+  otro cliente entraría por la puerta de atrás.
+- **El rescate del "Descartar borrador" se extendió a los tres niveles**:
+  `rescuePlanTraffic`/`restorePlanTraffic` ahora reconstruyen briefs → adsets →
+  ads (antes eran briefs → ads).
+- **Excel y editor al día** con la regla de paridad: el export es una fila por
+  ad con el contexto del placement, los campos del adset, los del ad, el estado
+  de carga y dos columnas de diagnóstico ("Falta (adsets)" / "Falta (ads)"); el
+  contador del botón "Tráfico" del plan pasó a mostrar `adsets · ads`.
+
+**Acción requerida en prod**: correr **`db/plan-traffic-adsets.sql`** en el SQL
+Editor de Supabase. Crea `ad_types` (y siembra los 7 tipos estándar para TODOS
+los clientes), crea `media_plan_traffic_adsets`, migra los ads del brief al
+adset (creando un "Adset 1" por brief con ads y mapeando el enum viejo al tipo
+del catálogo), saca `adsets_count` del brief y activa RLS. Es idempotente. Si
+nunca corriste `db/plan-traffic.sql`, corré ese PRIMERO.
+
+**Ojo con el cambio de comportamiento**: cualquier plan en borrador queda
+frenado para "Listo para enviar" hasta que sus placements tengan adsets, y
+cualquier plan aprobado queda frenado para cerrar el QA hasta que sus adsets
+tengan ads completos. Los planes ya firmados o live no se tocan (las reglas
+corren sobre la transición, no retroactivamente).
+
 ### Cambios de la sesión 28/ago/2026 — Planner: tarifa para métricas custom (tickets / LC tickets) · Tráfico del plan
 
 - **Pedido 1**: en los "indicadores estimados" del planificador, métricas como
@@ -4279,9 +4348,10 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
 | Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Historial de versiones (sólo en el export del plan vigente, `buildVersionHistorySheet`) + tabs 4+ auxiliares si el plan tiene). |
 | Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES`, los sets `PLAN_SIGNED_STATUSES` (approved+qa_done+live = "plan firmado, vigente") y `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata"), `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |
-| Tocar la sección **Tráfico** del plan (brief de armado de adsets) | UI: `app/(app)/proyectos/[code]/planes/[planId]/trafico/` (`page.tsx` + `traffic-editor.tsx`), con el botón "Tráfico" en el header del `editor.tsx`. Actions: `app/actions/plan-traffic.ts` (`updateTrafficBrief`, `addTrafficAd`, `updateTrafficAd`, `removeTrafficAd`, `setTrafficAdLoaded`). Lectura: `getPlanTraffic` en `db/queries/plan-traffic.ts`. Schema: `media_plan_traffic_briefs` (1:1 placement) + `media_plan_traffic_ads` (N por brief). **Se edita en cualquier estado vivo del plan, no sólo `draft`** (el brief se llena después de aprobar). Export: `app/api/plans/[planId]/traffic.xlsx/route.ts` — interno, NO público. |
-| Tocar la regla de "tráfico completo" (qué bloquea marcar Live) | **Fuente única: `lib/plan-traffic.ts`** (`findPlanTrafficIssues`, `computeTrafficProgress`, `TRAFFIC_AD_FORMATS`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y la UI (contadores de la ventana + franja `qa_done` + diálogo de "Marcar Live" en `editor.tsx`). Live exige brief completo **y** todos los anuncios marcados como cargados. |
-| Entender por qué el brief de tráfico no se pierde al **descartar un borrador** | `rescuePlanTraffic` / `restorePlanTraffic` en `app/actions/plans.ts`. `revertPlanToApprovedSnapshot` borra los publishers (cascade → placements) y los reinserta con **ids nuevos**; el brief se rescata antes del delete y se reapareja por **publisher del catálogo + nombre del placement**. |
+| Tocar la sección **Tráfico** del plan (adsets + ads) | UI: `app/(app)/proyectos/[code]/planes/[planId]/trafico/` (`page.tsx` + `traffic-editor.tsx`), con el botón "Tráfico" en el header del `editor.tsx`. Actions: `app/actions/plan-traffic.ts` — adsets (`addTrafficAdset`, `updateTrafficAdset`, `removeTrafficAdset`) y ads (`addTrafficAd`, `updateTrafficAd`, `removeTrafficAd`, `setTrafficAdLoaded`) + `updateTrafficBrief` (carpeta). Lectura: `getPlanTraffic` en `db/queries/plan-traffic.ts`. Schema: `media_plan_traffic_briefs` (1:1 placement) → `media_plan_traffic_adsets` → `media_plan_traffic_ads`. **Permisos por nivel**: los ADSETS sólo sobre el borrador (son parte de lo que se firma); los ADS y la carpeta, en cualquier estado vivo. Export: `app/api/plans/[planId]/traffic.xlsx/route.ts` — interno, NO público. |
+| Tocar los gates del tráfico (qué bloquea Listo / QA / Live) | **Fuente única: `lib/plan-traffic.ts`.** `findPlanAdsetIssues` → bloquea `ready_to_send`/`approved` (barrera en `transitionPlanStatus`, junto al chequeo de readiness). `findPlanAdIssues` → bloquea cerrar el QA (barrera en `completePlanQa`, `app/actions/plan-qa.ts`). `findPlanAdIssues(…, true)` → suma el "cargado" de cada ad y bloquea `live`. Las tres alimentan también la UI (contadores de la ventana, diálogos y franjas del `editor.tsx`), así que barrera y aviso nunca discrepan. |
+| Agregar/cambiar los **tipos de ad** de un cliente | Tabla `ad_types` (per-cliente, como `metrics_catalog`). UI: `AdTypesSection` en `app/(app)/configuracion/clientes/[slug]/sections.tsx` (`#tipos-de-ad`), con "Cargar los estándar". Actions: `app/actions/ad-types.ts`. Semilla: `DEFAULT_AD_TYPES` en `lib/ad-types.ts` (**no** en la action: un `"use server"` sólo exporta funciones async). `requires_detail` = entradas tipo "Otro", que además exigen el texto libre. Borrarlo deja los ads sin tipo (FK `set null`) → incompletos; para retirarlo sin romper nada, deshabilitalo. |
+| Entender por qué el tráfico no se pierde al **descartar un borrador** | `rescuePlanTraffic` / `restorePlanTraffic` en `app/actions/plans.ts`. `revertPlanToApprovedSnapshot` borra los publishers (cascade → placements) y los reinserta con **ids nuevos**; briefs, adsets y ads se rescatan antes del delete y se reaparejan por **publisher del catálogo + nombre del placement**. |
 | Tocar el **QA del plan** (paso obligatorio approved → live) | UI: `app/(app)/proyectos/[code]/planes/[planId]/qa-modal.tsx` (preview tipo Excel + casilla "Controlado" por línea + botón "QA realizado"), abierto desde el header/franja del `editor.tsx`. Actions: `app/actions/plan-qa.ts` (`setPlanQaCheck`, `completePlanQa`, `reopenPlanQa`). Lectura: `getPlanQaState` en `db/queries/plan-qa.ts`. Schema: `media_plan_qa_runs` (uno por plan **y por versión**, unique `(media_plan_id, version_number)`) + `media_plan_qa_checks` (`placement_id` **sin FK** a propósito: la línea puede borrarse en una versión futura y el QA histórico tiene que sobrevivir). **El QA es por versión**: aprobar la v(N+1) lo obliga de nuevo. |
 | Tocar el **historial de versiones** del plan (qué cambió en cada una) | UI: `app/(app)/proyectos/[code]/planes/[planId]/version-history.tsx` (filas desplegables). Datos: `getPlanVersionHistory` en `db/queries/plan-qa.ts`. Diff: `lib/plan-version-diff.ts` (`buildPlanVersionDiff`), que compara los **snapshots** de v(N−1) y vN — no el audit_log — con matching por **id de fila**. Los nombres de publisher/market/métrica se resuelven contra el catálogo actual. El espejo en Excel es `buildVersionHistorySheet` en `export.xlsx/route.ts`. |
 | Tocar los tabs auxiliares del plan (grillas libres con fórmulas / tabs extra del Excel) | UI: `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx` (botón "Crear tab auxiliar" + una sección colapsable por tab en el editor). CRUD: `app/actions/aux-sheets.ts`. Límites + helpers + **evaluador de fórmulas** (refs A1, SUM/AVERAGE/MIN/MAX/COUNT, errores `#REF!`/`#CIRC!`/…): `lib/aux-sheet.ts` (`evalAuxFormula`). Schema: `media_plan_aux_sheets` (N por plan, `sort_order`). **Insertar/eliminar filas y columnas en cualquier posición**: menú click-derecho en el editor → `insertAuxRow/Col` + `deleteAuxRow/Col` en `lib/aux-sheet.ts` (mueven data + uniones y reescriben refs con `shiftAuxFormula`). Los tabs del export: `buildAuxSheet` en `export.xlsx/route.ts` (fórmulas → fórmulas reales de Excel; **formato** header/subtotal/total/banding + anchos auto + congelado, parecido al Tab 1). |

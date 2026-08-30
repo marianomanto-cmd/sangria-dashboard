@@ -111,12 +111,17 @@ type UpdatePlacementPartial = Omit<
 >;
 type StartTransition = ReturnType<typeof useTransition>[1];
 
-// Lo que el editor necesita saber del brief de tráfico: el avance (para el
-// contador del botón) y qué falta (para el aviso del gate de Live). Se calcula
+// Lo que el editor necesita saber de la sección Tráfico: el avance (para el
+// contador del botón) y qué falta en cada uno de los tres cortes. Se calcula
 // server-side en page.tsx y baja ya resumido — el editor no carga los briefs.
 export type PlanTrafficSummary = {
   progress: TrafficProgress;
-  issues: TrafficIssue[];
+  // Adsets del planner: bloquean "Listo para enviar" / "Aprobado".
+  adsetIssues: TrafficIssue[];
+  // Ads del AM/PM: bloquean cerrar el QA.
+  adIssues: TrafficIssue[];
+  // Ads completos + marcados como cargados: bloquean Live.
+  liveIssues: TrafficIssue[];
 };
 
 export function PlanEditor({
@@ -170,13 +175,17 @@ export function PlanEditor({
 
   const trafficProgress = traffic?.progress ?? {
     placements: 0,
-    placementsComplete: 0,
+    placementsWithAdsets: 0,
+    adsets: 0,
+    adsetsComplete: 0,
     ads: 0,
     adsComplete: 0,
     adsLoaded: 0,
   };
-  const trafficIssues = traffic?.issues ?? [];
-  const trafficBlocking = trafficIssues.length;
+  const adsetIssues = traffic?.adsetIssues ?? [];
+  const adIssues = traffic?.adIssues ?? [];
+  const liveIssues = traffic?.liveIssues ?? [];
+  const trafficHref = `/proyectos/${detail.project.code}/planes/${detail.plan.id}/trafico`;
 
   // Progreso del QA de la versión vigente, para el header (el detalle vive en
   // el modal). Solo cuentan los checks de líneas que siguen existiendo.
@@ -242,15 +251,33 @@ export function PlanEditor({
   // Diálogo con el detalle de lo que falta. Devuelve true si el plan está
   // incompleto (y ya avisó), para cortar la acción en el call-site.
   const blockedByReadiness = async (target: "Listo" | "Aprobado") => {
-    if (readinessIssues.length === 0) return false;
-    await confirm({
-      title: `Falta completar el plan para marcarlo como ${target}`,
-      body: `${formatReadinessIssues(readinessIssues)}\n\nUn plan ${target} alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados.`,
-      confirmLabel: "Entendido",
-      hideCancel: true,
-      wide: true,
-    });
-    return true;
+    if (readinessIssues.length > 0) {
+      await confirm({
+        title: `Falta completar el plan para marcarlo como ${target}`,
+        body: `${formatReadinessIssues(readinessIssues)}\n\nUn plan ${target} alimenta la facturación, la estimación y los exports: los montos y las métricas principales tienen que estar cargados.`,
+        confirmLabel: "Entendido",
+        hideCancel: true,
+        wide: true,
+      });
+      return true;
+    }
+    // Segundo gate: los adsets que designa el media planner. Un plan que sale a
+    // firma sin ellos no se puede comprar ni armar. Los ADS no se piden acá —
+    // los completa el AM/PM más tarde y su gate es el QA.
+    if (adsetIssues.length > 0) {
+      await confirm({
+        title: `Faltan adsets para marcar el plan como ${target}`,
+        body: [
+          formatTrafficIssues(adsetIssues),
+          'Cada placement necesita al menos un adset con su audiencia, budget, pilar creativo y fechas. Cargalos en la ventana "Tráfico" del plan — el botón "Del placement" copia audiencia, budget y fechas de la línea cuando el adset coincide con el placement.',
+        ].join("\n\n"),
+        confirmLabel: "Entendido",
+        hideCancel: true,
+        wide: true,
+      });
+      return true;
+    }
+    return false;
   };
 
   const onMarkReady = async () => {
@@ -316,12 +343,12 @@ export function PlanEditor({
     // Aviso temprano: la barrera real está en transitionPlanStatus, pero
     // mostrar acá qué falta evita el viaje de ida y vuelta al servidor para
     // enterarse de que hay un copy sin escribir.
-    if (trafficIssues.length > 0) {
+    if (liveIssues.length > 0) {
       await confirm({
         title: "Falta completar la sección Tráfico",
         body: [
-          "Un plan no puede marcarse Live hasta que cada placement tenga su brief completo y todos los anuncios estén marcados como cargados.",
-          formatTrafficIssues(trafficIssues),
+          "Un plan no puede marcarse Live hasta que todos los ads estén completos y marcados como cargados en la plataforma.",
+          formatTrafficIssues(liveIssues),
           'Completalo en la ventana "Tráfico" del plan.',
         ].join("\n\n"),
         confirmLabel: "Entendido",
@@ -333,7 +360,7 @@ export function PlanEditor({
     if (
       !(await confirm({
         title: `¿Marcar ${detail.plan.name} como Live?`,
-        body: `El QA de la v${detail.plan.currentVersion} está cerrado y el tráfico está cargado. Marcar Live indica que la campaña está corriendo en las plataformas.`,
+        body: `El QA de la v${detail.plan.currentVersion} está cerrado y todos los ads están cargados. Marcar Live indica que la campaña está corriendo en las plataformas.`,
         confirmLabel: "Marcar Live",
       }))
     )
@@ -472,19 +499,22 @@ export function PlanEditor({
             PDF
           </a>
           <Link
-            href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/trafico`}
+            href={trafficHref}
             className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
-            title="Brief de tráfico: lo que el trafficker necesita para armar los adsets"
+            title="Adsets del planner y ads del AM/PM — lo que se necesita para armar la campaña"
           >
             <Megaphone size={14} strokeWidth={2} />
             Tráfico
-            {trafficProgress.ads > 0 && (
+            {trafficProgress.placements > 0 && (
               <span
                 className={`font-mono text-[11px] ${
-                  trafficBlocking === 0 ? "text-success" : "text-warn"
+                  adsetIssues.length === 0 ? "text-success" : "text-warn"
                 }`}
+                title={`${trafficProgress.adsetsComplete}/${trafficProgress.adsets} adsets completos · ${trafficProgress.adsComplete}/${trafficProgress.ads} ads completos · ${trafficProgress.adsLoaded}/${trafficProgress.ads} cargados`}
               >
-                {trafficProgress.adsLoaded}/{trafficProgress.ads}
+                {trafficProgress.adsetsComplete}/{trafficProgress.adsets}
+                <span className="text-line"> · </span>
+                {trafficProgress.adsComplete}/{trafficProgress.ads}
               </span>
             )}
           </Link>
@@ -647,8 +677,27 @@ export function PlanEditor({
               {qaCheckedLines > 0
                 ? `Ya controlaste ${qaCheckedLines} de ${qaTotalLines}.`
                 : "Ninguna línea controlada todavía."}
+              {adIssues.length > 0 && (
+                <>
+                  {" "}
+                  <span className="text-warn font-medium">
+                    Además faltan los ads de {adIssues.length} placement
+                    {adIssues.length === 1 ? "" : "s"} en la sección Tráfico: el
+                    QA no se puede cerrar hasta completarlos.
+                  </span>
+                </>
+              )}
             </p>
           </div>
+          {adIssues.length > 0 && (
+            <Link
+              href={trafficHref}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 shrink-0"
+            >
+              <Megaphone size={14} strokeWidth={2} />
+              Completar ads
+            </Link>
+          )}
           <button
             type="button"
             onClick={() => setQaOpen(true)}
@@ -673,16 +722,16 @@ export function PlanEditor({
               · {qaTotalLines} línea{qaTotalLines === 1 ? "" : "s"} controladas
               {qaState?.completedByEmail ? ` por ${qaState.completedByEmail}` : ""}
               .{" "}
-              {trafficBlocking === 0
-                ? "Tráfico cargado. Listo para marcar Live."
-                : `Falta completar el tráfico de ${trafficBlocking} placement${
-                    trafficBlocking === 1 ? "" : "s"
+              {liveIssues.length === 0
+                ? "Ads completos y cargados. Listo para marcar Live."
+                : `Falta completar o marcar como cargados los ads de ${liveIssues.length} placement${
+                    liveIssues.length === 1 ? "" : "s"
                   } antes de poder marcarlo Live.`}
             </span>
           </p>
-          {trafficBlocking > 0 && (
+          {liveIssues.length > 0 && (
             <Link
-              href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/trafico`}
+              href={trafficHref}
               className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 shrink-0"
             >
               <Megaphone size={14} strokeWidth={2} />
@@ -694,12 +743,12 @@ export function PlanEditor({
             onClick={onMarkLive}
             disabled={pending}
             title={
-              trafficBlocking > 0
+              liveIssues.length > 0
                 ? "Falta completar la sección Tráfico"
                 : undefined
             }
             className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 shrink-0 aria-disabled:opacity-50"
-            aria-disabled={trafficBlocking > 0}
+            aria-disabled={liveIssues.length > 0}
           >
             <Radio size={14} strokeWidth={2} />
             Marcar Live

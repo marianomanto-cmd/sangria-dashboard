@@ -541,38 +541,65 @@ export const mediaPlanQaChecks = pgTable(
 );
 
 // ════════════════════════════════════════════════════════════════════════════
-// TRÁFICO del plan — lo que el trafficker necesita para armar los adsets.
+// TRÁFICO del plan — de placement a adsets a ads.
 //
 // El plan dice QUÉ se compra (publisher, placement, mercado, monto, fechas).
-// El tráfico dice CÓMO se arma en la plataforma: cuántos adsets tiene cada
-// placement, con qué creatividad, qué copy/título/subtítulo/CTA, a qué landing
-// y dónde están los archivos. Vive en su propia ventana dentro del plan
-// (/proyectos/[code]/planes/[planId]/trafico).
+// El tráfico dice CÓMO se arma en la plataforma, y lo llenan DOS roles en dos
+// momentos distintos:
+//
+//   1. El MEDIA PLANNER define los ADSETS de cada placement. Un placement
+//      puede tener uno o varios adsets, cada uno con su audiencia, budget,
+//      pilar creativo y fechas. Es su trabajo de planificación, así que es
+//      requisito para marcar el plan "listo para enviar": un plan que sale a
+//      firma sin los adsets designados no se puede comprar ni armar.
+//
+//   2. El AM/PM completa los ADS de cada adset. Un adset puede tener uno o
+//      varios ads, cada uno con su tipo, creativo, copy, título, subtítulo,
+//      URL y landing. Esto llega después: los ads PUEDEN estar vacíos cuando
+//      el plan se manda a firmar, pero NO para cerrar el QA que habilita Live.
 //
 // Igual que los tabs auxiliares, es material OPERATIVO: no entra en los
-// snapshots ni en el diff de versiones, y se edita en cualquier estado vivo del
-// plan (el brief se llena justamente DESPUÉS de aprobar, mientras se arma la
-// campaña — si dependiera de `status === "draft"` sería inutilizable).
+// snapshots ni en el diff de versiones. Los adsets se editan mientras el plan
+// es borrador (son parte de lo que se manda a firmar); los ads se editan en
+// cualquier estado vivo del plan, porque se completan justamente DESPUÉS de
+// aprobar, mientras se arma la campaña.
 //
-// Lo que SÍ hace es cerrar el paso a Live: un plan no puede marcarse `live`
-// hasta que todos sus placements tengan el brief completo y todos sus anuncios
-// estén marcados como cargados. La regla vive en lib/plan-traffic.ts y la
-// barrera real en `transitionPlanStatus`.
+// Las reglas viven en lib/plan-traffic.ts y las barreras reales en
+// `transitionPlanStatus` (ready_to_send / approved) y `completePlanQa` (QA).
 // ════════════════════════════════════════════════════════════════════════════
 
-// Tipo de anuncio. "other" habilita el campo libre `adFormatOther` para que el
-// planner escriba a mano el formato que la lista no cubre.
-export const trafficAdFormat = pgEnum("traffic_ad_format", [
-  "single_image",
-  "carousel",
-  "video",
-  "dgen_set",
-  "other",
-]);
+// ── Catálogo de tipos de anuncio — per-cliente ──────────────────────────────
+// Mismo criterio que metrics_catalog / publishers / markets: cada cliente tiene
+// su propia lista y se administra en /configuracion/clientes/[slug]. Alimenta
+// el desplegable "Tipo de ad" del AM/PM.
+//
+// `requiresDetail` marca las entradas tipo "Otro", que obligan a escribir a
+// mano de qué se trata (campo `adTypeOther` del ad).
+export const adTypes = pgTable(
+  "ad_types",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),               // carousel, single_image, pmax_set
+    name: text("name").notNull(),               // Carrusel, Single image, PMAX set
+    requiresDetail: boolean("requires_detail").notNull().default(false),
+    enabled: boolean("enabled").notNull().default(true),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("ad_types_client_slug_uq").on(t.clientId, t.slug),
+    index("idx_ad_types_client_enabled").on(t.clientId, t.enabled, t.sortOrder),
+  ],
+);
 
-// Brief de tráfico de UN placement (1:1). Los campos de acá son los que
-// aplican a todo el placement: cuántos adsets hay que armar y dónde están los
-// archivos. Lo específico de cada creatividad vive en media_plan_traffic_ads.
+// ── Brief de tráfico de UN placement (1:1) ──────────────────────────────────
+// Lo que aplica a todo el placement. Hoy es sólo la carpeta de archivos: la
+// "cantidad de adsets" NO se carga a mano, se deriva de cuántos adsets tiene.
 export const mediaPlanTrafficBriefs = pgTable(
   "media_plan_traffic_briefs",
   {
@@ -580,8 +607,6 @@ export const mediaPlanTrafficBriefs = pgTable(
     placementId: uuid("placement_id")
       .notNull()
       .references(() => mediaPlanPlacements.id, { onDelete: "cascade" }),
-    // Cuántos adsets tiene adentro el placement. 0 = todavía sin definir.
-    adsetsCount: integer("adsets_count").notNull().default(0),
     // Carpeta (Drive u otra) donde el trafficker encuentra los archivos.
     trafficFolderUrl: text("traffic_folder_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -594,22 +619,56 @@ export const mediaPlanTrafficBriefs = pgTable(
   (t) => [unique("uq_mptb_placement").on(t.placementId)],
 );
 
-// Un anuncio del brief. Un placement puede tener varias creatividades
-// distintas; cada una es una fila con su copy y su propio "Cargado".
-export const mediaPlanTrafficAds = pgTable(
-  "media_plan_traffic_ads",
+// ── Adsets del placement (los llena el MEDIA PLANNER) ───────────────────────
+// Muchas veces el adset coincide con el placement: el editor tiene un botón
+// "Del placement" que copia audiencia, budget y fechas de la línea del plan,
+// para no re-tipear lo mismo.
+export const mediaPlanTrafficAdsets = pgTable(
+  "media_plan_traffic_adsets",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     briefId: uuid("brief_id")
       .notNull()
       .references(() => mediaPlanTrafficBriefs.id, { onDelete: "cascade" }),
-    adFormat: trafficAdFormat("ad_format"),
-    adFormatOther: text("ad_format_other"), // libre, sólo si adFormat = 'other'
+    name: text("name"),
+    audience: text("audience"),
+    budgetUsd: numeric("budget_usd", { precision: 14, scale: 2 }),
+    creativePillar: text("creative_pillar"),
+    startDate: date("start_date"),
+    endDate: date("end_date"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_mptas_brief").on(t.briefId, t.sortOrder)],
+);
+
+// ── Ads del adset (los llena el AM/PM) ──────────────────────────────────────
+// `adTypeId` apunta al catálogo per-cliente (ad_types). onDelete: set null para
+// que borrar un tipo del catálogo no se lleve puestos los ads ya cargados —
+// quedan sin tipo y la regla los marca incompletos, que es lo correcto.
+export const mediaPlanTrafficAds = pgTable(
+  "media_plan_traffic_ads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    adsetId: uuid("adset_id")
+      .notNull()
+      .references(() => mediaPlanTrafficAdsets.id, { onDelete: "cascade" }),
+    adTypeId: uuid("ad_type_id").references(() => adTypes.id, {
+      onDelete: "set null",
+    }),
+    // Libre, obligatorio sólo si el tipo elegido tiene requires_detail.
+    adTypeOther: text("ad_type_other"),
+    creativeUrl: text("creative_url"),      // link al creativo
     copy: text("copy"),
     headline: text("headline"),             // título
     subheadline: text("subheadline"),       // subtítulo
-    cta: text("cta"),
-    landingUrl: text("landing_url"),
+    clickUrl: text("click_url"),            // URL (la que se pega en la plataforma)
+    landingUrl: text("landing_url"),        // landing final
     // Registro del trafficker: cargado en la plataforma. null = pendiente.
     loadedAt: timestamp("loaded_at", { withTimezone: true }),
     loadedByUserId: uuid("loaded_by_user_id"),
@@ -622,7 +681,7 @@ export const mediaPlanTrafficAds = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [index("idx_mpta_brief").on(t.briefId, t.sortOrder)],
+  (t) => [index("idx_mpta_adset").on(t.adsetId, t.sortOrder)],
 );
 
 // ════════════════════════════════════════════════════════════════════════════

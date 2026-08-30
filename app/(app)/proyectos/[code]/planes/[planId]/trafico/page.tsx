@@ -4,6 +4,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, mediaPlans, projects } from "@/db/schema";
 import { getPlanTraffic } from "@/db/queries/plan-traffic";
+import { listAdTypesForClient } from "@/app/actions/ad-types";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { PlanTrafficEditor } from "./traffic-editor";
 
@@ -14,10 +15,13 @@ type Props = {
 // ════════════════════════════════════════════════════════════════════════════
 // Ventana de TRÁFICO del plan.
 //
-// El plan dice qué se compra; acá el planner deja lo que el trafficker necesita
-// para armar los adsets, y el trafficker registra lo que ya cargó. Completarlo
-// es requisito para marcar el plan Live (regla en lib/plan-traffic.ts, barrera
-// en `transitionPlanStatus`).
+// El plan dice QUÉ se compra; acá se define CÓMO se arma, en dos capas y con
+// dos roles: el media planner designa los ADSETS de cada placement (requisito
+// para marcar el plan Listo para enviar) y el AM/PM completa los ADS de cada
+// adset (requisito para cerrar el QA que habilita Live).
+//
+// Reglas en lib/plan-traffic.ts; barreras en `transitionPlanStatus` y
+// `completePlanQa`.
 // ════════════════════════════════════════════════════════════════════════════
 
 export default async function PlanTrafficPage({ params }: Props) {
@@ -32,7 +36,7 @@ export default async function PlanTrafficPage({ params }: Props) {
         currentVersion: mediaPlans.currentVersion,
       },
       project: { code: projects.code, name: projects.name },
-      client: { name: clients.name, slug: clients.slug },
+      client: { id: clients.id, name: clients.name, slug: clients.slug },
     })
     .from(mediaPlans)
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
@@ -42,12 +46,17 @@ export default async function PlanTrafficPage({ params }: Props) {
 
   if (!planRow || planRow.project.code !== code) notFound();
 
-  const rows = await getPlanTraffic(planId);
-
-  // El brief se llena mientras se arma la campaña — o sea DESPUÉS de aprobar.
-  // Por eso es editable en todo estado vivo del plan; sólo un plan archivado lo
-  // congela. (La barrera real está en app/actions/plan-traffic.ts.)
-  const editable = planRow.plan.status !== "archived";
+  const [rows, adTypeRows] = await Promise.all([
+    getPlanTraffic(planId),
+    // Catálogo de tipos de ad del cliente: alimenta el desplegable del AM/PM.
+    listAdTypesForClient(planRow.client.id),
+  ]);
+  const adTypes = adTypeRows.map((t) => ({
+    id: t.id,
+    name: t.name,
+    requiresDetail: t.requiresDetail,
+    enabled: t.enabled,
+  }));
 
   return (
     <main className="px-8 py-10 max-w-[1800px] mx-auto w-full">
@@ -109,9 +118,10 @@ export default async function PlanTrafficPage({ params }: Props) {
       <PlanTrafficEditor
         planId={planId}
         projectCode={planRow.project.code}
+        clientSlug={planRow.client.slug}
         planStatus={planRow.plan.status}
         rows={rows}
-        editable={editable}
+        adTypes={adTypes}
       />
     </main>
   );

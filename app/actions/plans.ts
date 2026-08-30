@@ -17,8 +17,10 @@ import {
   type PlanStatus,
 } from "@/lib/plan-status";
 import {
-  findPlanTrafficIssues,
-  trafficErrorMessage,
+  adsetsErrorMessage,
+  findPlanAdIssues,
+  findPlanAdsetIssues,
+  liveErrorMessage,
 } from "@/lib/plan-traffic";
 import { getPlanTraffic, toTrafficPlacements } from "@/db/queries/plan-traffic";
 import {
@@ -29,6 +31,7 @@ import {
   mediaPlanQaRuns,
   mediaPlanSnapshots,
   mediaPlanTrafficAds,
+  mediaPlanTrafficAdsets,
   mediaPlanTrafficBriefs,
   mediaPlans,
   metricsCatalog,
@@ -498,23 +501,18 @@ export async function transitionPlanStatus(input: {
     }
   }
 
-  // Regla dura del TRÁFICO: `live` exige que la sección Tráfico esté completa
-  // —cada placement con su cantidad de adsets, su carpeta y sus anuncios con
-  // tipo, copy, título, subtítulo, CTA y landing— y que TODOS los anuncios
-  // estén marcados como cargados por el trafficker.
+  // Regla dura del TRÁFICO para `live`: todos los ads completos Y marcados
+  // como cargados en la plataforma por el trafficker.
   //
-  // Es la contracara del QA: el QA controla que lo comprado sea lo planeado;
-  // esto controla que lo que hay que armar esté definido y efectivamente
-  // cargado en la plataforma. Sin esto, "live" podía marcarse sobre una
-  // campaña que nadie sabía cómo montar.
-  //
-  // La regla vive en lib/plan-traffic.ts porque la ventana de Tráfico la usa
-  // también, para mostrar qué falta antes de llegar acá.
+  // Que estén COMPLETOS ya lo exigió el QA (ver `completePlanQa`), pero se
+  // re-chequea acá por si el status llegó de una corrección manual en la base;
+  // lo que agrega esta barrera es el CARGADO: `live` significa "está al aire",
+  // y eso sólo lo puede afirmar quien montó los anuncios.
   if (input.to === "live") {
     const trafficRows = await getPlanTraffic(input.planId);
-    const issues = findPlanTrafficIssues(toTrafficPlacements(trafficRows));
+    const issues = findPlanAdIssues(toTrafficPlacements(trafficRows), true);
     if (issues.length > 0) {
-      return { ok: false, error: trafficErrorMessage(issues) };
+      return { ok: false, error: liveErrorMessage(issues) };
     }
   }
 
@@ -583,6 +581,23 @@ export async function transitionPlanStatus(input: {
 
     if (issues.length > 0) {
       return { ok: false, error: readinessErrorMessage(issues, input.to) };
+    }
+
+    // Regla dura de los ADSETS: el planner tiene que haber designado los adsets
+    // de cada placement —con audiencia, budget, pilar creativo y fechas— antes
+    // de que el plan salga a firma. Un plan firmado sin eso no se puede comprar
+    // ni armar, y corregirlo después obliga a una versión nueva con su QA.
+    //
+    // Los ADS (tipo, creativo, copy…) NO se exigen acá a propósito: los
+    // completa el AM/PM más tarde, mientras se arma la campaña. Su gate es el
+    // QA (ver `completePlanQa`).
+    //
+    // La regla vive en lib/plan-traffic.ts porque la ventana de Tráfico la usa
+    // también, para mostrar qué falta antes de llegar acá.
+    const trafficRows = await getPlanTraffic(input.planId);
+    const adsetIssues = findPlanAdsetIssues(toTrafficPlacements(trafficRows));
+    if (adsetIssues.length > 0) {
+      return { ok: false, error: adsetsErrorMessage(adsetIssues, input.to) };
     }
   }
 
@@ -685,10 +700,13 @@ function trafficKey(publisherId: string, placementName: string | null): string {
   return `${publisherId}\u0000${(placementName ?? "").trim().toLowerCase()}`;
 }
 
-type RescuedBrief = {
-  adsetsCount: number;
-  trafficFolderUrl: string | null;
+type RescuedAdset = typeof mediaPlanTrafficAdsets.$inferSelect & {
   ads: (typeof mediaPlanTrafficAds.$inferSelect)[];
+};
+
+type RescuedBrief = {
+  trafficFolderUrl: string | null;
+  adsets: RescuedAdset[];
 };
 
 async function rescuePlanTraffic(
@@ -697,9 +715,7 @@ async function rescuePlanTraffic(
 ): Promise<Map<string, RescuedBrief[]>> {
   const rows = await tx
     .select({
-      placementId: mediaPlanPlacements.id,
       placementName: mediaPlanPlacements.placementName,
-      sortOrder: mediaPlanPlacements.sortOrder,
       publisherId: mediaPlanPublishers.publisherId,
       brief: mediaPlanTrafficBriefs,
     })
@@ -718,31 +734,51 @@ async function rescuePlanTraffic(
   const out = new Map<string, RescuedBrief[]>();
   if (rows.length === 0) return out;
 
-  const ads = await tx
+  const adsets = await tx
     .select()
-    .from(mediaPlanTrafficAds)
+    .from(mediaPlanTrafficAdsets)
     .where(
       inArray(
-        mediaPlanTrafficAds.briefId,
+        mediaPlanTrafficAdsets.briefId,
         rows.map((r) => r.brief.id),
       ),
     )
-    .orderBy(asc(mediaPlanTrafficAds.sortOrder));
+    .orderBy(asc(mediaPlanTrafficAdsets.sortOrder));
 
-  const adsByBrief = new Map<string, (typeof mediaPlanTrafficAds.$inferSelect)[]>();
+  const ads =
+    adsets.length === 0
+      ? []
+      : await tx
+          .select()
+          .from(mediaPlanTrafficAds)
+          .where(
+            inArray(
+              mediaPlanTrafficAds.adsetId,
+              adsets.map((a) => a.id),
+            ),
+          )
+          .orderBy(asc(mediaPlanTrafficAds.sortOrder));
+
+  const adsByAdset = new Map<string, (typeof mediaPlanTrafficAds.$inferSelect)[]>();
   for (const a of ads) {
-    const list = adsByBrief.get(a.briefId) ?? [];
+    const list = adsByAdset.get(a.adsetId) ?? [];
     list.push(a);
-    adsByBrief.set(a.briefId, list);
+    adsByAdset.set(a.adsetId, list);
+  }
+
+  const adsetsByBrief = new Map<string, RescuedAdset[]>();
+  for (const a of adsets) {
+    const list = adsetsByBrief.get(a.briefId) ?? [];
+    list.push({ ...a, ads: adsByAdset.get(a.id) ?? [] });
+    adsetsByBrief.set(a.briefId, list);
   }
 
   for (const r of rows) {
     const key = trafficKey(r.publisherId, r.placementName);
     const list = out.get(key) ?? [];
     list.push({
-      adsetsCount: r.brief.adsetsCount,
       trafficFolderUrl: r.brief.trafficFolderUrl,
-      ads: adsByBrief.get(r.brief.id) ?? [],
+      adsets: adsetsByBrief.get(r.brief.id) ?? [],
     });
     out.set(key, list);
   }
@@ -773,28 +809,44 @@ async function restorePlanTraffic(
       .insert(mediaPlanTrafficBriefs)
       .values({
         placementId: t.placementId,
-        adsetsCount: brief.adsetsCount,
         trafficFolderUrl: brief.trafficFolderUrl,
       })
       .returning({ id: mediaPlanTrafficBriefs.id });
 
-    if (brief.ads.length === 0) continue;
-    await tx.insert(mediaPlanTrafficAds).values(
-      brief.ads.map((a) => ({
-        briefId: newBrief.id,
-        adFormat: a.adFormat,
-        adFormatOther: a.adFormatOther,
-        copy: a.copy,
-        headline: a.headline,
-        subheadline: a.subheadline,
-        cta: a.cta,
-        landingUrl: a.landingUrl,
-        loadedAt: a.loadedAt,
-        loadedByUserId: a.loadedByUserId,
-        loadedByEmail: a.loadedByEmail,
-        sortOrder: a.sortOrder,
-      })),
-    );
+    for (const adset of brief.adsets) {
+      const [newAdset] = await tx
+        .insert(mediaPlanTrafficAdsets)
+        .values({
+          briefId: newBrief.id,
+          name: adset.name,
+          audience: adset.audience,
+          budgetUsd: adset.budgetUsd,
+          creativePillar: adset.creativePillar,
+          startDate: adset.startDate,
+          endDate: adset.endDate,
+          sortOrder: adset.sortOrder,
+        })
+        .returning({ id: mediaPlanTrafficAdsets.id });
+
+      if (adset.ads.length === 0) continue;
+      await tx.insert(mediaPlanTrafficAds).values(
+        adset.ads.map((a) => ({
+          adsetId: newAdset.id,
+          adTypeId: a.adTypeId,
+          adTypeOther: a.adTypeOther,
+          creativeUrl: a.creativeUrl,
+          copy: a.copy,
+          headline: a.headline,
+          subheadline: a.subheadline,
+          clickUrl: a.clickUrl,
+          landingUrl: a.landingUrl,
+          loadedAt: a.loadedAt,
+          loadedByUserId: a.loadedByUserId,
+          loadedByEmail: a.loadedByEmail,
+          sortOrder: a.sortOrder,
+        })),
+      );
+    }
   }
 }
 
