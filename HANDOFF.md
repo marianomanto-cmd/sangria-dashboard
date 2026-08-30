@@ -3780,6 +3780,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+550eed3  `finished` como estado real del plan + separar FIRMADO de VIGENTE (#233)
 b49a96e  Filtro de año: los planes históricos sin fechas caían todos en el año en curso (#231)
 798395e  fix(sql): el backfill de tráfico v2 referenciaba el target del UPDATE en el ON (#229)
 d352768  Tráfico v2: adsets del planner, ads del AM/PM, catálogo de tipos de ad (#227)
