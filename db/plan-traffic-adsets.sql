@@ -129,6 +129,9 @@ begin
          and table_name   = 'media_plan_traffic_ads'
          and column_name  = 'ad_format'
     ) then
+      -- Ojo: la tabla que se actualiza (`a`) NO se puede referenciar en el ON
+      -- de un join del FROM — sólo en SET y WHERE. Por eso `ad_types` entra al
+      -- FROM apareado únicamente por cliente, y el match por slug se hace abajo.
       update public.media_plan_traffic_ads a
          set ad_type_id    = t.id,
              ad_type_other = coalesce(a.ad_type_other, a.ad_format_other)
@@ -139,10 +142,10 @@ begin
         join public.media_plans              pl on pl.id = mp.media_plan_id
         join public.projects                 pr on pr.id = pl.project_id
         join public.ad_types                  t on t.client_id = pr.client_id
-                                               and t.slug = a.ad_format::text
        where a.adset_id = s.id
          and a.ad_type_id is null
-         and a.ad_format is not null;
+         and a.ad_format is not null
+         and t.slug = a.ad_format::text;
     end if;
 
     -- Un ad sin adset a esta altura es huérfano (su brief no existe): se borra.
