@@ -315,10 +315,20 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 ### Filtro de año (Planes, Proyectos, Calendario)
 - Las tabs `/planes`, `/proyectos` y `/reportes/calendario` filtran por **año**,
   con **default = año actual**. Un plan/proyecto pertenece a un año si su
-  **período de placements lo intersecta** (una campaña 2024→2025 cae en ambos);
-  las filas sin fechas cuentan como año actual. En el calendario el reporte se
-  ubica por su **fecha de entrega** (o el cierre del proyecto si todavía no la
-  tiene). Opción **"Todos"** en los tres.
+  **período de placements lo intersecta** (una campaña 2024→2025 cae en ambos).
+  En el calendario el reporte se ubica por su **fecha de entrega** (o el cierre
+  del proyecto si todavía no la tiene). Opción **"Todos"** en los tres.
+- **Filas sin período**: el período se DERIVA de los placements, así que un plan
+  sin placements (o con placements sin fechas) no tiene. El orden de respaldo
+  es: **meses de facturación** (`plan_billings.month`) → si tampoco hay, **año
+  actual**. Sin ese respaldo, la **carga masiva de planes históricos** —cáscaras
+  sin publishers, que existen sólo para colgarles billing— caía entera en el año
+  en curso: un "Boosting Octubre 2024" aparecía bajo el filtro 2026 e **inflaba
+  los KPIs de la página**, que se calculan sobre el set ya filtrado (`Vigentes`
+  contaba esas cáscaras como campañas al aire). **`created_at` no sirve** como
+  señal: la carga masiva creó todos esos planes el mismo día del año en curso.
+  El año actual como último recurso preserva la intención original — un plan que
+  se está armando ahora, todavía sin fechas, no desaparece de la vista default.
 - En el calendario ese filtro cubre **pendientes + en curso (el Gantt)**: son
   los que se ubican por fecha objetivo. El listado de **Reportes enviados**
   tiene el suyo propio (Año + Mes, ver abajo) porque filtra por **fecha de

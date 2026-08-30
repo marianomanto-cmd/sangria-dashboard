@@ -2,6 +2,61 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 28/ago/2026 (3) — Filtro de año: los planes históricos sin fechas caían todos en el año en curso
+
+**El síntoma**: con el filtro en 2026, `/planes` mostraba planes claramente
+viejos (`COPA.m1010.BoostingOctubre`, `RefuerzoRaleigh`, `PuertoRicoPerformance`…),
+todos con `Período — → —` y `Media —`.
+
+**La causa** estaba en `lib/year-filter.ts`: `periodMatchesYear` devolvía
+`year === currentYear` para toda fila sin período. El período del plan se
+**deriva** de `min/max` de las fechas de sus placements, así que un plan sin
+placements no tiene período → caía en el año en curso.
+
+**Por qué esos planes no tienen placements**: son una **carga masiva de planes
+históricos** (2026-08-07) — cáscaras con `publishers = 0`, que existen sólo para
+colgarles facturación. La facturación vive en `plan_billings` y no necesita
+placements.
+
+**El daño no era sólo cosmético**: los KPIs de `/planes` se calculan **sobre el
+set ya filtrado por año**, así que "78 planes" y "74 vigentes" contaban 17
+cáscaras de 2024/2025 como actividad 2026.
+
+**La señal correcta son los meses de facturación.** Se evaluó y **descartó**
+`created_at`: la carga masiva creó los 17 planes el mismo día, así que los
+habría dejado a todos en 2026 igual — cero mejora. En cambio `plan_billings.month`
+da el año real de cada uno (`BoostingOctubre` → `2024-10/2024-11`,
+`PuertoRicoPerformance` → `2025-03/2025-05`), y cubre los 17 de 17.
+
+- **`lib/year-filter.ts`**: `periodMatchesYear` y `availableYears` aceptan un
+  `fallback` (un período de respaldo). `yearSpan` ya servía igual para
+  `YYYY-MM-DD` que para `YYYY-MM`, porque corta los primeros 4 caracteres.
+  El año actual queda como **último** recurso, que era la intención original:
+  un plan que se está armando ahora, sin fechas todavía, no desaparece del
+  default.
+- **`/planes`**: los `min/max` de `plan_billings.month` se sumaron a la query de
+  "consumido" que ya existía — sin round-trip extra, y el left join no altera
+  min/max.
+- **`/proyectos`**: mismo bug latente. `DashboardPlanSummary` suma
+  `billingFirstMonth`/`billingLastMonth` (query nueva en `getDashboardProjects`),
+  y `projectBillingPeriod` los agrega a nivel proyecto.
+- El **calendario** no se toca: ahí siempre se pasa una fecha real.
+
+**Verificado** con los datos reales de prod: los 5 planes de la captura caen en
+2024/2025 según su billing, el plan 2026 con fechas se queda en 2026, un plan
+nuevo sin nada sigue en el default, y la barra de años ahora ofrece 2024/2025
+derivados del billing.
+
+**Pendiente, no bloqueante**: en prod el enum `plan_status` tiene un valor
+**`finished`** que NO está en `db/schema.ts` (16 de esos 17 planes lo usan).
+Consecuencias: `PlanStatusBadge` los pinta como **"draft"** (fallback de status
+desconocido, `plan-status-badge.tsx:57`), no tienen chip de filtro
+(`isPlanStatus('finished')` es `false`) y quedan fuera de
+`PLAN_SIGNED_STATUSES`/`PLAN_COMMITTED_STATUSES` → no entran en portal,
+estimación ni pacing. Para históricos cerrados puede ser lo deseado, pero hay
+que decidirlo: o se suma `finished` al lifecycle como estado terminal, o se
+normalizan esos planes a `archived` y se saca del enum.
+
 ### Cambios de la sesión 28/ago/2026 (2) — Tráfico v2: adsets del planner, ads del AM/PM, catálogo de tipos de ad
 
 Iteración sobre la sección Tráfico que se había mergeado en #225. El pedido:

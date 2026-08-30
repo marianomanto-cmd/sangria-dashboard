@@ -157,6 +157,10 @@ export type DashboardPlanSummary = {
   currentVersion: number;
   periodStart: string | null;
   periodEnd: string | null;
+  // Meses facturados (YYYY-MM). Respaldo para ubicar en el tiempo a los planes
+  // sin placements — los históricos de la carga masiva. Ver lib/year-filter.ts.
+  billingFirstMonth: string | null;
+  billingLastMonth: string | null;
   totalMediaUsd: number;
   totalFeesUsd: number;
   totalUsd: number;
@@ -324,7 +328,7 @@ async function getPlansSummaryForProjects(
   if (baseRows.length === 0) return new Map();
   const planIds = baseRows.map((p) => p.id);
 
-  const [totals, periods] = await Promise.all([
+  const [totals, periods, billingMonths] = await Promise.all([
     db
       .select({
         planId: mediaPlanPublishers.mediaPlanId,
@@ -346,10 +350,24 @@ async function getPlansSummaryForProjects(
       )
       .where(inArray(mediaPlanPublishers.mediaPlanId, planIds))
       .groupBy(mediaPlanPublishers.mediaPlanId),
+    // Rango de meses facturados por plan: el respaldo del filtro de año para
+    // los planes sin placements (ver lib/year-filter.ts).
+    db
+      .select({
+        planId: planBillings.mediaPlanId,
+        firstMonth: sql<string | null>`min(${planBillings.month})`,
+        lastMonth: sql<string | null>`max(${planBillings.month})`,
+      })
+      .from(planBillings)
+      .where(inArray(planBillings.mediaPlanId, planIds))
+      .groupBy(planBillings.mediaPlanId),
   ]);
   const totalByPlan = new Map(totals.map((t) => [t.planId, t.total]));
   const periodByPlan = new Map(
     periods.map((p) => [p.planId, { start: p.periodStart, end: p.periodEnd }]),
+  );
+  const billingMonthsByPlan = new Map(
+    billingMonths.map((b) => [b.planId, { first: b.firstMonth, last: b.lastMonth }]),
   );
 
   const planRows = baseRows.map((p) => ({
@@ -357,6 +375,8 @@ async function getPlansSummaryForProjects(
     totalMediaUsd: totalByPlan.get(p.id) ?? "0",
     periodStart: periodByPlan.get(p.id)?.start ?? null,
     periodEnd: periodByPlan.get(p.id)?.end ?? null,
+    billingFirstMonth: billingMonthsByPlan.get(p.id)?.first ?? null,
+    billingLastMonth: billingMonthsByPlan.get(p.id)?.last ?? null,
   }));
 
   const [
@@ -561,6 +581,8 @@ async function getPlansSummaryForProjects(
       status: p.status,
       currentVersion: p.currentVersion,
       periodStart: p.periodStart,
+      billingFirstMonth: p.billingFirstMonth,
+      billingLastMonth: p.billingLastMonth,
       periodEnd: p.periodEnd,
       totalMediaUsd: totalMedia,
       totalFeesUsd: totalFees,

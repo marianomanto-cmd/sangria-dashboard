@@ -79,6 +79,10 @@ export default async function PlanesPage({ searchParams }: Props) {
   const totalsByPlan = new Map<string, number>();
   const periodsByPlan = new Map<string, { start: string | null; end: string | null }>();
   const spentByPlan = new Map<string, number>();
+  const billingPeriodByPlan = new Map<
+    string,
+    { start: string | null; end: string | null }
+  >();
   if (basePlans.length > 0) {
     const planIds = basePlans.map((p) => p.id);
     const [totals, periods, spent] = await Promise.all([
@@ -110,6 +114,11 @@ export default async function PlanesPage({ searchParams }: Props) {
         .select({
           mediaPlanId: planBillings.mediaPlanId,
           spent: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+          // Meses facturados del plan: el respaldo para ubicar en el tiempo a
+          // los planes sin placements (ver lib/year-filter.ts). Van en esta
+          // misma query porque el left join no altera min/max.
+          firstMonth: sql<string | null>`min(${planBillings.month})`,
+          lastMonth: sql<string | null>`max(${planBillings.month})`,
         })
         .from(planBillings)
         .leftJoin(
@@ -126,8 +135,13 @@ export default async function PlanesPage({ searchParams }: Props) {
         start: p.periodStart,
         end: p.periodEnd,
       });
-    for (const s of spent)
+    for (const s of spent) {
       spentByPlan.set(s.mediaPlanId, Number.parseFloat(s.spent));
+      billingPeriodByPlan.set(s.mediaPlanId, {
+        start: s.firstMonth,
+        end: s.lastMonth,
+      });
+    }
   }
 
   const allPlansUnfiltered = basePlans.map((p) => ({
@@ -136,20 +150,30 @@ export default async function PlanesPage({ searchParams }: Props) {
     spentMediaUsd: (spentByPlan.get(p.id) ?? 0).toFixed(2),
     periodStart: periodsByPlan.get(p.id)?.start ?? null,
     periodEnd: periodsByPlan.get(p.id)?.end ?? null,
+    billingPeriod: billingPeriodByPlan.get(p.id) ?? null,
   }));
 
   // Filtro de año (default: año actual) en memoria, sobre el período del plan.
   const currentYear = new Date().getFullYear();
   const selectedYear = resolveYearParam(sp.year, currentYear);
   const years = availableYears(
-    allPlansUnfiltered.map((p) => ({ start: p.periodStart, end: p.periodEnd })),
+    allPlansUnfiltered.map((p) => ({
+      start: p.periodStart,
+      end: p.periodEnd,
+      fallback: p.billingPeriod,
+    })),
     currentYear,
   );
   const allPlans =
     selectedYear == null
       ? allPlansUnfiltered
       : allPlansUnfiltered.filter((p) =>
-          periodMatchesYear({ start: p.periodStart, end: p.periodEnd }, selectedYear, currentYear),
+          periodMatchesYear(
+            { start: p.periodStart, end: p.periodEnd },
+            selectedYear,
+            currentYear,
+            p.billingPeriod,
+          ),
         );
 
   const counts = Object.fromEntries(
