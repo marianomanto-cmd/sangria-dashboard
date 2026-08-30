@@ -4229,6 +4229,26 @@ genere data histórica y se pueda benchmarkear.
 
 ## Gotchas / cosas que vale la pena recordar
 
+### SQL de migraciones
+
+- **`UPDATE ... FROM a JOIN b ON …`: la tabla que se actualiza NO se puede
+  referenciar en el `ON` del join** — sólo en `SET` y en `WHERE`. Postgres tira
+  `invalid reference to FROM-clause entry for table "x"` / *"There is an entry
+  for table x, but it cannot be referenced from this part of the query"*. El
+  backfill de `db/plan-traffic-adsets.sql` se comió exactamente eso: apareaba
+  `ad_types` con `on t.client_id = pr.client_id and t.slug = a.ad_format::text`,
+  donde `a` era el target del UPDATE. La solución es dejar en el `ON` sólo lo
+  que apareja las tablas del `FROM` entre sí, y mover la condición contra el
+  target al `WHERE`.
+- **Validá las migraciones contra un Postgres real antes de mandarlas.** En este
+  contenedor hay uno completo (`/usr/lib/postgresql/16/bin`), pero `initdb` no
+  corre como root: `useradd -m pgtest` y después
+  `su pgtest -c "…/initdb -D /home/pgtest/pgdata -U postgres --auth=trust"` +
+  `pg_ctl -o '-k /home/pgtest/run -p 5433 -c listen_addresses='`. Con eso se
+  arma la tabla mínima que la migración toca, se corre el script y se chequea el
+  resultado — incluida la **idempotencia** (correrlo dos veces) y el camino
+  desde una base limpia.
+
 ### Vercel + Supabase
 - **Transaction Pooler (6543)**, no Session Pooler (5432) ni Direct.
 - `DATABASE_URL` debe estar marcado para Production, Preview y Development
