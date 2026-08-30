@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { Building2, ChevronRight } from "lucide-react";
+import { BudgetOriginSelector } from "@/components/budget-origin-selector";
 import { EmptyState, PageShell } from "@/components/page-shell";
+import { PlanStatusBadge } from "@/components/plan-status-badge";
+import { YearSelector } from "@/components/year-selector";
 import {
   ConsumptionBar,
   FreshnessDots,
@@ -8,21 +11,53 @@ import {
   relativeUpdateLabel,
 } from "@/components/campaign-tracker-bits";
 import {
+  CAMPAIGN_HUB_PLAN_STATUSES,
   getCampaignTrackerHub,
+  isCampaignHubPlanStatus,
   type CampaignHubClient,
   type CampaignHubFilter,
+  type CampaignHubSignedStatus,
 } from "@/db/queries/campaign-tracker";
+import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { buildHrefWithClient } from "@/lib/client-filter";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { DEFAULT_LANGUAGE, formatDate } from "@/lib/i18n";
+import { PLAN_STATUS_LABELS } from "@/lib/plan-status";
+import { resolveYearParam } from "@/lib/year-filter";
 
 type Props = {
-  searchParams: Promise<{ client?: string; filter?: string }>;
+  searchParams: Promise<{
+    client?: string;
+    filter?: string;
+    origin?: string;
+    status?: string;
+    year?: string;
+  }>;
 };
 
 function parseFilter(raw: string | undefined): CampaignHubFilter {
   return raw === "concluido" || raw === "todos" ? raw : "vigente";
+}
+
+// Href del hub preservando el resto de los filtros. Los defaults NO se
+// escriben en la URL ('vigente' para el estado de tracking, el año corriente
+// para el año), así que /campaign-tracker a secas es la vista por default.
+function buildTrackerHref(params: {
+  filter: CampaignHubFilter;
+  planStatus: CampaignHubSignedStatus | null;
+  origin: string | null;
+  clientSlug: string | null;
+  year: string | undefined;
+}): string {
+  const qs = new URLSearchParams();
+  if (params.filter !== "vigente") qs.set("filter", params.filter);
+  if (params.planStatus) qs.set("status", params.planStatus);
+  if (params.origin) qs.set("origin", params.origin);
+  if (params.clientSlug) qs.set("client", params.clientSlug);
+  if (params.year) qs.set("year", params.year);
+  const q = qs.toString();
+  return q ? `/campaign-tracker?${q}` : "/campaign-tracker";
 }
 
 export default async function CampaignTrackerPage({ searchParams }: Props) {
@@ -31,10 +66,26 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
   const lang = client?.language ?? DEFAULT_LANGUAGE;
   const filter = parseFilter(sp.filter);
 
-  const { clients, totals, statusCounts } = await getCampaignTrackerHub(
-    client?.id ?? null,
-    filter,
-  );
+  // Los tres filtros se validan contra su fuente de verdad antes de tocar la
+  // query: un link viejo con un origin borrado o un status que ya no existe cae
+  // en "todos" en vez de devolver 0 filas sin explicación.
+  const allOrigins = await listAllBudgetOrigins({ clientId: client?.id ?? null });
+  const validOrigin =
+    sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
+  const planStatus =
+    sp.status && isCampaignHubPlanStatus(sp.status) ? sp.status : null;
+  const currentYear = new Date().getFullYear();
+  const selectedYear = resolveYearParam(sp.year, currentYear);
+
+  const { clients, totals, statusCounts, planStatusCounts, years } =
+    await getCampaignTrackerHub({
+      clientId: client?.id ?? null,
+      filter,
+      budgetOriginId: validOrigin,
+      planStatus,
+      year: selectedYear,
+      currentYear,
+    });
 
   const filterLabels: Record<CampaignHubFilter, { word: string; words: string }> = {
     vigente: { word: "vigente", words: "vigentes" },
@@ -42,6 +93,13 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
     todos: { word: "", words: "" },
   };
   const fl = filterLabels[filter];
+  // Para el empty state. `sp.year` (y no `selectedYear`) porque el año tiene
+  // default: sin tocar nada estás viendo el año corriente, y eso no es "filtro
+  // puesto por el usuario". El aviso del año va aparte, y sólo si hay planes en
+  // otros años que el filtro esté escondiendo.
+  const hasNarrowingFilters =
+    validOrigin !== null || planStatus !== null || sp.year !== undefined;
+  const yearHidesPlans = selectedYear !== null && years.length > 1;
 
   const title = client
     ? `Campaign Tracker · ${client.name}`
@@ -55,27 +113,103 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
 
   return (
     <PageShell eyebrow="Campaign Tracker" title={title} subtitle={subtitle}>
-      {/* Filtro de estado */}
+      <BudgetOriginSelector
+        origins={allOrigins}
+        current={validOrigin}
+        basePath="/campaign-tracker"
+        preserveParams={{
+          filter: filter === "vigente" ? undefined : filter,
+          status: planStatus ?? undefined,
+          client: client?.slug,
+          year: sp.year,
+        }}
+      />
+
+      <div className="mb-4">
+        <YearSelector
+          years={years}
+          current={selectedYear}
+          currentYear={currentYear}
+          basePath="/campaign-tracker"
+          preserveParams={{
+            filter: filter === "vigente" ? undefined : filter,
+            status: planStatus ?? undefined,
+            origin: validOrigin ?? undefined,
+            client: client?.slug,
+          }}
+          lang={lang}
+        />
+      </div>
+
+      {/* Estado de tracking (derivado de fechas) + status del plan (el de la
+          DB). Son cosas distintas y por eso van en dos grupos: un plan puede
+          estar 'concluido' por fecha y seguir marcado `live`. */}
       <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
         <FilterPill label="Estado">
           <FilterChoice
-            current={filter}
-            value="vigente"
+            isActive={filter === "vigente"}
+            href={buildTrackerHref({
+              filter: "vigente",
+              planStatus,
+              origin: validOrigin,
+              clientSlug: client?.slug ?? null,
+              year: sp.year,
+            })}
             label={`Vigentes (${statusCounts.vigente})`}
-            clientSlug={client?.slug ?? null}
           />
           <FilterChoice
-            current={filter}
-            value="concluido"
+            isActive={filter === "concluido"}
+            href={buildTrackerHref({
+              filter: "concluido",
+              planStatus,
+              origin: validOrigin,
+              clientSlug: client?.slug ?? null,
+              year: sp.year,
+            })}
             label={`Concluidos (${statusCounts.concluido})`}
-            clientSlug={client?.slug ?? null}
           />
           <FilterChoice
-            current={filter}
-            value="todos"
+            isActive={filter === "todos"}
+            href={buildTrackerHref({
+              filter: "todos",
+              planStatus,
+              origin: validOrigin,
+              clientSlug: client?.slug ?? null,
+              year: sp.year,
+            })}
             label={`Todos (${statusCounts.vigente + statusCounts.concluido})`}
-            clientSlug={client?.slug ?? null}
           />
+        </FilterPill>
+
+        <FilterPill label="Status del plan">
+          <FilterChoice
+            isActive={planStatus === null}
+            href={buildTrackerHref({
+              filter,
+              planStatus: null,
+              origin: validOrigin,
+              clientSlug: client?.slug ?? null,
+              year: sp.year,
+            })}
+            label={`Todos (${CAMPAIGN_HUB_PLAN_STATUSES.reduce(
+              (sum, st) => sum + planStatusCounts[st],
+              0,
+            )})`}
+          />
+          {CAMPAIGN_HUB_PLAN_STATUSES.map((st) => (
+            <FilterChoice
+              key={st}
+              isActive={planStatus === st}
+              href={buildTrackerHref({
+                filter,
+                planStatus: st,
+                origin: validOrigin,
+                clientSlug: client?.slug ?? null,
+                year: sp.year,
+              })}
+              label={`${PLAN_STATUS_LABELS[st]} (${planStatusCounts[st]})`}
+            />
+          ))}
         </FilterPill>
       </div>
 
@@ -145,11 +279,16 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
                 : "Sin planes vigentes para cargar"
           }
           hint={
-            filter === "concluido"
-              ? "Acá quedan los planes aprobados cuyo período ya terminó. Aparecen una vez que pasa la fecha de fin del último placement."
-              : filter === "todos"
-                ? "Aparecen los planes aprobados con período definido (vigentes y concluidos)."
-                : "Aparecen acá los planes aprobados cuyo período incluye la fecha de hoy."
+            (hasNarrowingFilters
+              ? "Ningún plan coincide con los filtros aplicados."
+              : filter === "concluido"
+                ? "Acá quedan los planes aprobados cuyo período ya terminó. Aparecen una vez que pasa la fecha de fin del último placement."
+                : filter === "todos"
+                  ? "Aparecen los planes aprobados con período definido (vigentes y concluidos)."
+                  : "Aparecen acá los planes aprobados cuyo período incluye la fecha de hoy.") +
+            (yearHidesPlans
+              ? ` El año está en ${selectedYear}: hay planes en otros años, probá con “Todos”.`
+              : "")
           }
         />
       ) : (
@@ -224,6 +363,13 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
                 = el período del plan ya terminó (queda como histórico)
               </span>
             )}
+            <span className="flex items-center gap-1.5">
+              <PlanStatusBadge status="live" size="sm" />
+              = status del plan en la app. Un plan{" "}
+              <span className="font-medium">concluido</span> que sigue{" "}
+              <span className="font-medium">live</span> quedó sin cerrar:
+              cerralo desde el plan o marcá el reporte final del proyecto.
+            </span>
           </div>
         </>
       )}
@@ -242,24 +388,17 @@ function FilterPill({ label, children }: { label: string; children: React.ReactN
   );
 }
 
+// Chip de filtro. El href lo arma `buildTrackerHref` en el cuerpo de la página
+// (que es quien conoce TODOS los filtros activos), así que acá sólo se pinta.
 function FilterChoice({
-  current,
-  value,
+  href,
   label,
-  clientSlug,
+  isActive,
 }: {
-  current: CampaignHubFilter;
-  value: CampaignHubFilter;
+  href: string;
   label: string;
-  clientSlug: string | null;
+  isActive: boolean;
 }) {
-  const isActive = current === value;
-  const params = new URLSearchParams();
-  // 'vigente' es default — no lo escribimos en la URL.
-  if (value !== "vigente") params.set("filter", value);
-  if (clientSlug) params.set("client", clientSlug);
-  const qs = params.toString();
-  const href = qs ? `/campaign-tracker?${qs}` : "/campaign-tracker";
   return (
     <Link
       href={href}
@@ -312,6 +451,10 @@ function ClientGroup({
         );
         const showConcluidoBadge =
           plan.status === "concluido" && filter !== "concluido";
+        // El desfasaje que motivó el filtro de status: el período del plan
+        // terminó pero el plan sigue marcado Live.
+        const staleLive =
+          plan.status === "concluido" && plan.planStatus === "live";
         return (
           <tr
             key={plan.planId}
@@ -333,6 +476,16 @@ function ClientGroup({
                     concluido
                   </span>
                 )}
+                <span
+                  className="ml-2 inline-flex align-middle"
+                  title={
+                    staleLive
+                      ? "El período del plan ya terminó pero sigue marcado Live. Cerralo desde el plan (\u201cMarcar terminado\u201d) o marcá el reporte final del proyecto como entregado."
+                      : undefined
+                  }
+                >
+                  <PlanStatusBadge status={plan.planStatus} size="sm" />
+                </span>
                 <div className="text-xs text-muted mt-0.5">
                   {plan.projectName} · {plan.budgetOriginName} ·{" "}
                   {plan.placementsCount} placement
@@ -437,6 +590,10 @@ function ClientGroupCards({
           );
           const showConcluidoBadge =
             plan.status === "concluido" && filter !== "concluido";
+          // El desfasaje que motivó el filtro de status: el período del plan
+          // terminó pero el plan sigue marcado Live.
+          const staleLive =
+            plan.status === "concluido" && plan.planStatus === "live";
           return (
             <Link
               key={plan.planId}
@@ -457,6 +614,16 @@ function ClientGroupCards({
                       concluido
                     </span>
                   )}
+                  <span
+                    className="ml-2 inline-flex align-middle"
+                    title={
+                      staleLive
+                        ? "El período del plan ya terminó pero sigue marcado Live. Cerralo desde el plan (\u201cMarcar terminado\u201d) o marcá el reporte final del proyecto como entregado."
+                        : undefined
+                    }
+                  >
+                    <PlanStatusBadge status={plan.planStatus} size="sm" />
+                  </span>
                   <div className="text-xs text-muted mt-0.5">
                     {plan.projectName} · {plan.budgetOriginName} ·{" "}
                     {plan.placementsCount} placement

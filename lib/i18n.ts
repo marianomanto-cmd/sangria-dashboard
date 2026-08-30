@@ -204,6 +204,7 @@ const DICT: Record<string, Record<Language, string>> = {
   // Paso de QA del plan: aprobado → QA realizado → live. Ver lib/plan-status.ts.
   "status.qa_done": { en: "QA done", es: "QA realizado" },
   "status.live": { en: "live", es: "live" },
+  "status.finished": { en: "finished", es: "finalizado" },
   "status.archived": { en: "archived", es: "archivado" },
   "status.planning": { en: "planning", es: "planificación" },
   "status.active": { en: "active", es: "activo" },

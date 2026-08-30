@@ -1,9 +1,9 @@
 // Badge del estado de un PLAN de medios (draft / ready_to_send / approved /
-// qa_done / live / archived). Fuente de verdad ÚNICA del label + color: antes
-// el mapa de estilos vivía duplicado en el editor, el detalle de proyecto y las
-// tablas de Planes/Proyectos, y el label de `ready_to_send` había driftado
-// entre "ready" y "ready to send". Espejo de `StatusBadge` (estados de
-// proyecto).
+// qa_done / live / finished / archived). Fuente de verdad ÚNICA del label + el
+// color: antes el mapa de estilos vivía duplicado en el editor, el detalle de
+// proyecto y las tablas de Planes/Proyectos, y el label de `ready_to_send`
+// había driftado entre "ready" y "ready to send". Espejo de `StatusBadge`
+// (estados de proyecto).
 //
 // Los labels y el significado de cada estado salen de lib/plan-status.ts (el
 // mismo módulo que usan las queries y las transiciones), acá vive sólo el look.
@@ -11,6 +11,10 @@
 // Lectura de los colores: `approved` es azul y NO verde a propósito — el plan
 // está firmado pero todavía no al aire: le falta el QA. El verde queda para
 // `live`, que es lo único que significa "campaña corriendo".
+//
+// `finished` es gris oscuro y NO gris claro: es el cierre normal de una
+// campaña que corrió, y tiene que distinguirse de `draft`/`archived` (que son
+// "todavía nada" y "no pasó nunca"). Sigue contando en todo lo histórico.
 //
 // `size`: `md` (default) para headers y la tabla de planes; `sm` para las
 // filas compactas del breakdown de la tabla de proyectos.
@@ -37,6 +41,10 @@ const STYLES: Record<PlanStatus, { className: string; dot: string }> = {
   live: {
     className: "bg-success-soft text-success border-success-soft",
     dot: "bg-success",
+  },
+  finished: {
+    className: "bg-paper-2 text-ink-2 border-line",
+    dot: "bg-ink-2",
   },
   archived: { className: "bg-paper-2 text-muted border-line", dot: "bg-muted" },
 };

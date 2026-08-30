@@ -12,8 +12,10 @@ import {
   readinessErrorMessage,
 } from "@/lib/plan-readiness";
 import {
+  isPlanTerminal,
   PLAN_STATUS_LABELS,
   PLAN_STATUS_TRANSITIONS,
+  planTerminalError,
   type PlanStatus,
 } from "@/lib/plan-status";
 import {
@@ -404,8 +406,8 @@ export async function updatePlanMetadata(input: {
     .where(eq(mediaPlans.id, input.planId))
     .limit(1);
   if (!before) return { ok: false, error: "Plan no encontrado" };
-  if (before.status === "archived") {
-    return { ok: false, error: "Plan archivado, no se puede editar" };
+  if (isPlanTerminal(before.status)) {
+    return { ok: false, error: planTerminalError(before.status) };
   }
 
   const update: Record<string, unknown> = {};
@@ -510,7 +512,13 @@ export async function transitionPlanStatus(input: {
   //
   // La regla vive en lib/plan-traffic.ts porque la ventana de Tráfico la usa
   // también, para mostrar qué falta antes de llegar acá.
-  if (input.to === "live") {
+  //
+  // Excepción: REABRIR un plan cerrado (`finished` → `live`) no arma nada
+  // nuevo, sólo deshace un cierre de más. Exigirle el brief completo dejaría
+  // trabados a todos los planes viejos, que terminaron antes de que la ventana
+  // de Tráfico existiera. El QA de arriba SÍ se sigue exigiendo: eso es sobre
+  // los números del plan, no sobre el armado.
+  if (input.to === "live" && before.status !== "finished") {
     const trafficRows = await getPlanTraffic(input.planId);
     const issues = findPlanTrafficIssues(toTrafficPlacements(trafficRows));
     if (issues.length > 0) {
@@ -1145,8 +1153,8 @@ export async function addPublisherToPlan(input: {
     .where(eq(mediaPlans.id, input.planId))
     .limit(1);
   if (!plan) return { ok: false, error: "Plan no encontrado" };
-  if (plan.status === "archived") {
-    return { ok: false, error: "Plan archivado" };
+  if (isPlanTerminal(plan.status)) {
+    return { ok: false, error: planTerminalError(plan.status) };
   }
 
   // Sort order = max + 1
@@ -1240,8 +1248,8 @@ export async function duplicatePlanPublisher(
     .where(eq(mediaPlans.id, src.mediaPlanId))
     .limit(1);
   if (!plan) return { ok: false, error: "Plan no encontrado" };
-  if (plan.status === "archived") {
-    return { ok: false, error: "Plan archivado" };
+  if (isPlanTerminal(plan.status)) {
+    return { ok: false, error: planTerminalError(plan.status) };
   }
 
   const srcPlacements = await db
@@ -1572,8 +1580,8 @@ export async function bulkUpdatePlacementDates(input: {
     return {
       ok: false,
       error:
-        plan.status === "archived"
-          ? "Plan archivado, no se puede editar"
+        isPlanTerminal(plan.status)
+          ? planTerminalError(plan.status)
           : `El plan está en "${PLAN_STATUS_LABELS[plan.status]}". Para cambiar las fechas abrí una nueva versión con "Editar (nueva versión)": el plan vuelve a borrador y, al aprobarlo, hay que rehacer el QA antes de marcarlo Live.`,
     };
   }

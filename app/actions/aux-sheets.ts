@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
+import { isPlanTerminal, planTerminalError } from "@/lib/plan-status";
 import {
   AUX_SHEET_DEFAULT_COLS,
   AUX_SHEET_DEFAULT_NAME,
@@ -46,7 +47,8 @@ export async function createAuxSheet(input: {
     .where(eq(mediaPlans.id, input.planId))
     .limit(1);
   if (!plan || plan.deletedAt) return { ok: false, error: "Plan no encontrado" };
-  if (plan.status === "archived") return { ok: false, error: "Plan archivado" };
+  if (isPlanTerminal(plan.status))
+    return { ok: false, error: planTerminalError(plan.status) };
 
   // La grilla nace con el tamaño default para que el editor muestre filas
   // vacías listas para tipear (como un tab nuevo de Excel).

@@ -304,6 +304,14 @@ export default async function PlanesPage({ searchParams }: Props) {
             clientSlug={client?.slug ?? null}
             yearParam={sp.year}
           />
+          <FilterChoice
+            current={filter}
+            value="finished"
+            label={`${lang === "es" ? "Terminados" : "Finished"} (${counts.finished})`}
+            originId={validOrigin}
+            clientSlug={client?.slug ?? null}
+            yearParam={sp.year}
+          />
         </FilterPill>
       </div>
 

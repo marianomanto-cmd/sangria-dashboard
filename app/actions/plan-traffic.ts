@@ -7,6 +7,7 @@ import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
 import { normalizeExternalUrl } from "@/lib/external-url";
 import { isTrafficAdFormat } from "@/lib/plan-traffic";
+import { isPlanTerminal } from "@/lib/plan-status";
 import {
   mediaPlanPlacements,
   mediaPlanPublishers,
@@ -58,7 +59,8 @@ async function planCtxForPlacement(placementId: string): Promise<PlanCtx | null>
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(and(eq(mediaPlanPlacements.id, placementId), isNull(mediaPlans.deletedAt)))
     .limit(1);
-  if (!row || row.status === "archived") return null;
+  // Un plan terminado o archivado congela el brief (ver PLAN_TERMINAL_STATUSES).
+  if (!row || isPlanTerminal(row.status)) return null;
   return { planId: row.planId, projectCode: row.projectCode };
 }
 

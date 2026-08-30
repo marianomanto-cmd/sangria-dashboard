@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { clients, mediaPlans, projects } from "@/db/schema";
 import { getPlanTraffic } from "@/db/queries/plan-traffic";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
+import { isPlanTerminal } from "@/lib/plan-status";
 import { PlanTrafficEditor } from "./traffic-editor";
 
 type Props = {
@@ -45,9 +46,10 @@ export default async function PlanTrafficPage({ params }: Props) {
   const rows = await getPlanTraffic(planId);
 
   // El brief se llena mientras se arma la campaña — o sea DESPUÉS de aprobar.
-  // Por eso es editable en todo estado vivo del plan; sólo un plan archivado lo
-  // congela. (La barrera real está en app/actions/plan-traffic.ts.)
-  const editable = planRow.plan.status !== "archived";
+  // Por eso es editable en todo estado VIVO del plan; lo congelan los estados
+  // terminales (`finished` cuando la campaña terminó, `archived` cuando el plan
+  // se reemplazó o canceló). La barrera real está en app/actions/plan-traffic.ts.
+  const editable = !isPlanTerminal(planRow.plan.status);
 
   return (
     <main className="px-8 py-10 max-w-[1800px] mx-auto w-full">

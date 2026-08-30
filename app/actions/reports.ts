@@ -1,17 +1,19 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
   clients,
   manualReports,
+  mediaPlans,
   projects,
   projectReports,
   reportComments,
 } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
+import { PLAN_SIGNED_OPEN_STATUSES } from "@/lib/plan-status";
 
 type Result = { ok: true } | { ok: false; error: string };
 type ReportKind = "project" | "manual";
@@ -26,7 +28,9 @@ type ReportKind = "project" | "manual";
 //   • setReportDeliveryDate(date) → escribe delivery_date y reescribe
 //     delivery_date_assigned_at = now().
 //   • markReportDelivered → delivered_at=now() + (si es project) project.status
-//     pasa a 'reportado'. Para manual queda en la DB para historial.
+//     pasa a 'reportado' Y todos los planes firmados del proyecto pasan a
+//     'finished' (ver closeProjectPlans). Para manual queda en la DB para
+//     historial.
 //   • Reportes manuales: createManualReport / deleteManualReport (no hay
 //     equivalente para project_reports porque esos los maneja el lifecycle
 //     del proyecto).
@@ -181,6 +185,60 @@ export async function setReportDeliveryDate(input: {
   return { ok: true };
 }
 
+// Cierra los planes de un proyecto que acaba de pasar a 'reportado'.
+//
+// El proyecto reportado es el estado final: las campañas terminaron y el
+// reporte ya se le entregó al cliente. Un plan que sigue en `live` ahí dentro
+// está mintiendo — la campaña no está al aire. Ese drift es el que dejó planes
+// de 2024 y 2025 figurando como Live: nada los cerraba, porque el cierre del
+// proyecto no bajaba a sus planes.
+//
+// Pasan a `finished`, NO a `archived`: `finished` es parte de
+// PLAN_SIGNED_STATUSES, así que el plan sigue contando en el portal del
+// cliente, en analysis, en el dashboard, en billing y en el histórico del
+// campaign tracker. Archivarlos habría borrado 2024 y 2025 de todas esas
+// vistas. Ver lib/plan-status.ts.
+//
+// Es idempotente: filtra por PLAN_SIGNED_OPEN_STATUSES (firmados SIN los ya
+// cerrados), así que re-correrlo no toca nada ni ensucia la auditoría. Los
+// `draft` / `ready_to_send` / `archived` quedan como están: nunca fueron una
+// campaña al aire.
+async function closeProjectPlans(projectId: string): Promise<void> {
+  // Leemos primero para poder auditar el status REAL de cada plan; el
+  // `returning` del update ya trae el nuevo.
+  const toClose = await db
+    .select({ id: mediaPlans.id, status: mediaPlans.status })
+    .from(mediaPlans)
+    .where(
+      and(
+        eq(mediaPlans.projectId, projectId),
+        inArray(mediaPlans.status, [...PLAN_SIGNED_OPEN_STATUSES]),
+        isNull(mediaPlans.deletedAt),
+      ),
+    );
+  if (toClose.length === 0) return;
+
+  await db
+    .update(mediaPlans)
+    .set({ status: "finished" })
+    .where(
+      inArray(
+        mediaPlans.id,
+        toClose.map((p) => p.id),
+      ),
+    );
+
+  for (const plan of toClose) {
+    await recordAudit({
+      entityType: "media_plan",
+      entityId: plan.id,
+      action: "status_change",
+      beforeJson: { status: plan.status },
+      afterJson: { status: "finished", reason: "proyecto reportado" },
+    });
+  }
+}
+
 export async function markReportDelivered(input: {
   reportId: string;
   kind: ReportKind;
@@ -228,6 +286,8 @@ export async function markReportDelivered(input: {
         beforeJson: { status: projBefore.status },
         afterJson: { status: "reportado" },
       });
+
+      await closeProjectPlans(before.projectId);
     }
 
     await recordAudit({

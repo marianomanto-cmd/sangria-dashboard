@@ -18,6 +18,7 @@ import {
   updateTrafficAd,
   updateTrafficBrief,
 } from "@/app/actions/plan-traffic";
+import { isPlanFinished, isPlanTerminal } from "@/lib/plan-status";
 import type { PlanTrafficAd, PlanTrafficPlacement } from "@/db/queries/plan-traffic";
 import {
   adFormatLabel,
@@ -137,9 +138,10 @@ export function PlanTrafficEditor({
         </p>
       </section>
 
-      {planStatus === "archived" && (
+      {isPlanTerminal(planStatus) && (
         <p className="text-xs text-muted">
-          El plan está archivado: la sección Tráfico queda de sólo lectura.
+          El plan está {isPlanFinished(planStatus) ? "terminado" : "archivado"}:
+          la sección Tráfico queda de sólo lectura.
         </p>
       )}
 

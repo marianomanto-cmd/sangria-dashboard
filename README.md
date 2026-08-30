@@ -171,7 +171,7 @@ components/                 # UI compartida
   report-comments.tsx       # tablerito de comentarios por reporte del calendario (botón + modal con autor/fecha/hora)
   report-generator-form.tsx # /reportes/generador: filtros cascading + column picker URL-based
   button.tsx                # Button + buttonVariants() — primitivo único para CTAs (primary/secondary/ghost/danger, xs/sm/md/lg). NO volver a escribir bg-ink inline
-  plan-status-badge.tsx     # PlanStatusBadge — badge de estado del plan (draft/ready_to_send/approved/qa_done/live/archived), prop size md/sm. Labels de lib/plan-status.ts. Fuente única; no duplicar
+  plan-status-badge.tsx     # PlanStatusBadge — badge de estado del plan (draft/ready_to_send/approved/qa_done/live/finished/archived), prop size md/sm. Labels de lib/plan-status.ts. Fuente única; no duplicar
   billing-status-badge.tsx  # BillingStatusBadge — badge de estado del billing, lang-aware es/en, prop size md/sm. Fuente única; no duplicar
   toast.tsx                 # ToastProvider + useToast() — feedback no bloqueante success/error/info con live-region (role=alert/status)
   confirm-dialog.tsx        # ConfirmProvider + useConfirm() — confirmación promise-based con focus-trap, Escape, backdrop. No usar confirm() nativo
@@ -188,6 +188,7 @@ db/
   plan-publisher-balance-check.sql # diagnóstico: publishers cuyo total no cuadra con la suma de placements, en planes ya congelados (previos a la regla de cuadre)
   plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
   plan-traffic.sql          # migración del Tráfico del plan: enum traffic_ad_format + tablas media_plan_traffic_briefs/_ads + índices + RLS
+  finish-reported-plans.sql # migración del cierre de planes: enum `finished` + diagnóstico + backfill de los planes que quedaron live en proyectos ya reportados
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
@@ -309,8 +310,9 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   duros de `/billing` (budget origin / proyecto / estado / rango de meses)
   siguen siendo URL-based y el buscador acota lo que esos filtros ya dejaron.
 
-### Filtro de año (Planes, Proyectos, Calendario)
-- Las tabs `/planes`, `/proyectos` y `/reportes/calendario` filtran por **año**,
+### Filtro de año (Planes, Proyectos, Campaign Tracker, Calendario)
+- Las tabs `/planes`, `/proyectos`, `/campaign-tracker` y
+  `/reportes/calendario` filtran por **año**,
   con **default = año actual**. Un plan/proyecto pertenece a un año si su
   **período de placements lo intersecta** (una campaña 2024→2025 cae en ambos);
   las filas sin fechas cuentan como año actual. En el calendario el reporte se
@@ -321,7 +323,8 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   tiene el suyo propio (Año + Mes, ver abajo) porque filtra por **fecha de
   envío** — cada listado usa la fecha que le corresponde y no se pisan.
 - Helpers puros en `lib/year-filter.ts` (`periodMatchesYear`, `availableYears`,
-  `resolveYearParam`). Planes/Proyectos usan `components/year-selector.tsx`
+  `resolveYearParam`). Planes / Proyectos / Campaign Tracker usan
+  `components/year-selector.tsx`
   (pills URL-based vía `?year=`; el año actual va sin param). El Calendario lo
   resuelve client-side (useState, mismo patrón que su filtro de budget origin).
   Todo el filtrado es en memoria sobre las filas ya cargadas.
@@ -346,9 +349,14 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 ### El plan vive dentro del proyecto, peer con otros planes
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).
 - Cada plan tiene su propio lifecycle:
-  `draft` → `ready_to_send` → `approved` → `qa_done` → `live` → `archived`.
-  Los sets de estado, el mapa de transiciones y los labels viven en
-  **`lib/plan-status.ts`** — fuente única que importan queries, actions y UI.
+  `draft` → `ready_to_send` → `approved` → `qa_done` → `live` → `finished`,
+  con `archived` colgando de cualquiera. Los sets de estado, el mapa de
+  transiciones y los labels viven en **`lib/plan-status.ts`** — fuente única
+  que importan queries, actions y UI.
+- **`finished` vs `archived`**: `finished` es el cierre normal (la campaña
+  terminó) y sigue contando como plan firmado en todo lo histórico; `archived`
+  es el anormal (reemplazado o cancelado) y sale de las vistas. Ver "Cierre del
+  plan" abajo.
 - **`approved` ya NO significa "al aire"**: significa *firmado por el cliente,
   falta el QA*. La campaña sale al aire recién en `live`, y **sólo se llega a
   `live` desde `qa_done`** (ver "QA del plan" abajo).
@@ -357,11 +365,18 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   cada placement briefeado y todos sus anuncios marcados como cargados (ver
   "Tráfico del plan" abajo).
 - **Nunca hardcodear `status = 'approved'` en una query nueva.** Usar los sets:
-  - `PLAN_SIGNED_STATUSES` (`approved` + `qa_done` + `live`) = "plan firmado,
-    vigente" — es el reemplazo del viejo `= 'approved'` en portal, analysis,
-    campaign tracker, pendings y dashboard;
+  - `PLAN_SIGNED_STATUSES` (`approved` + `qa_done` + `live` + `finished`) =
+    "plan firmado" — es el reemplazo del viejo `= 'approved'` en portal,
+    analysis, campaign tracker, pendings y dashboard. Incluye `finished` a
+    propósito: una campaña que terminó sigue siendo plata comprometida y
+    facturada;
+  - `PLAN_SIGNED_OPEN_STATUSES` (los firmados **sin** `finished`) = "firmado y
+    todavía abierto" — es lo que hay que cerrar cuando el proyecto se reporta;
   - `PLAN_COMMITTED_STATUSES` (los firmados + `ready_to_send`) = "compromete
-    plata" — estimación, pacing y comparables del simulador.
+    plata" — estimación, pacing y comparables del simulador;
+  - `PLAN_TERMINAL_STATUSES` (`finished` + `archived`) = "el plan no se toca
+    más" — congela toda escritura, incluidas las que un plan firmado vivo sí
+    permite (Tráfico, hojas auxiliares).
 - Los planes pueden solapar fechas y estar todos vigentes al mismo tiempo.
 - **Regla dura — el plan tiene que estar COMPLETO para pasar a Listo/Aprobado**:
   `transitionPlanStatus` bloquea el pase a `ready_to_send` **y** a `approved` si
@@ -541,6 +556,39 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   falta. **No** es público (no está en `isPublicPlanExportPath`): el brief es
   material de producción, no algo que se le manda al cliente.
 
+### Cierre del plan: `finished` cuando la campaña termina
+- El lifecycle del plan termina en **dos** estados y no en uno:
+  **`finished`** es el cierre **normal** (la campaña corrió y terminó) y
+  **`archived`** el **anormal** (el plan se reemplazó por otra versión o se
+  canceló). Lifecycle completo: `draft` → `ready_to_send` → `approved` →
+  `qa_done` → `live` → `finished`, con `archived` colgando de cualquiera.
+- **`finished` NO saca al plan del histórico**: está dentro de
+  `PLAN_SIGNED_STATUSES`, así que el plan sigue contando en el portal del
+  cliente, en analysis, en el dashboard, en billing y en el histórico del
+  campaign tracker. Es la razón por la que existe el estado en vez de reusar
+  `archived`: archivar una campaña de 2024 la habría **borrado** de todas esas
+  vistas. Cerrar un plan cambia lo que muestra su badge, no la historia del
+  cliente.
+- **Cómo se entra**: automático cuando el proyecto pasa a `reportado` (ver
+  "Lifecycle del proyecto"), o a mano con **"Marcar terminado"** en el header
+  del plan (desde `live`). **"Reabrir plan"** (`finished` → `live`) deshace un
+  cierre de más — por ejemplo si el reporte final se marcó entregado antes de
+  tiempo. Reabrir **sí** re-chequea el QA de la versión vigente pero **no** el
+  brief de Tráfico: reabrir no arma nada nuevo, y exigirlo dejaría trabados a
+  todos los planes que terminaron antes de que la ventana de Tráfico existiera.
+- **Terminal = congelado**: `finished` y `archived` son
+  `PLAN_TERMINAL_STATUSES` y bloquean por igual toda escritura sobre el plan,
+  incluidas las que sí se permiten en un plan firmado vivo (brief de Tráfico,
+  hojas auxiliares). Helpers `isPlanTerminal` / `planTerminalError` en
+  `lib/plan-status.ts`.
+- **El drift que originó esto**: hasta esta migración nada cerraba los planes,
+  así que había planes de 2024 y 2025 en `live` dentro de proyectos ya
+  `reportado`. El backfill de una sola vez está en
+  [`db/finish-reported-plans.sql`](db/finish-reported-plans.sql) (incluye las
+  queries de diagnóstico para ver el set antes de tocarlo). El filtro de
+  **status del plan** del campaign tracker es la forma de detectarlo de acá en
+  más: un plan `concluido` (por fecha) que sigue `live` quedó sin cerrar.
+
 ### Historial de versiones: qué cambió en cada una
 - Abajo del editor, **"Historial de versiones"**
   (`version-history.tsx`) lista una fila por versión aprobada — número, fecha,
@@ -640,6 +688,11 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   como delivered desde `/reportes/calendario` — no es seteable manualmente.
 - Cuando un proyecto pasa a `closed`, automáticamente se crea una fila en
   `project_reports` (idempotente). Ver `app/actions/reports.ts`.
+- **El cierre baja a los planes**: al pasar a `reportado`, todos los planes
+  firmados del proyecto (`approved` / `qa_done` / `live`) pasan a `finished`,
+  con su fila de auditoría (`closeProjectPlans` en `app/actions/reports.ts`).
+  Sin esto quedaban campañas de años anteriores figurando como Live para
+  siempre. Ver "Cierre del plan" más arriba.
 
 ### Naming
 - Proyectos: el `code` es interno (URL slug + base de la convención de
@@ -846,8 +899,29 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   goals. Las métricas calculadas (CPM, CTR, ROAS, CPT, …) se derivan
   on-the-fly para goal y real con las fórmulas del `metrics_catalog` del
   cliente (vía `buildMetricRows` en `lib/campaign-metrics.ts`).
-- "Plan vigente" en el hub = `status='approved'` Y la fecha de hoy cae
-  dentro del período derivado (min/max de fechas de placements).
+- "Plan vigente" en el hub = plan **firmado** (`PLAN_SIGNED_STATUSES`, o sea
+  `approved` / `qa_done` / `live` / `finished`) Y la fecha de hoy cae dentro
+  del período derivado (min/max de fechas de placements). Los `futuro` (todavía
+  no arrancaron) y los que no tienen fechas quedan fuera del hub.
+- **Filtros del hub** (`?filter=`, `?year=`, `?origin=`, `?status=`, más el
+  `?client=` global):
+  - **Estado** (de tracking, derivado de fechas): vigentes / concluidos /
+    todos. Default: vigentes.
+  - **Año**: mismo helper y mismo componente que `/planes` y `/proyectos`
+    (`lib/year-filter.ts` + `components/year-selector.tsx`), sobre el período
+    del plan. Default: año actual.
+  - **Budget origin**: `components/budget-origin-selector.tsx`, igual que
+    `/planes` y `/proyectos`.
+  - **Status del plan**: el de la DB (`approved` / `QA done` / `live` /
+    `finished`), distinto del estado de tracking. Es el filtro que deja ver el
+    desfasaje: un plan **concluido** por fecha que sigue **live** quedó sin
+    cerrar. Cada fila muestra su `PlanStatusBadge` y el caso live+concluido
+    lleva un tooltip explicando cómo cerrarlo.
+  - Cada grupo de chips cuenta **con los otros filtros puestos**, así el número
+    es el que vas a ver si lo clickeás. El año se filtra en memoria (el período
+    del plan es un min/max derivado, no una columna); el budget origin va en
+    SQL. La lista de años NO se recorta con los demás filtros, para que no se
+    colapse al año ya elegido.
 - Solo se persisten métricas direct (`amount` + las métricas `direct`
   habilitadas del `metrics_catalog` del cliente, p. ej. `tickets`,
   `tickets_stopover`, `revenue`), tanto en la capa viva como en los

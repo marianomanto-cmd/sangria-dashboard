@@ -33,8 +33,8 @@ export default async function PlanDetailPage({ params }: Props) {
   // Ventana de la "versión vigente" para el historial de cambios:
   // - draft / ready_to_send → el borrador en curso: cambios desde la última
   //   aprobación (o desde la creación si nunca se aprobó).
-  // - firmados (approved / qa_done / live) y archived → los cambios que
-  //   produjeron la versión aprobada vigente: desde la aprobación ANTERIOR
+  // - firmados (approved / qa_done / live / finished) y archived → los cambios
+  //   que produjeron la versión aprobada vigente: desde la aprobación ANTERIOR
   //   (v−1), incluida la aprobación.
   const locked =
     isPlanSigned(detail.plan.status) || detail.plan.status === "archived";

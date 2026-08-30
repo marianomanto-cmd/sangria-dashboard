@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useMemo, useState, useTransition } from "react";
 import {
   CalendarRange,
+  CheckCircle2,
   ChevronDown,
   Copy,
   Download,
@@ -383,6 +384,49 @@ export function PlanEditor({
     });
   };
 
+  // Cierre normal de la campaña. `finished` NO saca al plan del histórico:
+  // sigue contando para billing, portal, analysis y campaign tracker (es parte
+  // de PLAN_SIGNED_STATUSES). Sólo deja de estar al aire.
+  const onMarkFinished = async () => {
+    if (
+      !(await confirm({
+        title: `¿Marcar ${detail.plan.name} como terminado?`,
+        body: "La campaña deja de estar al aire y el plan queda cerrado. Sigue contando en billing, en el portal del cliente y en el histórico del campaign tracker — sólo deja de figurar como Live. Se puede reabrir.",
+        confirmLabel: "Marcar terminado",
+      }))
+    )
+      return;
+    startTransition(async () => {
+      const r = await transitionPlanStatus({
+        planId: detail.plan.id,
+        to: "finished",
+      });
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Plan marcado como terminado");
+      refresh();
+    });
+  };
+
+  const onReopenFinished = async () => {
+    if (
+      !(await confirm({
+        title: "¿Reabrir el plan?",
+        body: "Vuelve a Live, como si la campaña siguiera al aire. Se usa cuando el plan se cerró de más — por ejemplo, si el proyecto se marcó como reportado antes de tiempo.",
+        confirmLabel: "Reabrir",
+      }))
+    )
+      return;
+    startTransition(async () => {
+      const r = await transitionPlanStatus({
+        planId: detail.plan.id,
+        to: "live",
+      });
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Plan de vuelta en Live");
+      refresh();
+    });
+  };
+
   const onAddPublisher = (publisherId: string) => {
     startTransition(async () => {
       await addPublisherToPlan({ planId: detail.plan.id, publisherId });
@@ -624,7 +668,30 @@ export function PlanEditor({
               >
                 Editar (nueva versión)
               </button>
+              <button
+                type="button"
+                onClick={onMarkFinished}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
+                title="La campaña terminó: cerrar el plan sin sacarlo del histórico"
+              >
+                <CheckCircle2 size={14} strokeWidth={2} />
+                Marcar terminado
+              </button>
             </>
+          )}
+
+          {detail.plan.status === "finished" && (
+            <button
+              type="button"
+              onClick={onReopenFinished}
+              disabled={pending}
+              className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
+              title="Volver a poner el plan en Live (se cerró de más)"
+            >
+              <Radio size={14} strokeWidth={2} />
+              Reabrir plan
+            </button>
           )}
         </div>
       </header>

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { PLAN_SIGNED_STATUSES } from "@/lib/plan-status";
+import { PLAN_SIGNED_STATUSES, type PlanStatus } from "@/lib/plan-status";
 import {
   budgetOrigins,
   campaignActualSnapshots,
@@ -14,6 +14,7 @@ import {
   projects,
   publishers,
 } from "@/db/schema";
+import { availableYears, periodMatchesYear } from "@/lib/year-filter";
 import {
   buildMetricRows,
   computePacePct,
@@ -38,12 +39,49 @@ import {
 // queda disponible para consulta histórica. Los clientes archivados se
 // excluyen siempre y el scope respeta el filtro global ?client=.
 //
+// Encima de eso hay tres filtros más, iguales a los de /planes: AÑO (sobre el
+// período del plan, default el año corriente), BUDGET ORIGIN y STATUS DEL PLAN
+// (approved / QA done / live / finished). Los dos primeros son de recorte; el
+// de status es el que deja ver, por ejemplo, planes que siguen `live` cuando su
+// período terminó hace rato.
+//
+// Cada grupo de chips muestra el conteo que daría SU click, con los demás
+// filtros puestos: los chips vigente/concluido cuentan dentro de (año + origin
+// + status), y los de status dentro de (año + origin + vigente/concluido). El
+// año se filtra en memoria (igual que /planes) porque el período del plan es un
+// min/max derivado de sus placements, no una columna.
+//
 // Los goals salen del plan (amount_usd + metrics_json de cada placement); los
 // valores reales salen de campaign_placement_actuals.
 // ════════════════════════════════════════════════════════════════════════════
 
 export type CampaignHubFilter = "vigente" | "concluido" | "todos";
 export type CampaignHubPlanStatus = "vigente" | "concluido";
+
+// Estados de plan que pueden aparecer en el tracker: los firmados. Un draft o
+// un archivado nunca entra, así que el filtro de status se mueve dentro de este
+// set y no de PLAN_STATUSES entero.
+export const CAMPAIGN_HUB_PLAN_STATUSES = PLAN_SIGNED_STATUSES;
+export type CampaignHubSignedStatus =
+  (typeof CAMPAIGN_HUB_PLAN_STATUSES)[number];
+
+export function isCampaignHubPlanStatus(
+  value: string,
+): value is CampaignHubSignedStatus {
+  return (CAMPAIGN_HUB_PLAN_STATUSES as readonly string[]).includes(value);
+}
+
+export type CampaignHubOptions = {
+  clientId?: string | null;
+  filter?: CampaignHubFilter;
+  budgetOriginId?: string | null;
+  // null = todos los estados firmados.
+  planStatus?: CampaignHubSignedStatus | null;
+  // null = todos los años. `undefined` NO es "todos": la página resuelve el
+  // default (año corriente) con resolveYearParam antes de llamar acá.
+  year?: number | null;
+  currentYear?: number;
+};
 
 const STALE_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 
@@ -71,6 +109,9 @@ export type CampaignHubPlan = {
   lastUpdateAt: Date | null;
   isStale: boolean;
   status: CampaignHubPlanStatus;
+  // Status del plan en la DB (approved / qa_done / live / finished), distinto
+  // del `status` de arriba, que es el estado de tracking derivado de fechas.
+  planStatus: PlanStatus;
   lag: number; // pacePct - progressPct (rezago); usado para ordenar
 };
 
@@ -93,30 +134,47 @@ export type CampaignHubResult = {
     staleCount: number;
     offPaceCount: number;
   };
-  // Conteo total por estado (sin importar el filtro aplicado), para los
-  // chips de filtro del hub.
+  // Conteo por estado de tracking, dentro de (año + origin + status de plan).
   statusCounts: {
     vigente: number;
     concluido: number;
   };
+  // Conteo por status de plan, dentro de (año + origin + vigente/concluido).
+  planStatusCounts: Record<CampaignHubSignedStatus, number>;
+  // Años con planes, para el YearSelector. Se calculan sobre el scope de
+  // cliente + budget origin y NO se recortan por año, tracking ni status: la
+  // lista de años tiene que quedar estable mientras movés los otros filtros.
+  years: number[];
 };
 
 export async function getCampaignTrackerHub(
-  clientId?: string | null,
-  filter: CampaignHubFilter = "vigente",
+  options: CampaignHubOptions = {},
 ): Promise<CampaignHubResult> {
+  const {
+    clientId = null,
+    filter = "vigente",
+    budgetOriginId = null,
+    planStatus = null,
+    year = null,
+  } = options;
   const today = new Date();
+  const currentYear = options.currentYear ?? today.getFullYear();
 
+  // El status de plan y el año se filtran en memoria (ver más abajo): hacen
+  // falta enteros para poder contar cuántos planes daría cada chip.
   const conds: SQL[] = [
     inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
     ne(clients.status, "archived"),
   ];
   if (clientId) conds.push(eq(projects.clientId, clientId));
+  if (budgetOriginId)
+    conds.push(eq(projects.budgetOriginId, budgetOriginId));
 
   const planRows = await db
     .select({
       planId: mediaPlans.id,
       planName: mediaPlans.name,
+      planStatus: mediaPlans.status,
       currentVersion: mediaPlans.currentVersion,
       projectId: projects.id,
       projectCode: projects.code,
@@ -160,15 +218,52 @@ export async function getCampaignTrackerHub(
     return [{ row: r, status }];
   });
 
+  // Años disponibles para el selector: sobre el scope de cliente + origin y
+  // ANTES de los filtros en memoria. Calcularlos después colapsaría la lista al
+  // año ya elegido y no habría forma de volver a los otros.
+  const years = availableYears(
+    classified.map((c) => ({
+      start: c.row.periodStart,
+      end: c.row.periodEnd,
+    })),
+    currentYear,
+  );
+
+  const inYear =
+    year == null
+      ? classified
+      : classified.filter((c) =>
+          periodMatchesYear(
+            { start: c.row.periodStart, end: c.row.periodEnd },
+            year,
+            currentYear,
+          ),
+        );
+
+  const matchesTracking = (c: (typeof inYear)[number]) =>
+    filter === "todos" || c.status === filter;
+  const matchesPlanStatus = (c: (typeof inYear)[number]) =>
+    planStatus == null || c.row.planStatus === planStatus;
+
+  // Cada grupo de chips cuenta con los OTROS filtros puestos, así el número que
+  // muestra es el que vas a ver si lo clickeás.
+  const forTrackingCounts = inYear.filter(matchesPlanStatus);
   const statusCounts = {
-    vigente: classified.filter((c) => c.status === "vigente").length,
-    concluido: classified.filter((c) => c.status === "concluido").length,
+    vigente: forTrackingCounts.filter((c) => c.status === "vigente").length,
+    concluido: forTrackingCounts.filter((c) => c.status === "concluido").length,
   };
 
-  const filtered =
-    filter === "todos"
-      ? classified
-      : classified.filter((c) => c.status === filter);
+  const forPlanStatusCounts = inYear.filter(matchesTracking);
+  const planStatusCounts = Object.fromEntries(
+    CAMPAIGN_HUB_PLAN_STATUSES.map((st) => [
+      st,
+      forPlanStatusCounts.filter((c) => c.row.planStatus === st).length,
+    ]),
+  ) as Record<CampaignHubSignedStatus, number>;
+
+  const filtered = inYear.filter(
+    (c) => matchesTracking(c) && matchesPlanStatus(c),
+  );
 
   if (filtered.length === 0) {
     return {
@@ -183,6 +278,8 @@ export async function getCampaignTrackerHub(
         offPaceCount: 0,
       },
       statusCounts,
+      planStatusCounts,
+      years,
     };
   }
 
@@ -266,6 +363,7 @@ export async function getCampaignTrackerHub(
       lastUpdateAt,
       isStale,
       status,
+      planStatus: r.planStatus,
       lag: pacePct - progressPct,
     };
 
@@ -305,6 +403,8 @@ export async function getCampaignTrackerHub(
       offPaceCount,
     },
     statusCounts,
+    planStatusCounts,
+    years,
   };
 }
 

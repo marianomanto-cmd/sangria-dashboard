@@ -1,6 +1,88 @@
-# Handoff — viernes 28/ago/2026
+# Handoff — domingo 30/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 30/ago/2026 — Planes: estado `finished` (cierre de campaña) · Campaign Tracker: filtros de año, budget origin y status de plan
+
+- **Pedido 1**: "hay planes de 2024 y 2025 que están live cuando el proyecto en
+  el que viven está *reportado*; esos planes ya terminaron". Revisar la base y
+  arreglarlo.
+- **Pedido 2**: que el campaign tracker tenga **filtros por año, budget origin y
+  status de plan**.
+
+**El diagnóstico**: un proyecto pasa a `reportado` cuando se marca su reporte
+final como entregado (`markReportDelivered`, `/reportes/calendario`). Ese cierre
+**no bajaba a sus planes**: nada los movía de `live`, así que campañas de 2024 y
+2025 seguían figurando como al aire en `/planes`, en el detalle del proyecto y
+en el campaign tracker. No es data corrupta — es un estado que faltaba.
+
+**Por qué NO se archivaron (la decisión que define todo el cambio)**: `archived`
+significa "reemplazado por otra versión o cancelado" y está **fuera** de
+`PLAN_SIGNED_STATUSES`. Archivar esos planes los habría borrado del portal del
+cliente, de analysis, del dashboard, de billing y del histórico del campaign
+tracker — o sea, habría borrado 2024 y 2025 de todas esas vistas. Por eso el
+lifecycle gana un estado nuevo.
+
+**`finished`: el cierre normal de un plan**
+
+- Enum `plan_status` pasa a 7 valores: `draft` → `ready_to_send` → `approved` →
+  `qa_done` → `live` → **`finished`**, con `archived` colgando de cualquiera.
+- **Entra en `PLAN_SIGNED_STATUSES`**, así que un plan cerrado sigue contando en
+  todo lo histórico. **Esto hace que el backfill sea numéricamente neutro**: los
+  planes que se cierran ya estaban `live` (o sea, ya estaban dentro del set), así
+  que ninguna cifra del portal, del dashboard ni del billing se mueve. Lo único
+  que cambia es el badge y el KPI "Vigentes" de `/planes`, que es justamente lo
+  que estaba mal.
+- Set nuevo **`PLAN_SIGNED_OPEN_STATUSES`** (firmados **sin** `finished`) para no
+  re-tocar lo ya cerrado, y **`PLAN_TERMINAL_STATUSES`** (`finished` + `archived`)
+  con `isPlanTerminal` / `planTerminalError`: los dos estados terminales congelan
+  por igual toda escritura, **incluidas** las que un plan firmado vivo sí permite
+  (brief de Tráfico, hojas auxiliares). Un plan terminado no se toca.
+- **Cascada**: `closeProjectPlans` en `app/actions/reports.ts` — al pasar el
+  proyecto a `reportado`, sus planes firmados pasan a `finished` con una fila de
+  auditoría cada uno (con el status previo real). Idempotente. Este drift no se
+  vuelve a acumular.
+- **Escape hatches en el editor**: **"Marcar terminado"** (desde `live`) y
+  **"Reabrir plan"** (`finished` → `live`). Reabrir **sí** re-chequea el QA de la
+  versión vigente pero **no** el brief de Tráfico: reabrir no arma nada nuevo, y
+  exigirlo dejaría trabados a todos los planes que terminaron antes de que la
+  ventana de Tráfico existiera.
+- Badge gris **oscuro** (`text-ink-2`), no gris claro: `finished` tiene que
+  distinguirse de `draft`/`archived`, que son "todavía nada" y "no pasó nunca".
+
+**Campaign Tracker: tres filtros nuevos**
+
+- **Año** y **Budget origin** reusan los mismos componentes que `/planes` y
+  `/proyectos` (`components/year-selector.tsx` + `lib/year-filter.ts`,
+  `components/budget-origin-selector.tsx`). Nada nuevo que mantener.
+- **Status del plan** (`approved` / `QA done` / `live` / `finished`) es el
+  filtro que **hace visible el problema del pedido 1**: es el status de la DB,
+  distinto del estado de tracking (vigente/concluido) que se deriva de fechas.
+  Un plan **concluido** que sigue **live** quedó sin cerrar. Cada fila ahora
+  muestra su `PlanStatusBadge` y ese caso lleva tooltip con cómo cerrarlo.
+- **Los conteos de los chips cruzan filtros**: cada grupo cuenta con los *otros*
+  filtros puestos, así el número es el que vas a ver si lo clickeás. La lista de
+  años NO se recorta con los demás filtros (si no, se colapsaría al año ya
+  elegido y no habría forma de volver). El año y el status se filtran en memoria
+  —el período del plan es un `min/max` derivado de sus placements, no una
+  columna—; el budget origin va en SQL.
+- `getCampaignTrackerHub` pasa de dos parámetros posicionales a un objeto de
+  opciones (`CampaignHubOptions`). Único call site: la page del hub.
+
+**Acción requerida en prod**: correr **`db/finish-reported-plans.sql`** en el SQL
+Editor de Supabase, **paso por paso**. El PASO 1 (valor nuevo del enum) tiene que
+estar commiteado antes del PASO 3 (backfill) — Postgres no deja usar un valor de
+enum en la misma transacción en la que se agregó. El **PASO 2 es sólo lectura y
+se puede correr antes de todo**: lista exactamente qué planes están abiertos
+dentro de un proyecto reportado, con año y días desde que terminaron, más un
+diagnóstico informativo del mismo drift en proyectos que todavía no se reportaron
+(esos no se tocan: primero hay que cerrar el proyecto desde
+`/reportes/calendario`). Equivalente del paso 1: `npm run db:push`.
+
+**Ojo con el cambio de comportamiento**: a partir de este deploy, marcar el
+reporte final de un proyecto como entregado **cierra sus planes**. Y un plan
+`finished` es de sólo lectura también en Tráfico y en las hojas auxiliares
+(antes sólo `archived` los congelaba).
 
 ### Cambios de la sesión 28/ago/2026 — Planner: tarifa para métricas custom (tickets / LC tickets) · Tráfico del plan
 
@@ -4278,7 +4360,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar la regla de "plan completo" (qué bloquea marcar Listo/Aprobado) | **Fuente única: `lib/plan-readiness.ts`** (`findPlanReadinessIssues`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y el diálogo del editor. Chequea campos del placement, la métrica principal del cost method y el **cuadre publisher ↔ placements** (`BALANCE_TOLERANCE_USD` = $1 — arrancó en 1 centavo y se subió con el dato de prod, ver sesión 18/ago (2); el editor lo importa para el aviso ámbar del bloque). **Ojo con el cuadre**: el total del plan sale de `total_planned_usd` y el prorrateo mensual de los placements — si divergen, hay plata que no se factura. Diagnóstico de lo viejo: `db/plan-publisher-balance-check.sql`. |
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
 | Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Historial de versiones (sólo en el export del plan vigente, `buildVersionHistorySheet`) + tabs 4+ auxiliares si el plan tiene). |
-| Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES`, los sets `PLAN_SIGNED_STATUSES` (approved+qa_done+live = "plan firmado, vigente") y `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata"), `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |
+| Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES` (7 valores: draft → ready_to_send → approved → qa_done → live → **finished**, con archived aparte) y los sets: `PLAN_SIGNED_STATUSES` (approved+qa_done+live+**finished** = "plan firmado"; incluye los cerrados a propósito, si no se borran de portal/analysis/dashboard/billing/tracker), `PLAN_SIGNED_OPEN_STATUSES` (los firmados **sin** finished = "todavía abierto", lo que hay que cerrar cuando el proyecto se reporta), `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata") y `PLAN_TERMINAL_STATUSES` (finished+archived = "no se toca más", con `isPlanTerminal`/`planTerminalError`). Más `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |
+| Entender por qué un plan queda **`finished`** (y quién lo cierra) | `closeProjectPlans` en `app/actions/reports.ts`: al marcar el reporte final como entregado, el proyecto pasa a `reportado` **y** sus planes firmados pasan a `finished`, con auditoría. A mano: "Marcar terminado" / "Reabrir plan" en el header del `editor.tsx`. El backfill de una sola vez (planes de 2024/2025 que quedaron `live` en proyectos ya reportados) + sus queries de diagnóstico: **`db/finish-reported-plans.sql`**. Reabrir (`finished` → `live`) re-chequea el QA pero **no** el brief de Tráfico. |
+| Tocar los **filtros del Campaign Tracker** (año / budget origin / status de plan) | `app/(app)/campaign-tracker/page.tsx` (parseo + validación de `?filter=`, `?year=`, `?origin=`, `?status=` y el `buildTrackerHref` que los preserva) + `getCampaignTrackerHub` en `db/queries/campaign-tracker.ts`, que ahora recibe un objeto `CampaignHubOptions`. Año y origin reusan `components/year-selector.tsx` / `components/budget-origin-selector.tsx` (mismos que `/planes`). **Estado (vigente/concluido) y status del plan son cosas distintas**: el primero se deriva de fechas, el segundo es el de la DB; el cruce `concluido` + `live` es el plan que quedó sin cerrar. Los conteos de cada grupo de chips se calculan con los otros filtros puestos. |
 | Tocar la sección **Tráfico** del plan (brief de armado de adsets) | UI: `app/(app)/proyectos/[code]/planes/[planId]/trafico/` (`page.tsx` + `traffic-editor.tsx`), con el botón "Tráfico" en el header del `editor.tsx`. Actions: `app/actions/plan-traffic.ts` (`updateTrafficBrief`, `addTrafficAd`, `updateTrafficAd`, `removeTrafficAd`, `setTrafficAdLoaded`). Lectura: `getPlanTraffic` en `db/queries/plan-traffic.ts`. Schema: `media_plan_traffic_briefs` (1:1 placement) + `media_plan_traffic_ads` (N por brief). **Se edita en cualquier estado vivo del plan, no sólo `draft`** (el brief se llena después de aprobar). Export: `app/api/plans/[planId]/traffic.xlsx/route.ts` — interno, NO público. |
 | Tocar la regla de "tráfico completo" (qué bloquea marcar Live) | **Fuente única: `lib/plan-traffic.ts`** (`findPlanTrafficIssues`, `computeTrafficProgress`, `TRAFFIC_AD_FORMATS`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y la UI (contadores de la ventana + franja `qa_done` + diálogo de "Marcar Live" en `editor.tsx`). Live exige brief completo **y** todos los anuncios marcados como cargados. |
 | Entender por qué el brief de tráfico no se pierde al **descartar un borrador** | `rescuePlanTraffic` / `restorePlanTraffic` en `app/actions/plans.ts`. `revertPlanToApprovedSnapshot` borra los publishers (cascade → placements) y los reinserta con **ids nuevos**; el brief se rescata antes del delete y se reapareja por **publisher del catálogo + nombre del placement**. |

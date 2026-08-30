@@ -52,6 +52,11 @@ export const projectStatus = pgEnum("project_status", [
 //   qa_done       → el planner controló línea por línea que la campaña esté
 //                   armada tal cual el plan (ver media_plan_qa_runs)
 //   live          → campaña al aire. Solo se llega desde qa_done
+//   finished      → la campaña terminó y el plan quedó cerrado. Es el cierre
+//                   NORMAL (a diferencia de `archived`): sigue contando como
+//                   plan firmado para historial, billing, portal y analysis,
+//                   solo deja de estar al aire. Se entra acá automáticamente
+//                   cuando el proyecto pasa a `reportado`
 //   archived      → reemplazado por una nueva versión approved o cancelado
 //
 // El QA es obligatorio y es POR VERSIÓN: aprobar la v(N+1) devuelve el plan a
@@ -65,6 +70,7 @@ export const planStatus = pgEnum("plan_status", [
   "approved",
   "qa_done",
   "live",
+  "finished",
   "archived",
 ]);
 
