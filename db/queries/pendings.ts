@@ -1,6 +1,6 @@
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { PLAN_SIGNED_STATUSES } from "@/lib/plan-status";
+import { PLAN_ACTIVE_STATUSES } from "@/lib/plan-status";
 import {
   campaignActualSnapshots,
   clients,
@@ -196,7 +196,7 @@ async function getPendingBillings(
   lastClosedMonth: string,
 ): Promise<PendingBilling[]> {
   const conds = [
-    inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
+    inArray(mediaPlans.status, [...PLAN_ACTIVE_STATUSES]),
     isNull(mediaPlans.deletedAt),
   ];
   if (clientId) conds.push(eq(projects.clientId, clientId));
@@ -279,7 +279,7 @@ async function getPendingTracking(
   today: string,
 ): Promise<PendingTracking[]> {
   const conds = [
-    inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
+    inArray(mediaPlans.status, [...PLAN_ACTIVE_STATUSES]),
     isNull(mediaPlans.deletedAt),
   ];
   if (clientId) conds.push(eq(projects.clientId, clientId));

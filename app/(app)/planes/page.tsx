@@ -192,9 +192,12 @@ export default async function PlanesPage({ searchParams }: Props) {
   );
   const kpiPctConsumed =
     kpiTotalMedia > 0 ? (kpiSpent / kpiTotalMedia) * 100 : 0;
-  // "Vigentes" = todo lo comprometido: el ready congelado + los firmados
-  // (approved / QA done / live). El desglose del hint separa lo que ya está al
-  // aire de lo que está trabado esperando el QA.
+  // "Vigentes" = lo que todavía es trabajo en curso: el ready congelado + los
+  // firmados que siguen abiertos (approved / QA done / live). Las `finished`
+  // quedan AFUERA a propósito — una campaña que ya cerró no es trabajo vigente,
+  // que es la misma distinción que hace PLAN_ACTIVE_STATUSES en lib/plan-status.
+  // El desglose del hint separa lo que ya está al aire de lo que está trabado
+  // esperando el QA.
   const kpiActive =
     counts.ready_to_send + counts.approved + counts.qa_done + counts.live;
 
@@ -328,6 +331,18 @@ export default async function PlanesPage({ searchParams }: Props) {
             clientSlug={client?.slug ?? null}
             yearParam={sp.year}
           />
+          {/* Terminadas: sólo se ofrece el chip si hay alguna, para no sumar
+              ruido a los clientes que todavía no cierran campañas. */}
+          {counts.finished > 0 && (
+            <FilterChoice
+              current={filter}
+              value="finished"
+              label={`Finished (${counts.finished})`}
+              originId={validOrigin}
+              clientSlug={client?.slug ?? null}
+              yearParam={sp.year}
+            />
+          )}
         </FilterPill>
       </div>
 

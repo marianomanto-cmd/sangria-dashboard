@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useMemo, useState, useTransition } from "react";
 import {
   CalendarRange,
+  CheckCheck,
   ChevronDown,
   Copy,
   Download,
@@ -390,6 +391,49 @@ export function PlanEditor({
     });
   };
 
+  // Cerrar la campaña. Es el estado que faltaba en el lifecycle: hasta ahora un
+  // plan quedaba `live` para siempre, y el tablero de pendientes le seguía
+  // pidiendo billing y tracking a campañas que ya habían terminado.
+  const onMarkFinished = async () => {
+    if (
+      !(await confirm({
+        title: `¿Marcar ${detail.plan.name} como terminada?`,
+        body: "La campaña deja de ser vigente: no genera más pendientes ni aparece en el campaign tracker. Sigue contando para el histórico — el portal del cliente, el análisis y los benchmarks del simulador. Se puede reabrir.",
+        confirmLabel: "Marcar terminada",
+      }))
+    )
+      return;
+    startTransition(async () => {
+      const r = await transitionPlanStatus({
+        planId: detail.plan.id,
+        to: "finished",
+      });
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Campaña marcada como terminada");
+      refresh();
+    });
+  };
+
+  const onReopenFinished = async () => {
+    if (
+      !(await confirm({
+        title: "¿Reabrir la campaña?",
+        body: "Vuelve a Live: se cuenta otra vez como vigente y el tablero de pendientes vuelve a pedirle billing y tracking.",
+        confirmLabel: "Reabrir",
+      }))
+    )
+      return;
+    startTransition(async () => {
+      const r = await transitionPlanStatus({
+        planId: detail.plan.id,
+        to: "live",
+      });
+      if (!r.ok) toast.error(r.error);
+      else toast.success("Campaña reabierta");
+      refresh();
+    });
+  };
+
   const onUndoLive = async () => {
     if (
       !(await confirm({
@@ -654,7 +698,29 @@ export function PlanEditor({
               >
                 Editar (nueva versión)
               </button>
+              <button
+                type="button"
+                onClick={onMarkFinished}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
+                title="La campaña terminó: deja de ser vigente y de generar pendientes, pero sigue en el histórico"
+              >
+                <CheckCheck size={14} strokeWidth={2} />
+                Marcar terminada
+              </button>
             </>
+          )}
+
+          {detail.plan.status === "finished" && (
+            <button
+              type="button"
+              onClick={onReopenFinished}
+              disabled={pending}
+              className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
+              title="Volver a Live: la campaña vuelve a contar como vigente"
+            >
+              Reabrir campaña
+            </button>
           )}
         </div>
       </header>

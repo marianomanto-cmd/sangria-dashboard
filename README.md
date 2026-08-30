@@ -226,7 +226,7 @@ lib/
   auth.ts                   # getCurrentUser() (server-side)
   permissions.ts            # canApprovePlans(email) + PLAN_APPROVER_EMAILS — allowlist de aprobación de planes (case-insensitive)
   plan-readiness.ts         # findPlanReadinessIssues — qué falta para marcar un plan Listo/Aprobado (campos + métrica principal + CUADRE publisher↔placements). Fuente única: server action (barrera) + editor (diálogo y aviso de descuadre)
-  plan-status.ts            # lifecycle del plan: PLAN_STATUSES, sets PLAN_SIGNED_/PLAN_COMMITTED_STATUSES, mapa de transiciones y labels. Fuente única: queries + actions + badges
+  plan-status.ts            # lifecycle del plan: PLAN_STATUSES, los tres sets (PLAN_ACTIVE_ = vigente/pendientes, PLAN_SIGNED_ = firmado/histórico, PLAN_COMMITTED_ = compromete plata), mapa de transiciones y labels. Fuente única: queries + actions + badges
   plan-traffic.ts           # reglas del tráfico (módulo puro): qué falta en los ADSETS (gate de "Listo para enviar") y en los ADS (gate del QA, + "cargado" para Live), progreso y mensajes. Fuente única de las barreras y de los avisos del editor
   ad-types.ts               # DEFAULT_AD_TYPES — semilla del catálogo de tipos de ad de un cliente (vive en lib/ porque un "use server" sólo exporta funciones async)
   plan-version-diff.ts      # buildPlanVersionDiff — qué cambió entre dos versiones aprobadas, comparando sus snapshots (plan/publishers/líneas/fees)
@@ -359,7 +359,8 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 ### El plan vive dentro del proyecto, peer con otros planes
 - Un proyecto puede tener N planes en paralelo (no son versiones de uno).
 - Cada plan tiene su propio lifecycle:
-  `draft` → `ready_to_send` → `approved` → `qa_done` → `live` → `archived`.
+  `draft` → `ready_to_send` → `approved` → `qa_done` → `live` → `finished`,
+  con `archived` como salida lateral.
   Los sets de estado, el mapa de transiciones y los labels viven en
   **`lib/plan-status.ts`** — fuente única que importan queries, actions y UI.
 - **`approved` ya NO significa "al aire"**: significa *firmado por el cliente,
@@ -370,12 +371,28 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (`transitionPlanStatus`); cerrar el **QA** exige los **ads** del AM/PM
   (`completePlanQa`); y `live` exige, además del QA cerrado, que cada ad esté
   marcado como **cargado** en la plataforma (`transitionPlanStatus`).
-- **Nunca hardcodear `status = 'approved'` en una query nueva.** Usar los sets:
-  - `PLAN_SIGNED_STATUSES` (`approved` + `qa_done` + `live`) = "plan firmado,
-    vigente" — es el reemplazo del viejo `= 'approved'` en portal, analysis,
-    campaign tracker, pendings y dashboard;
-  - `PLAN_COMMITTED_STATUSES` (los firmados + `ready_to_send`) = "compromete
-    plata" — estimación, pacing y comparables del simulador.
+- **`finished` = la campaña corrió y cerró.** Es el estado terminal "sano"
+  (`archived` es "se canceló o la reemplazó otra versión" — cosa distinta).
+  Se llega desde `live` con "Marcar terminada" y se vuelve con "Reabrir
+  campaña". Antes no existía: un plan quedaba `live` para siempre y el tablero
+  de pendientes le seguía pidiendo billing y tracking a campañas cerradas.
+- **FIRMADO ≠ VIGENTE**, y la diferencia la hace `finished`. Hasta que apareció,
+  las dos ideas estaban colapsadas en un solo set porque coincidían:
+  - `PLAN_ACTIVE_STATUSES` (`approved` + `qa_done` + `live`) = **vigente**,
+    "todavía es trabajo en curso" → tablero de **pendientes** (`pendings.ts`) y
+    **campaign tracker**. Sobre una campaña terminada, "¿qué falta hacer?" es
+    "nada", así que `finished` queda afuera.
+  - `PLAN_SIGNED_STATUSES` (+ `finished`) = **firmado alguna vez** → define el
+    **histórico**: portal del cliente y análisis publisher × mercado. El cliente
+    tiene que poder ver sus campañas cerradas.
+  - `PLAN_COMMITTED_STATUSES` (+ `ready_to_send`) = **compromete plata** →
+    estimación, pacing y comparables del simulador. Una campaña terminada gastó
+    de verdad, así que cuenta.
+  - Se cumple `vigente ⊂ firmado ⊂ comprometido`.
+- **Nunca hardcodear `status = 'approved'` en una query nueva.** Usar los sets.
+  Al elegir cuál, la pregunta es qué está respondiendo la query: *"¿qué falta
+  hacer?"* → `PLAN_ACTIVE_STATUSES`; *"¿qué pasó?"* → `PLAN_SIGNED_STATUSES`;
+  *"¿cuánta plata hay comprometida?"* → `PLAN_COMMITTED_STATUSES`.
 - Los planes pueden solapar fechas y estar todos vigentes al mismo tiempo.
 - **Regla dura — el plan tiene que estar COMPLETO para pasar a Listo/Aprobado**:
   `transitionPlanStatus` bloquea el pase a `ready_to_send` **y** a `approved` si
