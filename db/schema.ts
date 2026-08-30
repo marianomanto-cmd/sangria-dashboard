@@ -52,19 +52,23 @@ export const projectStatus = pgEnum("project_status", [
 //   qa_done       → el planner controló línea por línea que la campaña esté
 //                   armada tal cual el plan (ver media_plan_qa_runs)
 //   live          → campaña al aire. Solo se llega desde qa_done
+//   finished      → la campaña corrió y cerró. Sigue contando como FIRMADO
+//                   (portal, análisis, benchmarks) pero NO como vigente: no
+//                   genera pendientes ni aparece en el campaign tracker
 //   archived      → reemplazado por una nueva versión approved o cancelado
 //
 // El QA es obligatorio y es POR VERSIÓN: aprobar la v(N+1) devuelve el plan a
 // `approved`, así que hay que volver a controlarlo antes de marcarlo live.
-// Los sets de estado ("firmado", "comprometido") y el mapa de transiciones
-// viven en lib/plan-status.ts — las queries importan de ahí en vez de
-// hardcodear 'approved'.
+// Los sets de estado ("firmado" ≠ "vigente" ≠ "comprometido") y el mapa de
+// transiciones viven en lib/plan-status.ts — las queries importan de ahí en vez
+// de hardcodear 'approved'.
 export const planStatus = pgEnum("plan_status", [
   "draft",
   "ready_to_send",
   "approved",
   "qa_done",
   "live",
+  "finished",
   "archived",
 ]);
 

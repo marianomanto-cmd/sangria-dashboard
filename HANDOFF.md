@@ -2,6 +2,60 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 28/ago/2026 (4) — `finished` como estado real + FIRMADO ≠ VIGENTE
+
+Cierre del pendiente que dejó la sesión (3): prod tenía un valor `finished` en
+el enum `plan_status` que **no existía en el código** (lo trajo la carga masiva
+de planes históricos). Consecuencias que tenía: esos planes se pintaban como
+**"draft"** (fallback de status desconocido en `PlanStatusBadge`), no tenían
+chip de filtro, y `statusRank` los ordenaba primero por `indexOf === -1`.
+
+**1. `finished` es ahora un estado de primera clase.** Sumado a `planStatus`
+(`db/schema.ts`), `PLAN_STATUSES`, labels, hints, color del badge y al mapa de
+transiciones: `live → finished` ("Marcar terminada"), `finished → live`
+("Reabrir campaña") y `finished → archived`. **No** se puede volver a `draft`:
+una campaña cerrada no se re-edita.
+
+Llena un hueco real del lifecycle: hasta ahora **no había forma de cerrar una
+campaña**. Un plan quedaba `live` para siempre — por eso había un
+`COPA.m1036.Stopover2025Creative` marcado `live` desde 2025.
+
+**2. Se partió `PLAN_SIGNED_STATUSES` en dos.** Ésta es la parte importante, y
+es la que hay que entender antes de tocar cualquier query nueva:
+
+- **`PLAN_ACTIVE_STATUSES`** (`approved` + `qa_done` + `live`) = **vigente**,
+  "todavía es trabajo en curso". Lo usan el **tablero de pendientes**
+  (`pendings.ts`) y el **campaign tracker**. `finished` queda AFUERA: sobre una
+  campaña terminada, "¿qué billing falta?" es una pregunta sin sentido, y si
+  entrara, campañas de 2024 resucitarían como trabajo pendiente.
+- **`PLAN_SIGNED_STATUSES`** (+ `finished`) = **firmado alguna vez** → define el
+  **histórico**: portal del cliente y análisis publisher × mercado. El cliente
+  tiene que ver sus campañas cerradas.
+- **`PLAN_COMMITTED_STATUSES`** (+ `ready_to_send`) = **compromete plata** →
+  estimación, pacing, benchmarks del simulador. Una campaña terminada gastó de
+  verdad.
+
+Las dos primeras ideas estaban colapsadas en un solo set porque **coincidían**
+hasta que apareció `finished`. Al elegir set en una query nueva, la pregunta es
+qué está respondiendo: *"¿qué falta hacer?"* → ACTIVE; *"¿qué pasó?"* → SIGNED;
+*"¿cuánta plata hay comprometida?"* → COMMITTED. Se cumple
+`vigente ⊂ firmado ⊂ comprometido`.
+
+**3. Los KPIs de `/planes`**: "Vigentes" ya no cuenta las terminadas (misma
+distinción). El chip `Finished (N)` sólo aparece si hay alguna, para no sumar
+ruido a los clientes que todavía no cierran campañas.
+
+**Verificado** con un script sobre el módulo: la matriz estado × set da lo
+esperado para los 7 estados, las transiciones desde/hacia `finished` son las
+que corresponden (y `finished → draft` NO existe), todo destino es un estado
+válido y se cumple la inclusión de los tres sets.
+
+**No requiere SQL**: el enum de prod ya tiene `finished` (por eso aparecieron
+esos planes). Lo único a chequear es que el valor esté en el orden esperado del
+enum — si prod lo agregó al final con `ALTER TYPE ... ADD VALUE`, es cosmético
+(nada ordena por `status` en SQL; `statusRank` ordena en JS), pero un
+`npm run db:push` podría querer recrear el tipo. Ojo con eso.
+
 ### Cambios de la sesión 28/ago/2026 (3) — Filtro de año: los planes históricos sin fechas caían todos en el año en curso
 
 **El síntoma**: con el filtro en 2026, `/planes` mostraba planes claramente
@@ -4425,6 +4479,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar la regla de "plan completo" (qué bloquea marcar Listo/Aprobado) | **Fuente única: `lib/plan-readiness.ts`** (`findPlanReadinessIssues`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y el diálogo del editor. Chequea campos del placement, la métrica principal del cost method y el **cuadre publisher ↔ placements** (`BALANCE_TOLERANCE_USD` = $1 — arrancó en 1 centavo y se subió con el dato de prod, ver sesión 18/ago (2); el editor lo importa para el aviso ámbar del bloque). **Ojo con el cuadre**: el total del plan sale de `total_planned_usd` y el prorrateo mensual de los placements — si divergen, hay plata que no se factura. Diagnóstico de lo viejo: `db/plan-publisher-balance-check.sql`. |
 | Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
 | Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Historial de versiones (sólo en el export del plan vigente, `buildVersionHistorySheet`) + tabs 4+ auxiliares si el plan tiene). |
+| Elegir el set de estados en una query nueva | **`lib/plan-status.ts`.** `PLAN_ACTIVE_STATUSES` = vigente ("¿qué falta hacer?" → pendientes, campaign tracker). `PLAN_SIGNED_STATUSES` = firmado alguna vez, **incluye `finished`** ("¿qué pasó?" → portal del cliente, análisis publisher × mercado). `PLAN_COMMITTED_STATUSES` = + `ready_to_send` ("¿cuánta plata hay comprometida?" → estimación, pacing, benchmarks). `vigente ⊂ firmado ⊂ comprometido`. Meter `finished` en ACTIVE resucita campañas viejas en el tablero de pendientes; sacarlo de SIGNED le borra el histórico al cliente. |
 | Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES`, los sets `PLAN_SIGNED_STATUSES` (approved+qa_done+live = "plan firmado, vigente") y `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata"), `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |
 | Tocar la sección **Tráfico** del plan (adsets + ads) | UI: `app/(app)/proyectos/[code]/planes/[planId]/trafico/` (`page.tsx` + `traffic-editor.tsx`), con el botón "Tráfico" en el header del `editor.tsx`. Actions: `app/actions/plan-traffic.ts` — adsets (`addTrafficAdset`, `updateTrafficAdset`, `removeTrafficAdset`) y ads (`addTrafficAd`, `updateTrafficAd`, `removeTrafficAd`, `setTrafficAdLoaded`) + `updateTrafficBrief` (carpeta). Lectura: `getPlanTraffic` en `db/queries/plan-traffic.ts`. Schema: `media_plan_traffic_briefs` (1:1 placement) → `media_plan_traffic_adsets` → `media_plan_traffic_ads`. **Permisos por nivel**: los ADSETS sólo sobre el borrador (son parte de lo que se firma); los ADS y la carpeta, en cualquier estado vivo. Export: `app/api/plans/[planId]/traffic.xlsx/route.ts` — interno, NO público. |
 | Tocar los gates del tráfico (qué bloquea Listo / QA / Live) | **Fuente única: `lib/plan-traffic.ts`.** `findPlanAdsetIssues` → bloquea `ready_to_send`/`approved` (barrera en `transitionPlanStatus`, junto al chequeo de readiness). `findPlanAdIssues` → bloquea cerrar el QA (barrera en `completePlanQa`, `app/actions/plan-qa.ts`). `findPlanAdIssues(…, true)` → suma el "cargado" de cada ad y bloquea `live`. Las tres alimentan también la UI (contadores de la ventana, diálogos y franjas del `editor.tsx`), así que barrera y aviso nunca discrepan. |

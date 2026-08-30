@@ -27,6 +27,7 @@ export const PLAN_STATUSES = [
   "approved",
   "qa_done",
   "live",
+  "finished",
   "archived",
 ] as const;
 
@@ -38,20 +39,47 @@ export function isPlanStatus(value: string): value is PlanStatus {
 
 // ── Sets de estado ──────────────────────────────────────────────────────────
 
-// Planes FIRMADOS por el cliente: la versión vigente es un compromiso real.
-// Es el reemplazo de `status = 'approved'` en todas las queries que existían
-// antes del QA (portal, analysis, campaign tracker, pendings, dashboard).
-// Un plan aprobado sigue siendo un plan aprobado esté en QA, con QA hecho o
-// al aire — el QA no cambia los números, solo verifica el armado.
-export const PLAN_SIGNED_STATUSES = ["approved", "qa_done", "live"] as const;
+// ── FIRMADO vs VIGENTE ──────────────────────────────────────────────────────
+//
+// Son dos ideas distintas, y hasta que apareció `finished` estaban colapsadas
+// en un solo set porque coincidían. Ya no:
+//
+//   FIRMADO  = "el cliente firmó esto alguna vez". Incluye las campañas que ya
+//              terminaron. Es lo que define el HISTÓRICO: qué ve el cliente en
+//              su portal, qué entra al análisis publisher × mercado, qué se
+//              muestra como plan cerrado.
+//
+//   VIGENTE  = "esto todavía es trabajo en curso". NO incluye `finished`. Es lo
+//              que define el TRABAJO PENDIENTE: qué billing falta cargar, qué
+//              tracking del día falta, qué campañas siguen en el tracker.
+//
+// Confundirlas tiene consecuencias concretas en las dos direcciones: si
+// `finished` entra en VIGENTE, campañas de 2024 resucitan en el tablero de
+// pendientes ("falta el billing de octubre"); si queda afuera de FIRMADO, el
+// cliente pierde su histórico en el portal.
 
-// Planes que ya comprometen plata: firmados + el `ready_to_send` que el MM
-// congeló. Alimentan estimación, pacing y comparables del simulador.
-export const PLAN_COMMITTED_STATUSES = [
-  "ready_to_send",
+// Planes FIRMADOS por el cliente, terminados o no. Es el reemplazo de
+// `status = 'approved'` en las queries de histórico (portal, analysis).
+// Un plan aprobado sigue siendo un plan aprobado esté en QA, con QA hecho, al
+// aire o cerrado — el QA no cambia los números, solo verifica el armado.
+export const PLAN_SIGNED_STATUSES = [
   "approved",
   "qa_done",
   "live",
+  "finished",
+] as const;
+
+// Planes VIGENTES: firmados y todavía en curso. Lo usan el tablero de
+// pendientes y el campaign tracker, que preguntan "¿qué falta hacer?" — y sobre
+// una campaña terminada la respuesta es "nada".
+export const PLAN_ACTIVE_STATUSES = ["approved", "qa_done", "live"] as const;
+
+// Planes que ya comprometen plata: firmados (incluidos los terminados, que
+// gastaron de verdad) + el `ready_to_send` que el MM congeló. Alimentan
+// estimación, pacing y comparables del simulador.
+export const PLAN_COMMITTED_STATUSES = [
+  "ready_to_send",
+  ...PLAN_SIGNED_STATUSES,
 ] as const;
 
 // Estados en los que el plan NO se edita (hay que abrir una nueva versión).
@@ -60,11 +88,16 @@ export const PLAN_LOCKED_STATUSES = [
   "approved",
   "qa_done",
   "live",
+  "finished",
   "archived",
 ] as const;
 
 export function isPlanSigned(status: string): boolean {
   return (PLAN_SIGNED_STATUSES as readonly string[]).includes(status);
+}
+
+export function isPlanActive(status: string): boolean {
+  return (PLAN_ACTIVE_STATUSES as readonly string[]).includes(status);
 }
 
 export function isPlanCommitted(status: string): boolean {
@@ -93,7 +126,10 @@ export const PLAN_STATUS_TRANSITIONS: Record<PlanStatus, PlanStatus[]> = {
   qa_done: ["draft", "approved", "live", "archived"],
   // live → qa_done = deshacer un "Live" marcado de más (el QA sigue válido).
   // live → draft = editar, que abre la v(N+1) y obliga a rehacer el QA.
-  live: ["draft", "qa_done", "archived"],
+  // live → finished = la campaña corrió y cerró.
+  live: ["draft", "qa_done", "finished", "archived"],
+  // finished → live = reabrir una campaña que se cerró de más.
+  finished: ["live", "archived"],
   archived: [], // terminal
 };
 
@@ -113,6 +149,7 @@ export const PLAN_STATUS_LABELS: Record<PlanStatus, string> = {
   approved: "approved",
   qa_done: "QA done",
   live: "live",
+  finished: "finished",
   archived: "archived",
 };
 
@@ -125,5 +162,7 @@ export const PLAN_STATUS_HINTS: Record<PlanStatus, string> = {
   qa_done:
     "QA hecho sobre esta versión: se controló línea por línea que la campaña esté armada como el plan. Listo para marcar Live.",
   live: "Campaña al aire.",
+  finished:
+    "Campaña terminada: corrió y cerró. Sigue contando para el histórico (portal, análisis, benchmarks) pero ya no genera pendientes ni aparece en el campaign tracker.",
   archived: "Reemplazado por una versión nueva o cancelado.",
 };

@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray, isNull, ne, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { PLAN_SIGNED_STATUSES } from "@/lib/plan-status";
+import { PLAN_ACTIVE_STATUSES } from "@/lib/plan-status";
 import {
   budgetOrigins,
   campaignActualSnapshots,
@@ -108,7 +108,7 @@ export async function getCampaignTrackerHub(
   const today = new Date();
 
   const conds: SQL[] = [
-    inArray(mediaPlans.status, [...PLAN_SIGNED_STATUSES]),
+    inArray(mediaPlans.status, [...PLAN_ACTIVE_STATUSES]),
     ne(clients.status, "archived"),
   ];
   if (clientId) conds.push(eq(projects.clientId, clientId));
