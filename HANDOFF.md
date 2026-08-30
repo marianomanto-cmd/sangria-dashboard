@@ -3671,6 +3671,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+d352768  Tráfico v2: adsets del planner, ads del AM/PM, catálogo de tipos de ad (#227)
 deff3be  Planner: tarifa para métricas custom (tickets / LC tickets) · Tráfico del plan (#225)
 5feb27e  Planes: cambio masivo de fechas de los placements · Proyectos: botón a la carpeta de Drive (#223)
 65533f9  Planes: audiencia del placement al hover + caja de audiencia cómoda en el inspector (#221)
