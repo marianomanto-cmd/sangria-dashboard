@@ -84,6 +84,38 @@ reporte final de un proyecto como entregado **cierra sus planes**. Y un plan
 `finished` es de sólo lectura también en Tráfico y en las hojas auxiliares
 (antes sólo `archived` los congelaba).
 
+**El diagnóstico corrido en prod (30/ago/2026)**: **100 planes** en **87
+proyectos**, todos de Copa Airlines y todos en `live` — cero `approved` y cero
+`qa_done`, así que el backfill sólo toca `live`. Por año: **2** de 2024, **97**
+de 2025, **1** de 2026. Por budget origin: Online 86, AT San Diego 6, AT Puerto
+Rico 3, Courier 2, AT Repdom-POP 2, AT Promtur 1. **Ninguno seguía corriendo**:
+el que terminó más recientemente lo hizo hace 168 días (`COPA.m1115.CopaCourier
+Performance`, fin 2026-03-15) y el más viejo terminó el 2024-12-02 — no hay
+casos borderline, el set entero son campañas genuinamente terminadas.
+
+**Dos problemas de datos que salieron de ese diagnóstico — quedan ABIERTOS**
+(el backfill no los arregla ni los empeora; las queries para verlos están en el
+**ANEXO** de `db/finish-reported-plans.sql`):
+
+1. **4 planes con el rango de fechas invertido** (fin antes que inicio):
+   `COPA.m1140.BlueWeek November` (2025-11-25 → **2024**-12-02, parece typo de
+   año), `COPA.m1108|Meta|TarifasDavid` (2025-11-09 → 2025-10-15) y los dos de
+   `puerto-rico-2025` (`m1017` y `m1015`, ambos con fin 2025-02-28). **La causa
+   es una regla desalineada**: `findPlanReadinessIssues` exige que las fechas
+   EXISTAN pero **no chequea `fin >= inicio`**, mientras que
+   `bulkUpdatePlacementDates` sí lo rechaza. Efecto hoy: `computePacePct` corta
+   en `end <= start` y devuelve 0%, así que esos planes aparecen siempre
+   "adelantados" — no rompe nada, pero el pace no significa nada. **Sumar el
+   chequeo a `lib/plan-readiness.ts` es una barrera de aprobación nueva** y
+   dejaría trabados esos 4 planes hasta corregirles las fechas: se dejó como
+   decisión del usuario, no se aplicó.
+2. **2 planes sin fecha de fin** (`COPA.m1039.BoostingDavid`,
+   `COPA.m1078.BoostingStopoverTiktok`), anteriores a la regla que exige fechas
+   para aprobar (#191). Un placement sin fechas **no entra al prorrateo de
+   `getBillingEstimate`**: su media y el management fee sobre esa media
+   desaparecen del estimado. Además el plan queda fuera del campaign tracker,
+   que exige período completo.
+
 ### Cambios de la sesión 28/ago/2026 — Planner: tarifa para métricas custom (tickets / LC tickets) · Tráfico del plan
 
 - **Pedido 1**: en los "indicadores estimados" del planificador, métricas como

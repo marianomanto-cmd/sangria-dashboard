@@ -175,3 +175,69 @@ from media_plans
 where deleted_at is null
 group by status
 order by status;
+
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- ANEXO — higiene de fechas de placements. INFORMATIVO, NO modifica nada.
+--
+-- Salió del diagnóstico del 30/ago/2026 sobre los 100 planes de este backfill.
+-- NO es parte del cierre de planes: son placements con fechas mal cargadas, un
+-- problema aparte que el backfill no arregla ni empeora.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- A. Placements con el rango INVERTIDO (fin antes que inicio).
+--
+--    Cómo entraron: `findPlanReadinessIssues` (lib/plan-readiness.ts) exige que
+--    las dos fechas EXISTAN pero no chequea `fin >= inicio` — a diferencia de
+--    `bulkUpdatePlacementDates`, que sí lo rechaza. Las dos reglas no están
+--    alineadas.
+--    Efecto hoy: `computePacePct` corta en `end <= start` y devuelve 0%, así
+--    que el plan aparece siempre "adelantado". No rompe nada, pero el pace de
+--    esas líneas no significa nada.
+select
+  c.name        as cliente,
+  p.code        as proyecto,
+  mp.name       as plan,
+  mp.status     as status_plan,
+  pub.name      as publisher,
+  pl.placement_name,
+  pl.start_date as inicio,
+  pl.end_date   as fin
+from media_plan_placements pl
+join media_plan_publishers mpp on mpp.id = pl.media_plan_publisher_id
+join publishers pub            on pub.id = mpp.publisher_id
+join media_plans mp            on mp.id  = mpp.media_plan_id
+join projects p                on p.id   = mp.project_id
+join clients  c                on c.id   = p.client_id
+where pl.start_date is not null
+  and pl.end_date   is not null
+  and pl.end_date < pl.start_date
+  and mp.deleted_at is null
+order by c.name, p.code, mp.name, pl.sort_order;
+
+-- B. Placements de planes FIRMADOS sin fecha de inicio o sin fecha de fin.
+--
+--    Son anteriores a la regla que exige fechas para aprobar. Ojo: un placement
+--    sin fechas NO entra al prorrateo de `getBillingEstimate` — su media, y el
+--    management fee sobre esa media, desaparecen del estimado. Además el plan
+--    queda fuera del campaign tracker, que exige período completo.
+select
+  c.name      as cliente,
+  p.code      as proyecto,
+  mp.name     as plan,
+  mp.status   as status_plan,
+  pub.name    as publisher,
+  pl.placement_name,
+  pl.start_date as inicio,
+  pl.end_date   as fin,
+  pl.amount_usd as monto
+from media_plan_placements pl
+join media_plan_publishers mpp on mpp.id = pl.media_plan_publisher_id
+join publishers pub            on pub.id = mpp.publisher_id
+join media_plans mp            on mp.id  = mpp.media_plan_id
+join projects p                on p.id   = mp.project_id
+join clients  c                on c.id   = p.client_id
+where (pl.start_date is null or pl.end_date is null)
+  and mp.status in ('approved', 'qa_done', 'live', 'finished')
+  and mp.deleted_at is null
+order by c.name, p.code, mp.name, pl.sort_order;

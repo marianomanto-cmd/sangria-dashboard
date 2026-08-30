@@ -583,7 +583,9 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `lib/plan-status.ts`.
 - **El drift que originó esto**: hasta esta migración nada cerraba los planes,
   así que había planes de 2024 y 2025 en `live` dentro de proyectos ya
-  `reportado`. El backfill de una sola vez está en
+  `reportado` — **100 planes en 87 proyectos** al correr el diagnóstico
+  (30/ago/2026), todos `live` y **ninguno todavía corriendo**. El backfill de
+  una sola vez está en
   [`db/finish-reported-plans.sql`](db/finish-reported-plans.sql) (incluye las
   queries de diagnóstico para ver el set antes de tocarlo). El filtro de
   **status del plan** del campaign tracker es la forma de detectarlo de acá en
