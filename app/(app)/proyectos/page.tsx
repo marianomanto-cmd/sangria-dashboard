@@ -35,6 +35,26 @@ function projectPeriod(r: DashboardProjectRow): { start: string | null; end: str
   return { start, end };
 }
 
+// Respaldo cuando ningún plan del proyecto tiene fechas: el rango de meses
+// facturados. Es lo único que ubica en el tiempo a los proyectos históricos de
+// la carga masiva, cuyos planes son cáscaras sin placements. Ver
+// lib/year-filter.ts.
+function projectBillingPeriod(
+  r: DashboardProjectRow,
+): { start: string | null; end: string | null } | null {
+  let start: string | null = null;
+  let end: string | null = null;
+  for (const pl of r.plans) {
+    if (pl.billingFirstMonth && (!start || pl.billingFirstMonth < start)) {
+      start = pl.billingFirstMonth;
+    }
+    if (pl.billingLastMonth && (!end || pl.billingLastMonth > end)) {
+      end = pl.billingLastMonth;
+    }
+  }
+  return start || end ? { start, end } : null;
+}
+
 export default async function ProyectosPage({ searchParams }: Props) {
   const sp = await searchParams;
   const client = await resolveClientFromSearchParams(sp);
@@ -49,12 +69,23 @@ export default async function ProyectosPage({ searchParams }: Props) {
   // derivado de los planes de cada proyecto.
   const currentYear = new Date().getFullYear();
   const selectedYear = resolveYearParam(sp.year, currentYear);
-  const years = availableYears(data.rows.map(projectPeriod), currentYear);
+  const years = availableYears(
+    data.rows.map((r) => ({
+      ...projectPeriod(r),
+      fallback: projectBillingPeriod(r),
+    })),
+    currentYear,
+  );
   const yearRows =
     selectedYear == null
       ? data.rows
       : data.rows.filter((r) =>
-          periodMatchesYear(projectPeriod(r), selectedYear, currentYear),
+          periodMatchesYear(
+            projectPeriod(r),
+            selectedYear,
+            currentYear,
+            projectBillingPeriod(r),
+          ),
         );
 
   // Filtro de estado (opcional). Valida contra el enum para ignorar valores
