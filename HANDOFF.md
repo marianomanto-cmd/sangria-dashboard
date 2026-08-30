@@ -3671,6 +3671,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+798395e  fix(sql): el backfill de tráfico v2 referenciaba el target del UPDATE en el ON (#229)
 d352768  Tráfico v2: adsets del planner, ads del AM/PM, catálogo de tipos de ad (#227)
 deff3be  Planner: tarifa para métricas custom (tickets / LC tickets) · Tráfico del plan (#225)
 5feb27e  Planes: cambio masivo de fechas de los placements · Proyectos: botón a la carpeta de Drive (#223)
