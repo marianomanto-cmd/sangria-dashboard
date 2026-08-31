@@ -130,7 +130,7 @@ async function ensureBrief(placementId: string): Promise<string> {
     .from(mediaPlanTrafficBriefs)
     .where(eq(mediaPlanTrafficBriefs.placementId, placementId))
     .limit(1);
-  if (!raced) throw new Error("No se pudo crear el brief de tráfico");
+  if (!raced) throw new Error("No se pudo crear la ficha de tráfico del placement");
   return raced.id;
 }
 

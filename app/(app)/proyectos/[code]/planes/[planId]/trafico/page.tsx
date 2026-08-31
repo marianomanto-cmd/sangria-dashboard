@@ -109,7 +109,7 @@ export default async function PlanTrafficPage({ params }: Props) {
         <a
           href={`/api/plans/${planId}/traffic.xlsx`}
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
-          title="Descargar el brief de tráfico en Excel"
+          title="Descargar la planilla de tráfico en Excel"
         >
           Excel de tráfico
         </a>
