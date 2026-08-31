@@ -99,6 +99,7 @@ app/
         bulk-dates-modal.tsx # cambio masivo de fechas: mueve inicio y/o fin de TODOS los placements del plan de una vez (solo sobre el borrador)
         plan-history.tsx    # chip "Última edición" + modal read-only con los cambios de la versión vigente (audit_log)
         qa-modal.tsx        # modal de QA del plan: preview tipo Excel con casilla "Controlado" por línea; con todas tildadas habilita "QA realizado" (approved → qa_done)
+        planning-qa-modal.tsx # modal del QA DE PLANIFICACIÓN (media planner): cada placement con sus adsets anidados y una casilla por cada uno; con todo tildado cierra el QA y hace el pase draft → ready_to_send
         version-history.tsx # historial de versiones desplegable: qué cambió en cada versión vs la anterior (diff de snapshots) + fecha + QA + descargas ?v=N
         trafico/            # ventana "Tráfico" del plan: placement → adsets (planner: audiencia/budget/pilar/fechas, botón "Del placement") → ads (AM/PM: tipo del catálogo, creativo, copy, título, subtítulo, URL, landing) + "Marcar cargado" por ad. Los adsets gatean "Listo para enviar"; los ads, el QA
         billing/            # editor de facturación mensual + gráfico "Avance de facturación" (facturado medios/fee acumulado vs total del plan) arriba de todo
@@ -192,6 +193,7 @@ db/
   plan-traffic-adsets.sql   # migración del Tráfico (paso 2): tabla ad_types (+ semilla para todos los clientes) + media_plan_traffic_adsets + migración de los ads del brief al adset + RLS
   plan-traffic-drop-folder.sql # migración del Tráfico (paso 3): saca traffic_folder_url del brief — la carpeta vive a nivel AD (creative_url)
   plan-health-check.sql     # chequeo de salud READ-ONLY de todos los planes: 14 controles (una fila cada uno, aunque den 0) — tipos de ad cruzados entre clientes, status drifteados, gates de tráfico que bloquean el avance, live sin cerrar, planes que caen en el año actual por falta de fechas, tarifas huérfanas en metrics_json
+  plan-planning-qa.sql      # migración del QA DE PLANIFICACIÓN: enum planning_qa_item_kind + tablas media_plan_planning_qa_runs/_checks + RLS. Puramente aditiva: no toca el QA que ya existía ni traba ningún plan
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
@@ -497,6 +499,56 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   (`onDelete: restrict`: un publisher en uso no se puede borrar). Si algo falla
   igual, la action captura el error y devuelve `{ok:false}` (toast) en vez de
   propagar y romper la vista.
+
+### Los DOS QA del plan: planificación y armado
+La app tiene **dos instancias de QA**, en los dos extremos del ciclo. Se hacen
+en momentos distintos, las hace gente distinta y controlan cosas distintas —
+conviene no confundirlas:
+
+| | QA de **planificación** | QA de **armado** |
+| --- | --- | --- |
+| Pase que habilita | `draft → ready_to_send` | `approved → qa_done` |
+| Quién | Media planner | AM / PM |
+| Qué controla | Lo que acaba de cargar, antes de que el plan sea un compromiso | Que la campaña esté montada en las plataformas tal cual el plan |
+| Qué se tilda | Cada **placement** y cada **adset** | Cada **línea** del plan |
+| Tablas | `media_plan_planning_qa_runs` / `_checks` | `media_plan_qa_runs` / `_checks` |
+| Módulos | `lib/plan-planning-qa.ts`, `app/actions/plan-planning-qa.ts` | `lib/plan-status.ts`, `app/actions/plan-qa.ts` |
+
+### QA de planificación: el repaso del planner antes de la firma
+- **Cómo se hace**: el botón **"Marcar listo para enviar"** ya no congela el
+  plan de una. Primero corren los chequeos que ya existían (readiness y el gate
+  de adsets) — no tiene sentido hacer repasar 40 líneas para después avisar que
+  a un publisher le falta el monto — y con eso en verde abre el modal
+  (`planning-qa-modal.tsx`): cada **placement** con su mercado, monto, método,
+  fechas y audiencia, y anidados debajo sus **adsets** con audiencia, budget,
+  pilar y fechas. Una casilla por cada uno. Con todo tildado, el botón del modal
+  **cierra el QA y hace el pase** en una sola acción (`completePlanningQa`).
+- **Es por versión**, igual que el otro, pero la versión que controla es la que
+  el draft **va a ser**: `current_version + 1`. Así el QA de planificación de la
+  v3 y el de armado de la v3 hablan de lo mismo, y editar un plan aprobado
+  —que abre la v(N+1)— pide un QA nuevo en vez de heredar el anterior.
+- **Volver a draft lo reabre**. Lo que se controló fue el plan como estaba antes
+  de volver a editarlo; dar por bueno ese control sobre contenido que puede
+  haber cambiado es justo el error que el QA existe para evitar. Los **tildes no
+  se borran** (son el registro de qué se miró y quién): el planner reabre el
+  modal, revisa y confirma.
+- **Tablas aparte, no un `stage` en las del otro QA**: acá se tildan **dos**
+  tipos de entidad (placements y adsets) y allá sólo placements. Compartir tabla
+  obligaba a un check polimórfico y a rehacer los unique de una tabla viva; así
+  la migración es puramente aditiva y el QA que ya funciona no se toca. La clave
+  de un tilde es `(kind, id)`, no el id solo.
+- **Barreras reales (server-side)**, en `app/actions/plan-planning-qa.ts` y
+  `transitionPlanStatus`:
+  - sólo se tilda sobre un plan `draft`, y sólo ítems **de ese plan**;
+  - `completePlanningQa` **re-cuenta contra la base** antes de cerrar, y sólo
+    cuenta los tildes de ítems **vivos** (borrar un placement no puede dejar el
+    QA completo con un tilde fantasma);
+  - el pase lo hace `transitionPlanStatus`, que vuelve a chequear todo. Si
+    rechaza, `completePlanningQa` **revierte el cierre** para no dejar un QA
+    "hecho" sobre un plan que no se movió;
+  - se exige **sólo** en `draft → ready_to_send`, no en `approved`: al aprobado
+    sólo se llega desde ready_to_send, y gatearlo además dejaría trabados los
+    planes que quedaron congelados antes de que este QA existiera.
 
 ### QA del plan: obligatorio para pasar a Live, y por versión
 - Entre `approved` y `live` hay una **instancia de QA**: el planner verifica que

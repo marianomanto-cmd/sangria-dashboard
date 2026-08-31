@@ -1,11 +1,13 @@
 "use client";
 
 // ════════════════════════════════════════════════════════════════════════════
-// Modal de QA del plan — el control obligatorio entre "aprobado" y "live".
+// Modal de QA DE ARMADO — el control obligatorio entre "aprobado" y "live".
+// Lo hace el AM/PM. El hermano de antes de la firma, que hace el media planner,
+// es planning-qa-modal.tsx.
 //
 // Muestra el plan como lo muestra el Excel (mismas columnas, mismos grupos de
 // publisher, mismos subtotales y el bloque de fees), con una casilla
-// "Controlado" al final de CADA línea. El planner va tildando a medida que
+// "Controlado" al final de CADA línea. El AM/PM va tildando a medida que
 // verifica que la campaña esté armada en las plataformas tal cual el plan;
 // recién con todas las líneas tildadas se habilita "QA realizado".
 //

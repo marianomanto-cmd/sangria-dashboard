@@ -41,6 +41,7 @@ import { AuxSheetSection } from "./aux-sheet";
 import { BulkDatesModal } from "./bulk-dates-modal";
 import { PlanLastEdit, type PlanEditHistory } from "./plan-history";
 import { PlanQaModal } from "./qa-modal";
+import { PlanningQaModal } from "./planning-qa-modal";
 import { PlanVersionHistory } from "./version-history";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { AudienceHoverCard } from "@/components/audience-hover-card";
@@ -53,6 +54,8 @@ import {
   findPlanReadinessIssues,
   formatReadinessIssues,
 } from "@/lib/plan-readiness";
+import type { PlanningQaState } from "@/db/queries/plan-planning-qa";
+import type { PlanTrafficPlacement } from "@/db/queries/plan-traffic";
 import type {
   PlanDetail,
   PlanFee,
@@ -136,6 +139,8 @@ export function PlanEditor({
   qaState,
   versionHistory = [],
   traffic,
+  planningQa,
+  planningRows = [],
 }: {
   detail: PlanDetail;
   allPublishers: PublisherCatalog[];
@@ -154,16 +159,22 @@ export function PlanEditor({
   qaState?: PlanQaState;
   // Una entrada por versión aprobada, con el diff contra la anterior.
   versionHistory?: PlanVersionEntry[];
-  // Resumen del brief de tráfico (ventana /trafico): avance + qué falta. El
-  // paso a Live lo exige completo, así que el editor lo muestra acá en vez de
-  // dejar que el planner se entere recién con el error de la action.
+  // Resumen del tráfico (ventana /trafico): avance + qué falta. El paso a Live
+  // lo exige completo, así que el editor lo muestra acá en vez de dejar que el
+  // planner se entere recién con el error de la action.
   traffic?: PlanTrafficSummary;
+  // QA DE PLANIFICACIÓN (el del planner, antes de la firma): estado del run de
+  // la versión que este draft va a ser + los placements con sus adsets, que es
+  // lo que el modal lista para tildar.
+  planningQa?: PlanningQaState;
+  planningRows?: PlanTrafficPlacement[];
 }) {
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [qaOpen, setQaOpen] = useState(false);
+  const [planningQaOpen, setPlanningQaOpen] = useState(false);
   const [bulkDatesOpen, setBulkDatesOpen] = useState(false);
   const editable = detail.plan.status === "draft";
 
@@ -281,14 +292,15 @@ export function PlanEditor({
     return false;
   };
 
+  // "Marcar listo para enviar" ya no congela el plan de una: abre el QA DE
+  // PLANIFICACIÓN. Primero corren los chequeos que ya existían (readiness y el
+  // gate de adsets), porque no tiene sentido hacerle repasar 40 líneas a alguien
+  // para después decirle que a un publisher le falta el monto. Con eso en
+  // verde, el modal lista placements y adsets para tildar, y su botón es el que
+  // cierra el QA y hace el pase (`completePlanningQa`).
   const onMarkReady = async () => {
     if (await blockedByReadiness("Listo")) return;
-    startTransition(async () => {
-      const r = await transitionPlanStatus({ planId: detail.plan.id, to: "ready_to_send" });
-      if (!r.ok) toast.error(r.error);
-      else toast.success("Plan marcado como listo para enviar");
-      refresh();
-    });
+    setPlanningQaOpen(true);
   };
 
   const onBackToDraft = () => {
@@ -1080,6 +1092,31 @@ export function PlanEditor({
             // Refrescar al cerrar: los tildes se guardan uno a uno, así que sin
             // esto reabrir el modal mostraría el estado viejo (props del último
             // render del server) y parecería que se perdió el progreso.
+            refresh();
+          }}
+        />
+      )}
+
+      {/* Modal de QA DE PLANIFICACIÓN — el control del planner antes de firma.
+          Lo abre "Marcar listo para enviar"; su botón cierra el QA y hace el
+          pase, así que al terminar sólo hay que refrescar. */}
+      {planningQaOpen && (
+        <PlanningQaModal
+          planId={detail.plan.id}
+          planName={detail.plan.name}
+          projectCode={detail.project.code}
+          nextVersion={detail.plan.currentVersion + 1}
+          rows={planningRows}
+          initialChecks={planningQa?.checks ?? []}
+          lang={lang}
+          onClose={() => {
+            setPlanningQaOpen(false);
+            // Igual que el otro QA: los tildes se guardan uno a uno, así que sin
+            // refrescar reabrir el modal mostraría el estado viejo.
+            refresh();
+          }}
+          onDone={() => {
+            setPlanningQaOpen(false);
             refresh();
           }}
         />

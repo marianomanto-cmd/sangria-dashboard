@@ -24,6 +24,17 @@ import {
 } from "@/lib/plan-traffic";
 import { getPlanTraffic, toTrafficPlacements } from "@/db/queries/plan-traffic";
 import {
+  getPlanningQaItems,
+  getPlanningQaState,
+  planningQaCheckedKeys,
+  planningQaVersion,
+} from "@/db/queries/plan-planning-qa";
+import {
+  computePlanningQaProgress,
+  planningQaRequiredMessage,
+} from "@/lib/plan-planning-qa";
+import { mediaPlanPlanningQaRuns } from "@/db/schema";
+import {
   markets,
   mediaPlanFees,
   mediaPlanPlacements,
@@ -601,6 +612,36 @@ export async function transitionPlanStatus(input: {
     }
   }
 
+  // Regla dura del QA DE PLANIFICACIÓN: antes de congelar el plan y mandarlo a
+  // firma, el planner tiene que haber repasado y tildado cada placement y cada
+  // adset. Lo hace en el modal que abre "Marcar listo para enviar", y el cierre
+  // del QA es el que llama acá (`completePlanningQa`).
+  //
+  // Se exige SOLO en el pase a `ready_to_send`, no en `approved`, por dos
+  // razones: al aprobado sólo se llega desde ready_to_send —así que el control
+  // ya pasó—, y gatearlo también dejaría trabados los planes que quedaron
+  // congelados antes de que este QA existiera.
+  //
+  // La regla vive en lib/plan-planning-qa.ts porque el modal la usa también,
+  // para contar el progreso con el mismo criterio con el que esto bloquea.
+  if (input.to === "ready_to_send") {
+    const version = planningQaVersion(before.currentVersion);
+    const [items, state] = await Promise.all([
+      getPlanningQaItems(input.planId),
+      getPlanningQaState(input.planId, version),
+    ]);
+    const progress = computePlanningQaProgress(
+      items,
+      planningQaCheckedKeys(state.checks),
+    );
+    if (!state.completedAt || !progress.complete) {
+      return {
+        ok: false,
+        error: planningQaRequiredMessage(progress, state.completedAt != null),
+      };
+    }
+  }
+
   // Si pasa a approved: tomar snapshot inmutable.
   if (input.to === "approved") {
     const newVersion = before.currentVersion + 1;
@@ -623,6 +664,29 @@ export async function transitionPlanStatus(input: {
       .update(mediaPlans)
       .set({ status: input.to })
       .where(eq(mediaPlans.id, input.planId));
+  }
+
+  // Volver a draft REABRE el QA de planificación de esa versión. Lo que se
+  // controló fue el plan como estaba antes de volver a editarlo; dar por bueno
+  // ese control sobre contenido que puede haber cambiado es justo el error que
+  // este QA existe para evitar. Los tildes NO se borran (son el registro de qué
+  // se miró y quién): el planner reabre el modal, revisa y confirma.
+  //
+  // Sólo aplica al ready_to_send → draft: desde un estado firmado, "Editar
+  // (nueva versión)" apunta a una versión que todavía no tiene run.
+  if (input.to === "draft") {
+    await db
+      .update(mediaPlanPlanningQaRuns)
+      .set({ completedAt: null, completedByUserId: null, completedByEmail: null })
+      .where(
+        and(
+          eq(mediaPlanPlanningQaRuns.mediaPlanId, input.planId),
+          eq(
+            mediaPlanPlanningQaRuns.versionNumber,
+            planningQaVersion(before.currentVersion),
+          ),
+        ),
+      );
   }
 
   await recordAudit({

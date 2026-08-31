@@ -17,11 +17,15 @@ import {
 } from "@/db/schema";
 
 // ════════════════════════════════════════════════════════════════════════════
-// QA del plan — el paso obligatorio entre "aprobado" y "live".
+// QA DE ARMADO del plan — el paso obligatorio entre "aprobado" y "live".
 //
-// El planner abre el modal de QA (preview tipo Excel del plan), tilda
+// El AM/PM abre el modal de QA (preview tipo Excel del plan), tilda
 // "controlado" línea por línea y, con TODAS tildadas, cierra el QA. Recién ahí
 // el plan pasa a `qa_done` y puede marcarse `live`.
+//
+// NO confundir con el QA DE PLANIFICACIÓN (app/actions/plan-planning-qa.ts):
+// aquél lo hace el media planner sobre el BORRADOR, antes de la firma, y mira
+// el plan; éste mira la campaña ya montada en las plataformas.
 //
 // El QA es por versión: aprobar la v(N+1) deja el plan en `approved` sin run
 // para esa versión → hay que rehacerlo entero. Ver lib/plan-status.ts.

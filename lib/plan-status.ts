@@ -11,7 +11,7 @@
 //   draft         → editable por el MM
 //   ready_to_send → MM lo congeló, AM puede bajar el PDF y mandarlo a firma
 //   approved      → cliente firmó. Falta el QA de la versión → NO puede ir a live
-//   qa_done       → el planner controló línea por línea que la campaña esté
+//   qa_done       → el AM/PM controló línea por línea que la campaña esté
 //                   armada tal cual el plan. Habilitado para pasar a live
 //   live          → campaña al aire
 //   archived      → reemplazado por una nueva versión o cancelado
@@ -155,12 +155,12 @@ export const PLAN_STATUS_LABELS: Record<PlanStatus, string> = {
 
 // Qué significa cada estado, para tooltips y textos de ayuda.
 export const PLAN_STATUS_HINTS: Record<PlanStatus, string> = {
-  draft: "Borrador editable por el media manager.",
+  draft: "Borrador editable por el media planner. Para mandarlo a firma hay que pasar el QA de planificación.",
   ready_to_send: "Congelado por el MM, listo para mandar a firma del cliente.",
   approved:
     "Firmado por el cliente. Falta el QA de esta versión — hasta hacerlo no se puede marcar Live.",
   qa_done:
-    "QA hecho sobre esta versión: se controló línea por línea que la campaña esté armada como el plan. Listo para marcar Live.",
+    "QA de armado hecho sobre esta versión: el AM/PM controló línea por línea que la campaña esté montada como el plan. Listo para marcar Live.",
   live: "Campaña al aire.",
   finished:
     "Campaña terminada: corrió y cerró. Sigue contando para el histórico (portal, análisis, benchmarks) pero ya no genera pendientes ni aparece en el campaign tracker.",
