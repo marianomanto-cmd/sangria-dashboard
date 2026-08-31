@@ -1,6 +1,32 @@
-# Handoff — viernes 28/ago/2026
+# Handoff — domingo 31/ago/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 31/ago/2026 — Manual de operación del plan + fuera la palabra "brief"
+
+Se armó un **artefacto de instrucciones** (documento web, fuera del repo) con la
+ruta completa de un plan de medios: las 8 etapas (configuración del cliente →
+armar el plan → adsets → firma → ads → QA → carga y Live → cierre), quién hace
+cada una y las **tres barreras** que el sistema no deja saltear, más la tabla de
+qué se puede hacer en cada estado y los tres exports. Sale del código, no de
+memoria: las reglas que documenta son las de `lib/plan-status.ts`,
+`lib/plan-readiness.ts` y `lib/plan-traffic.ts`.
+
+Del lado del código, un solo cambio de copy: **"brief" no va en los textos que
+ve el usuario**. En la app la sección se llama Tráfico y lo que se baja es la
+planilla de tráfico.
+
+- Tooltip del export (`trafico/page.tsx`): "Descargar la **planilla** de tráfico
+  en Excel".
+- Error de `ensureBriefId` (`app/actions/plan-traffic.ts`): "No se pudo crear la
+  **ficha de tráfico del placement**" — de paso gana precisión, porque nombra la
+  fila que falló.
+- Los **identificadores internos** (`media_plan_traffic_briefs`, sus tipos y
+  queries) quedan como están: renombrar la tabla es una migración y no cambia
+  nada de lo que se lee en pantalla. Las menciones del README describen ese
+  identificador, así que siguen siendo correctas.
+
+**No requiere acción en prod.**
 
 ### Cambios de la sesión 28/ago/2026 (5) — la carpeta de tráfico sale del placement
 
@@ -3806,6 +3832,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+0c2469c  Tráfico: sacar la palabra "brief" de los textos que ve el usuario (#239)
 fdc548e  Tráfico: la carpeta de archivos sale del placement (vive a nivel ad) (#237)
 564ba37  db: chequeo de salud read-only de los planes (14 controles) (#235)
 550eed3  `finished` como estado real del plan + separar FIRMADO de VIGENTE (#233)
