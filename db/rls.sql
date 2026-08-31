@@ -42,6 +42,8 @@ alter table public.media_plan_aux_sheets       enable row level security;
 alter table public.media_plan_snapshots        enable row level security;
 alter table public.media_plan_qa_runs           enable row level security;
 alter table public.media_plan_qa_checks         enable row level security;
+alter table public.media_plan_planning_qa_runs   enable row level security;
+alter table public.media_plan_planning_qa_checks enable row level security;
 alter table public.media_plan_traffic_briefs    enable row level security;
 alter table public.media_plan_traffic_adsets    enable row level security;
 alter table public.media_plan_traffic_ads       enable row level security;

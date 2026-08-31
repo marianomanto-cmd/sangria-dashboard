@@ -105,6 +105,13 @@ export const costMethod = pgEnum("cost_method", [
 //   calculated — derivada de otras (cpc = amount/clicks, ctr = clicks/impressions)
 export const metricKind = pgEnum("metric_kind", ["direct", "calculated"]);
 
+// Qué se tilda en el QA de planificación: una línea del plan o un adset.
+// Ver `media_plan_planning_qa_checks` más abajo.
+export const planningQaItemKind = pgEnum("planning_qa_item_kind", [
+  "placement",
+  "adset",
+]);
+
 // ════════════════════════════════════════════════════════════════════════════
 // Catálogo de mercados — per-cliente.
 // Antes era global. Ahora cada cliente tiene su propia lista; podés tener
@@ -541,6 +548,85 @@ export const mediaPlanQaChecks = pgTable(
   (t) => [
     unique("uq_mpqc_run_placement").on(t.qaRunId, t.placementId),
     index("idx_mpqc_run").on(t.qaRunId),
+  ],
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// QA de PLANIFICACIÓN — el control del MEDIA PLANNER antes de mandar a firma.
+//
+// Es el hermano del QA de arriba, en el otro extremo del ciclo. Se hacen en
+// momentos distintos, los hace gente distinta y controlan cosas distintas:
+//
+//   PLANIFICACIÓN (esto)   draft → ready_to_send.  Lo hace el MEDIA PLANNER.
+//     Antes de congelar el plan y mandarlo a firma, repasa línea por línea lo
+//     que acaba de cargar: cada PLACEMENT y cada ADSET. Es la última lectura
+//     antes de que el plan se vuelva un compromiso con el cliente.
+//
+//   ARMADO (media_plan_qa_runs)   approved → qa_done.  Lo hace el AM/PM.
+//     Con el plan ya firmado, controla que la campaña esté montada en las
+//     plataformas tal cual el plan.
+//
+// Por qué TABLAS APARTE y no un `stage` en las de arriba: este QA tilda dos
+// tipos de entidad (placements y adsets), el otro sólo placements. Meterlos en
+// la misma tabla obligaba a un check polimórfico y a re-hacer los unique de una
+// tabla viva. Separadas, la migración es puramente aditiva y el QA que ya
+// funciona no se toca.
+//
+// La versión que se controla es la que el draft VA A SER: `current_version + 1`.
+// Así el QA de planificación de la v3 y el QA de armado de la v3 hablan de lo
+// mismo, y editar un plan aprobado (que abre la v(N+1)) pide un QA nuevo.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const mediaPlanPlanningQaRuns = pgTable(
+  "media_plan_planning_qa_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    mediaPlanId: uuid("media_plan_id")
+      .notNull()
+      .references(() => mediaPlans.id, { onDelete: "cascade" }),
+    // Versión que este draft va a ser al aprobarse (= current_version + 1).
+    versionNumber: integer("version_number").notNull(),
+    // null = QA en curso. Seteado = cerrado (todo tildado) → habilitó el pase
+    // a ready_to_send. Volver a draft lo limpia: lo que se controló ya no es
+    // necesariamente lo que se va a congelar.
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    completedByUserId: uuid("completed_by_user_id"),
+    completedByEmail: text("completed_by_email"),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique("uq_mppqr_plan_version").on(t.mediaPlanId, t.versionNumber),
+    index("idx_mppqr_plan").on(t.mediaPlanId, t.versionNumber),
+  ],
+);
+
+export const mediaPlanPlanningQaChecks = pgTable(
+  "media_plan_planning_qa_checks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    qaRunId: uuid("qa_run_id")
+      .notNull()
+      .references(() => mediaPlanPlanningQaRuns.id, { onDelete: "cascade" }),
+    // Qué se tildó. Sin FK a propósito (igual que en media_plan_qa_checks): la
+    // línea o el adset pueden desaparecer en una versión futura y el registro
+    // histórico de lo que se controló tiene que sobrevivir.
+    //
+    //   itemKind = 'placement' → itemId es un media_plan_placements.id
+    //   itemKind = 'adset'     → itemId es un media_plan_traffic_adsets.id
+    itemKind: planningQaItemKind("item_kind").notNull(),
+    itemId: uuid("item_id").notNull(),
+    checkedAt: timestamp("checked_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    checkedByUserId: uuid("checked_by_user_id"),
+    checkedByEmail: text("checked_by_email"),
+  },
+  (t) => [
+    unique("uq_mppqc_run_item").on(t.qaRunId, t.itemKind, t.itemId),
+    index("idx_mppqc_run").on(t.qaRunId),
   ],
 );
 

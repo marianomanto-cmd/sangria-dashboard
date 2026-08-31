@@ -5,6 +5,10 @@ import { getPlanAuditEvents } from "@/db/queries/audit-log";
 import { getPlanQaState, getPlanVersionHistory } from "@/db/queries/plan-qa";
 import { getPlanTraffic, toTrafficPlacements } from "@/db/queries/plan-traffic";
 import {
+  getPlanningQaState,
+  planningQaVersion,
+} from "@/db/queries/plan-planning-qa";
+import {
   listMarketsForClient,
   listMetricsForClient,
   listPublishersForClient,
@@ -54,6 +58,7 @@ export default async function PlanDetailPage({ params }: Props) {
     qaState,
     versionHistory,
     trafficRows,
+    planningQaState,
   ] = await Promise.all([
     listPublishersForClient(detail.client.id),
     listMarketsForClient(detail.client.id),
@@ -64,9 +69,13 @@ export default async function PlanDetailPage({ params }: Props) {
     // de versiones con su diff (el desplegable de abajo del editor).
     getPlanQaState(planId, detail.plan.currentVersion),
     getPlanVersionHistory(planId),
-    // Brief de tráfico: el editor sólo necesita el resumen (avance + qué
-    // falta) para el contador del botón "Tráfico" y el aviso del gate de Live.
+    // Tráfico: el editor necesita el resumen (avance + qué falta) para el
+    // contador del botón "Tráfico" y el aviso del gate de Live, y las filas
+    // completas para el modal del QA de planificación, que lista cada
+    // placement con sus adsets.
     getPlanTraffic(planId),
+    // QA de planificación de la versión que este draft va a ser.
+    getPlanningQaState(planId, planningQaVersion(detail.plan.currentVersion)),
   ]);
 
   // Los tres cortes que el editor necesita mostrar, uno por gate:
@@ -121,6 +130,8 @@ export default async function PlanDetailPage({ params }: Props) {
         qaState={qaState}
         versionHistory={versionHistory}
         traffic={traffic}
+        planningQa={planningQaState}
+        planningRows={trafficRows}
       />
     </main>
   );
