@@ -2,6 +2,24 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 31/ago/2026 (4) — regla nueva: las queries se entregan en el chat
+
+`AGENTS.md` suma una **regla dura**: toda migración, backfill, corrección de
+datos o query de diagnóstico se entrega **pegada en la respuesta del chat**, en
+un bloque ```sql listo para copiar. Dejarla sólo en un archivo de `db/` y avisar
+que está ahí **no alcanza** — el dueño del repo las corre a mano en el SQL
+Editor de Supabase y las necesita a mano.
+
+La regla además fija cómo entregarlas: migración y verificación en **bloques
+separados** (el SQL Editor muestra sólo el resultado del último statement),
+diciendo qué tiene que devolver la verificación; probadas contra el Postgres 16
+local antes de entregarlas; idempotentes; y con el orden explícito respecto del
+deploy cuando el código depende de ellas.
+
+El archivo en `db/*.sql` se sigue commiteando: es el registro histórico.
+
+**No requiere acción en prod.**
+
 ### Cambios de la sesión 31/ago/2026 (3) — segundo QA: el del planner antes de la firma
 
 Ahora hay **dos QA**, en los dos extremos del ciclo. El que ya existía

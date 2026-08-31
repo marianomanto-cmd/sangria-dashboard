@@ -4,6 +4,33 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
+# Las queries se entregan EN EL CHAT, para copy-paste (regla dura)
+
+En este proyecto **nadie aplica cambios a Supabase por su cuenta**: los corre el
+dueño del repo a mano, en el SQL Editor. Toda migración, backfill, corrección de
+datos o query de diagnóstico se entrega **pegada en la respuesta del chat**, en
+un bloque ```sql listo para copiar — no alcanza con dejarla en un archivo de
+`db/` y avisar que está ahí, ni con decir el nombre del archivo.
+
+Cómo entregarlas:
+
+- **En el chat, completa.** El archivo en `db/*.sql` se sigue commiteando (es el
+  registro), pero la copia del chat es la que se usa. Si son largas, se puede
+  recortar el comentario de cabecera, nunca el SQL.
+- **Separá la migración de la verificación** en dos bloques: el SQL Editor
+  muestra el resultado del último statement, así que los `select` de control van
+  aparte para poder verlos.
+- **Decí qué tiene que devolver** la verificación para considerarla exitosa.
+- **Nunca las apliques vos** — ni con el MCP de Supabase ni de ninguna otra
+  forma. Tampoco `db:push` ni `db:migrate` contra prod.
+- **Probalas antes de entregarlas.** Hay un Postgres 16 local en el contenedor
+  (`/usr/lib/postgresql/16/bin`); ver el gotcha de `initdb` en HANDOFF. Ya pasó
+  una vez que una migración sin probar rebotó con un error de sintaxis.
+- **Hacelas idempotentes** (`if not exists`, `do $$ ... end $$` sobre
+  `pg_constraint` / `pg_type`) para que se puedan recorrer si algo se corta.
+- **Si el código depende de la migración, decilo con todas las letras**: qué se
+  rompe si se deploya el código sin correr el SQL, y en qué orden va cada cosa.
+
 # La documentación SIEMPRE tiene que estar al día (regla dura)
 
 En este proyecto, mantener la documentación actualizada NO es opcional: es
