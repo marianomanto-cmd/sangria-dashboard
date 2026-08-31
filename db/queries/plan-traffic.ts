@@ -56,7 +56,6 @@ export type PlanTrafficAdset = {
 
 export type PlanTrafficBrief = {
   id: string;
-  trafficFolderUrl: string | null;
   adsets: PlanTrafficAdset[];
 };
 
@@ -203,7 +202,6 @@ export async function getPlanTraffic(
   for (const b of briefRows) {
     briefByPlacement.set(b.placementId, {
       id: b.id,
-      trafficFolderUrl: b.trafficFolderUrl,
       adsets: adsetsByBrief.get(b.id) ?? [],
     });
   }
@@ -242,7 +240,7 @@ export function toTrafficPlacements(
     publisherName: r.publisherName,
     placementName: r.placementName,
     brief: r.brief
-      ? { trafficFolderUrl: r.brief.trafficFolderUrl, adsets: r.brief.adsets }
+      ? { adsets: r.brief.adsets }
       : null,
   }));
 }

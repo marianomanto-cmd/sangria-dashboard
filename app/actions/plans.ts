@@ -705,7 +705,6 @@ type RescuedAdset = typeof mediaPlanTrafficAdsets.$inferSelect & {
 };
 
 type RescuedBrief = {
-  trafficFolderUrl: string | null;
   adsets: RescuedAdset[];
 };
 
@@ -776,10 +775,7 @@ async function rescuePlanTraffic(
   for (const r of rows) {
     const key = trafficKey(r.publisherId, r.placementName);
     const list = out.get(key) ?? [];
-    list.push({
-      trafficFolderUrl: r.brief.trafficFolderUrl,
-      adsets: adsetsByBrief.get(r.brief.id) ?? [],
-    });
+    list.push({ adsets: adsetsByBrief.get(r.brief.id) ?? [] });
     out.set(key, list);
   }
   return out;
@@ -807,10 +803,7 @@ async function restorePlanTraffic(
 
     const [newBrief] = await tx
       .insert(mediaPlanTrafficBriefs)
-      .values({
-        placementId: t.placementId,
-        trafficFolderUrl: brief.trafficFolderUrl,
-      })
+      .values({ placementId: t.placementId })
       .returning({ id: mediaPlanTrafficBriefs.id });
 
     for (const adset of brief.adsets) {

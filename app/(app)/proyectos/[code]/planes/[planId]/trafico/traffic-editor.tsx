@@ -21,7 +21,6 @@ import {
   setTrafficAdLoaded,
   updateTrafficAd,
   updateTrafficAdset,
-  updateTrafficBrief,
 } from "@/app/actions/plan-traffic";
 import type {
   PlanTrafficAd,
@@ -71,7 +70,7 @@ function asTrafficPlacement(row: PlanTrafficPlacement): TrafficPlacement {
     publisherName: row.publisherName,
     placementName: row.placementName,
     brief: row.brief
-      ? { trafficFolderUrl: row.brief.trafficFolderUrl, adsets: row.brief.adsets }
+      ? { adsets: row.brief.adsets }
       : null,
   };
 }
@@ -358,28 +357,6 @@ function PlacementCard({
 
       {open && (
         <div className="px-5 py-4 space-y-4">
-          {/* Carpeta de tráfico: material del AM/PM, junto con los creativos. */}
-          <Field label="Carpeta de tráfico">
-            <div className="flex items-center gap-2">
-              <TextInput
-                value={row.brief?.trafficFolderUrl ?? ""}
-                disabled={!adsEditable}
-                placeholder="https://drive.google.com/…"
-                onCommit={(v) =>
-                  run(() =>
-                    updateTrafficBrief({
-                      placementId: row.placementId,
-                      trafficFolderUrl: v || null,
-                    }),
-                  )
-                }
-              />
-              {row.brief?.trafficFolderUrl && (
-                <OpenLink href={row.brief.trafficFolderUrl} />
-              )}
-            </div>
-          </Field>
-
           {!adsetsOk && <IssueList issues={adsetIssues} title="Adsets" />}
 
           {adsets.length === 0 ? (

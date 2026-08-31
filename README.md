@@ -190,6 +190,7 @@ db/
   plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
   plan-traffic.sql          # migración del Tráfico (paso 1): tablas media_plan_traffic_briefs/_ads + índices + RLS. SUPERADO por plan-traffic-adsets.sql
   plan-traffic-adsets.sql   # migración del Tráfico (paso 2): tabla ad_types (+ semilla para todos los clientes) + media_plan_traffic_adsets + migración de los ads del brief al adset + RLS
+  plan-traffic-drop-folder.sql # migración del Tráfico (paso 3): saca traffic_folder_url del brief — la carpeta vive a nivel AD (creative_url)
   plan-health-check.sql     # chequeo de salud READ-ONLY de todos los planes: 14 controles (una fila cada uno, aunque den 0) — tipos de ad cruzados entre clientes, status drifteados, gates de tráfico que bloquean el avance, live sin cerrar, planes que caen en el año actual por falta de fechas, tarifas huérfanas en metrics_json
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
@@ -551,8 +552,12 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   - **Ads** (`media_plan_traffic_ads`) — los completa el **AM/PM**. Un adset
     puede tener uno o varios, cada uno con **tipo de ad** (del catálogo del
     cliente), **link del creativo, copy, título, subtítulo, URL y landing**.
-  - El **brief** del placement (`media_plan_traffic_briefs`, 1:1) queda sólo con
-    el **link a la carpeta de tráfico**: la cantidad de adsets se **deriva**.
+  - **La carpeta de archivos vive a nivel AD**, no de placement ni de adset: es
+    el `creative_url` del ad. Un mismo placement puede tener creatividades
+    distintas en carpetas distintas, así que una sola carpeta arriba no servía.
+  - El **brief** del placement (`media_plan_traffic_briefs`, 1:1) es sólo el
+    contenedor del que cuelgan los adsets — **no tiene campos propios**. La
+    cantidad de adsets se **deriva** de cuántos hay.
 - **Dos gates, uno por rol** — reglas en
   [`lib/plan-traffic.ts`](lib/plan-traffic.ts) (módulo puro, sin DB ni React,
   igual que `plan-readiness.ts`), consumidas por las barreras y por la UI, que
@@ -587,10 +592,10 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
   `restorePlanTraffic` (en `app/actions/plans.ts`) rescatan briefs, adsets y ads
   antes del delete y los devuelven a su línea, apareando por **publisher +
   nombre del placement**.
-- **Export**: `/api/plans/[planId]/traffic.xlsx` — espejo de la pantalla, una
-  fila por ad con el contexto del placement, los campos del adset, los del ad,
-  el estado de carga y las dos columnas de diagnóstico ("Falta (adsets)" /
-  "Falta (ads)"). **No** es público (no está en `isPublicPlanExportPath`): el
+- **Export**: `/api/plans/[planId]/traffic.xlsx` — espejo de la pantalla, 25
+  columnas: una fila por ad con el contexto del placement, los campos del adset,
+  los del ad, el estado de carga y las dos columnas de diagnóstico
+  ("Falta (adsets)" / "Falta (ads)"). **No** es público (no está en `isPublicPlanExportPath`): el
   brief es material de producción, no algo que se le manda al cliente.
 
 ### Historial de versiones: qué cambió en cada una

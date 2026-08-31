@@ -134,49 +134,6 @@ async function ensureBrief(placementId: string): Promise<string> {
   return raced.id;
 }
 
-// ── Brief del placement: la carpeta de archivos ─────────────────────────────
-// La llena el AM/PM junto con los ads (es donde están los creativos), así que
-// sigue la regla de los ads: cualquier estado vivo del plan.
-
-export async function updateTrafficBrief(input: {
-  placementId: string;
-  trafficFolderUrl?: string | null;
-}): Promise<Result> {
-  if (!input.placementId) return { ok: false, error: "Falta placement_id" };
-  const ctx = await planCtxForPlacement(input.placementId);
-  if (!ctx) {
-    return { ok: false, error: "El placement no existe o el plan no es editable" };
-  }
-  if (input.trafficFolderUrl === undefined) return { ok: true };
-
-  const link = normalizeExternalUrl(input.trafficFolderUrl);
-  if (!link.ok) return { ok: false, error: link.error };
-
-  const briefId = await ensureBrief(input.placementId);
-  const [before] = await db
-    .select()
-    .from(mediaPlanTrafficBriefs)
-    .where(eq(mediaPlanTrafficBriefs.id, briefId))
-    .limit(1);
-
-  const [after] = await db
-    .update(mediaPlanTrafficBriefs)
-    .set({ trafficFolderUrl: link.url, updatedAt: sql`now()` })
-    .where(eq(mediaPlanTrafficBriefs.id, briefId))
-    .returning();
-
-  await recordAudit({
-    entityType: "plan_traffic_brief",
-    entityId: briefId,
-    action: "update",
-    beforeJson: before,
-    afterJson: after,
-  });
-
-  revalidateTraffic(ctx);
-  return { ok: true };
-}
-
 // ── Adsets (media planner) ──────────────────────────────────────────────────
 
 // `copyFromPlacement` es el botón "Del placement": muchas veces el adset ES el
