@@ -3806,6 +3806,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+fdc548e  Tráfico: la carpeta de archivos sale del placement (vive a nivel ad) (#237)
 564ba37  db: chequeo de salud read-only de los planes (14 controles) (#235)
 550eed3  `finished` como estado real del plan + separar FIRMADO de VIGENTE (#233)
 b49a96e  Filtro de año: los planes históricos sin fechas caían todos en el año en curso (#231)
