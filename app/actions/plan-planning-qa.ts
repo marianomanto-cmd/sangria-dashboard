@@ -15,6 +15,7 @@ import {
   getPlanningQaItems,
   planningQaCheckedKeys,
   planningQaVersion,
+  type PlanningQaCheck,
 } from "@/db/queries/plan-planning-qa";
 import {
   mediaPlanPlanningQaChecks,
@@ -169,7 +170,7 @@ export async function setPlanningQaCheck(input: {
       .where(eq(mediaPlanPlanningQaRuns.id, run.id));
   }
 
-  const checks = await db
+  const checkRows = await db
     .select({
       itemKind: mediaPlanPlanningQaChecks.itemKind,
       itemId: mediaPlanPlanningQaChecks.itemId,
@@ -178,10 +179,15 @@ export async function setPlanningQaCheck(input: {
     .where(eq(mediaPlanPlanningQaChecks.qaRunId, run.id));
 
   // Solo cuentan los tildes de ítems que siguen vivos: borrar un placement no
-  // puede dejar el QA "completo" con un tilde fantasma.
+  // puede dejar el QA "completo" con un tilde fantasma. Lo mismo vale para los
+  // tildes viejos de adsets, que el enum de la base todavía admite.
   const progress = computePlanningQaProgress(
     items,
-    new Set(checks.map((c) => planningQaKey(c.itemKind, c.itemId))),
+    new Set(
+      checkRows
+        .filter((c) => isPlanningQaItemKind(c.itemKind))
+        .map((c) => planningQaKey(c.itemKind as PlanningQaItemKind, c.itemId)),
+    ),
   );
 
   return { ok: true, checkedCount: progress.checked, totalCount: progress.total };
@@ -218,7 +224,7 @@ export async function completePlanningQa(input: {
   const run = await ensurePlanningRun(input.planId, version);
   if (!run) return { ok: false, error: "No se pudo abrir el QA de planificación" };
 
-  const checks = await db
+  const checkRows = await db
     .select({
       itemKind: mediaPlanPlanningQaChecks.itemKind,
       itemId: mediaPlanPlanningQaChecks.itemId,
@@ -228,7 +234,11 @@ export async function completePlanningQa(input: {
     .from(mediaPlanPlanningQaChecks)
     .where(eq(mediaPlanPlanningQaChecks.qaRunId, run.id));
 
-  const checkedKeys = planningQaCheckedKeys(checks);
+  const checkedKeys = planningQaCheckedKeys(
+    checkRows.filter((c): c is PlanningQaCheck =>
+      isPlanningQaItemKind(c.itemKind),
+    ),
+  );
   const missing = findPlanningQaMissing(items, checkedKeys);
   if (missing.length > 0) {
     return { ok: false, error: planningQaIncompleteMessage(missing) };

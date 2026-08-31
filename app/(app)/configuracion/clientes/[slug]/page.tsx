@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  adTypes,
   budgetOrigins,
   clients,
   markets,
@@ -56,11 +55,6 @@ export default async function ClientConfigPage({ params }: Props) {
     .orderBy(asc(markets.sortOrder), asc(markets.name));
 
   // Tipos de ad del cliente (alimentan el desplegable de la ventana de Tráfico).
-  const adTypeRows = await db
-    .select()
-    .from(adTypes)
-    .where(eq(adTypes.clientId, client.id))
-    .orderBy(asc(adTypes.sortOrder), asc(adTypes.name));
 
   // Budget origins del cliente.
   const budgetOriginRows = await db
@@ -91,7 +85,6 @@ export default async function ClientConfigPage({ params }: Props) {
         metrics={metricRows}
         markets={marketRows}
         budgetOrigins={budgetOriginRows}
-        adTypes={adTypeRows}
       />
     </PageShell>
   );
