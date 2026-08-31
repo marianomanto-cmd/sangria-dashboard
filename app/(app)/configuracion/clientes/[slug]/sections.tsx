@@ -26,14 +26,7 @@ import {
   deletePublisher,
   updatePublisher,
 } from "@/app/actions/publishers";
-import {
-  createAdType,
-  deleteAdType,
-  seedDefaultAdTypes,
-  updateAdType,
-} from "@/app/actions/ad-types";
 import type {
-  adTypes as adTypesTable,
   budgetOrigins as budgetOriginsTable,
   markets as marketsTable,
   metricsCatalog as metricsTable,
@@ -50,7 +43,6 @@ type PublisherRow = {
 type Metric = typeof metricsTable.$inferSelect;
 type Market = typeof marketsTable.$inferSelect;
 type BudgetOrigin = typeof budgetOriginsTable.$inferSelect;
-type AdType = typeof adTypesTable.$inferSelect;
 
 export function ClientConfigSections({
   clientId,
@@ -59,7 +51,6 @@ export function ClientConfigSections({
   metrics,
   markets,
   budgetOrigins,
-  adTypes,
 }: {
   clientId: string;
   clientSlug: string;
@@ -68,7 +59,6 @@ export function ClientConfigSections({
   metrics: Metric[];
   markets: Market[];
   budgetOrigins: BudgetOrigin[];
-  adTypes: AdType[];
 }) {
   return (
     <div className="space-y-8">
@@ -81,11 +71,6 @@ export function ClientConfigSections({
         clientId={clientId}
         clientSlug={clientSlug}
         rows={metrics}
-      />
-      <AdTypesSection
-        clientId={clientId}
-        clientSlug={clientSlug}
-        rows={adTypes}
       />
       <MarketsSection
         clientId={clientId}
@@ -715,250 +700,6 @@ function MetricsSection({
 // "Pide detalle" marca las entradas tipo "Otro": el ad queda incompleto —y
 // bloquea el QA— hasta que se escriba a mano de qué se trata.
 // ────────────────────────────────────────────────────────────────────────────
-
-function AdTypesSection({
-  clientId,
-  clientSlug,
-  rows,
-}: {
-  clientId: string;
-  clientSlug: string;
-  rows: AdType[];
-}) {
-  const router = useRouter();
-  const toast = useToast();
-  const confirm = useConfirm();
-  const [pending, startTransition] = useTransition();
-  const [showAdd, setShowAdd] = useState(false);
-  const [draft, setDraft] = useState({ name: "", slug: "", requiresDetail: false });
-  const [error, setError] = useState<string | null>(null);
-
-  const onCreate = () => {
-    if (!draft.name.trim()) {
-      setError("Nombre requerido");
-      return;
-    }
-    setError(null);
-    startTransition(async () => {
-      const r = await createAdType({
-        clientId,
-        clientSlug,
-        name: draft.name.trim(),
-        slug: draft.slug.trim() || undefined,
-        requiresDetail: draft.requiresDetail,
-      });
-      if (!r.ok) {
-        setError(r.error);
-        return;
-      }
-      setDraft({ name: "", slug: "", requiresDetail: false });
-      setShowAdd(false);
-      router.refresh();
-    });
-  };
-
-  const onUpdate = (
-    id: string,
-    partial: { name?: string; enabled?: boolean; requiresDetail?: boolean },
-  ) => {
-    startTransition(async () => {
-      const r = await updateAdType({ id, clientSlug, ...partial });
-      if (!r.ok) toast.error(r.error);
-      router.refresh();
-    });
-  };
-
-  const onDelete = async (id: string, name: string) => {
-    if (
-      !(await confirm({
-        title: `¿Eliminar el tipo de ad "${name}"?`,
-        body: "Los ads que ya lo usaban quedan sin tipo (y por lo tanto incompletos). Si sólo querés sacarlo de circulación, deshabilitalo en vez de borrarlo.",
-        confirmLabel: "Eliminar",
-        danger: true,
-      }))
-    )
-      return;
-    startTransition(async () => {
-      const r = await deleteAdType({ id, clientSlug });
-      if (!r.ok) toast.error(r.error);
-      router.refresh();
-    });
-  };
-
-  const onSeed = () => {
-    startTransition(async () => {
-      const r = await seedDefaultAdTypes({ clientId, clientSlug });
-      if (!r.ok) {
-        toast.error(r.error);
-        return;
-      }
-      toast.success(
-        r.created === 0
-          ? "Ya estaban todos los tipos estándar"
-          : `Se agregaron ${r.created} tipo${r.created === 1 ? "" : "s"} de ad`,
-      );
-      router.refresh();
-    });
-  };
-
-  return (
-    <section id="tipos-de-ad">
-      <header className="mb-3 flex items-baseline justify-between gap-3 flex-wrap">
-        <h2 className="text-base font-semibold">Tipos de ad</h2>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onSeed}
-            disabled={pending}
-            className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-muted hover:text-ink disabled:opacity-40"
-            title="Agrega los tipos estándar que falten (no pisa ni duplica los que ya están)"
-          >
-            Cargar los estándar
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowAdd((s) => !s)}
-            className={buttonVariants({ size: "xs" })}
-          >
-            <Plus size={12} />
-            Nuevo tipo
-          </button>
-        </div>
-      </header>
-      <p className="text-xs text-muted mb-3 max-w-2xl">
-        Alimentan el desplegable <span className="font-medium">Tipo de ad</span>{" "}
-        de la ventana de Tráfico de cada plan, donde el AM/PM carga los ads.
-        Marcá <span className="font-medium">Pide detalle</span> en las entradas
-        tipo &ldquo;Otro&rdquo;: esos ads además exigen escribir a mano de qué se
-        trata, y hasta entonces bloquean el QA.
-      </p>
-      {showAdd && (
-        <div className="rounded-lg border border-line bg-paper-2 p-4 mb-3 space-y-2">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <input
-              type="text"
-              placeholder="Nombre (ej. Collection)"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
-            />
-            <input
-              type="text"
-              placeholder="slug (opcional, ej. collection)"
-              value={draft.slug}
-              onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
-              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
-            />
-          </div>
-          <label className="flex items-center gap-2 text-xs text-muted">
-            <input
-              type="checkbox"
-              checked={draft.requiresDetail}
-              onChange={(e) =>
-                setDraft({ ...draft, requiresDetail: e.target.checked })
-              }
-            />
-            Pide detalle (tipo &ldquo;Otro&rdquo;: hay que escribir a mano de qué
-            se trata)
-          </label>
-          {error && <p role="alert" className="text-xs text-danger">{error}</p>}
-          <div className="flex gap-2">
-            <Button size="sm" onClick={onCreate} disabled={pending}>
-              Crear
-            </Button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowAdd(false);
-                setError(null);
-              }}
-              className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-muted hover:text-ink"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-      <div className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
-        {rows.length === 0 ? (
-          <div className="px-5 py-8 text-center text-xs text-muted italic">
-            Sin tipos de ad. Empezá con &ldquo;Cargar los estándar&rdquo; (Carrusel,
-            Single image, Video, DGEN set, PMAX set, YT Video, Otro).
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-paper">
-                <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
-                  <th className="text-left font-medium px-5 py-2.5">Nombre</th>
-                  <th className="text-left font-medium px-5 py-2.5">Slug</th>
-                  <th className="text-left font-medium px-5 py-2.5">Pide detalle</th>
-                  <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
-                  <th className="w-10" />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((t) => (
-                  <tr
-                    key={t.id}
-                    className="border-t border-line-soft hover:bg-paper-2/50"
-                  >
-                    <td className="px-5 py-2">
-                      <input
-                        type="text"
-                        defaultValue={t.name}
-                        disabled={pending}
-                        onBlur={(e) =>
-                          e.target.value !== t.name &&
-                          onUpdate(t.id, { name: e.target.value })
-                        }
-                        className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
-                      />
-                    </td>
-                    <td className="px-5 py-2 font-mono text-xs text-muted">
-                      {t.slug}
-                    </td>
-                    <td className="px-5 py-2">
-                      <input
-                        type="checkbox"
-                        checked={t.requiresDetail}
-                        disabled={pending}
-                        onChange={(e) =>
-                          onUpdate(t.id, { requiresDetail: e.target.checked })
-                        }
-                      />
-                    </td>
-                    <td className="px-5 py-2">
-                      <input
-                        type="checkbox"
-                        checked={t.enabled}
-                        disabled={pending}
-                        onChange={(e) =>
-                          onUpdate(t.id, { enabled: e.target.checked })
-                        }
-                      />
-                    </td>
-                    <td className="px-2 py-2">
-                      <button
-                        type="button"
-                        onClick={() => onDelete(t.id, t.name)}
-                        disabled={pending}
-                        className="text-muted hover:text-danger p-1"
-                        aria-label="Eliminar"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
 
 function MarketsSection({
   clientId,

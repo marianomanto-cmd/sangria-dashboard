@@ -5,8 +5,6 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
-import { adsErrorMessage, findPlanAdIssues } from "@/lib/plan-traffic";
-import { getPlanTraffic, toTrafficPlacements } from "@/db/queries/plan-traffic";
 import {
   mediaPlanPlacements,
   mediaPlanPublishers,
@@ -240,20 +238,6 @@ export async function completePlanQa(input: {
       ok: false,
       error: `Faltan controlar ${missing} línea${missing === 1 ? "" : "s"} del plan. El QA se cierra con todas las líneas tildadas.`,
     };
-  }
-
-  // Regla dura de los ADS: el QA es lo que habilita a ir Live, así que no se
-  // cierra sobre una campaña cuyos anuncios nadie definió. Cada adset tiene que
-  // tener al menos un ad, y cada ad su tipo, creativo, copy, título, subtítulo,
-  // URL y landing (los completa el AM/PM en la ventana de Tráfico).
-  //
-  // No se exige acá el "cargado" —eso es el registro del trafficker y lo pide
-  // el paso a Live (`transitionPlanStatus`)—: se puede controlar el armado
-  // antes de que esté todo montado en la plataforma.
-  const trafficRows = await getPlanTraffic(input.planId);
-  const adIssues = findPlanAdIssues(toTrafficPlacements(trafficRows));
-  if (adIssues.length > 0) {
-    return { ok: false, error: adsErrorMessage(adIssues) };
   }
 
   const user = await getCurrentUser();

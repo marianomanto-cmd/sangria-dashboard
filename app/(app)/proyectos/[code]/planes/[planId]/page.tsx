@@ -3,8 +3,8 @@ import { notFound } from "next/navigation";
 import { getPlanDetail } from "@/db/queries/project-detail";
 import { getPlanAuditEvents } from "@/db/queries/audit-log";
 import { getPlanQaState, getPlanVersionHistory } from "@/db/queries/plan-qa";
-import { getPlanTraffic, toTrafficPlacements } from "@/db/queries/plan-traffic";
 import {
+  getPlanningQaRows,
   getPlanningQaState,
   planningQaVersion,
 } from "@/db/queries/plan-planning-qa";
@@ -17,11 +17,6 @@ import { DEFAULT_LANGUAGE, formatDate, type Language } from "@/lib/i18n";
 import { getCurrentUser } from "@/lib/auth";
 import { canApprovePlans } from "@/lib/permissions";
 import { isPlanSigned } from "@/lib/plan-status";
-import {
-  computeTrafficProgress,
-  findPlanAdIssues,
-  findPlanAdsetIssues,
-} from "@/lib/plan-traffic";
 import { PlanEditor } from "./editor";
 
 type Props = {
@@ -57,8 +52,8 @@ export default async function PlanDetailPage({ params }: Props) {
     editEvents,
     qaState,
     versionHistory,
-    trafficRows,
     planningQaState,
+    planningRows,
   ] = await Promise.all([
     listPublishersForClient(detail.client.id),
     listMarketsForClient(detail.client.id),
@@ -69,26 +64,12 @@ export default async function PlanDetailPage({ params }: Props) {
     // de versiones con su diff (el desplegable de abajo del editor).
     getPlanQaState(planId, detail.plan.currentVersion),
     getPlanVersionHistory(planId),
-    // Tráfico: el editor necesita el resumen (avance + qué falta) para el
-    // contador del botón "Tráfico" y el aviso del gate de Live, y las filas
-    // completas para el modal del QA de planificación, que lista cada
-    // placement con sus adsets.
-    getPlanTraffic(planId),
-    // QA de planificación de la versión que este draft va a ser.
+    // QA de planificación de la versión que este draft va a ser: el estado del
+    // run y las líneas que el modal lista para tildar.
     getPlanningQaState(planId, planningQaVersion(detail.plan.currentVersion)),
+    getPlanningQaRows(planId),
   ]);
 
-  // Los tres cortes que el editor necesita mostrar, uno por gate:
-  //   adsetIssues → bloquean "Listo para enviar" / "Aprobado" (media planner)
-  //   adIssues    → bloquean cerrar el QA (AM/PM)
-  //   liveIssues  → los anteriores + el "cargado" de cada ad, para Live
-  const trafficPlacements = toTrafficPlacements(trafficRows);
-  const traffic = {
-    progress: computeTrafficProgress(trafficPlacements),
-    adsetIssues: findPlanAdsetIssues(trafficPlacements),
-    adIssues: findPlanAdIssues(trafficPlacements),
-    liveIssues: findPlanAdIssues(trafficPlacements, true),
-  };
   const canApprove = canApprovePlans(user?.email);
 
   const windowNote = sinceSnap
@@ -129,9 +110,8 @@ export default async function PlanDetailPage({ params }: Props) {
         editHistory={{ events: editEvents, windowNote }}
         qaState={qaState}
         versionHistory={versionHistory}
-        traffic={traffic}
         planningQa={planningQaState}
-        planningRows={trafficRows}
+        planningRows={planningRows}
       />
     </main>
   );

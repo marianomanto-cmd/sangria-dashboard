@@ -3,10 +3,10 @@
 // ════════════════════════════════════════════════════════════════════════════
 // Modal de QA DE PLANIFICACIÓN — el control del media planner antes de firma.
 //
-// Se abre al apretar "Marcar listo para enviar" (después de que readiness y el
-// gate de adsets pasen) y muestra, agrupado por publisher, cada PLACEMENT con
-// sus ADSETS anidados. Una casilla por cada uno: con todo tildado, el botón de
-// abajo cierra el QA y hace el pase a `ready_to_send` en una sola acción.
+// Se abre al apretar "Marcar listo para enviar" (después de que pase readiness)
+// y muestra, agrupado por publisher, cada PLACEMENT del plan con una casilla.
+// Con todo tildado, el botón de abajo cierra el QA y hace el pase a
+// `ready_to_send` en una sola acción.
 //
 // Es hermano de qa-modal.tsx (el QA de armado, del AM/PM) y comparte sus
 // decisiones de diseño, por las mismas razones:
@@ -16,28 +16,26 @@
 //     revierte si el server rechaza.
 //   • "Ir al primero pendiente" para no perderse en planes largos.
 //   • La barrera real está en `completePlanningQa` + `transitionPlanStatus`.
-//
-// Lo que cambia respecto del otro: acá se tildan DOS tipos de cosa (la línea
-// del plan y cada adset), así que la clave es `kind:id`, no el id solo.
 // ════════════════════════════════════════════════════════════════════════════
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ArrowDown, ClipboardCheck, Layers, X } from "lucide-react";
+import { ArrowDown, ClipboardCheck, X } from "lucide-react";
 import {
   completePlanningQa,
   setPlanningQaCheck,
 } from "@/app/actions/plan-planning-qa";
 import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
-import type { PlanTrafficPlacement } from "@/db/queries/plan-traffic";
-import type { PlanningQaCheck } from "@/db/queries/plan-planning-qa";
+import type {
+  PlanningQaCheck,
+  PlanningQaRow,
+} from "@/db/queries/plan-planning-qa";
 import { formatUsd } from "@/lib/format";
 import { formatDate, type Language } from "@/lib/i18n";
 import {
   buildPlanningQaItems,
   computePlanningQaProgress,
   planningQaKey,
-  type PlanningQaItemKind,
 } from "@/lib/plan-planning-qa";
 
 export function PlanningQaModal({
@@ -56,9 +54,8 @@ export function PlanningQaModal({
   projectCode: string;
   // La versión que este draft va a ser al aprobarse (current + 1).
   nextVersion: number;
-  // Los placements del plan con sus adsets — la misma lectura que alimenta la
-  // ventana de Tráfico, así el planner ve exactamente lo que cargó.
-  rows: PlanTrafficPlacement[];
+  // Las líneas del plan, así el planner ve exactamente lo que cargó.
+  rows: PlanningQaRow[];
   initialChecks: PlanningQaCheck[];
   lang: Language;
   onClose: () => void;
@@ -78,18 +75,7 @@ export function PlanningQaModal({
   const [notes, setNotes] = useState("");
 
   // Los ítems, con la MISMA función que usa el server para contarlos.
-  const items = useMemo(
-    () =>
-      buildPlanningQaItems(
-        rows.map((r) => ({
-          placementId: r.placementId,
-          publisherName: r.publisherName,
-          placementName: r.placementName,
-          adsets: (r.brief?.adsets ?? []).map((a) => ({ id: a.id, name: a.name })),
-        })),
-      ),
-    [rows],
-  );
+  const items = useMemo(() => buildPlanningQaItems(rows), [rows]);
 
   const progress = useMemo(
     () => computePlanningQaProgress(items, checked),
@@ -132,12 +118,8 @@ export function PlanningQaModal({
   // Tilde optimista + persistencia. Si el server rechaza, se revierte y se
   // avisa: nunca queda algo "controlado" en pantalla que no lo esté en la base
   // (sería exactamente el error humano que este modal viene a evitar).
-  const toggle = async (
-    kind: PlanningQaItemKind,
-    id: string,
-    next: boolean,
-  ) => {
-    const key = planningQaKey(kind, id);
+  const toggle = async (id: string, next: boolean) => {
+    const key = planningQaKey("placement", id);
     setChecked((prev) => {
       const s = new Set(prev);
       if (next) s.add(key);
@@ -148,7 +130,7 @@ export function PlanningQaModal({
 
     const r = await setPlanningQaCheck({
       planId,
-      itemKind: kind,
+      itemKind: "placement",
       itemId: id,
       checked: next,
     });
@@ -192,11 +174,9 @@ export function PlanningQaModal({
         return;
       }
       toast.success(
-        `QA de planificación hecho · ${progress.placements} placement${
-          progress.placements === 1 ? "" : "s"
-        } y ${progress.adsets} adset${
-          progress.adsets === 1 ? "" : "s"
-        } controlados · plan listo para enviar`,
+        `QA de planificación hecho · ${progress.total} línea${
+          progress.total === 1 ? "" : "s"
+        } controladas · plan listo para enviar`,
       );
       onDone();
     });
@@ -250,16 +230,10 @@ export function PlanningQaModal({
             </button>
           </div>
 
-          {/* Progreso, separado por tipo: son dos cosas distintas de mirar. */}
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-            <Meta label="Placements">
+            <Meta label="Líneas del plan">
               <span className="font-mono tabular-nums">
-                {progress.placementsChecked}/{progress.placements}
-              </span>
-            </Meta>
-            <Meta label="Adsets">
-              <span className="font-mono tabular-nums">
-                {progress.adsetsChecked}/{progress.adsets}
+                {progress.checked}/{progress.total}
               </span>
             </Meta>
             <div className="ml-auto flex items-center gap-2.5">
@@ -289,13 +263,12 @@ export function PlanningQaModal({
           </div>
         </div>
 
-        {/* ── Lista: placement con sus adsets anidados ───────────────────── */}
+        {/* ── Lista de líneas del plan ───────────────────────────────────── */}
         <div ref={scrollRef} className="flex-1 overflow-auto px-5 py-4">
           <div className="flex flex-col gap-3">
             {rows.map((row) => {
               const plKey = planningQaKey("placement", row.placementId);
               const plChecked = checked.has(plKey);
-              const adsets = row.brief?.adsets ?? [];
               const showPublisher = showPublisherAt.has(row.placementId);
 
               return (
@@ -311,17 +284,14 @@ export function PlanningQaModal({
                         ? "border-success/40 bg-success-soft/40"
                         : "border-line bg-paper/40"
                     }`}
+                    data-pqa-row={plKey}
                   >
-                    {/* Línea del plan */}
-                    <div
-                      data-pqa-row={plKey}
-                      className="flex items-start gap-3 px-4 py-3"
-                    >
+                    <div className="flex items-start gap-3 px-4 py-3">
                       <CheckBox
                         dataKey={plKey}
                         checked={plChecked}
                         disabled={saving.has(plKey) || pending}
-                        onChange={(v) => toggle("placement", row.placementId, v)}
+                        onChange={(v) => toggle(row.placementId, v)}
                         label={`Controlado — ${row.publisherName} · ${
                           row.placementName ?? "placement sin nombre"
                         }`}
@@ -350,64 +320,6 @@ export function PlanningQaModal({
                       </div>
                     </div>
 
-                    {/* Adsets del placement */}
-                    {adsets.length > 0 && (
-                      <div className="border-t border-line-soft/70 pl-4">
-                        {adsets.map((a, i) => {
-                          const key = planningQaKey("adset", a.id);
-                          const isChecked = checked.has(key);
-                          return (
-                            <div
-                              key={a.id}
-                              data-pqa-row={key}
-                              className={`flex items-start gap-3 border-l-2 pl-4 pr-4 py-2.5 ${
-                                isChecked
-                                  ? "border-success/50 bg-success-soft/30"
-                                  : "border-line"
-                              } ${i > 0 ? "border-t border-t-line-soft/70" : ""}`}
-                            >
-                              <CheckBox
-                                dataKey={key}
-                                checked={isChecked}
-                                disabled={saving.has(key) || pending}
-                                onChange={(v) => toggle("adset", a.id, v)}
-                                label={`Controlado — adset ${i + 1} de ${
-                                  row.placementName ?? "placement sin nombre"
-                                }`}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <p className="text-[13px] font-medium text-ink-2 flex items-center gap-1.5">
-                                  <Layers
-                                    size={12}
-                                    strokeWidth={2}
-                                    className="text-muted shrink-0"
-                                  />
-                                  {(a.name ?? "").trim() || `Adset ${i + 1}`}
-                                </p>
-                                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
-                                  <Fact label="Audiencia">
-                                    {a.audience ?? "—"}
-                                  </Fact>
-                                  <Fact label="Budget">
-                                    {a.budgetUsd == null
-                                      ? "—"
-                                      : formatUsd(a.budgetUsd)}
-                                  </Fact>
-                                  <Fact label="Pilar">
-                                    {a.creativePillar ?? "—"}
-                                  </Fact>
-                                  <Fact label="Fechas">
-                                    {formatDate(a.startDate, lang)}
-                                    <span className="text-line"> → </span>
-                                    {formatDate(a.endDate, lang)}
-                                  </Fact>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
                   </div>
                 </div>
               );

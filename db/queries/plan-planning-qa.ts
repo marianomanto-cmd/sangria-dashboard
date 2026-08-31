@@ -1,8 +1,8 @@
 // ════════════════════════════════════════════════════════════════════════════
 // Lecturas del QA de PLANIFICACIÓN (el del media planner, antes de la firma).
 //
-//   • getPlanningQaItems → los ítems tildables del plan (cada placement y cada
-//                          adset), en orden de pantalla.
+//   • getPlanningQaRows  → las líneas del plan como las muestra el modal.
+//   • getPlanningQaItems → los ítems tildables (hoy, una por línea).
 //   • getPlanningQaState → el run de la versión que el draft va a ser + qué
 //                          ítems ya están tildados.
 //
@@ -13,20 +13,19 @@
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  markets,
   mediaPlanPlacements,
   mediaPlanPlanningQaChecks,
   mediaPlanPlanningQaRuns,
   mediaPlanPublishers,
-  mediaPlanTrafficAdsets,
-  mediaPlanTrafficBriefs,
   publishers,
 } from "@/db/schema";
 import {
   buildPlanningQaItems,
+  isPlanningQaItemKind,
   planningQaKey,
   type PlanningQaItem,
   type PlanningQaItemKind,
-  type PlanningQaPlacement,
 } from "@/lib/plan-planning-qa";
 
 export type PlanningQaCheck = {
@@ -55,11 +54,23 @@ export function planningQaVersion(currentVersion: number): number {
 
 // ── Los ítems tildables ─────────────────────────────────────────────────────
 
-// Placements vivos del plan, cada uno con sus adsets, en el MISMO orden que la
-// planilla: publisher por sortOrder y, dentro, el sortOrder del placement.
-export async function getPlanningQaPlacements(
-  planId: string,
-): Promise<PlanningQaPlacement[]> {
+// Una línea del plan tal como la muestra el modal: lo que el planner tiene que
+// mirar para poder decir "esto está bien".
+export type PlanningQaRow = {
+  placementId: string;
+  publisherName: string;
+  placementName: string | null;
+  marketName: string | null;
+  audience: string | null;
+  amountUsd: number;
+  costMethod: string | null;
+  startDate: string | null;
+  endDate: string | null;
+};
+
+// Placements vivos del plan, en el MISMO orden que la planilla: publisher por
+// sortOrder y, dentro, el sortOrder del placement.
+export async function getPlanningQaRows(planId: string): Promise<PlanningQaRow[]> {
   const pubRows = await db
     .select({ id: mediaPlanPublishers.id, name: publishers.name })
     .from(mediaPlanPublishers)
@@ -71,85 +82,40 @@ export async function getPlanningQaPlacements(
   const pubName = new Map(pubRows.map((p) => [p.id, p.name]));
   const pubOrder = new Map(pubRows.map((p, i) => [p.id, i]));
 
-  const placementRows = await db
-    .select({
-      id: mediaPlanPlacements.id,
-      mediaPlanPublisherId: mediaPlanPlacements.mediaPlanPublisherId,
-      placementName: mediaPlanPlacements.placementName,
-      sortOrder: mediaPlanPlacements.sortOrder,
-    })
+  const rows = await db
+    .select({ placement: mediaPlanPlacements, marketName: markets.name })
     .from(mediaPlanPlacements)
+    .leftJoin(markets, eq(mediaPlanPlacements.marketId, markets.id))
     .where(
       inArray(
         mediaPlanPlacements.mediaPlanPublisherId,
         pubRows.map((p) => p.id),
       ),
     );
-  if (placementRows.length === 0) return [];
 
-  const briefRows = await db
-    .select({
-      id: mediaPlanTrafficBriefs.id,
-      placementId: mediaPlanTrafficBriefs.placementId,
-    })
-    .from(mediaPlanTrafficBriefs)
-    .where(
-      inArray(
-        mediaPlanTrafficBriefs.placementId,
-        placementRows.map((r) => r.id),
-      ),
-    );
-
-  const adsetRows =
-    briefRows.length === 0
-      ? []
-      : await db
-          .select({
-            id: mediaPlanTrafficAdsets.id,
-            briefId: mediaPlanTrafficAdsets.briefId,
-            name: mediaPlanTrafficAdsets.name,
-          })
-          .from(mediaPlanTrafficAdsets)
-          .where(
-            inArray(
-              mediaPlanTrafficAdsets.briefId,
-              briefRows.map((b) => b.id),
-            ),
-          )
-          .orderBy(
-            asc(mediaPlanTrafficAdsets.sortOrder),
-            asc(mediaPlanTrafficAdsets.createdAt),
-          );
-
-  const adsetsByBrief = new Map<string, { id: string; name: string | null }[]>();
-  for (const a of adsetRows) {
-    const list = adsetsByBrief.get(a.briefId) ?? [];
-    list.push({ id: a.id, name: a.name });
-    adsetsByBrief.set(a.briefId, list);
-  }
-  const adsetsByPlacement = new Map<string, { id: string; name: string | null }[]>();
-  for (const b of briefRows) {
-    adsetsByPlacement.set(b.placementId, adsetsByBrief.get(b.id) ?? []);
-  }
-
-  return [...placementRows]
+  return [...rows]
     .sort((a, b) => {
-      const oa = pubOrder.get(a.mediaPlanPublisherId) ?? 0;
-      const ob = pubOrder.get(b.mediaPlanPublisherId) ?? 0;
-      return oa - ob || a.sortOrder - b.sortOrder;
+      const oa = pubOrder.get(a.placement.mediaPlanPublisherId) ?? 0;
+      const ob = pubOrder.get(b.placement.mediaPlanPublisherId) ?? 0;
+      return oa - ob || a.placement.sortOrder - b.placement.sortOrder;
     })
-    .map((p) => ({
-      placementId: p.id,
-      publisherName: pubName.get(p.mediaPlanPublisherId) ?? "—",
-      placementName: p.placementName,
-      adsets: adsetsByPlacement.get(p.id) ?? [],
+    .map((r) => ({
+      placementId: r.placement.id,
+      publisherName: pubName.get(r.placement.mediaPlanPublisherId) ?? "—",
+      placementName: r.placement.placementName,
+      marketName: r.marketName,
+      audience: r.placement.audience,
+      amountUsd: Number.parseFloat(r.placement.amountUsd),
+      costMethod: r.placement.costMethod,
+      startDate: r.placement.startDate,
+      endDate: r.placement.endDate,
     }));
 }
 
 export async function getPlanningQaItems(
   planId: string,
 ): Promise<PlanningQaItem[]> {
-  return buildPlanningQaItems(await getPlanningQaPlacements(planId));
+  return buildPlanningQaItems(await getPlanningQaRows(planId));
 }
 
 // ── El estado del run ───────────────────────────────────────────────────────
@@ -180,7 +146,7 @@ export async function getPlanningQaState(
     .limit(1);
   if (!run) return empty;
 
-  const checks = await db
+  const rows = await db
     .select({
       itemKind: mediaPlanPlanningQaChecks.itemKind,
       itemId: mediaPlanPlanningQaChecks.itemId,
@@ -189,6 +155,13 @@ export async function getPlanningQaState(
     })
     .from(mediaPlanPlanningQaChecks)
     .where(eq(mediaPlanPlanningQaChecks.qaRunId, run.id));
+
+  // El enum de la base todavía admite 'adset' (la columna quedó de cuando el QA
+  // también tildaba adsets, y sacarle un valor a un enum de Postgres no vale la
+  // pena). Los tildes viejos de adsets se ignoran: ya no hay adsets que mirar.
+  const checks: PlanningQaCheck[] = rows.filter(
+    (r): r is PlanningQaCheck => isPlanningQaItemKind(r.itemKind),
+  );
 
   return {
     runId: run.id,

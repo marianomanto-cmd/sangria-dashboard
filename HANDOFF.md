@@ -2,6 +2,48 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 31/ago/2026 (5) — se da de baja la sección Tráfico
+
+El tráfico vuelve a manejarse con un **documento externo**, así que la ventana
+`/trafico`, sus dos capas (adsets del planner, ads del AM/PM), el catálogo de
+tipos de ad y el Excel de tráfico salen de la app.
+
+Qué se borró:
+
+- Rutas: `…/planes/[planId]/trafico/` y `app/api/plans/[planId]/traffic.xlsx/`.
+- Módulos: `lib/plan-traffic.ts`, `db/queries/plan-traffic.ts`,
+  `app/actions/plan-traffic.ts`, `app/actions/ad-types.ts`, `lib/ad-types.ts`.
+- Schema: `media_plan_traffic_briefs` / `_adsets` / `_ads` y `ad_types`.
+- La sección **Tipos de ad** de la configuración del cliente.
+- Los **tres gates** que el tráfico imponía: adsets para `ready_to_send`, ads
+  para cerrar el QA, y ads cargados para `live`. Hoy `live` sólo exige venir de
+  `qa_done`, como antes de que el tráfico existiera.
+- El rescate/restauración del tráfico en `revertPlanToApprovedSnapshot`
+  (`rescuePlanTraffic` / `restorePlanTraffic`): ya no hay nada que rescatar.
+
+Qué **sobrevive**:
+
+- El **QA de planificación** (draft → ready_to_send). Se pidió aparte y su valor
+  no dependía del tráfico, así que queda — pero ahora tilda **sólo los
+  placements**, que es lo único que quedó del plan para repasar. El modal
+  muestra cada línea con mercado, monto, método, fechas y audiencia.
+- La columna `item_kind` de `media_plan_planning_qa_checks` queda con un solo
+  valor útil (`placement`): sacarle un valor a un enum de Postgres no vale lo
+  que cuesta. Las lecturas **filtran** los tildes viejos de adsets, que quedaron
+  huérfanos.
+- El QA de armado (approved → qa_done) no se tocó.
+
+**Acción requerida en prod**: correr **`db/drop-plan-traffic.sql`**.
+⚠️ **Borra datos y no se puede deshacer**: se va todo lo cargado en la sección
+(adsets, ads, links de creativos, copies, registros de "cargado"). El archivo
+trae comentado un bloque de inventario para verlo antes. No toca planes,
+publishers, placements, fees ni billings. Probado dos veces contra un Postgres
+16 local: idempotente, y los datos del plan sobreviven.
+
+También se actualizó **`db/plan-health-check.sql`**: los siete controles que
+consultaban las tablas de tráfico se sacaron (si no, la query reventaría después
+del drop). Quedan **7 controles**, revalidados contra Postgres local.
+
 ### Cambios de la sesión 31/ago/2026 (4) — regla nueva: las queries se entregan en el chat
 
 `AGENTS.md` suma una **regla dura**: toda migración, backfill, corrección de
@@ -4623,11 +4665,10 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Chequear que no se rompió nada en los planes (tras un cambio de reglas o una carga de datos) | `db/plan-health-check.sql` — read-only, pegar entero en el SQL Editor. 14 controles, una fila cada uno **aunque den 0** (para distinguir "no hay problema" de "no corrió"). Niveles: REVISAR (no debería poder pasar), BLOQUEA (el plan no avanza de estado — los gates de tráfico), ATENCION, INFO. Las reglas de completitud espejan `lib/plan-traffic.ts`: **si esa regla cambia, actualizar el archivo también**. |
 | Tocar el **lifecycle / status de un plan** | **Fuente única: `lib/plan-status.ts`** — `PLAN_STATUSES`, los sets `PLAN_SIGNED_STATUSES` (approved+qa_done+live = "plan firmado, vigente") y `PLAN_COMMITTED_STATUSES` (+ ready_to_send = "compromete plata"), `PLAN_STATUS_TRANSITIONS` y los labels. **Regla dura: nunca hardcodear `status = 'approved'` en una query nueva** — usar los sets, o el plan `live` desaparece en silencio del portal, la estimación y el pacing. La barrera de transición vive en `transitionPlanStatus` (`app/actions/plans.ts`); el badge en `components/plan-status-badge.tsx`. |
 | Tocar la sección **Tráfico** del plan (adsets + ads) | UI: `app/(app)/proyectos/[code]/planes/[planId]/trafico/` (`page.tsx` + `traffic-editor.tsx`), con el botón "Tráfico" en el header del `editor.tsx`. Actions: `app/actions/plan-traffic.ts` — adsets (`addTrafficAdset`, `updateTrafficAdset`, `removeTrafficAdset`) y ads (`addTrafficAd`, `updateTrafficAd`, `removeTrafficAd`, `setTrafficAdLoaded`) + `updateTrafficBrief` (carpeta). Lectura: `getPlanTraffic` en `db/queries/plan-traffic.ts`. Schema: `media_plan_traffic_briefs` (1:1 placement) → `media_plan_traffic_adsets` → `media_plan_traffic_ads`. **Permisos por nivel**: los ADSETS sólo sobre el borrador (son parte de lo que se firma); los ADS y la carpeta, en cualquier estado vivo. Export: `app/api/plans/[planId]/traffic.xlsx/route.ts` — interno, NO público. |
-| Tocar los gates del tráfico (qué bloquea Listo / QA / Live) | **Fuente única: `lib/plan-traffic.ts`.** `findPlanAdsetIssues` → bloquea `ready_to_send`/`approved` (barrera en `transitionPlanStatus`, junto al chequeo de readiness). `findPlanAdIssues` → bloquea cerrar el QA (barrera en `completePlanQa`, `app/actions/plan-qa.ts`). `findPlanAdIssues(…, true)` → suma el "cargado" de cada ad y bloquea `live`. Las tres alimentan también la UI (contadores de la ventana, diálogos y franjas del `editor.tsx`), así que barrera y aviso nunca discrepan. |
 | Agregar/cambiar los **tipos de ad** de un cliente | Tabla `ad_types` (per-cliente, como `metrics_catalog`). UI: `AdTypesSection` en `app/(app)/configuracion/clientes/[slug]/sections.tsx` (`#tipos-de-ad`), con "Cargar los estándar". Actions: `app/actions/ad-types.ts`. Semilla: `DEFAULT_AD_TYPES` en `lib/ad-types.ts` (**no** en la action: un `"use server"` sólo exporta funciones async). `requires_detail` = entradas tipo "Otro", que además exigen el texto libre. Borrarlo deja los ads sin tipo (FK `set null`) → incompletos; para retirarlo sin romper nada, deshabilitalo. |
 | Entender por qué el tráfico no se pierde al **descartar un borrador** | `rescuePlanTraffic` / `restorePlanTraffic` en `app/actions/plans.ts`. `revertPlanToApprovedSnapshot` borra los publishers (cascade → placements) y los reinserta con **ids nuevos**; briefs, adsets y ads se rescatan antes del delete y se reaparejan por **publisher del catálogo + nombre del placement**. |
 | Tocar el **QA de armado** (AM/PM · paso obligatorio approved → live) | UI: `app/(app)/proyectos/[code]/planes/[planId]/qa-modal.tsx` (preview tipo Excel + casilla "Controlado" por línea + botón "QA realizado"), abierto desde el header/franja del `editor.tsx`. Actions: `app/actions/plan-qa.ts` (`setPlanQaCheck`, `completePlanQa`, `reopenPlanQa`). Lectura: `getPlanQaState` en `db/queries/plan-qa.ts`. Schema: `media_plan_qa_runs` (uno por plan **y por versión**, unique `(media_plan_id, version_number)`) + `media_plan_qa_checks` (`placement_id` **sin FK** a propósito: la línea puede borrarse en una versión futura y el QA histórico tiene que sobrevivir). **El QA es por versión**: aprobar la v(N+1) lo obliga de nuevo. |
-| Tocar el **QA de planificación** (planner · paso obligatorio draft → ready_to_send) | UI: `app/(app)/proyectos/[code]/planes/[planId]/planning-qa-modal.tsx`, que abre el botón "Marcar listo para enviar" del `editor.tsx` **después** de que pasen readiness y el gate de adsets. Reglas: **`lib/plan-planning-qa.ts`** (módulo puro, compartido por la barrera y el modal, para que cuenten igual). Actions: `app/actions/plan-planning-qa.ts` (`setPlanningQaCheck`, `completePlanningQa` — cierra el QA **y** delega el pase en `transitionPlanStatus`, revirtiendo el cierre si éste rechaza). Lectura: `getPlanningQaItems` / `getPlanningQaState` en `db/queries/plan-planning-qa.ts`. Schema: `media_plan_planning_qa_runs` + `_checks`, con `item_kind` (`placement` \| `adset`) e `item_id` **sin FK**, igual que el otro QA. **La versión del run es la que el draft VA A SER** (`current_version + 1`). **Volver a draft lo reabre** (los tildes quedan). Se exige sólo en `draft → ready_to_send`, **no** en `approved`. |
+| Tocar el **QA de planificación** (planner · paso obligatorio draft → ready_to_send) | UI: `app/(app)/proyectos/[code]/planes/[planId]/planning-qa-modal.tsx`, que abre el botón "Marcar listo para enviar" del `editor.tsx` **después** de que pasen readiness y el gate de adsets. Reglas: **`lib/plan-planning-qa.ts`** (módulo puro, compartido por la barrera y el modal, para que cuenten igual). Actions: `app/actions/plan-planning-qa.ts` (`setPlanningQaCheck`, `completePlanningQa` — cierra el QA **y** delega el pase en `transitionPlanStatus`, revirtiendo el cierre si éste rechaza). Lectura: `getPlanningQaItems` / `getPlanningQaState` en `db/queries/plan-planning-qa.ts`. Schema: `media_plan_planning_qa_runs` + `_checks`, con `item_kind` (hoy sólo `placement`) e `item_id` **sin FK**, igual que el otro QA. **La versión del run es la que el draft VA A SER** (`current_version + 1`). **Volver a draft lo reabre** (los tildes quedan). Se exige sólo en `draft → ready_to_send`, **no** en `approved`. |
 | Tocar el **historial de versiones** del plan (qué cambió en cada una) | UI: `app/(app)/proyectos/[code]/planes/[planId]/version-history.tsx` (filas desplegables). Datos: `getPlanVersionHistory` en `db/queries/plan-qa.ts`. Diff: `lib/plan-version-diff.ts` (`buildPlanVersionDiff`), que compara los **snapshots** de v(N−1) y vN — no el audit_log — con matching por **id de fila**. Los nombres de publisher/market/métrica se resuelven contra el catálogo actual. El espejo en Excel es `buildVersionHistorySheet` en `export.xlsx/route.ts`. |
 | Tocar los tabs auxiliares del plan (grillas libres con fórmulas / tabs extra del Excel) | UI: `app/(app)/proyectos/[code]/planes/[planId]/aux-sheet.tsx` (botón "Crear tab auxiliar" + una sección colapsable por tab en el editor). CRUD: `app/actions/aux-sheets.ts`. Límites + helpers + **evaluador de fórmulas** (refs A1, SUM/AVERAGE/MIN/MAX/COUNT, errores `#REF!`/`#CIRC!`/…): `lib/aux-sheet.ts` (`evalAuxFormula`). Schema: `media_plan_aux_sheets` (N por plan, `sort_order`). **Insertar/eliminar filas y columnas en cualquier posición**: menú click-derecho en el editor → `insertAuxRow/Col` + `deleteAuxRow/Col` en `lib/aux-sheet.ts` (mueven data + uniones y reescriben refs con `shiftAuxFormula`). Los tabs del export: `buildAuxSheet` en `export.xlsx/route.ts` (fórmulas → fórmulas reales de Excel; **formato** header/subtotal/total/banding + anchos auto + congelado, parecido al Tab 1). |
 | Qué métricas se muestran / cómo se computan en los exports | `lib/plan-metrics.ts` — `resolveMetricColumns` (qué columnas: directs presentes + calculated que resuelven), `placementMetricValue` (valor por placement: guardado o computado), `evalFormula`. Lo usan **PDF y Excel**. Las calculated NO están en `metrics_json`. |
