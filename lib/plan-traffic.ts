@@ -51,7 +51,7 @@ export type TrafficPlacement = {
   publisherName: string;
   placementName: string | null;
   // null = el placement todavía no tiene brief de tráfico creado.
-  brief: { trafficFolderUrl: string | null; adsets: TrafficAdset[] } | null;
+  brief: { adsets: TrafficAdset[] } | null;
 };
 
 export type TrafficIssue = {

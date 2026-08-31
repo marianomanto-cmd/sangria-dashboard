@@ -602,8 +602,10 @@ export const adTypes = pgTable(
 );
 
 // ── Brief de tráfico de UN placement (1:1) ──────────────────────────────────
-// Lo que aplica a todo el placement. Hoy es sólo la carpeta de archivos: la
-// "cantidad de adsets" NO se carga a mano, se deriva de cuántos adsets tiene.
+// Es sólo el contenedor del que cuelgan los adsets — no tiene campos propios.
+// La "cantidad de adsets" se deriva de cuántos hay, y la carpeta de archivos
+// vive a nivel AD (`creativeUrl`), que es donde el trafficker la necesita: un
+// placement puede tener creatividades distintas en carpetas distintas.
 export const mediaPlanTrafficBriefs = pgTable(
   "media_plan_traffic_briefs",
   {
@@ -611,8 +613,6 @@ export const mediaPlanTrafficBriefs = pgTable(
     placementId: uuid("placement_id")
       .notNull()
       .references(() => mediaPlanPlacements.id, { onDelete: "cascade" }),
-    // Carpeta (Drive u otra) donde el trafficker encuentra los archivos.
-    trafficFolderUrl: text("traffic_folder_url"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -667,7 +667,7 @@ export const mediaPlanTrafficAds = pgTable(
     }),
     // Libre, obligatorio sólo si el tipo elegido tiene requires_detail.
     adTypeOther: text("ad_type_other"),
-    creativeUrl: text("creative_url"),      // link al creativo
+    creativeUrl: text("creative_url"),      // carpeta / link de los archivos
     copy: text("copy"),
     headline: text("headline"),             // título
     subheadline: text("subheadline"),       // subtítulo

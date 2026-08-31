@@ -2,6 +2,32 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 28/ago/2026 (5) — la carpeta de tráfico sale del placement
+
+La carpeta de archivos estaba a nivel PLACEMENT (`media_plan_traffic_briefs.
+traffic_folder_url`), una sola para todo el placement y arriba de los adsets.
+No es donde va: el trafficker la necesita **por AD**, y un mismo placement puede
+tener creatividades distintas en carpetas distintas. El campo `creative_url` del
+ad ("Link del creativo") ya cumplía esa función, así que **no hay campo nuevo**
+— sólo se saca el que sobraba.
+
+- `media_plan_traffic_briefs` queda como el **contenedor 1:1 sin campos
+  propios**, del que cuelgan los adsets. **No se borra la tabla**: es el eslabón
+  placement → adsets y borrarla se llevaría puestos todos los adsets.
+- Se va `updateTrafficBrief` de `app/actions/plan-traffic.ts` — la carpeta era
+  su único campo.
+- El Excel pierde la columna "Carpeta de tráfico" del bloque de placement y
+  renombra la del ad a "Carpeta / link del creativo". Quedó en **25 columnas**;
+  los índices de `numFmt` y del formato de "Cargado" se corrieron uno a la
+  izquierda (verificado contando el array `COLUMNS` contra el código, no a ojo).
+- El rescate del "Descartar borrador" ya no copia la carpeta.
+
+**Acción requerida en prod**: correr **`db/plan-traffic-drop-folder.sql`**.
+⚠️ **Borra datos**: si algún placement tenía cargada su carpeta, ese link se
+pierde. El archivo trae comentada la consulta para verlos antes de correrlo.
+Probado contra un Postgres 16 local: borra la columna, es idempotente y no toca
+adsets ni ads.
+
 ### Cambios de la sesión 28/ago/2026 (4) — `finished` como estado real + FIRMADO ≠ VIGENTE
 
 Cierre del pendiente que dejó la sesión (3): prod tenía un valor `finished` en

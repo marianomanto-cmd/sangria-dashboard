@@ -20,9 +20,9 @@ import {
 //
 // Regla del repo: el export muestra TODO lo que se ve en la pantalla desde
 // donde se descarga. La ventana muestra, por placement, la línea del plan
-// (publisher, mercado, monto, método) y la carpeta de tráfico; dentro, cada
-// ADSET con su nombre, audiencia, budget, pilar creativo y fechas; y dentro de
-// cada adset, cada AD con tipo, creativo, copy, título, subtítulo, URL, landing
+// (publisher, mercado, monto, método); dentro, cada ADSET con su nombre,
+// audiencia, budget, pilar creativo y fechas; y dentro de cada adset, cada AD
+// con tipo, carpeta del creativo, copy, título, subtítulo, URL, landing
 // y su estado de carga. Todo eso está acá, aplanado a una fila por ad (que es
 // como se trabaja), más el bloque de avance de los dos gates.
 //
@@ -47,7 +47,6 @@ const COLUMNS: { header: string; width: number }[] = [
   { header: "Mercado", width: 15 },
   { header: "Monto USD", width: 13 },
   { header: "Método", width: 9 },
-  { header: "Carpeta de tráfico", width: 32 },
   // Adset (media planner)
   { header: "Adset", width: 7 },
   { header: "Nombre del adset", width: 28 },
@@ -59,7 +58,7 @@ const COLUMNS: { header: string; width: number }[] = [
   // Ad (AM/PM)
   { header: "Ad", width: 6 },
   { header: "Tipo de ad", width: 18 },
-  { header: "Link del creativo", width: 34 },
+  { header: "Carpeta / link del creativo", width: 34 },
   { header: "Copy", width: 50 },
   { header: "Título", width: 28 },
   { header: "Subtítulo", width: 28 },
@@ -206,7 +205,6 @@ export async function GET(
       row.marketName ?? "—",
       row.amountUsd,
       row.costMethod ?? "—",
-      row.brief?.trafficFolderUrl ?? EMPTY,
     ];
     const adsets = row.brief?.adsets ?? [];
 
@@ -254,8 +252,8 @@ export async function GET(
 
   // Formatos de columna (1-indexados, en el orden de COLUMNS)
   ws.getColumn(4).numFmt = '"$"#,##0.00';   // Monto USD
-  ws.getColumn(10).numFmt = '"$"#,##0.00';  // Budget USD
-  ws.getColumn(24).numFmt = "dd/mm/yyyy hh:mm"; // Cargado el
+  ws.getColumn(9).numFmt = '"$"#,##0.00';   // Budget USD
+  ws.getColumn(23).numFmt = "dd/mm/yyyy hh:mm"; // Cargado el
   ws.autoFilter = {
     from: { row: HEADER_ROW, column: 1 },
     to: { row: HEADER_ROW, column: lastCol },
@@ -297,6 +295,6 @@ function styleDataRow(
     }
   }
   // La celda de "Cargado" en negrita: es la que se escanea.
-  row.getCell(22).font = { size: 9, bold: true };
-  row.getCell(22).alignment = { vertical: "top", horizontal: "center" };
+  row.getCell(21).font = { size: 9, bold: true };
+  row.getCell(21).alignment = { vertical: "top", horizontal: "center" };
 }
