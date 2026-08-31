@@ -2,6 +2,32 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 31/ago/2026 (2) — el management fee se precarga en 13%
+
+La tarifa de base de la agencia es **13%**, pero el botón "Agregar fee ·
+management" precargaba **15%**. Todo management fee nuevo arrancaba con la
+tarifa equivocada y dependía de que el planner se acordara de corregirla. El
+HANDOFF ya tenía el 13% registrado en la reconstrucción del m1172 (sesión de los
+fees sin cascade), así que el 15% era un default viejo que nunca se actualizó.
+
+- `editor.tsx` · `onAddFee`: `ratePct` de management pasa de 15 a **13**. Es sólo
+  el valor de precarga — la fila sigue editable para clientes con otra tarifa, y
+  **no toca ningún fee ya cargado**.
+- Recordatorio de cómo funciona el cálculo, que es lo que hace que el default
+  importe: el management fee se carga por **porcentaje** y el monto se deriva
+  (`monto = total de medios × tarifa / (100 − tarifa)`). El porcentaje es
+  comisión **sobre el bruto**, no sobre los medios: 13% sobre $87.000 de medios
+  da $13.000 de fee y $100.000 de bruto.
+- Nuevo **`db/fees-management-rate-check.sql`** (READ-ONLY): lista los management
+  fees con tarifa distinta de 13%, con la diferencia en plata contra lo que
+  darían a 13%, ordenados por cuánto desvían. Probado contra un Postgres 16 local
+  con una fixture de seis casos.
+
+**Acción sugerida en prod** (no rompe nada si no se hace): correr
+`db/fees-management-rate-check.sql` para ver qué planes quedaron con el 15%
+precargado. Algunos van a ser tarifas negociadas legítimas; los que no, se
+corrigen a mano desde el editor del plan.
+
 ### Cambios de la sesión 31/ago/2026 — Manual de operación del plan + fuera la palabra "brief"
 
 Se armó un **artefacto de instrucciones** (documento web, fuera del repo) con la
@@ -3832,6 +3858,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+2f5f189  Planes: el management fee se precarga en 13%, no en 15% (#241)
 0c2469c  Tráfico: sacar la palabra "brief" de los textos que ve el usuario (#239)
 fdc548e  Tráfico: la carpeta de archivos sale del placement (vive a nivel ad) (#237)
 564ba37  db: chequeo de salud read-only de los planes (14 controles) (#235)

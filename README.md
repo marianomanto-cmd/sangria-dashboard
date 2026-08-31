@@ -192,6 +192,7 @@ db/
   plan-traffic-adsets.sql   # migración del Tráfico (paso 2): tabla ad_types (+ semilla para todos los clientes) + media_plan_traffic_adsets + migración de los ads del brief al adset + RLS
   plan-traffic-drop-folder.sql # migración del Tráfico (paso 3): saca traffic_folder_url del brief — la carpeta vive a nivel AD (creative_url)
   plan-health-check.sql     # chequeo de salud READ-ONLY de todos los planes: 14 controles (una fila cada uno, aunque den 0) — tipos de ad cruzados entre clientes, status drifteados, gates de tráfico que bloquean el avance, live sin cerrar, planes que caen en el año actual por falta de fechas, tarifas huérfanas en metrics_json
+  fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
     project-detail.ts       # detalle de proyecto + plan
