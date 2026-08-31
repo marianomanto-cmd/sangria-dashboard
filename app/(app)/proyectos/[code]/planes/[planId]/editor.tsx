@@ -478,7 +478,9 @@ export function PlanEditor({
         feeType,
         name: defaultName,
         amountUsd: feeType === "management" ? undefined : 0,
-        ratePct: feeType === "management" ? 15 : null,
+        // 13% es la tarifa de base de la agencia. Es sólo el valor con el que
+        // se precarga la fila: el planner lo edita si el cliente tiene otra.
+        ratePct: feeType === "management" ? 13 : null,
       });
       refresh();
     });
