@@ -218,6 +218,14 @@ const DICT: Record<string, Record<Language, string>> = {
     es: "Publishers y Placements",
   },
   "export.auxSheet": { en: "Auxiliary sheet", es: "Hoja auxiliar" },
+  // Tipos de fee: mismos labels que el editor del plan, para que el cliente
+  // lea en el PDF lo mismo que ve el planner en pantalla.
+  "fee.management": { en: "Management", es: "Management" },
+  "fee.setup": { en: "Set Up", es: "Set Up" },
+  "fee.reporting": { en: "Reporting", es: "Reporting" },
+  "fee.custom": { en: "Custom", es: "Custom" },
+  "export.concept": { en: "Concept", es: "Concepto" },
+  "export.totalFees": { en: "TOTAL FEES", es: "TOTAL FEES" },
   "export.signaturePrompt": {
     en: "Signature: ____________________",
     es: "Firma: ____________________",

@@ -2,6 +2,63 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 01/sep/2026 (2) — el PDF del plan deja de recortar
+
+El PDF es el documento que **firma el cliente** y venía recortando justo lo que
+tiene que quedar claro. Ya era apaisado (letter 792×612), así que el problema no
+era la orientación sino que todo estaba comprimido y cortado:
+
+- El **nombre del placement** se truncaba con `..` a ~150pt: dos placements del
+  mismo publisher se veían idénticos (`COPA.m1220|Meta|Latam|Performa..` vs
+  `COPA.m1202|Meta|EEUU|Performa..`).
+- **Mercado, audiencia, cost method y fechas** iban los cuatro pegados en UNA
+  línea gris de 6.5pt, también truncada. De la audiencia —que es un párrafo— el
+  cliente veía cuatro palabras, y el método y las fechas desaparecían siempre.
+- Los **fees** eran una tirada de texto monoespaciado sin columnas: los montos
+  caían en cualquier lado del renglón y no había subtotal.
+- El **nombre del plan** y el del publisher también se truncaban.
+
+Qué se hizo (todo en `lib/plan-pdf.ts`):
+
+- **`wrap()` reescrito**: envuelve sin recortar (el tope de 3 líneas era
+  silencioso) y corta también en los **separadores del naming** (`|`, `_`, `/`,
+  `-`) porque los nombres del cliente **no tienen espacios** — un wrap por
+  palabras los dejaba enteros como una sola "palabra" de 90 caracteres. Si un
+  segmento no entra ni así, se parte por carácter. Mismo criterio que
+  `components/placement-name.tsx`.
+- **Bloque del placement**: nombre en negrita envuelto + un renglón etiquetado
+  por dato (`Mercado`, `Audiencia`, `Cost method`, `Período`) con sangría
+  francesa. Monto y métricas alineados con la primera línea del nombre. El
+  bloque **no se parte entre páginas** si entra en una.
+- **Ancho de columnas**: la de inversión se calcula con el monto más ancho que
+  se va a mostrar (hay planes de 7 cifras) en vez de 74pt fijos; la del nombre
+  tiene un mínimo de 235pt, así que con muchas métricas se achican las métricas,
+  no el bloque del placement.
+- **Fees como tabla de verdad**: `Tipo · Concepto · Tarifa · Inv. (USD)`, notas
+  envueltas debajo del concepto y fila **`TOTAL FEES`**. El `[auto]` del
+  management fee se explica en palabras. Labels nuevos `fee.*` en `lib/i18n.ts`.
+- **Firma + fecha + disclaimer, siempre en la misma página**: `drawSignatureBlock`
+  reserva el alto del bloque entero y abre página nueva si no entra. Antes cada
+  línea saltaba sola y quedaba la firma en una hoja y el disclaimer en la otra.
+
+**`scripts/preview-plan-pdf.ts` (nuevo)**: renderiza el PDF **sin base de
+datos**, con el caso base y los casos borde (muchas métricas, audiencia más
+larga que una página, sin métricas, campos vacíos, inglés con nombres y montos
+extremos, hoja auxiliar). Es lo que permite mirar el PDF antes de mergear —
+hasta ahora había que bajarse un plan real.
+
+Verificación: los siete PDF rasterizados y revisados uno por uno, más un chequeo
+automático de que **todas** las páginas son apaisadas, ningún texto se sale del
+margen y no queda ni un truncado con `..`. El PDF viejo falla ese chequeo y el
+nuevo lo pasa entero.
+
+**Truncado que queda a propósito**: las celdas de las **hojas auxiliares** se
+siguen cortando a 3 líneas (`AUX_MAX_LINES`), porque el alto de fila de esa
+tabla se calcula con el mismo tope; tocarlo requiere rehacer su ajuste de
+página, y no era lo que se pidió. Está anotado en el README.
+
+**No hay migración ni acción en prod**: es sólo render.
+
 ### Cambios de la sesión 01/sep/2026 — el nombre del placement se lee entero
 
 El nombre del placement se recortaba en la planilla del plan: se veía
@@ -4703,7 +4760,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el **cuadrito de audiencia al hover** (vista del plan) | `components/audience-hover-card.tsx` — envuelve el nombre del placement en la **planilla** (`PlacementGridRow`) y en la **vista previa tipo Excel** (`ExcelPreview`), ambas en `editor.tsx`. El delay (2s) es `AUDIENCE_HOVER_DELAY_MS`. Es `fixed` con coordenadas del ancla porque dentro de las tablas un `absolute` lo recorta el `overflow`; `pointer-events: none` para no comerse clicks. |
 | Agrandar / achicar las cajas de texto libre del **inspector** del plan (audiencia, notas) | `components/auto-grow-textarea.tsx` (props `minHeight`/`maxHeight`), usado por `PlacementInspector` en `editor.tsx`. El ancho de la columna sale del grid de `PlanWorkspace` (`lg:[1fr_440px]`, `xl:[1fr_520px]`), que además scrollea solo (`max-h-[calc(100vh-2rem)]`) por ser `sticky`. |
 | Tocar la regla de "plan completo" (qué bloquea marcar Listo/Aprobado) | **Fuente única: `lib/plan-readiness.ts`** (`findPlanReadinessIssues`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y el diálogo del editor. Chequea campos del placement, la métrica principal del cost method y el **cuadre publisher ↔ placements** (`BALANCE_TOLERANCE_USD` = $1 — arrancó en 1 centavo y se subió con el dato de prod, ver sesión 18/ago (2); el editor lo importa para el aviso ámbar del bloque). **Ojo con el cuadre**: el total del plan sale de `total_planned_usd` y el prorrateo mensual de los placements — si divergen, hay plata que no se factura. Diagnóstico de lo viejo: `db/plan-publisher-balance-check.sql`. |
-| Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla, fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). |
+| Cambiar el **PDF** del plan            | `lib/plan-pdf.ts` (`renderPlanPdf`, todo el layout landscape: header, tabla de medios, tabla de fees, GRAND TOTAL, firma, iniciales, sanitize WinAnsi). La ruta `app/api/plans/[planId]/export.pdf/route.ts` es solo el handler (fetch + filename + Response). **Regla dura: no recorta nada** — es lo que firma el cliente. `wrap()` envuelve sin tope y corta en los separadores del naming (`NAME_SEPARATORS`) porque los nombres de placement no tienen espacios; el bloque del placement (nombre + Mercado/Audiencia/Cost method/Período etiquetados) no se parte entre páginas; la firma + fecha + disclaimer van siempre en la misma página. **Probalo con `npx tsx scripts/preview-plan-pdf.ts ./out`**: renderiza sin DB el caso base y los casos borde (muchas métricas, audiencia gigante, campos vacíos, inglés, hoja auxiliar). |
 | Cambiar el **Excel** del plan          | `app/api/plans/[planId]/export.xlsx/route.ts` (workbook inline ExcelJS: Tab 1 Media plan + Tab 2 Budget por mercado + Tab 3 Historial de versiones (sólo en el export del plan vigente, `buildVersionHistorySheet`) + tabs 4+ auxiliares si el plan tiene). |
 | Elegir el set de estados en una query nueva | **`lib/plan-status.ts`.** `PLAN_ACTIVE_STATUSES` = vigente ("¿qué falta hacer?" → pendientes, campaign tracker). `PLAN_SIGNED_STATUSES` = firmado alguna vez, **incluye `finished`** ("¿qué pasó?" → portal del cliente, análisis publisher × mercado). `PLAN_COMMITTED_STATUSES` = + `ready_to_send` ("¿cuánta plata hay comprometida?" → estimación, pacing, benchmarks). `vigente ⊂ firmado ⊂ comprometido`. Meter `finished` en ACTIVE resucita campañas viejas en el tablero de pendientes; sacarlo de SIGNED le borra el histórico al cliente. |
 | Chequear que no se rompió nada en los planes (tras un cambio de reglas o una carga de datos) | `db/plan-health-check.sql` — read-only, pegar entero en el SQL Editor. 14 controles, una fila cada uno **aunque den 0** (para distinguir "no hay problema" de "no corrió"). Niveles: REVISAR (no debería poder pasar), BLOQUEA (el plan no avanza de estado — los gates de tráfico), ATENCION, INFO. Las reglas de completitud espejan `lib/plan-traffic.ts`: **si esa regla cambia, actualizar el archivo también**. |

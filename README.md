@@ -204,6 +204,7 @@ db/
     plan-qa.ts              # getPlanQaState (QA de una versión: run + líneas controladas) + getPlanVersionHistory (versiones con su diff y su QA)
 scripts/
   seed.ts                   # datos de demo (4 clientes)
+  preview-plan-pdf.ts       # previsualiza el PDF del plan SIN base de datos (caso base + casos borde) — `npx tsx scripts/preview-plan-pdf.ts ./out`
   db-check.mjs, db-reset.mjs
 lib/
   format.ts                 # formatUsd, formatPct, formatUsdCompact + inputs US: formatIntInput / formatAmountInput / parseNumberInput / evalNumberInput (fórmulas tipo Excel)
@@ -1518,18 +1519,53 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
 
 ### PDF (`lib/plan-pdf.ts`)
 
+**Regla dura: el PDF del plan no recorta nada.** Es el documento que el cliente
+firma, así que la legibilidad gana sobre la compacidad: si algo no entra, se
+envuelve o se va a la página siguiente, nunca se corta. Antes se recortaba con
+`..` (nombre del plan, nombre del publisher, nombre del placement) y la línea de
+mercado + audiencia + cost method + fechas iba entera en **una sola** línea gris
+de 6.5pt, también recortada — o sea que de la audiencia el cliente veía cuatro
+palabras y de dos placements del mismo publisher veía el mismo texto cortado.
+
 - **Landscape** letter (792×612pt, margin 40) para que entren las columnas de
   métricas.
-- Estructura: header (label `MEDIA PLAN` + nombre del plan, truncado al ancho
+- Estructura: header (label `MEDIA PLAN` + nombre del plan **envuelto** al ancho
   libre a la izquierda del logo + project code + metadata, **incluye `Período`
-  general del plan**) → Totales → **tabla** → Fees → **GRAND TOTAL** → firma +
-  disclaimer → footer → **una página por hoja auxiliar** (ver abajo).
-- Tabla: columnas = Publisher/Placement (flexible) + Invest (USD) + una por
-  métrica (ancho y fuente 7–8pt según cantidad). Filas: subtotal por publisher
-  (fondo accent-soft, **sin** tag de quién paga, con **sub-línea gris de fechas**
-  = más temprana/más tardía de sus placements), placements (nombre + sub-línea
-  gris `mercado · audiencia · cost method · fechas`), fila `MEDIA TOTAL`
-  (accent). El **header de la tabla se redibuja en cada salto de página**.
+  general del plan**) → Totales → **tabla de medios** → **tabla de fees** →
+  **GRAND TOTAL** → firma + disclaimer → footer → **una página por hoja
+  auxiliar** (ver abajo).
+- **Tabla de medios**: columnas = Publisher/Placement (flexible) + Invest (USD)
+  + una por métrica (ancho y fuente 7–8pt según cantidad).
+  - El **ancho de la columna de inversión** se calcula con el **monto más ancho
+    que se va a mostrar** (hay planes de 7 cifras), no con un ancho fijo.
+  - La columna del nombre tiene un **mínimo de 235pt**: si hay muchas métricas,
+    se achican las métricas, no el bloque del placement.
+  - **Bloque del placement**: nombre en negrita **envuelto** + un renglón
+    **etiquetado por dato** (`Mercado`, `Audiencia`, `Cost method`, `Período`),
+    con sangría francesa. El monto y las métricas se alinean con la **primera
+    línea** del nombre.
+  - Los nombres de placement **no tienen espacios** (`COPA.m1220|Meta|Latam|…`),
+    así que el wrap corta también en los **separadores del naming**
+    (`NAME_SEPARATORS` = `|`, `_`, `/`, `-`) y, si un segmento suelto no entra
+    ni así, por carácter. Mismo criterio que `components/placement-name.tsx` en
+    la app. Sin esto, un wrap por palabras deja el nombre entero como una sola
+    "palabra" de 90 caracteres y la celda lo termina recortando.
+  - Un bloque de placement **no se parte entre páginas** si entra en una: o va
+    entero, o arranca en la siguiente (partirlo dejaba la audiencia sola arriba
+    de una página, sin el nombre al que pertenece). Sólo un bloque más alto que
+    una página entera fluye, y ahí lo hace línea por línea.
+  - Filas de subtotal por publisher (fondo accent-soft, **sin** tag de quién
+    paga, nombre envuelto y **sub-línea gris de fechas** = más temprana/más
+    tardía de sus placements) y fila `MEDIA TOTAL` (accent). El **header de la
+    tabla se redibuja en cada salto de página**.
+- **Tabla de fees**: mismas columnas y mismo look que la de medios —
+  `Tipo` · `Concepto` · `Tarifa` · `Inv. (USD)`— con las notas envueltas debajo
+  del concepto y una fila **`TOTAL FEES`** que cierra. Antes era una tirada de
+  texto monoespaciado (`management  Management fee…  (13%)  $36.609  [auto]`):
+  los montos caían en cualquier lado del renglón, un nombre largo se iba de la
+  hoja y no había subtotal. El `[auto]` del management fee ahora se explica en
+  palabras debajo del concepto. Los labels de tipo salen de `fee.*` en
+  `lib/i18n.ts` (los mismos que ve el planner en pantalla).
 - **Sanitización WinAnsi**: la fuente Helvetica de pdf-lib no codifica fuera de
   Latin-1 ni caracteres de control. `sanitize()` mapea flechas/comillas
   tipográficas/`×`/`…` a ASCII, los **control chars y C1 (newline, tab) a
@@ -1537,7 +1573,11 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
   `placementName` con un salto de línea reventaba el encoder → **HTTP 500**.
 - **GRAND TOTAL**: barra oscura con `(Media + Fees)` y el total, debajo de Fees.
 - **Firma**: `Signature: ___` / `Date: ___` + disclaimer legal
-  (`export.signatureDisclaimer`).
+  (`export.signatureDisclaimer`). Las tres cosas van **sí o sí en la misma
+  página**: `drawSignatureBlock` reserva el alto del bloque entero (con el pie)
+  y abre página nueva antes de empezar si no entra. Antes cada línea decidía
+  sola si saltaba, y un plan que cerraba cerca del borde dejaba la firma en una
+  hoja y el disclaimer que la obliga en la siguiente.
 - **Hojas auxiliares**: después del plan principal, cada tab auxiliar va en
   **su propia página** con el formato del plan: label `PLAN DE MEDIOS · Hoja
   auxiliar` + nombre del tab + metadata (proyecto / período / budget origin) →
@@ -1560,6 +1600,16 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
   un bloque de firma completa lleva `Client initials: ___` abajo a la derecha
   (las páginas firmadas —última del plan + cada hoja auxiliar— se saltean). Se
   dibuja al final iterando `pdf.getPages()` contra el set de páginas firmadas.
+- **Cómo se prueba un cambio en el PDF (sin base de datos)**:
+  `npx tsx scripts/preview-plan-pdf.ts ./out` arma un `PlanDetail` de mentira
+  con datos del tamaño que tienen en prod y escribe el caso base **más los
+  casos borde**: muchas métricas (la columna del nombre en su mínimo), una
+  audiencia más larga que una página, sin métricas, campos vacíos, inglés con
+  nombres y montos extremos, y un plan con hoja auxiliar. **Miralos antes de
+  mergear**: el PDF es lo que firma el cliente y no hay test que lo cubra.
+- **Truncado que queda**: las celdas de las **hojas auxiliares** siguen
+  cortándose a 3 líneas (`AUX_MAX_LINES`), porque el alto de fila de esa tabla
+  se calcula con ese mismo tope. La tabla del plan no tiene tope.
 
 ### Excel (`export.xlsx/route.ts`, ExcelJS)
 

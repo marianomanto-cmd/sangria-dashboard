@@ -47,6 +47,15 @@ const INK: [number, number, number] = [0.11, 0.098, 0.09]; // #1C1917 (grand tot
 const ZEBRA: [number, number, number] = [0.984, 0.957, 0.969]; // #FBF4F7 banding
 const CELL_LINE: [number, number, number] = [0.839, 0.827, 0.82]; // #D6D3D1 borders
 
+// Separadores del naming del cliente ("COPA.m1220|Meta|Latam|..."). Son los
+// únicos puntos de corte que tienen esos nombres: no llevan espacios.
+const NAME_SEPARATORS = "|_/-";
+
+// Tope de líneas por celda en las HOJAS AUXILIARES. El alto de cada fila se
+// calcula con este mismo tope, así que cambiarlo acá cambia las dos puntas a
+// la vez. (La tabla del plan no tiene tope: no se recorta nada.)
+const AUX_MAX_LINES = 3;
+
 export async function renderPlanPdf(
   detail: PlanDetail,
   allMetrics: MetricMeta[],
@@ -222,21 +231,87 @@ export async function renderPlanPdf(
     }
     return `${safe}..`;
   }
-  function wrap(s: string, f: typeof font, size: number, maxW: number): string[] {
-    const words = sanitize(s).split(/\s+/);
+  // Corta una "palabra" en los separadores del naming del cliente, dejando el
+  // separador pegado al segmento que cierra. Sin esto,
+  // "COPA.m1220|Meta|Latam|Performance|Awareness" es UNA palabra de 90
+  // caracteres sin espacios: el wrap por palabras no la parte nunca y la celda
+  // termina truncándola. Mismo criterio que components/placement-name.tsx.
+  function splitOnNameSeparators(word: string): string[] {
+    const out: string[] = [];
+    let start = 0;
+    for (let i = 0; i < word.length; i++) {
+      if (NAME_SEPARATORS.includes(word[i])) {
+        out.push(word.slice(start, i + 1));
+        start = i + 1;
+      }
+    }
+    if (start < word.length) out.push(word.slice(start));
+    return out.length > 0 ? out : [word];
+  }
+
+  // Último recurso: un pedazo que no entra ni solo en la columna se parte por
+  // carácter. Es feo, pero desbordar la celda o recortar en silencio es peor
+  // en un documento que se firma.
+  function splitToFit(
+    piece: string,
+    f: typeof font,
+    size: number,
+    maxW: number,
+  ): string[] {
+    if (piece.length <= 1 || f.widthOfTextAtSize(piece, size) <= maxW) {
+      return [piece];
+    }
+    const out: string[] = [];
+    let cur = "";
+    for (const ch of piece) {
+      if (cur && f.widthOfTextAtSize(cur + ch, size) > maxW) {
+        out.push(cur);
+        cur = ch;
+      } else {
+        cur += ch;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  }
+
+  // Wrap que NO recorta: devuelve todas las líneas que haga falta. `maxLines`
+  // es opcional y sólo lo usan los headers de tabla, donde el alto sí es fijo.
+  function wrap(
+    s: string,
+    f: typeof font,
+    size: number,
+    maxW: number,
+    maxLines?: number,
+  ): string[] {
+    const safe = sanitize(s).trim();
+    if (!safe) return [];
+    // `glue` = este pedazo continúa la palabra anterior (vino de partir en un
+    // separador o de un corte duro), así que al unirlo NO lleva espacio.
+    const atoms: { text: string; glue: boolean }[] = [];
+    for (const word of safe.split(/\s+/)) {
+      let first = true;
+      for (const piece of splitOnNameSeparators(word)) {
+        for (const chunk of splitToFit(piece, f, size, maxW)) {
+          atoms.push({ text: chunk, glue: !first });
+          first = false;
+        }
+      }
+    }
     const lines: string[] = [];
     let line = "";
-    for (const w of words) {
-      const test = line ? `${line} ${w}` : w;
-      if (f.widthOfTextAtSize(test, size) > maxW && line) {
+    for (const a of atoms) {
+      const sep = line === "" || a.glue ? "" : " ";
+      const test = line + sep + a.text;
+      if (line !== "" && f.widthOfTextAtSize(test, size) > maxW) {
         lines.push(line);
-        line = w;
+        line = a.text;
       } else {
         line = test;
       }
     }
     if (line) lines.push(line);
-    return lines.slice(0, 3);
+    return maxLines != null ? lines.slice(0, maxLines) : lines;
   }
 
   const numberLocale = lang === "es" ? "es-AR" : "en-US";
@@ -290,17 +365,18 @@ export async function renderPlanPdf(
   const signedPages = new Set<PDFPage>();
 
   // ─── Header ──────────────────────────────────────────────────────────────
-  // El título se trunca al ancho disponible a la izquierda del logo para no
-  // pisarlo (ambos viven en la misma banda superior).
+  // El título envuelve al ancho disponible a la izquierda del logo (los dos
+  // viven en la misma banda superior). Truncarlo dejaba planes con nombre
+  // largo identificados a medias justo en la tapa del documento.
   const headerMaxW = PAGE_W - MARGIN * 2 - (logoW > 0 ? logoW + 18 : 0);
   writeLine(t("export.mediaPlan", lang), { size: 8, bold: true, color: ACCENT });
   y -= 5; // aire extra: el título (17pt) que sigue es más alto que su interlínea
-  writeLine(truncate(detail.plan.name, fontBold, 17, headerMaxW), { size: 17, bold: true });
-  writeLine(truncate(detail.project.code, fontMono, 10, headerMaxW), {
-    size: 10,
-    mono: true,
-    color: [0.45, 0.45, 0.45],
-  });
+  for (const ln of wrap(detail.plan.name, fontBold, 17, headerMaxW)) {
+    writeLine(ln, { size: 17, bold: true });
+  }
+  for (const ln of wrap(detail.project.code, fontMono, 10, headerMaxW)) {
+    writeLine(ln, { size: 10, mono: true, color: [0.45, 0.45, 0.45] });
+  }
   y -= 4;
 
   // ─── Metadata ──────────────────────────────────────────────────────────
@@ -333,10 +409,32 @@ export async function renderPlanPdf(
   writeLine(t("export.publishersPlacements", lang), { size: 12, bold: true });
   y -= 4;
 
-  // Layout de columnas: nombre (flexible) + inversión + una por métrica.
+  // ── Layout de columnas ──────────────────────────────────────────────────
+  // Este es el documento que firma el cliente, así que la prioridad es que se
+  // lea: la columna del nombre se lleva el ancho que necesita el bloque de
+  // datos del placement (nombre + mercado + audiencia + método + fechas), y
+  // las métricas se reparten el resto.
   const usableW = PAGE_W - MARGIN * 2;
-  const investW = 74;
-  const minNameW = 150;
+
+  // La columna de inversión se dimensiona con el monto MÁS ANCHO que va a
+  // mostrar (los planes tienen montos de 7 cifras) en vez de un ancho fijo de
+  // 74pt, que dejaba el número pegado al header o a la métrica de al lado.
+  const INVEST_SIZE = 9;
+  const investHdr = lang === "es" ? "Inv. (USD)" : "Invest. (USD)";
+  const amountsShown = [
+    totalMediaUsd,
+    ...detail.publishers.map((g) => g.totalPlannedUsd),
+    ...allPlacements.map((pl) => pl.amountUsd),
+  ];
+  const widestAmountW = Math.max(
+    0,
+    ...amountsShown.map((v) => fontBold.widthOfTextAtSize(fmtUsd(v), INVEST_SIZE)),
+  );
+  const investW = Math.max(78, Math.ceil(widestAmountW) + 16);
+
+  // El bloque del placement necesita ancho real: con menos de ~230pt la
+  // audiencia queda en una tira de una palabra por línea.
+  const minNameW = 235;
   const M = metricCols.length;
   let metricW = M > 0 ? (usableW - minNameW - investW) / M : 0;
   metricW = Math.max(40, Math.min(86, metricW));
@@ -348,25 +446,58 @@ export async function renderPlanPdf(
   const tableW = usableW;
   const xName = MARGIN;
   const xInvest = MARGIN + nameW;
-  const investRight = xInvest + investW - 4;
+  const investRight = xInvest + investW - 6;
   const metricRight = (i: number) =>
     MARGIN + nameW + investW + i * metricW + metricW - 4;
   const bodyFont = metricW < 50 ? 7 : 8;
 
-  // Header de la tabla (texto wrap a 1-3 líneas según ancho de columna).
+  // ── Tipografía del bloque del placement ─────────────────────────────────
+  // Antes: nombre a 8.5pt truncado con ".." y mercado + audiencia + método +
+  // fechas apretados en UNA línea gris de 6.5pt, también truncada. O sea que
+  // de la audiencia (que suele ser un párrafo) el cliente veía cuatro palabras.
+  // Ahora el nombre envuelve y cada dato va etiquetado en su propia línea.
+  const NAME_SIZE = 9;
+  const NAME_LH = 11.5;
+  const FACT_SIZE = 7.5;
+  const FACT_LH = 9.5;
+  const factLabels: [string, (pl: PlanPlacement) => string][] = [
+    [t("common.market", lang), (pl) => pl.marketName ?? ""],
+    [t("common.audience", lang), (pl) => pl.audience ?? ""],
+    [t("common.costMethod", lang), (pl) => (pl.costMethod ?? "").toUpperCase()],
+    [
+      t("common.period", lang),
+      (pl) =>
+        pl.startDate && pl.endDate
+          ? `${formatDate(pl.startDate, lang)} -> ${formatDate(pl.endDate, lang)}`
+          : "",
+    ],
+  ];
+  // Columna de etiquetas: fija, para que los valores queden alineados entre sí.
+  const factLabelW =
+    Math.ceil(
+      Math.max(
+        ...factLabels.map(([l]) =>
+          fontBold.widthOfTextAtSize(`${sanitize(l)}:`, FACT_SIZE),
+        ),
+      ),
+    ) + 5;
+
+  // Header de la tabla: el alto se calcula con las líneas que salgan, así que
+  // el tope sólo existe para que un nombre de métrica absurdo no se coma la
+  // página. Con 6 líneas entra cualquier nombre real del catálogo sin cortarse.
+  const HEADER_MAX_LINES = 6;
   const headerSize = 7;
   const headerLineH = 9;
-  const investHdr = lang === "es" ? "Inv. (USD)" : "Invest. (USD)";
   type Hdr = { lines: string[]; right: boolean; x: number };
   const headerCols: Hdr[] = [
     {
-      lines: wrap(t("common.publisherPlacement", lang), fontBold, headerSize, nameW - 8),
+      lines: wrap(t("common.publisherPlacement", lang), fontBold, headerSize, nameW - 8, HEADER_MAX_LINES),
       right: false,
       x: xName + 4,
     },
-    { lines: wrap(investHdr, fontBold, headerSize, investW - 6), right: true, x: investRight },
+    { lines: wrap(investHdr, fontBold, headerSize, investW - 6, HEADER_MAX_LINES), right: true, x: investRight },
     ...metricCols.map((m, i) => ({
-      lines: wrap(m.name, fontBold, headerSize, metricW - 6),
+      lines: wrap(m.name, fontBold, headerSize, metricW - 6, HEADER_MAX_LINES),
       right: true,
       x: metricRight(i),
     })),
@@ -412,20 +543,25 @@ export async function renderPlanPdf(
       period.start && period.end
         ? `${formatDate(period.start, lang)} -> ${formatDate(period.end, lang)}`
         : "";
-    const rowH = periodStr ? 24 : 16;
+    // El nombre del publisher envuelve en vez de truncarse (hay nombres largos
+    // tipo "Google / YouTube - Video Partners").
+    const nameLines = wrap(grp.publisherName, fontBold, 9.5, nameW - 10);
+    const rowH = nameLines.length * 12 + (periodStr ? 10 : 0) + 6;
     ensureRoom(rowH);
     page.drawRectangle({ x: MARGIN, y: y - rowH, width: tableW, height: rowH, color: rgb(...ACCENT_SOFT) });
-    textAt(truncate(grp.publisherName, fontBold, 8.5, nameW - 8), xName + 4, y - 11, {
-      size: 8.5,
+    let ly = y - 12;
+    for (const ln of nameLines) {
+      textAt(ln, xName + 5, ly, { size: 9.5, bold: true });
+      ly -= 12;
+    }
+    if (periodStr) {
+      textAt(periodStr, xName + 5, ly, { size: 7, color: [0.4, 0.4, 0.4] });
+    }
+    const firstY = y - 12;
+    textRight(fmtUsd(grp.totalPlannedUsd), investRight, firstY, {
+      size: INVEST_SIZE,
       bold: true,
     });
-    if (periodStr) {
-      textAt(truncate(periodStr, font, 6.5, nameW - 8), xName + 4, y - 20, {
-        size: 6.5,
-        color: [0.45, 0.45, 0.45],
-      });
-    }
-    textRight(fmtUsd(grp.totalPlannedUsd), investRight, y - 11, { size: 8.5, bold: true });
     const pubDirects = sumDirectMetrics(grp.placements, directSlugs);
     metricCols.forEach((m, i) => {
       const v =
@@ -433,7 +569,7 @@ export async function renderPlanPdf(
           ? (pubDirects[m.slug] ?? null)
           : evalFormula(m.formula, grp.totalPlannedUsd, pubDirects);
       if (v != null && Number.isFinite(v)) {
-        textRight(fmtMetric(v, m.unit), metricRight(i), y - 11, { size: bodyFont, bold: true });
+        textRight(fmtMetric(v, m.unit), metricRight(i), firstY, { size: bodyFont, bold: true });
       }
     });
     y -= rowH;
@@ -446,38 +582,76 @@ export async function renderPlanPdf(
     y -= rowH;
   }
 
+  // Bloque del placement: nombre envuelto + un renglón etiquetado por dato.
+  // Nada se recorta. Las líneas se dibujan de a una con su propio ensureRoom,
+  // así una audiencia larga fluye a la página siguiente en vez de pisar el pie
+  // o desaparecer.
   function drawPlacementRow(pl: PlanPlacement) {
-    const dates =
-      pl.startDate && pl.endDate
-        ? `${formatDate(pl.startDate, lang)} -> ${formatDate(pl.endDate, lang)}`
-        : "";
-    const subLine = [pl.marketName, pl.audience, pl.costMethod, dates]
-      .filter(Boolean)
-      .join("  ·  ");
-    const rowH = subLine ? 25 : 15;
-    ensureRoom(rowH);
-    const lineY = y - 11;
-    textAt(truncate(pl.placementName, font, 8.5, nameW - 10), xName + 6, lineY, { size: 8.5 });
-    if (subLine) {
-      textAt(truncate(subLine, font, 6.5, nameW - 12), xName + 8, y - 21, {
-        size: 6.5,
-        color: [0.45, 0.45, 0.45],
-      });
-    }
-    textRight(fmtUsd(pl.amountUsd), investRight, lineY, { size: 8.5 });
+    const nameLines = wrap(
+      pl.placementName || "-",
+      fontBold,
+      NAME_SIZE,
+      nameW - 16,
+    );
+    const factValueW = nameW - 20 - factLabelW;
+    const facts = factLabels
+      .map(([label, get]) => ({ label, lines: wrap(get(pl), font, FACT_SIZE, factValueW) }))
+      .filter((f) => f.lines.length > 0);
+
+    // El bloque no se parte: o entra entero en lo que queda de página, o
+    // arranca en la siguiente. Partirlo dejaba la audiencia sola arriba de una
+    // página, sin el nombre del placement al que pertenece. Sólo un bloque más
+    // alto que una página entera (una audiencia larguísima) fluye, y en ese
+    // caso lo hace línea por línea, con su propio ensureRoom.
+    const factLineCount = facts.reduce((n, f) => n + f.lines.length, 0);
+    const blockH = nameLines.length * NAME_LH + factLineCount * FACT_LH + 9;
+    const pageBodyH = PAGE_H - MARGIN * 2 - headerH;
+    ensureRoom(
+      blockH <= pageBodyH ? blockH : nameLines.length * NAME_LH + FACT_LH + 8,
+    );
+
+    // Monto y métricas van alineados con la PRIMERA línea del nombre.
+    const firstY = y - NAME_LH + 2.5;
+    textRight(fmtUsd(pl.amountUsd), investRight, firstY, { size: INVEST_SIZE });
     metricCols.forEach((m, i) => {
       const v = placementMetricValue(m, pl);
       if (v != null && Number.isFinite(v)) {
-        textRight(fmtMetric(v, m.unit), metricRight(i), lineY, { size: bodyFont });
+        textRight(fmtMetric(v, m.unit), metricRight(i), firstY, { size: bodyFont });
       }
     });
+
+    for (const ln of nameLines) {
+      ensureRoom(NAME_LH);
+      textAt(ln, xName + 8, y - NAME_LH + 2.5, { size: NAME_SIZE, bold: true });
+      y -= NAME_LH;
+    }
+    for (const f of facts) {
+      f.lines.forEach((ln, li) => {
+        ensureRoom(FACT_LH);
+        const ty = y - FACT_LH + 2.5;
+        // La etiqueta sólo en la primera línea del valor; las que siguen
+        // arrancan alineadas debajo del valor (sangría francesa).
+        if (li === 0) {
+          textAt(`${f.label}:`, xName + 12, ty, {
+            size: FACT_SIZE,
+            bold: true,
+            color: [0.42, 0.42, 0.42],
+          });
+        }
+        textAt(ln, xName + 12 + factLabelW, ty, {
+          size: FACT_SIZE,
+          color: [0.28, 0.28, 0.28],
+        });
+        y -= FACT_LH;
+      });
+    }
+    y -= 5;
     page.drawLine({
-      start: { x: MARGIN, y: y - rowH + 1 },
-      end: { x: MARGIN + tableW, y: y - rowH + 1 },
+      start: { x: MARGIN, y: y + 1 },
+      end: { x: MARGIN + tableW, y: y + 1 },
       thickness: 0.4,
       color: rgb(0.85, 0.85, 0.85),
     });
-    y -= rowH;
   }
 
   function drawTotalRow() {
@@ -521,23 +695,100 @@ export async function renderPlanPdf(
   y -= 10;
 
   // ─── Fees ──────────────────────────────────────────────────────────────
+  // Tabla de verdad, con las mismas columnas y el mismo look que la de medios.
+  // Antes era una tirada de texto monoespaciado ("management  Management fee
+  // sobre media total   (13%)   $36.609  [auto]"): los montos quedaban en
+  // cualquier lado del renglón, un nombre largo se iba de la hoja y no había
+  // subtotal. En el documento que firma el cliente, los fees son plata que
+  // paga: van alineados y sumados.
   writeSeparator();
   writeLine(t("common.fees", lang), { size: 12, bold: true });
-  y -= 2;
+  y -= 4;
   if (detail.fees.length === 0) {
     writeLine(t("common.noFees", lang), { size: 9, color: [0.6, 0.6, 0.6] });
   } else {
-    for (const f of detail.fees) {
-      const rate = f.ratePct != null ? `   (${f.ratePct}%)` : "";
-      const autoTag = f.isAutoComputed ? "  [auto]" : "";
-      writeLine(
-        `${f.feeType.padEnd(10)} ${f.name}${rate}   ${fmtUsd(f.amountUsd)}${autoTag}`,
-        { mono: true, size: 9.5 },
-      );
-      if (f.notes) {
-        writeWrapped(f.notes, { size: 8.5, indent: 12 });
-      }
+    const feeTypeW = 74;
+    const feeRateW = 54;
+    const feeAmountW = investW;
+    const feeConceptW = usableW - feeTypeW - feeRateW - feeAmountW;
+    const xFeeType = MARGIN;
+    const xFeeConcept = xFeeType + feeTypeW;
+    const feeRateRight = xFeeConcept + feeConceptW + feeRateW - 6;
+    const feeAmountRight = MARGIN + usableW - 6;
+    const FEE_SIZE = 9;
+    const FEE_LH = 11.5;
+
+    const feeHdrH = 15;
+    newPageIfNeeded(feeHdrH + FEE_LH * 2);
+    function drawFeesHeader() {
+      page.drawRectangle({
+        x: MARGIN,
+        y: y - feeHdrH,
+        width: usableW,
+        height: feeHdrH,
+        color: rgb(...ACCENT),
+      });
+      const ty = y - 10.5;
+      textAt(t("common.type", lang), xFeeType + 5, ty, { size: headerSize, bold: true, color: WHITE });
+      textAt(t("export.concept", lang), xFeeConcept + 5, ty, { size: headerSize, bold: true, color: WHITE });
+      textRight(t("common.rate", lang), feeRateRight, ty, { size: headerSize, bold: true, color: WHITE });
+      textRight(investHdr, feeAmountRight, ty, { size: headerSize, bold: true, color: WHITE });
+      y -= feeHdrH;
     }
+    drawFeesHeader();
+
+    for (const f of detail.fees) {
+      const conceptLines = wrap(f.name, font, FEE_SIZE, feeConceptW - 10);
+      // El "[auto]" del management fee se explica en palabras: el cliente no
+      // tiene por qué saber qué significa la etiqueta interna.
+      const noteText = [
+        f.notes?.trim(),
+        f.isAutoComputed
+          ? lang === "es"
+            ? "Calculado automáticamente a partir del porcentaje sobre la media."
+            : "Automatically computed from the percentage over media."
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const noteLines = wrap(noteText, font, 7.5, feeConceptW - 10);
+
+      if (y - (FEE_LH * conceptLines.length + 6) < MARGIN + 6) {
+        page = pdf.addPage([PAGE_W, PAGE_H]);
+        y = PAGE_H - MARGIN;
+        drawFeesHeader();
+      }
+      const firstY = y - FEE_LH + 2.5;
+      textAt(t(`fee.${f.feeType}`, lang), xFeeType + 5, firstY, { size: FEE_SIZE, bold: true });
+      textRight(f.ratePct != null ? `${f.ratePct}%` : "-", feeRateRight, firstY, { size: FEE_SIZE });
+      textRight(fmtUsd(f.amountUsd), feeAmountRight, firstY, { size: FEE_SIZE });
+      for (const ln of conceptLines) {
+        newPageIfNeeded(FEE_LH);
+        textAt(ln, xFeeConcept + 5, y - FEE_LH + 2.5, { size: FEE_SIZE });
+        y -= FEE_LH;
+      }
+      for (const ln of noteLines) {
+        newPageIfNeeded(9.5);
+        textAt(ln, xFeeConcept + 5, y - 9.5 + 2.5, { size: 7.5, color: [0.42, 0.42, 0.42] });
+        y -= 9.5;
+      }
+      y -= 4;
+      page.drawLine({
+        start: { x: MARGIN, y: y + 1 },
+        end: { x: MARGIN + usableW, y: y + 1 },
+        thickness: 0.4,
+        color: rgb(0.85, 0.85, 0.85),
+      });
+    }
+
+    // Subtotal de fees: la tabla de medios cierra con TOTAL MEDIA, ésta cierra
+    // con TOTAL FEES. Los dos son los sumandos del GRAND TOTAL de abajo.
+    const feeTotH = 17;
+    newPageIfNeeded(feeTotH + 2);
+    page.drawRectangle({ x: MARGIN, y: y - feeTotH, width: usableW, height: feeTotH, color: rgb(...ACCENT) });
+    textAt(t("export.totalFees", lang), xFeeType + 5, y - 12, { size: 9, bold: true, color: WHITE });
+    textRight(fmtUsd(detail.totals.fees), feeAmountRight, y - 12, { size: 9, bold: true, color: WHITE });
+    y -= feeTotH;
   }
 
   // ─── Total del plan (media + fees) ───────────────────────────────────────
@@ -599,6 +850,24 @@ export async function renderPlanPdf(
   // ──────────────────────────────────────────────────────────────────────────
 
   function drawSignatureBlock() {
+    // Firma, fecha y disclaimer van SÍ O SÍ en la misma página: es lo que el
+    // cliente firma, y separar las líneas de firma del texto que las obliga
+    // deja un documento que no se sostiene. Antes cada línea decidía sola si
+    // saltaba de página, y con un plan que cerraba cerca del borde la firma
+    // quedaba en una hoja y el disclaimer en la siguiente. Reservamos el alto
+    // del bloque entero (con el pie, para no dejar una página con sólo eso) y
+    // si no entra, abrimos página nueva antes de empezar.
+    const discLines = wrap(
+      t("export.signatureDisclaimer", lang),
+      font,
+      8,
+      PAGE_W - MARGIN * 2,
+    );
+    const blockH = 14 + 6 + 14 + 2 + 14 + 8 + discLines.length * 11 + 14 + 12;
+    if (y - blockH < MARGIN) {
+      page = pdf.addPage([PAGE_W, PAGE_H]);
+      y = PAGE_H - MARGIN;
+    }
     writeSeparator();
     y -= 6;
     writeLine(t("export.signaturePrompt", lang), { size: 10 });
@@ -606,8 +875,6 @@ export async function renderPlanPdf(
     writeLine(t("export.dateLabel", lang), { size: 10 });
     y -= 8;
     writeWrapped(t("export.signatureDisclaimer", lang), { size: 8 });
-    // La firma cae en la página actual (writeLine/writeWrapped pueden haber
-    // saltado de página); la marcamos como firmada para la pasada de iniciales.
     signedPages.add(page);
   }
 
@@ -827,7 +1094,7 @@ export async function renderPlanPdf(
         const availW = (m ? mergedW(m.c0, m.c1) : colW[c]) - padX * 2;
         const txt = auxCellDisplay(grid, r, c);
         if (!txt) continue;
-        const lines = wrap(txt, font, bodyFont, availW).length;
+        const lines = wrap(txt, font, bodyFont, availW, AUX_MAX_LINES).length;
         if (lines > maxLines) maxLines = lines;
       }
       rowH[r] = maxLines * lineH + padY * 2;
@@ -894,7 +1161,7 @@ export async function renderPlanPdf(
         });
         const txt = auxCellDisplay(grid, r, c);
         if (txt) {
-          const lines = wrap(txt, font, bodyFont, cw - padX * 2);
+          const lines = wrap(txt, font, bodyFont, cw - padX * 2, AUX_MAX_LINES);
           const f = style?.bold ? fontBold : font;
           const color = style ? style.text : [0.1, 0.1, 0.1];
           const numeric = auxIsNumeric(grid, r, c);
