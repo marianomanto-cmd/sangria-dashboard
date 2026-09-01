@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useMemo, useState, useTransition } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   CalendarRange,
   CheckCheck,
@@ -45,6 +45,7 @@ import { PlanVersionHistory } from "./version-history";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
 import { AudienceHoverCard } from "@/components/audience-hover-card";
 import { AutoGrowTextarea } from "@/components/auto-grow-textarea";
+import { PlacementName } from "@/components/placement-name";
 import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -1421,11 +1422,10 @@ function PlacementGridRow({
     >
       <td className="pl-5 pr-2 py-1">
         <AudienceHoverCard audience={placement.audience} className="w-full">
-          <TextInput
+          <PlacementNameCell
             value={placement.placementName}
             onCommit={(v) => update({ placementName: v })}
-            disabled={!editable}
-            className="w-full min-w-0"
+            editable={editable}
           />
         </AudienceHoverCard>
       </td>
@@ -1551,6 +1551,92 @@ function PlacementGridRow({
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Celda del nombre del placement: se lee entero, se edita al hacer click.
+//
+// El nombre es el dato más largo de la planilla (el naming del cliente, 60/90
+// caracteres) y vivía en un <input> de una línea, que lo recortaba sin siquiera
+// puntos suspensivos: "COPA.m1220|Meta|Latam|Perform" y el resto había que
+// adivinarlo o entrar al campo y moverse con las flechas.
+//
+// Un input no envuelve texto, así que la única forma de mostrarlo completo es
+// no tener un input hasta que haga falta: en reposo es texto que se envuelve
+// por los separadores del naming (PlacementName), y recién al tomar el foco se
+// convierte en el input de siempre.
+//
+// El botón —y no un div— es lo que mantiene la navegación de planilla: es
+// focusable, así que Tab y el Enter de moveGridFocus siguen cayendo acá, y al
+// recibir el foco se convierte solo en input con el texto ya seleccionado,
+// igual que antes. Por eso lleva data-grid-name: es como moveGridFocus lo
+// encuentra en la fila de al lado.
+// ════════════════════════════════════════════════════════════════════════════
+
+function PlacementNameCell({
+  value,
+  onCommit,
+  editable,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  editable: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // Foco + selección al entrar en edición. Va acá y no en autoFocus para que el
+  // salto de fila con Enter (que desmonta un input y monta otro en el mismo
+  // tick) termine siempre con el cursor donde corresponde.
+  useEffect(() => {
+    if (!editing) return;
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [editing]);
+
+  if (!editable) {
+    return (
+      <span className="block w-full min-w-0 px-1 -mx-1 opacity-50">
+        <PlacementName name={value} />
+      </span>
+    );
+  }
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        type="text"
+        defaultValue={value}
+        onClick={(e) => e.stopPropagation()}
+        onBlur={(e) => {
+          setEditing(false);
+          if (e.target.value !== value) onCommit(e.target.value);
+        }}
+        className="w-full min-w-0 bg-transparent border-b border-accent focus:outline-none px-1 -mx-1"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      data-grid-name=""
+      onClick={(e) => {
+        e.stopPropagation();
+        setEditing(true);
+      }}
+      onFocus={() => setEditing(true)}
+      className="w-full min-w-0 text-left border-b border-transparent hover:border-line focus:outline-none px-1 -mx-1"
+    >
+      <PlacementName
+        name={value}
+        empty={<span className="italic text-muted">sin nombre</span>}
+      />
+    </button>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Inspector: detalle completo del placement seleccionado (fechas, audiencia,
 // métrica principal, métricas secundarias, notas). Reusa PrincipalPairEditor y
 // MetricsEditor. Se monta con key={placement.id} → su estado interno se resetea
@@ -1583,8 +1669,8 @@ function PlacementInspector({
         <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
           Placement
         </p>
-        <p className="text-sm font-semibold text-ink truncate">
-          {placement.placementName || "—"}
+        <p className="text-sm font-semibold text-ink">
+          <PlacementName name={placement.placementName} />
         </p>
       </div>
 
@@ -2610,7 +2696,7 @@ function ExcelPreview({
                                 audience={pl.audience}
                                 lang={lang}
                               >
-                                {pl.placementName}
+                                <PlacementName name={pl.placementName} />
                               </AudienceHoverCard>
                             </td>
                             <td className="px-3 py-1.5 text-muted">
@@ -2984,6 +3070,12 @@ function TotalChip({
   );
 }
 
+// Qué es "la celda editable" de una columna a los fines de la navegación. Casi
+// siempre un <input>; la del nombre del placement es un botón mientras no se
+// está editando (PlacementNameCell), y al recibir el foco se convierte solo en
+// el input, así que enfocarlo equivale a caer en el campo.
+const GRID_FOCUS_SELECTOR = "input, button[data-grid-name]";
+
 // Navegación tipo planilla: Enter mueve a la misma columna en la fila de abajo
 // (Shift+Enter, arriba); Enter en la última fila agrega un placement. Sólo
 // actúa sobre <input> para no romper la selección nativa de los <select>.
@@ -3003,12 +3095,14 @@ function moveGridFocus(
   if (sib instanceof HTMLTableRowElement) {
     const cell = sib.cells[colIndex];
     const focusable =
-      cell?.querySelector<HTMLInputElement>("input") ??
-      sib.querySelector<HTMLInputElement>("input");
+      cell?.querySelector<HTMLElement>(GRID_FOCUS_SELECTOR) ??
+      sib.querySelector<HTMLElement>(GRID_FOCUS_SELECTOR);
     if (focusable) {
       el.blur();
       focusable.focus();
-      focusable.select();
+      // El botón del nombre no tiene select(): se selecciona solo cuando el
+      // foco lo convierte en input.
+      if (focusable instanceof HTMLInputElement) focusable.select();
     }
     return;
   }

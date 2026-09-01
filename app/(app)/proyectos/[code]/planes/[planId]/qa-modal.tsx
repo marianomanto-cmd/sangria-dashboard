@@ -27,6 +27,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ArrowDown, Check, RefreshCw, ShieldCheck, X } from "lucide-react";
 import { completePlanQa, setPlanQaCheck } from "@/app/actions/plan-qa";
 import { Button } from "@/components/button";
+import { PlacementName } from "@/components/placement-name";
 import { useToast } from "@/components/toast";
 import type { PlanDetail } from "@/db/queries/project-detail";
 import type { PlanQaCheck } from "@/db/queries/plan-qa";
@@ -314,7 +315,9 @@ export function PlanQaModal({
                               : "hover:bg-paper-2/60"
                           }`}
                         >
-                          <Td className="pl-6">{pl.placementName}</Td>
+                          <Td className="pl-6">
+                            <PlacementName name={pl.placementName} />
+                          </Td>
                           <Td>{pl.marketName ?? "—"}</Td>
                           <Td className="font-mono whitespace-nowrap">
                             {formatDate(pl.startDate, lang)}

@@ -25,6 +25,7 @@ import {
   setPlanningQaCheck,
 } from "@/app/actions/plan-planning-qa";
 import { Button } from "@/components/button";
+import { PlacementName } from "@/components/placement-name";
 import { useToast } from "@/components/toast";
 import type {
   PlanningQaCheck,
@@ -298,11 +299,14 @@ export function PlanningQaModal({
                       />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-ink">
-                          {(row.placementName ?? "").trim() || (
-                            <span className="italic text-muted">
-                              (placement sin nombre)
-                            </span>
-                          )}
+                          <PlacementName
+                            name={row.placementName}
+                            empty={
+                              <span className="italic text-muted">
+                                (placement sin nombre)
+                              </span>
+                            }
+                          />
                         </p>
                         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
                           <Fact label="Mercado">{row.marketName ?? "—"}</Fact>

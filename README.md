@@ -178,6 +178,7 @@ components/                 # UI compartida
   audit-entry.tsx           # render de un evento del audit_log (oración + diff de campos) — lo usan /auditoria y el modal de cambios del plan
   audience-hover-card.tsx   # cuadrito flotante con la audiencia de un placement al hacer hover (2s de delay). Vista del plan: planilla + preview tipo Excel
   auto-grow-textarea.tsx    # textarea que se estira con su contenido (min/max configurables) — campos de texto libre del inspector del plan
+  placement-name.tsx        # nombre de placement legible completo: mete puntos de corte (<wbr>) en los separadores del naming para que envuelva por segmento en vez de recortarse
   mobile-nav.tsx            # MobileNavProvider + MobileNavToggle + useMobileNav() — sidebar drawer en mobile (< lg)
   sidebar.tsx               # navegación como DRAWER mobile (< lg); en ≥lg no se renderiza (la nav vive en top-nav.tsx)
 db/
@@ -1394,6 +1395,41 @@ Es colapsable; notas/fees se omiten (sí salen en el Excel/PDF) y la **audiencia
 aparece al hacer hover** sobre el nombre del placement (ver abajo). La edición
 sigue en la grilla + inspector; el preview es solo visualización. (Una
 "planilla 100% editable" se evaluará aparte en otra branch.)
+
+### El nombre del placement se lee entero (nunca recortado)
+
+Los nombres de placement siguen el naming del cliente
+—`COPA.m1220|Meta|Latam|Performance|Awareness|Video`— y son 60/90 caracteres
+**sin un solo espacio**. Para el navegador eso es una palabra sola e
+indivisible: en una celda angosta no tiene dónde cortarla, así que la recorta.
+En la planilla del plan se veía `COPA.m1220|Meta|Latam|Perform` y el resto
+había que adivinarlo o entrar al campo y moverse con las flechas.
+
+- **`components/placement-name.tsx`** mete un `<wbr>` después de cada separador
+  del naming (`|`, `_`, `/`, `-`), así el texto **envuelve por segmento** y se
+  lee completo:
+
+  ```
+  COPA.m1220|Meta|Latam|
+  Performance|Awareness|Video
+  ```
+
+  El corte va **después** del separador a propósito: el `|` queda pegado al
+  segmento que cierra, y así se ve que la línea sigue abajo. El `.` queda
+  afuera de la lista: `COPA.m1220` es el código de campaña, una unidad, y
+  partirlo al medio se lee peor que envolver más abajo. `break-words` queda de
+  red por si un segmento suelto no entra ni así.
+- **En la planilla el nombre ya no vive en un `<input>`**: un input no envuelve
+  texto, así que la celda (`PlacementNameCell`, en `editor.tsx`) muestra el
+  nombre como **texto** y se convierte en input **recién al tomar el foco**. En
+  reposo es un `<button>` —no un `div`— para que siga siendo focusable: Tab y
+  el Enter de `moveGridFocus` caen ahí igual que antes, y al recibir el foco se
+  convierte solo en el input con el texto ya seleccionado. Por eso lleva
+  `data-grid-name`: es como `moveGridFocus` lo encuentra en la fila de al lado
+  (`GRID_FOCUS_SELECTOR`).
+- Se usa en **todas** las vistas donde aparece el nombre: planilla, cabecera
+  del inspector (antes `truncate`), vista previa tipo Excel y los dos QA
+  (armado y planificación).
 
 ### Audiencia al hover (vista del plan)
 

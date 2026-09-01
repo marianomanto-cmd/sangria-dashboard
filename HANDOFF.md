@@ -1,6 +1,49 @@
-# Handoff — domingo 31/ago/2026
+# Handoff — martes 01/sep/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 01/sep/2026 — el nombre del placement se lee entero
+
+El nombre del placement se recortaba en la planilla del plan: se veía
+`COPA.m1220|Meta|Latam|Perform` y el resto había que adivinarlo, o entrar al
+campo y moverse con las flechas. La causa son dos cosas juntas: el naming del
+cliente son 60/90 caracteres **sin un solo espacio** (para el navegador, una
+palabra indivisible: no tiene dónde cortarla) y el nombre vivía en un `<input>`
+de una línea, que además **no envuelve texto**. La columna es la más apretada
+de la planilla porque compite con Mercado, Método, Monto, Tarifa y Delivery
+—de ancho fijo— más el inspector de 440/520px.
+
+Qué se hizo:
+
+- **`components/placement-name.tsx`** (nuevo): mete un `<wbr>` después de cada
+  separador del naming (`|`, `_`, `/`, `-`), así el texto **envuelve por
+  segmento** en vez de recortarse. El corte va **después** del separador para
+  que el `|` quede pegado al segmento que cierra. El `.` queda afuera:
+  `COPA.m1220` es el código de campaña y partirlo al medio se lee peor.
+  `break-words` es la red por si un segmento suelto no entra ni así.
+- **`PlacementNameCell`** (en `editor.tsx`): en la planilla el nombre ya no
+  vive en un input. En reposo es texto envuelto; se convierte en input **recién
+  al tomar el foco**. Es un `<button>` y no un `div` para no perder la
+  navegación de planilla: Tab y el Enter de `moveGridFocus` siguen cayendo ahí
+  y al recibir el foco se abre solo el input con el texto seleccionado, igual
+  que antes. `moveGridFocus` ahora busca `GRID_FOCUS_SELECTOR`
+  (`input, button[data-grid-name]`) en vez de sólo `input`.
+- Se aplicó `PlacementName` en **todas** las vistas donde aparece el nombre:
+  planilla, cabecera del inspector (tenía `truncate`), vista previa tipo Excel,
+  QA de armado y QA de planificación.
+
+Verificado en Chromium (Playwright) con los tres anchos reales de la columna:
+a ~1340px de planilla el nombre entra **en una línea** (la columna pasa de 303
+a 563px: al poder envolver, la tabla ya puede repartir el espacio libre), a
+~860px entra en dos, y a ~780px en cuatro — siempre completo. Los cortes caen
+exactamente en los separadores. También se probó la interacción sobre el código
+real extraído del editor: click abre el input con todo seleccionado, Enter y
+Shift+Enter navegan entre filas, Enter en la última fila agrega placement, Tab
+y Shift+Tab entran y salen, el blur commitea (y no commitea si no hubo cambio),
+vaciar el nombre muestra "sin nombre" y la fila **no** se selecciona al
+clickear el nombre (`stopPropagation`, como antes).
+
+**No hay migración ni acción en prod**: es sólo UI.
 
 ### Cambios de la sesión 31/ago/2026 (5) — se da de baja la sección Tráfico
 
@@ -4656,6 +4699,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
 | Tocar el **cambio masivo de fechas** de los placements | UI: `app/(app)/proyectos/[code]/planes/[planId]/bulk-dates-modal.tsx`, abierto desde el botón "Cambiar fechas de todos" del strip de metadata del `editor.tsx` (pegado al período derivado). Action: `bulkUpdatePlacementDates` en `app/actions/plans.ts`. **Regla dura: sólo sobre un plan en `draft`** — la action lo chequea server-side, así el cambio pasa sí o sí por "Editar (nueva versión)" → aprobación de la v(N+1) → QA nuevo → Live. No se pueden **vaciar** fechas en masa ni dejar un rango invertido (`fin < inicio`): en los dos casos `prorateByMonth` manda la plata a `NO_DATE_KEY` y desaparece del estimado. Auditoría: **una** row a nivel `media_plan` (no una por línea). |
 | Tocar la **carpeta de Drive** de un proyecto | Columna `projects.drive_folder_url`. Se carga en `app/(app)/proyectos/nuevo/form.tsx` (alta) y `app/(app)/proyectos/[code]/edit-panel.tsx` (edición); el botón vive en el header de `app/(app)/proyectos/[code]/page.tsx`, al lado del `ProjectStatusChanger`. Validación/normalización: **`normalizeExternalUrl` en `lib/external-url.ts`** (agrega `https://` si falta, rechaza esquemas ≠ http/https porque el valor sale como `href`), usada por `createProject`/`updateProject` y por los forms. |
+| Tocar cómo se muestra el **nombre del placement** (que no se recorte) | `components/placement-name.tsx` — mete `<wbr>` después de cada separador del naming (`|`, `_`, `/`, `-`) para que envuelva por segmento; el `.` queda afuera a propósito. En la planilla la celda es `PlacementNameCell` (`editor.tsx`): texto en reposo, input al tomar el foco. Es un `<button data-grid-name>` para seguir siendo focusable — `moveGridFocus` lo busca con `GRID_FOCUS_SELECTOR`. Si agregás una vista nueva que muestre el nombre, usá `PlacementName`: un `<input>` o un `truncate` lo vuelven a recortar. |
 | Tocar el **cuadrito de audiencia al hover** (vista del plan) | `components/audience-hover-card.tsx` — envuelve el nombre del placement en la **planilla** (`PlacementGridRow`) y en la **vista previa tipo Excel** (`ExcelPreview`), ambas en `editor.tsx`. El delay (2s) es `AUDIENCE_HOVER_DELAY_MS`. Es `fixed` con coordenadas del ancla porque dentro de las tablas un `absolute` lo recorta el `overflow`; `pointer-events: none` para no comerse clicks. |
 | Agrandar / achicar las cajas de texto libre del **inspector** del plan (audiencia, notas) | `components/auto-grow-textarea.tsx` (props `minHeight`/`maxHeight`), usado por `PlacementInspector` en `editor.tsx`. El ancho de la columna sale del grid de `PlanWorkspace` (`lg:[1fr_440px]`, `xl:[1fr_520px]`), que además scrollea solo (`max-h-[calc(100vh-2rem)]`) por ser `sticky`. |
 | Tocar la regla de "plan completo" (qué bloquea marcar Listo/Aprobado) | **Fuente única: `lib/plan-readiness.ts`** (`findPlanReadinessIssues`), que usan la barrera real (`transitionPlanStatus` en `app/actions/plans.ts`) y el diálogo del editor. Chequea campos del placement, la métrica principal del cost method y el **cuadre publisher ↔ placements** (`BALANCE_TOLERANCE_USD` = $1 — arrancó en 1 centavo y se subió con el dato de prod, ver sesión 18/ago (2); el editor lo importa para el aviso ámbar del bloque). **Ojo con el cuadre**: el total del plan sale de `total_planned_usd` y el prorrateo mensual de los placements — si divergen, hay plata que no se factura. Diagnóstico de lo viejo: `db/plan-publisher-balance-check.sql`. |
