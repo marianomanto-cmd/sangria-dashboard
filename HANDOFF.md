@@ -2,7 +2,7 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 02/sep/2026 — Incidente: la app se colgaba horas (PRs #245 a #249)
+### Cambios de la sesión 02/sep/2026 — Incidente: la app se colgaba horas (PRs #245 a #256)
 
 Esta entrada reemplaza a la que se escribió al principio de la sesión, que
 contaba la primera teoría. Lo que sigue es lo que pasó **de verdad**, en orden,
@@ -81,13 +81,56 @@ un plan, después todos, incluidos otros proyectos.
   que quedar muy por debajo del `maxDuration`). `lib/supabase/fetch-with-timeout.ts`:
   `auth.getUser()` con `AbortSignal.timeout(8s)` en proxy y layout. Página del
   plan: se sacan del render `getPlanVersionDiff` y `getPlanAuditEvents`.
+- **#250** HANDOFF: la crónica del incidente reescrita como pasó de verdad
+  (incluidos los dos diagnósticos errados), que es esta entrada.
+- **#251** `db/migrations-check.sql`: control read-only de qué migraciones ya
+  están aplicadas — una fila por objeto, `aplicada = true/false`.
+- **#252** README: el control en el árbol del proyecto y en "Dónde están las cosas".
+- **#253** `db/rls-creative-billings.sql` (única tabla sin RLS) + reparación de
+  `migrations-check.sql`, que se había commiteado sin la línea del CTE.
+- **#254** `db/index.ts`: `max` 3 → **1** (una instancia no puede acaparar el
+  pooler) + **`db/queries/cached.ts`**: envoltorios `unstable_cache` de las
+  lecturas caras, compartidos entre `/` y `/proyectos` — que antes pagaban
+  `getDashboardProjects` (12–14 round-trips) por separado.
+- **#255** README: el project ref y la región estaban desactualizados
+  (`hhubbahbmurrukftezea` @ `aws-1-us-east-2`), y qué significa —y qué **no**—
+  `pg_stat_activity` cuando el que conecta es Supavisor.
+- **#256** README: los números reales del pooler y por qué `max: 1` sube la
+  concurrencia (abajo).
 
-#### Acciones en prod (las hizo el dueño del repo, en el SQL Editor)
+#### El techo real (se midió recién al final, y explica todo lo anterior)
+
+Durante casi toda la sesión se diagnosticó en la **capa equivocada**:
+`pg_stat_activity` no ve las conexiones de la app. La app entra por **Supavisor**
+en modo transacción, así que Postgres ve *una* conexión del pooler, no las de
+las Lambdas. `max_connections = 60` nunca fue el techo.
+
+Los números que sí mandan están en **Settings → Database → Connection pooling**:
+
+- **Max client connections: 200** (fijo en compute Nano) — cuántas Lambdas
+  pueden estar conectadas a Supavisor. Con `max: 1` harían falta 200 instancias
+  calientes a la vez: no es el techo.
+- **Connection pool size** — conexiones de Supavisor **contra Postgres**. Cada
+  query en vuelo ocupa una mientras corre: **éste es el techo real**. Estaba en
+  **15**.
+
+De ahí sale por qué `max` importaba tanto: con `max: 3` una sola carga de página
+podía tener 3 statements en vuelo → **5 páginas concurrentes** antes de agotar
+los 15. Con `max: 1` cada instancia ocupa como mucho 1 slot, así que la
+concurrencia **es** el pool size. El costo es que las queries de una página se
+serializan (~15ms cada una): por eso el fan-out por página y la caché de #254
+son parte del mismo fix, no un extra.
+
+#### Acciones en prod (las hizo el dueño del repo)
 
 - Restart de Supabase ×2 (limpia zombies; no evita que vuelvan).
 - `db/fk-indexes.sql` aplicado.
 - `pg_terminate_backend` sobre los backends `ClientRead` > 2 min (3 matados).
   La query está en README → "Si Vercel falla con statement_timeout".
+- **Connection pool size 15 → 25** (Settings → Database → Connection pooling).
+  Con `max: 1` eso es 25 páginas concurrentes en vez de 15. Hay lugar de sobra:
+  se midieron 9 conexiones en uso contra `max_connections = 60`, con ~8 de los
+  servicios internos de Supabase → ~33 de 60. No requiere redeploy.
 
 #### Cambios visibles para el equipo
 
@@ -4083,6 +4126,13 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+a064168  docs: los numeros reales del pooler y por que max:1 triplica la concurrencia (#256)
+b1f7839  docs: que significa (y que no) pg_stat_activity con Supavisor de por medio (#255)
+fd34731  perf(db): max de conexiones a 1 + cache compartida de las lecturas pesadas (#254)
+d58a147  db: RLS en creative_billings + reparar migrations-check.sql (#253)
+3032f65  docs: migrations-check.sql en el arbol del README (#252)
+5516c1b  db: control read-only de que migraciones ya estan aplicadas (#251)
+1d6bae6  docs: registrar el incidente del 02/sep/2026 como fue de verdad (#250)
 21489a8  fix: reintento acotado bajo maxDuration + timeout en auth.getUser(); plan sin diff/audit en el render (#249)
 6f036b7  fix(db): max de conexiones por instancia 8 → 3 + índices de FK (#248)
 b9be28e  fix(plan): la página traía el snapshot_json de TODAS las versiones en cada render (#247)
@@ -4857,7 +4907,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
 | Activar RLS / cerrar la REST API pública de Supabase | `db/rls.sql` — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` en todas las tablas de `public`. Pegarlo en el SQL Editor. La app no se ve afectada (conecta como `postgres`, dueño → bypassa RLS; no se usa `FORCE`). **Toda tabla nueva** necesita su propio ENABLE. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
-| Configurar conexión DB                 | `db/index.ts` — `max: 3` (no subir sin recalcular contra los ~15 slots del pooler), `connect_timeout`, `connection.statement_timeout` y el **timeout de cliente con reintento** (`QUERY_TIMEOUT_MS`, `MAX_ATTEMPTS`). **Invariante**: el peor caso del reintento tiene que quedar muy por debajo del `maxDuration` (45s); si se pasa, la función muere antes del error y deja conexiones zombie en el pooler. |
+| Configurar conexión DB                 | `db/index.ts` — `max: 1` (**no subirlo**: con `max: N` la concurrencia de la app es *pool size / N*; el pool size del Supavisor está en 25), `connect_timeout`, `connection.statement_timeout` y el **timeout de cliente con reintento** (`QUERY_TIMEOUT_MS`, `MAX_ATTEMPTS`). **Invariante**: el peor caso del reintento tiene que quedar muy por debajo del `maxDuration` (45s); si se pasa, la función muere antes del error y deja conexiones zombie en el pooler. |
 | Timeout de las llamadas a Supabase Auth | `lib/supabase/fetch-with-timeout.ts` (8s), inyectado vía `global.fetch` en `lib/supabase/server.ts` y `lib/supabase/middleware.ts`. Es la única llamada de red del render fuera del timeout de queries. |
 | Cachear una lectura pesada             | `db/queries/cached.ts` — envoltorios `unstable_cache` de las lecturas caras, compartidos entre rutas (`getDashboardProjects` son 12 round-trips y la usan `/` y `/proyectos`). Invalidar con `revalidateTag("dashboard")`. Al agregar una ruta pesada, cachearla acá y no inline en la página. |
 | ¿Hay migraciones pendientes?           | Correr **`db/migrations-check.sql`** en el SQL Editor (read-only): una fila por objeto, `aplicada = true/false`. Nunca proponer `drop-plan-traffic.sql` desde ahí (destructiva). Al agregar una migración nueva a `db/`, sumar sus objetos al control. |
