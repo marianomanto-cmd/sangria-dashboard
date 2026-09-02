@@ -133,8 +133,13 @@ function NavItem({
       // Sin prefetch: el sidebar tiene 13 destinos y TODOS son páginas pesadas
       // (cada una dispara sus propias queries). Con el prefetch por viewport,
       // cada carga de cualquier página de la app disparaba ~13 renders de golpe
-      // contra el pooler de Supabase — la tormenta que lo saturaba. Next igual
-      // prefetchea al hacer hover, que es cuando hay intención real de navegar.
+      // contra el pooler de Supabase — la tormenta que lo saturaba.
+      //
+      // Ojo: en Next 16 `prefetch={false}` apaga el prefetch POR COMPLETO,
+      // también el de hover/touch (`prefetchEnabled` corta en `onMouseEnter` y
+      // `onTouchStart`, ver `client/app-dir/link.js`). O sea que la navegación
+      // pasa a cargar recién al hacer click. Es el trade que queremos acá: la
+      // nav es lo que más se renderiza y lo que saturaba el pooler.
       prefetch={false}
       onClick={onNavigate}
       data-active={active}
