@@ -22,6 +22,8 @@ import {
 } from "@/db/queries/dashboard";
 import { getDashboardPendings } from "@/db/queries/pendings";
 import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
+import { getReportingCalendar, getSentReports } from "@/db/queries/reports";
+import { getClientOptions } from "@/db/queries/clients";
 
 export const DASHBOARD_TAG = "dashboard";
 const REVALIDATE = 60;
@@ -57,4 +59,41 @@ export const cachedBudgetOrigins = unstable_cache(
   (clientId: string | null) => listAllBudgetOrigins({ clientId }),
   ["budget-origins-v1"],
   { revalidate: REVALIDATE, tags: [DASHBOARD_TAG] },
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// Calendario de reportes (`/reportes/calendario`).
+//
+// Son 7 round-trips (3 de `getReportingCalendar`, 3 de `getSentReports`, 1 de
+// `getClientOptions`) que se pagaban ENTEROS en cada carga y, sobre todo, otra
+// vez en cada mutación: las acciones de `app/actions/reports.ts` llaman a
+// `revalidatePath("/reportes/calendario")`, así que cambiar UNA fecha
+// re-renderizaba la página completa contra la DB. Ahí saltaba el timeout de 8s
+// (digest 268176261 en Vercel: `getSentReports` sin respuesta).
+//
+// Tag propio: a diferencia del dashboard, acá NO alcanza con el `revalidate` de
+// 60s — quien acaba de mover una fecha tiene que verla al instante o parece que
+// no se guardó. Toda mutación de reportes invalida REPORTS_TAG explícitamente.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const REPORTS_TAG = "reports";
+
+export const cachedReportingCalendar = unstable_cache(
+  (clientId: string | null) => getReportingCalendar(clientId),
+  ["reporting-calendar-v1"],
+  { revalidate: REVALIDATE, tags: [REPORTS_TAG] },
+);
+
+export const cachedSentReports = unstable_cache(
+  (clientId: string | null) => getSentReports(clientId),
+  ["sent-reports-v1"],
+  { revalidate: REVALIDATE, tags: [REPORTS_TAG] },
+);
+
+// La lista de clientes cambia muy de vez en cuando y la usan varias vistas
+// como opciones de filtro. Se invalida con REPORTS_TAG y con el revalidate.
+export const cachedClientOptions = unstable_cache(
+  () => getClientOptions(),
+  ["client-options-v1"],
+  { revalidate: REVALIDATE, tags: [REPORTS_TAG, DASHBOARD_TAG] },
 );

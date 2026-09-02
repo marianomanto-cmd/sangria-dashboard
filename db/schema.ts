@@ -765,6 +765,9 @@ export const projectReports = pgTable(
   (t) => [
     // Para el listado del calendario: filtramos delivered_at IS NULL.
     index("idx_project_reports_pending").on(t.deliveredAt, t.deliveryDate),
+    // FK: las dos queries del calendario joinean contra projects. Postgres no
+    // indexa las FK solo (ver db/reports-fk-index.sql).
+    index("idx_project_reports_project").on(t.projectId),
   ],
 );
 
