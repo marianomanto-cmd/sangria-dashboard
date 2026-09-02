@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { touchUser } from "@/db/queries/app-users";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Helpers de auth server-side. Todas las pages y server actions pueden usar
@@ -31,6 +32,11 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     (typeof meta.avatar_url === "string" && meta.avatar_url) ||
     (typeof meta.picture === "string" && meta.picture) ||
     null;
+
+  // Deja constancia de que este usuario existe, para Configuración → Usuarios
+  // y roles. Throttleado (1/hora por instancia) y fire-and-forget: no suma
+  // latencia al render ni puede tumbarlo. Ver db/queries/app-users.ts.
+  touchUser({ email: user.email, name, authUserId: user.id });
 
   return { id: user.id, email: user.email, name, avatarUrl };
 }

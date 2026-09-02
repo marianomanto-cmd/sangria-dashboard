@@ -59,7 +59,9 @@ export default async function PlanDetailPage({ params }: Props) {
     getPlanningQaRows(planId),
   ]);
 
-  const canApprove = canApprovePlans(user?.email);
+  // Lectura de una fila por email (índice único). Va después del batch porque
+  // depende del user que sale de él.
+  const canApprove = await canApprovePlans(user?.email);
 
 
   return (

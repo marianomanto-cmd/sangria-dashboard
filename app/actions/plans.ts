@@ -446,11 +446,11 @@ export async function transitionPlanStatus(input: {
   // botón como conveniencia.
   if (input.to === "approved") {
     const user = await getCurrentUser();
-    if (!canApprovePlans(user?.email)) {
+    if (!(await canApprovePlans(user?.email))) {
       return {
         ok: false,
         error:
-          "No tenés permiso para aprobar planes. Solo mariano.mantovani@sangria.agency y herman.grabosky@sangria.agency pueden marcar un plan como Aprobado.",
+          "No tenés permiso para aprobar planes. Hace falta el rol Admin o Aprobador (Configuración → Usuarios y roles).",
       };
     }
   }

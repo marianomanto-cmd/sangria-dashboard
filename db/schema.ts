@@ -1062,3 +1062,48 @@ export const creativeBillings = pgTable(
     index("idx_creative_billings_client").on(t.clientId),
   ],
 );
+
+// ════════════════════════════════════════════════════════════════════════════
+// Usuarios y roles.
+//
+// La identidad la sigue manejando Supabase Auth (`auth.users`): acá NO se
+// guardan contraseñas ni se crean cuentas. Esta tabla es la capa de la app
+// sobre esa identidad — a quién conocemos, con qué rol y si está activo.
+//
+// Cómo se puebla: `syncCurrentUser()` hace upsert por email en cada request
+// autenticado, así que cualquiera que entre queda listado sin trabajo manual.
+// Un admin también puede pre-cargar a alguien por email antes de su primer
+// login (queda `last_seen_at` en null hasta que entre).
+//
+// El email es la clave natural (único, case-insensitive por normalización en
+// el código). `auth_user_id` se completa en el primer login.
+// ════════════════════════════════════════════════════════════════════════════
+
+export const appUserRole = pgEnum("app_user_role", [
+  "admin",          // configura la app y los roles; aprueba planes
+  "approver",       // aprueba planes, no toca configuración
+  "media_planner",
+  "account_manager",
+  "finance",
+  "viewer",         // solo lectura
+]);
+
+export const appUsers = pgTable(
+  "app_users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: text("email").notNull().unique(),
+    name: text("name"),
+    role: appUserRole("role").notNull().default("viewer"),
+    active: boolean("active").notNull().default(true),
+    authUserId: uuid("auth_user_id"),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("idx_app_users_role").on(t.role)],
+);

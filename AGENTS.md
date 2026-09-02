@@ -6,6 +6,12 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # Las queries se entregan EN EL CHAT, para copy-paste (regla dura)
 
+> **Sin excepciones, y vale para TODA query que haya que correr en Supabase:**
+> migración, backfill, corrección de datos, diagnóstico o control. Va **pegada
+> en la respuesta del chat**, en un bloque ```sql listo para copiar y pegar en
+> el SQL Editor. Dejarla en un archivo y nombrarlo NO cuenta como entregarla.
+> El dueño del repo la corre a mano: si no está en el chat, no existe.
+
 En este proyecto **nadie aplica cambios a Supabase por su cuenta**: los corre el
 dueño del repo a mano, en el SQL Editor. Toda migración, backfill, corrección de
 datos o query de diagnóstico se entrega **pegada en la respuesta del chat**, en
