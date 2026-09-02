@@ -130,6 +130,7 @@ app/
     plans/[planId]/
       export.xlsx/route.ts  # XLSX del plan (logo + firma + disclaimer + todas las métricas + mercado + fechas por publisher/placement). ?v=N → versión aprobada histórica
       export.pdf/route.ts   # PDF del plan (thin handler → lib/plan-pdf.ts). ?v=N → versión aprobada histórica. Acceso: sesión interna O cookie de portal del cliente dueño
+      version-diff/route.ts # diff de UNA versión vs la anterior (2 snapshots). Lo pide version-history.tsx al desplegar, para no traer todos los snapshot_json en el render
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
       billing/mark-paid/route.ts # POST invoiced → paid de una factura del portal. Público + canWriteAsClientPortal + ownership (plan vivo del cliente) + sólo esa transición
@@ -187,6 +188,7 @@ db/
   plan-publisher-balance-check.sql # diagnóstico: publishers cuyo total no cuadra con la suma de placements, en planes ya congelados (previos a la regla de cuadre)
   plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
   plan-health-check.sql     # chequeo de salud READ-ONLY de todos los planes: 14 controles (una fila cada uno, aunque den 0) — tipos de ad cruzados entre clientes, status drifteados, gates de tráfico que bloquean el avance, live sin cerrar, planes que caen en el año actual por falta de fechas, tarifas huérfanas en metrics_json
+  fk-indexes.sql            # índices en foreign keys (Postgres no los crea solos). Aplicado en prod el 02/sep/2026; idempotente
   drop-plan-traffic.sql     # BAJA de la sección Tráfico: dropea media_plan_traffic_ads/_adsets/_briefs y ad_types. ⚠️ borra datos; no toca planes, publishers, placements, fees ni billings
   plan-planning-qa.sql      # migración del QA DE PLANIFICACIÓN: enum planning_qa_item_kind + tablas media_plan_planning_qa_runs/_checks + RLS. Puramente aditiva: no toca el QA que ya existía ni traba ningún plan
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
@@ -235,6 +237,7 @@ lib/
   project-period.ts         # período del proyecto (min/max de placements) + aviso "termina pronto" (≤7 días)
   external-url.ts           # normalizeExternalUrl — normaliza links pegados a mano (agrega https:// si falta) y rechaza esquemas que no sean http/https. Lo usan las actions de proyecto (carpeta de Drive) y los forms
   supabase/
+    fetch-with-timeout.ts   # fetch con AbortSignal.timeout(8s) para Auth — inyectado en server.ts y middleware.ts
     server.ts               # cliente Supabase para Server Components / route handlers
     client.ts               # cliente Supabase para Client Components
     middleware.ts           # updateSession() — usado por proxy.ts (route protection)
@@ -1733,12 +1736,17 @@ en frío que puebla el cache.
 
 ### Pool de conexiones
 - `prepare: false` para Transaction Pooler (puerto 6543).
-- `max: 8` por warm-instance. Da lugar a las queries concurrentes sin que
-  queueen ni se traben (el dashboard además ahora **cachea** esas queries, ver
-  "Dashboard: caché por cliente"). (Se probó `max: 3` durante el incidente del
-  pooler, pero la fuga de conexiones que motivaba bajarlo la causaba un loop
-  infinito en `enumerateMonths`, ya arreglado.)
-- `idle_timeout: 20`, `connect_timeout: 10`.
+- **`max: 3` por instancia de Lambda. No subirlo sin recalcular.** El pooler
+  tiene ~15 slots; cada request cae en su propia instancia y cada instancia
+  abre hasta `max` conexiones propias. Con 8, dos cargas concurrentes de la
+  página del plan agotaban el pooler. Con 3 entran cinco instancias. Las ~12
+  queries de una página no sufren: postgres.js las pipelinea, y con las FK
+  indexadas cada una tarda milisegundos. (Estuvo en 3, se subió a 8 el
+  22/may/2026 y se volvió a 3 el 02/sep/2026 — ver el incidente abajo.)
+- `idle_timeout: 20`, `connect_timeout: 10`, `connection.statement_timeout: 12s`.
+- **Timeout de cliente + reintento** (`QUERY_TIMEOUT_MS = 8s`, `MAX_ATTEMPTS = 2`).
+  Invariante: el peor caso (todos los intentos vencidos) tiene que quedar muy
+  por debajo del `maxDuration` de la página (45s). Ver "Si Vercel falla…".
 
 ---
 
@@ -1792,58 +1800,78 @@ Prevención (ya aplicada):
   (12s) al abrir la conexión, así que el tope existe aunque el `ALTER ROLE`
   no se haya corrido.
 - `enumerateMonths` blindado contra fechas malformadas (no más loop infinito).
-- `max: 8` conexiones por instancia (ver "Pool de conexiones").
+- `max: 3` conexiones por instancia (ver "Pool de conexiones").
 
-#### Por qué el `statement_timeout` NO alcanzaba (02/sep/2026)
+#### Incidente del 02/sep/2026: la espiral completa (y qué NO era)
 
-Con todo lo de arriba aplicado, la app se seguía colgando **horas** con el
-skeleton en pantalla. El agujero: `statement_timeout` es un parámetro
-**server-side**, sólo corre una vez que el statement empezó a ejecutarse en un
-backend de Postgres. No cubre los dos momentos donde realmente se colgaba:
+Con todo lo de arriba aplicado, la app se seguía colgando **horas**. La cadena
+real tiene cinco eslabones, y hace falta cada uno para que sean horas y no
+segundos. Detalle y cronología en HANDOFF → "Cambios de la sesión 02/sep/2026".
 
-1. **La cola de postgres.js.** Cuando las `max` conexiones están ocupadas, la
-   query se encola — y **esa cola no tiene timeout**: la promesa espera para
-   siempre hasta que se libere una conexión (`src/index.js`, `handler`).
-2. **La cola del Transaction Pooler.** Supabase acepta la conexión TCP pero no
-   tiene backend libre para atenderla. Como la conexión ya está *abierta*,
-   `connect_timeout` tampoco aplica, y el statement nunca llega al server.
+1. **La cola de postgres.js no tiene timeout.** Sin conexión libre, la query se
+   encola y espera para siempre (`src/index.js`, `handler`). `statement_timeout`
+   es server-side (no hay statement corriendo) y `connect_timeout` no aplica (la
+   conexión ya está abierta). El render esperaba hasta que Vercel mataba la
+   función.
+2. **Una función que muere con la query en vuelo deja su conexión colgada en el
+   pooler**: `active` / `Client:ClientRead`, esperando a un cliente que ya no
+   existe, ocupando un slot **para siempre**. Ningún timeout de Postgres la
+   reapea (`idle_in_transaction_session_timeout` no aplica porque el estado es
+   `active`). Menos slots → más colas → más funciones muertas → más zombies.
+3. **Saturación**: prefetch de las 13 secciones en cada carga (TopNav + Sidebar)
+   y de cada fila de las tablas; `max: 8` por instancia contra ~15 slots;
+   **ninguna FK indexada** (Postgres no las crea solas).
+4. **La página del plan** traía el `snapshot_json` de todas las versiones y
+   scaneaba `audit_log` en cada render.
+5. **El primer fix empeoró el punto 2**: el reintento sumaba 45,8s contra un
+   `maxDuration` de 45 → Vercel mataba la función antes de que se lanzara el
+   error, con la conexión abierta. Fabricaba zombies.
 
-En los dos casos la query no falla: **espera**. El render se queda colgado sin
-error hasta que Vercel mata la función, y cada función muerta deja su conexión
-trabada → más saturación → espiral que dura horas.
+**Descartado con evidencia**: locks (`pg_blocking_pids` = 0), zombies como
+causa raíz (eran 0 cuando fallaba: son consecuencia del punto 5), volumen de
+datos (son chicos).
 
-El fix vive en `db/index.ts`, que envuelve el cliente postgres.js con dos capas:
+**Lo que hay hoy en `db/index.ts`** (sobre el cliente postgres.js):
 
-1. **Reintento seguro** — hasta 3 intentos con backoff (200ms, 600ms). Un pico
-   de carga es transitorio: si la query no consiguió conexión, reintentar la
-   resuelve sin que el usuario se entere. Se reintenta **sólo** cuando es
-   demostrable que la query nunca se ejecutó: `query.state == null` significa
-   que ninguna conexión la tomó (`connection.js` hace `q.state = backend` al
-   tomarla), así que no llegó al server ni siquiera si escribe. También se
-   reintentan las lecturas (`select`) que fallan por error de conexión.
-2. **Timeout de cliente** (`QUERY_TIMEOUT_MS`, 15s) — si el reintento tampoco
-   alcanza, falla rápido y explícito: la página cae en su error boundary
-   (recargable) en vez de quedarse en el skeleton, y la conexión se libera.
+- **Timeout de cliente** `QUERY_TIMEOUT_MS = 8s` y **reintento** `MAX_ATTEMPTS = 2`
+  (backoff 300ms). Se reintenta sólo cuando es demostrable que la query nunca
+  salió: `query.state == null` ⟹ ninguna conexión la tomó ⟹ no llegó al server
+  ni siquiera si escribe. También lecturas (`select`) con error de conexión.
+- **Invariante**: 2 × 8s + 0,3s ≈ 16s, **muy por debajo del `maxDuration`** (45s).
+  Si la suma se pasa, la función muere antes del error y vuelve el punto 2.
+- **Sólo se cancela lo que nunca salió.** postgres.js pipelinea varias queries
+  sobre una conexión, y el cancel de una pipelineada va con el backend key de
+  la conexión: **puede matar a una query hermana** (reproducido en local). Las
+  que ya salieron no se cancelan ni se reintentan: para ésas está el
+  `connection.statement_timeout` de 12s del server.
+- Las transacciones (`db.transaction`) quedan fuera a propósito.
 
-**Ojo con cancelar: sólo se cancela lo que nunca salió.** Para una query
-encolada, `cancel()` es puramente local (la saca de la cola, no toca el server).
-Pero postgres.js **pipelinea** varias queries sobre una misma conexión, y el
-cancel de una pipelineada se manda con el *backend key de la conexión*: cancela
-lo que ese backend esté corriendo, o sea **puede matar a una query hermana**.
-Verificado en el test local — el cancel de la query vencida mataba la query
-larga que ocupaba la conexión. Por eso las que ya salieron **no** se cancelan ni
-se reintentan: para ésas está el `connection.statement_timeout` de 12s, que las
-reapea desde el server (que sí sabe cuál matar) antes que el tope de 15s del
-cliente, y reintentarlas sólo agregaría carga sobre un pooler ya saturado.
+**Fuera de `db/index.ts`**: `lib/supabase/fetch-with-timeout.ts` le pone
+`AbortSignal.timeout(8s)` a `auth.getUser()` (proxy + layout) — era la única
+llamada de red del render sin tope; `db/fk-indexes.sql` (12 índices, aplicado);
+`maxDuration = 45` en `app/(app)/layout.tsx`; `prefetch={false}` en las navs y
+en los links de fila (en Next 16 apaga también el hover: cargan al click).
 
-Verificado contra un Postgres 16 local (6 casos): query normal, `.values()`,
-params y errores reales de SQL pasan intactos; una query encolada de verdad se
-cancela y **se reintenta hasta salir bien**; una query en vuelo que vence falla
-en el tope **sin matar a su hermana** en la misma conexión.
-
-Las transacciones (`db.transaction`) quedan fuera de todo esto a propósito: usan
-una conexión reservada, viven sólo en server actions puntuales, y reintentarlas
-o cortarlas por la mitad es peor que dejarlas terminar.
+Diagnóstico de zombies (SQL Editor). Contar:
+```sql
+select count(*) as zombies,
+       round(max(extract(epoch from now() - xact_start))) as la_mas_vieja_seg
+from pg_stat_activity
+where datname = current_database()
+  and wait_event = 'ClientRead'
+  and xact_start < now() - interval '1 minute';
+```
+Matar (sólo backends esperando a un cliente hace más de 2 minutos):
+```sql
+select pid, pg_terminate_backend(pid) as terminada
+from pg_stat_activity
+where datname = current_database()
+  and pid <> pg_backend_pid()
+  and wait_event = 'ClientRead'
+  and xact_start < now() - interval '2 minutes';
+```
+Si vuelven a acumularse con el código actual, el paso siguiente es un reaper
+con `pg_cron` (función probada en local, ver HANDOFF → Pendientes).
 
 ---
 

@@ -2,102 +2,119 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 02/sep/2026 — La app se colgaba horas: cola del pool sin timeout + tormenta de prefetch
+### Cambios de la sesión 02/sep/2026 — Incidente: la app se colgaba horas (PRs #245 a #249)
 
-**Síntoma**: `/proyectos/[code]` (y otras) se quedaban con el skeleton de
-`app/(app)/loading.tsx` en pantalla durante horas.
+Esta entrada reemplaza a la que se escribió al principio de la sesión, que
+contaba la primera teoría. Lo que sigue es lo que pasó **de verdad**, en orden,
+incluidas las dos veces que el diagnóstico estuvo mal. Vale más que la versión
+prolija: la próxima vez que algo se cuelgue, esto es lo que hay que descartar
+primero.
 
-**Evidencia (logs de Vercel, prod)**:
-- `Vercel Runtime Timeout Error: Task timed out after 300 seconds` × 98, en
-  `/`, `/[clientSlug]`, `/proyectos/[code]`, `/proyectos/[code]/planes/[planId]`
-  — el último el mismo 02/sep.
-- `57014 canceling statement due to statement timeout` en queries **triviales**
-  (`select slug, name from clients`) → saturación del pooler, no SQL lento.
-- 7.969 requests en 24h para una app interna de ~6 personas.
-  `/proyectos/[code]` es la ruta más golpeada (1.304), y en 40 min se ven ~20
-  slugs de proyecto distintos pedidos 2 veces cada uno mientras el usuario
-  recargaba `/proyectos` 25 veces: fan-out de prefetch, no clicks.
+**Síntoma**: `/proyectos/[code]/planes/[planId]` (y después `/proyectos/[code]`
+y hasta `/proyectos`) se quedaban con el skeleton de `app/(app)/loading.tsx`
+durante horas. Patrón reportado: *"lo abro, hago un cambio y se cae"*; primero
+un plan, después todos, incluidos otros proyectos.
 
-**Causa raíz (por qué colgaba en vez de fallar)**: `statement_timeout` es
-server-side y sólo corre cuando el statement YA empezó a ejecutarse. No cubría
-los dos lugares donde se colgaba: la **cola de postgres.js** (cuando las `max`
-conexiones están ocupadas la query se encola, y esa cola **no tiene timeout**) y
-la **cola del Transaction Pooler** (acepta el TCP pero no tiene backend libre;
-como la conexión ya está abierta, `connect_timeout` tampoco aplica). En ambos
-casos la query **espera**, no falla → el render colgaba hasta que Vercel mataba
-la función a los 300s, y cada función muerta dejaba su conexión trabada en el
-pooler → más saturación → espiral de horas. Detalle en README → "Por qué el
-`statement_timeout` NO alcanzaba".
+**Evidencia (Vercel + `pg_stat_activity`, corrida por el dueño del repo)**:
+- 98 × `Task timed out after 300 seconds` en `/`, `/proyectos/[code]` y
+  `/proyectos/[code]/planes/[planId]`.
+- `57014` en queries **triviales** (`select slug, name from clients`).
+- 7.969 requests en 24h para ~6 personas; ráfagas de los 13 destinos de la nav
+  en 4 segundos tras cada carga.
+- `pg_stat_activity`: 3 backends en `active` / `Client:ClientRead` con
+  transacciones de **440s** y `pg_blocking_pids = 0`.
+- Al momento en que fallaban todos los planes: **0 zombies**, **0 locks**,
+  **ningún `57014`** en el servidor.
 
-**Fixes**:
-- **`db/index.ts`**: dos capas sobre el cliente postgres.js.
-  1. **Reintento seguro** (3 intentos, backoff 200/600ms) — un pico es
-     transitorio, así que reintentar lo resuelve sin que el usuario vea nada. Se
-     reintenta **sólo** cuando es demostrable que la query no se ejecutó:
-     `query.state == null` ⟹ ninguna conexión la tomó (`connection.js` hace
-     `q.state = backend` al tomarla) ⟹ no llegó al server ni siquiera si
-     escribe. También lecturas que fallan por error de conexión.
-  2. **Timeout de cliente** (`QUERY_TIMEOUT_MS = 15s`) como red de contención.
-  Más `connection.statement_timeout` (12s) para no depender del `ALTER ROLE`
-  manual. Las transacciones quedan fuera a propósito.
+#### La cadena (cada eslabón hacía falta para que fueran horas y no segundos)
 
-  **Hallazgo del test — sólo se cancela lo que nunca salió**: postgres.js
-  pipelinea varias queries sobre una misma conexión, y el cancel de una
-  pipelineada va con el *backend key de la conexión* → cancela lo que ese
-  backend esté corriendo, o sea **puede matar a una query hermana**. Se
-  reprodujo en el Postgres local. Las que ya salieron no se cancelan ni se
-  reintentan: para ésas está el `statement_timeout` del server (12s, reapea
-  antes que el tope de 15s del cliente) y reintentarlas sólo sumaría carga.
+1. **La cola de postgres.js no tiene timeout.** Cuando no hay conexión libre la
+   query se encola y espera para siempre. `statement_timeout` no aplica (no hay
+   statement corriendo) ni `connect_timeout` (la conexión ya está abierta). El
+   render esperaba hasta que Vercel mataba la función (300s por defecto).
+2. **Una función que muere con la query en vuelo deja su conexión colgada en
+   el pooler** — `active` / `Client:ClientRead`, esperando a un cliente que ya
+   no existe. Ocupa un slot para siempre: **ningún timeout de Postgres la
+   reapea** (`idle_in_transaction_session_timeout` no aplica porque el estado
+   es `active`). Menos slots → más colas → más funciones muertas → más zombies.
+   Esa espiral es "las horas".
+3. **Por qué se saturaba el pooler**: (a) `TopNav` y `Sidebar` precargaban las
+   **13 secciones** en cada carga de cualquier página, y las tablas cada fila;
+   (b) `max: 8` conexiones por instancia de Lambda contra un pooler de ~15
+   slots — dos personas cargando algo a la vez lo agotaban; (c) **ninguna
+   foreign key tenía índice** (Postgres no las crea solas): con datos chicos no
+   se nota hasta que hay concurrencia y todo scanea a la vez.
+4. **Por qué la página del plan era la peor**: traía el `snapshot_json` de
+   TODAS las versiones en cada render (y al guardar, una versión más), y hacía
+   un scan de `audit_log` con un `OR` sobre claves dentro del jsonb que ningún
+   índice sirve.
+5. **Lo que agregué yo y empeoró las cosas**: el reintento de queries sumaba
+   3 × 15s + backoff = **45,8s** contra un `maxDuration` de 45s. Vercel mataba
+   la función *antes* de que se lanzara el error (por eso en los logs había
+   "timed out after 45 seconds" y ningún `QueryTimeoutError`), con la conexión
+   abierta → **yo fabricaba las mismas zombies del punto 2**. Además
+   `getPlanVersionDiff` volvía a traer 3 catálogos que la página ya pedía.
 
-  Verificado contra un Postgres 16 local, 6 casos: query normal, `.values()`,
-  params y errores de SQL pasan intactos; una query encolada de verdad se
-  cancela y **se reintenta hasta salir bien**; una en vuelo que vence falla en
-  el tope **sin matar a su hermana**. El test también destapó un unhandled
-  rejection (la promesa de `cancel()` descartada sin handler) — los
-  `unrecoverable error: Unhandled Rejection` que se veían en prod son de esa
-  familia; ya está manejado.
-- **`components/top-nav.tsx` y `components/sidebar.tsx`**: `prefetch={false}`.
-  Los dos renderizan los mismos **13 destinos, todos páginas pesadas**
-  (`[...PRIMARY_NAV, ...FOOTER_NAV]`): con el prefetch por viewport, cada carga
-  de cualquier página disparaba ~13 renders de golpe. Es la mayor fuente de
-  carga de la app y explica los contadores casi uniformes de `/planes` (647),
-  `/reportes/calendario` (573), `/billing` (563), `/` (562). Ya se había
-  sospechado en la sesión del 16/jun/2026 pero nunca se arregló.
+#### Descartado con evidencia (no volver sobre esto)
 
-  **La `TopNav` es la nav real en desktop** (`hidden lg:flex`, montada desde
-  `topbar.tsx`); el `Sidebar` es el equivalente para pantallas chicas. En el
-  primer intento se parcheó sólo el sidebar y la tormenta siguió igual: se vio
-  en los logs del deploy, con los 13 destinos golpeados en una ráfaga de 4s.
-  **Si se toca la navegación, hay que tocar los dos.**
-- **`prefetch={false}` en los links de fila** (24 sitios) de las tablas y
-  listados que hacen fan-out a páginas pesadas: `projects-table-expandable`,
-  `plans-table-client`, `billing-table`, `reporting-calendar-client`,
-  `reporting-gantt`, `billing-estimate-card`, `dashboard/view-operaciones` y las
-  cards de plan de `app/(app)/proyectos/[code]/page.tsx`.
+- **Locks**: `pg_blocking_pids` = 0 en todas las conexiones trabadas.
+- **Zombies como causa raíz**: eran 0 cuando fallaban los planes. Son la
+  *consecuencia* del punto 5, no la causa.
+- **Volumen de datos**: los datos son chicos. Era arquitectura de conexiones.
 
-  **Ojo con la semántica**: en Next 16 `prefetch={false}` apaga el prefetch por
-  completo, **también el de hover/touch** — `prefetchEnabled` corta en
-  `onMouseEnter` y `onTouchStart` (`client/app-dir/link.js`). O sea que estos
-  links cargan recién al hacer click, con su skeleton. Es el trade deliberado:
-  vale para links que se repiten por fila, no para un botón suelto.
-- **`app/(app)/layout.tsx`**: `export const maxDuration = 45`. Los segment
-  configs cascadean del layout a las páginas (verificado en el manifest del
-  build: todas las rutas del grupo quedan en 45, y `/` conserva su 60 propio).
-  El default de Vercel era 300s: cortando a 45 la conexión trabada se libera
-  ~7x antes y el usuario ve el error boundary recargable en vez del skeleton.
+#### Qué se cambió (en orden de merge)
 
-**Sin cambios de schema. No requiere correr SQL.** `tsc` + `eslint` +
-`next build` en verde.
+- **#245** `db/index.ts`: timeout de cliente por query + `connection.statement_timeout`
+  (12s) + `maxDuration = 45` en `app/(app)/layout.tsx` + `prefetch={false}` en
+  `sidebar.tsx` y en 24 links de fila.
+- **#246** `components/top-nav.tsx`: `prefetch={false}` — la nav real de
+  desktop es la TopNav, no el sidebar; el #245 había parcheado la equivocada.
+  En Next 16 `prefetch={false}` apaga TAMBIÉN el hover: los links cargan al
+  click.
+- **#247** `db/queries/plan-qa.ts`: `getPlanVersionHistory` se parte en
+  `getPlanVersionList` (sin `snapshot_json`) + `getPlanVersionDiff` (2
+  snapshots, vía `/api/plans/[planId]/version-diff`, al desplegar).
+  `getPlanVersionHistory` queda sólo para el Excel.
+- **#248** `db/index.ts`: `max` 8 → **3**. `db/fk-indexes.sql`: 12 índices en
+  FK (**ya aplicados en prod**, verificados en `pg_indexes`).
+- **#249** `db/index.ts`: reintento **2 × 8s** (invariante: el peor caso tiene
+  que quedar muy por debajo del `maxDuration`). `lib/supabase/fetch-with-timeout.ts`:
+  `auth.getUser()` con `AbortSignal.timeout(8s)` en proxy y layout. Página del
+  plan: se sacan del render `getPlanVersionDiff` y `getPlanAuditEvents`.
 
-**Acción recomendada en prod (una vez, la hace el dueño del repo)**: si la app
-está colgada AHORA, reiniciar el proyecto en Supabase (Settings → Restart) para
-limpiar las conexiones trabadas — el deploy solo no las libera.
+#### Acciones en prod (las hizo el dueño del repo, en el SQL Editor)
 
-**Pendiente / próximo paso**: `/proyectos/[code]` sigue sin caché. Si tras esto
-la carga sigue alta, el siguiente paso es cachearla por `code` con
-`unstable_cache` como ya hace el dashboard, invalidando con `revalidateTag` en
-las actions que tocan el proyecto.
+- Restart de Supabase ×2 (limpia zombies; no evita que vuelvan).
+- `db/fk-indexes.sql` aplicado.
+- `pg_terminate_backend` sobre los backends `ClientRead` > 2 min (3 matados).
+  La query está en README → "Si Vercel falla con statement_timeout".
 
+#### Cambios visibles para el equipo
+
+- Los links de nav y de tabla **cargan al click** (sin precarga).
+- En el historial de versiones, el resumen de cada versión aparece **al
+  desplegarla**.
+- El indicador **"última edición"** del plan está **apagado** (ver Pendientes).
+
+#### Estado al cierre
+
+El dueño del repo confirmó que la app anda. En los logs del deploy final hay
+**un** `57014` a las 15:25:14 UTC — el minuto del cutover, con zombies del
+código viejo todavía vivas — y nada después. Se recomienda mirar los logs de
+Vercel un día después: cero "timed out after 45 seconds" es la señal de que la
+espiral está cortada.
+
+#### Pendientes
+
+- **Reactivar "última edición"** sin el scan: o se lo pide aparte (endpoint +
+  fetch al abrir, como el diff) **y** se reescribe `getPlanAuditEvents` para
+  que sea indexable — lo más simple es una columna `media_plan_id` en
+  `audit_log` poblada al escribir, en vez de filtrar por claves del jsonb.
+- **Reaper automático** sólo si las zombies vuelven: hay una función
+  `reap_dead_client_connections()` probada en local (no aplicada), para
+  correr cada minuto con `pg_cron`.
+- `/proyectos/[code]` sigue **sin caché**; `getDashboardProjects` hace un
+  `in (172 ids)` que dio `57014` una vez bajo saturación — vigilar.
 
 ### Cambios de la sesión 31/ago/2026 (5) — se da de baja la sección Tráfico
 
@@ -4053,6 +4070,11 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+21489a8  fix: reintento acotado bajo maxDuration + timeout en auth.getUser(); plan sin diff/audit en el render (#249)
+6f036b7  fix(db): max de conexiones por instancia 8 → 3 + índices de FK (#248)
+b9be28e  fix(plan): la página traía el snapshot_json de TODAS las versiones en cada render (#247)
+e951567  fix(nav): faltaba la TopNav — el prefetch de los 13 destinos seguía igual (#246)
+d10c2c5  fix(prod): la app se colgaba horas — cola del pool sin timeout + tormenta de prefetch (#245)
 f6634c6  Planes: QA de planificación del planner antes de mandar a firma (#242)
 2f5f189  Planes: el management fee se precarga en 13%, no en 15% (#241)
 0c2469c  Tráfico: sacar la palabra "brief" de los textos que ve el usuario (#239)
@@ -4822,7 +4844,11 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
 | Activar RLS / cerrar la REST API pública de Supabase | `db/rls.sql` — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` en todas las tablas de `public`. Pegarlo en el SQL Editor. La app no se ve afectada (conecta como `postgres`, dueño → bypassa RLS; no se usa `FORCE`). **Toda tabla nueva** necesita su propio ENABLE. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
-| Configurar conexión DB                 | `db/index.ts` — pool, `connect_timeout` y el **timeout de cliente por query** (`QUERY_TIMEOUT_MS`), que es lo que evita que un pooler saturado cuelgue el render (la cola de postgres.js no tiene timeout propio). |
+| Configurar conexión DB                 | `db/index.ts` — `max: 3` (no subir sin recalcular contra los ~15 slots del pooler), `connect_timeout`, `connection.statement_timeout` y el **timeout de cliente con reintento** (`QUERY_TIMEOUT_MS`, `MAX_ATTEMPTS`). **Invariante**: el peor caso del reintento tiene que quedar muy por debajo del `maxDuration` (45s); si se pasa, la función muere antes del error y deja conexiones zombie en el pooler. |
+| Timeout de las llamadas a Supabase Auth | `lib/supabase/fetch-with-timeout.ts` (8s), inyectado vía `global.fetch` en `lib/supabase/server.ts` y `lib/supabase/middleware.ts`. Es la única llamada de red del render fuera del timeout de queries. |
+| Índices en foreign keys                | `db/fk-indexes.sql` (aplicado en prod el 02/sep/2026). Postgres NO los crea solos: al agregar una FK nueva en `db/schema.ts`, agregar también su `index(...)`. |
+| Historial de versiones del plan (diff) | `db/queries/plan-qa.ts`: `getPlanVersionList` (sin `snapshot_json`, para la página) + `getPlanVersionDiff` (2 snapshots, vía `app/api/plans/[planId]/version-diff/route.ts`, lo pide `version-history.tsx` al desplegar). `getPlanVersionHistory` (todo) queda sólo para el Excel. **Nunca traer todos los `snapshot_json` en un render.** |
+| Indicador "última edición" del plan     | **Apagado** desde el 02/sep/2026 (`getPlanAuditEvents` en `db/queries/audit-log.ts` scanea `audit_log` por claves del jsonb, no indexable). Para reactivarlo: pedirlo aparte + hacerlo indexable (columna `media_plan_id` en `audit_log`). Ver HANDOFF 02/sep → Pendientes. |
 | Agregar un `<Link>` a una lista/tabla  | Poner **`prefetch={false}`** si apunta a una página pesada y se repite por fila: sin eso, el prefetch por viewport dispara un render por fila contra el pooler. En Next 16 eso apaga TAMBIÉN el prefetch por hover, así que la página carga recién al click. Ver HANDOFF 02/sep/2026. |
 | Tocar la **navegación** | Son **DOS** componentes con la misma lista (`lib/nav.ts`): `components/top-nav.tsx` es la nav de desktop (`hidden lg:flex`, montada desde `topbar.tsx`) y `components/sidebar.tsx` la de pantallas chicas. Un cambio en una sin la otra pasa desapercibido en desarrollo — ya pasó con el `prefetch={false}`. |
 | Cambiar el tope de duración de una página | `export const maxDuration` — el de `app/(app)/layout.tsx` (45s) cascadea a todo el grupo; una página puede subirlo (`app/(app)/page.tsx` usa 60). |
