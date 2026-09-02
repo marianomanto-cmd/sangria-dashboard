@@ -76,44 +76,56 @@ export async function getDashboardKpis(
     ? and(eq(projects.status, "active"), eq(projects.clientId, filterClient))
     : eq(projects.status, "active");
 
-  const [pipelineRow] = await db
-    .select({
-      value: sql<string>`coalesce(sum(${projects.totalGrossBudgetUsd}), 0)`,
-    })
-    .from(projects)
-    .where(projectsActive);
+  // Las cuatro son INDEPENDIENTES entre sí: van en un solo batch, no en serie.
+  // Con `max: 1` (db/index.ts) todo el fan-out de la página comparte una sola
+  // conexión, así que cada `await` suelto es un round-trip completo a Ohio
+  // (~15ms) esperando al anterior. En un Promise.all, postgres.js las pipelinea
+  // sobre esa misma conexión: 4 round-trips pasan a ser ~1. Importa porque el
+  // camino frío del dashboard es el que vence a los 8s, y si vence NUNCA se
+  // llena la caché (unstable_cache sólo guarda éxitos) — se queda reintentando
+  // el camino caro para siempre. Mismo criterio que
+  // `getPlansSummaryForProjects` acá abajo, que ya batcheaba.
+  const [[pipelineRow], [clientsRow], [invoicedRow], [consumptionRow]] =
+    await Promise.all([
+      db
+        .select({
+          value: sql<string>`coalesce(sum(${projects.totalGrossBudgetUsd}), 0)`,
+        })
+        .from(projects)
+        .where(projectsActive),
 
-  const [clientsRow] = await db
-    .select({
-      value: sql<number>`count(distinct ${projects.clientId})::int`,
-    })
-    .from(projects)
-    .where(projectsActive);
+      db
+        .select({
+          value: sql<number>`count(distinct ${projects.clientId})::int`,
+        })
+        .from(projects)
+        .where(projectsActive),
 
-  const [invoicedRow] = await db
-    .select({
-      value: sql<string>`coalesce(sum(${planBillings.totalUsd}), 0)`,
-    })
-    .from(planBillings)
-    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
-    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
-    .where(
-      and(
-        inArray(planBillings.status, ["invoiced", "paid"]),
-        sql`${planBillings.month} >= ${yearStartMonth}`,
-        ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
-      ),
-    );
+      db
+        .select({
+          value: sql<string>`coalesce(sum(${planBillings.totalUsd}), 0)`,
+        })
+        .from(planBillings)
+        .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
+        .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+        .where(
+          and(
+            inArray(planBillings.status, ["invoiced", "paid"]),
+            sql`${planBillings.month} >= ${yearStartMonth}`,
+            ...(filterClient ? [eq(projects.clientId, filterClient)] : []),
+          ),
+        ),
 
-  const [consumptionRow] = await db
-    .select({
-      spent: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
-    })
-    .from(planBillingPublishers)
-    .innerJoin(planBillings, eq(planBillingPublishers.planBillingId, planBillings.id))
-    .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
-    .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
-    .where(projectsActive);
+      db
+        .select({
+          spent: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
+        })
+        .from(planBillingPublishers)
+        .innerJoin(planBillings, eq(planBillingPublishers.planBillingId, planBillings.id))
+        .innerJoin(mediaPlans, and(eq(planBillings.mediaPlanId, mediaPlans.id), isNull(mediaPlans.deletedAt)))
+        .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
+        .where(projectsActive),
+    ]);
 
   const pipeline = Number.parseFloat(pipelineRow.value);
   const spent = Number.parseFloat(consumptionRow.spent);
@@ -239,10 +251,11 @@ export async function getDashboardProjects(
     .groupBy(projects.id, clients.name, clients.slug)
     .orderBy(asc(projects.code));
 
-  const totals = await (totalsWhere ? totalsBase.where(totalsWhere) : totalsBase);
-
-  // Spend mensual por proyecto.
-  const monthly = await db
+  // `totals` y `monthly` no dependen entre sí: van juntas en un batch para que
+  // postgres.js las pipelinee sobre la única conexión, en vez de pagar dos
+  // round-trips en serie. (`getPlansSummaryForProjects`, más abajo, sí depende
+  // de los ids que salen de `totals`, así que ésa va después.)
+  const monthlyQuery = db
     .select({
       projectId: projects.id,
       month: planBillings.month,
@@ -256,6 +269,11 @@ export async function getDashboardProjects(
       eq(planBillingPublishers.planBillingId, planBillings.id),
     )
     .groupBy(projects.id, planBillings.month);
+
+  const [totals, monthly] = await Promise.all([
+    totalsWhere ? totalsBase.where(totalsWhere) : totalsBase,
+    monthlyQuery,
+  ]);
 
   const monthLabels = Array.from(new Set(monthly.map((r) => r.month))).sort();
 

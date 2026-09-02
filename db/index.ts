@@ -322,10 +322,19 @@ function getClient(): PgClient {
   // Supabase: no es una fuga por funciones muertas, es el modelo de conexiones
   // persistentes chocando con el ciclo de vida serverless.
   //
-  // Con 1, cada instancia retiene exactamente una. No perdemos throughput:
-  // Vercel sirve UN request por instancia a la vez, y postgres.js pipelinea
-  // varias queries sobre la misma conexión (no las serializa), así que las ~24
-  // round-trips del dashboard salen igual. Es además la recomendación estándar
+  // Con 1, cada instancia retiene exactamente una. Vercel sirve UN request por
+  // instancia a la vez, así que no se pierde concurrencia entre requests.
+  //
+  // Sobre el throughput DENTRO de un request, con el matiz medido (02/sep/2026,
+  // contra Postgres 16 local con esta misma config): postgres.js **sí**
+  // pipelinea, pero sólo las queries que están en vuelo a la vez. 300 queries
+  // triviales en un `Promise.all` tardan 6× menos que 300 `await` sueltos
+  // (0,03 vs 0,18 ms cada una). O sea: un `await` suelto detrás de otro paga un
+  // round-trip completo cada uno (~15ms contra Ohio), y NO se pipelinea solo.
+  //
+  // Consecuencia práctica para quien escriba queries: **agrupá en `Promise.all`
+  // todo lo que no dependa entre sí.** Con `max: 1` eso no es microoptimización,
+  // es la diferencia entre N round-trips y uno. Es además la recomendación estándar
   // para serverless contra un pooler en modo transacción.
   //
   // Historial: 3 → 8 (22/may/2026) → 3 (02/sep/2026, PR #248) → 1.
