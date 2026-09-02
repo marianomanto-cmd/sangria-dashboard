@@ -1839,6 +1839,14 @@ en frío que puebla el cache.
 - **Timeout de cliente + reintento** (`QUERY_TIMEOUT_MS = 8s`, `MAX_ATTEMPTS = 2`).
   Invariante: el peor caso (todos los intentos vencidos) tiene que quedar muy
   por debajo del `maxDuration` de la página (45s). Ver "Si Vercel falla…".
+- **Al vencer una query que YA SALIÓ, se CIERRA la conexión** — no se abandona
+  (`discardPoisonedConnection`). Es la regla más importante de este archivo:
+  abandonarla deja la conexión con la query en vuelo, Vercel congela la
+  instancia así, y del lado de Supabase queda `active/ClientRead` **para
+  siempre**. El `statement_timeout` del server **no** la rescata: mata el
+  statement, no la conexión. Eso era lo que colgaba la app y lo que obligaba a
+  reiniciar el proyecto en Supabase — el restart no arreglaba nada, tiraba las
+  conexiones colgadas. Ver HANDOFF 02/sep/2026 (3).
 
 ---
 
@@ -1894,6 +1902,33 @@ Prevención (ya aplicada):
 - `enumerateMonths` blindado contra fechas malformadas (no más loop infinito).
 - `max: 1` conexión por instancia (ver "Pool de conexiones").
 
+#### Si la app se cuelga: QUÉ MEDIR PRIMERO
+
+No teorizar. En el SQL Editor, con la app colgada:
+
+```sql
+select
+  (select count(*) from pg_stat_activity
+    where datname = current_database() and state = 'active')             as activas,
+  (select round(100.0 * sum(blks_hit) / nullif(sum(blks_hit + blks_read), 0), 1)
+     from pg_stat_database where datname = current_database())           as cache_hit_pct,
+  (select count(*) from pg_stat_activity
+    where datname = current_database() and state = 'active'
+      and wait_event = 'ClientRead'
+      and now() - state_change > interval '2 minutes')                   as zombies;
+```
+
+Cómo leerlo:
+
+- **`cache_hit_pct` ≈ 100 y `activas` bajo** → Postgres está sano y ocioso. El
+  problema NO es la base, ni su CPU, ni el volumen de datos: es el pooler o la
+  app. (Se descartaron las tres el 02/sep/2026.)
+- **`zombies` > 0** → conexiones `active/ClientRead` de funciones que ya
+  murieron. Cada una se come un slot y no vuelve sola. Hoy no deberían
+  aparecer: el código cierra la conexión al vencer una query (ver "Pool de
+  conexiones"). Si vuelven a aparecer, algo la está abandonando otra vez.
+- **`cache_hit_pct` < 95** → ahí sí la instancia se queda corta de RAM.
+
 #### Incidente del 02/sep/2026: la espiral completa (y qué NO era)
 
 Con todo lo de arriba aplicado, la app se seguía colgando **horas**. La cadena
@@ -1918,6 +1953,11 @@ segundos. Detalle y cronología en HANDOFF → "Cambios de la sesión 02/sep/202
 5. **El primer fix empeoró el punto 2**: el reintento sumaba 45,8s contra un
    `maxDuration` de 45 → Vercel mataba la función antes de que se lanzara el
    error, con la conexión abierta. Fabricaba zombies.
+6. **Y el timeout mismo era la fábrica de zombies** (encontrado el 02/sep/2026
+   por la noche, midiendo prod): al vencer una query ya enviada la
+   abandonábamos, dejando la conexión en vuelo → `active/ClientRead` eterno.
+   Con Supavisor manteniendo UNA conexión contra Postgres, una sola alcanzaba
+   para tapar todo. Hoy se cierra la conexión. Ver HANDOFF 02/sep (3).
 
 **Descartado con evidencia**: locks (`pg_blocking_pids` = 0), zombies como
 causa raíz (eran 0 cuando fallaba: son consecuencia del punto 5), volumen de
