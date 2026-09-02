@@ -93,6 +93,58 @@ type Attempt =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Referencia al cliente crudo, para poder descartarlo cuando se envenena. Se
+// puebla en getClient(); `_db` (el drizzle que lo envuelve) se declara más
+// abajo y se resetea junto con él.
+let _rawClient: PgClient | null = null;
+
+// ════════════════════════════════════════════════════════════════════════════
+// Descartar la conexión envenenada. ESTO ES LA CURA DE LOS ZOMBIES.
+//
+// Cuando una query YA SALIÓ y vence nuestro reloj, abandonarla deja la conexión
+// con una query en vuelo. El render falla, la función responde, y Vercel
+// CONGELA la instancia con esa conexión abierta y a medio consumir. Del lado de
+// Supabase queda para siempre así:
+//
+//     Supavisor | active | Client:ClientRead | 233 segundos
+//
+// El `statement_timeout` del server NO la rescata: mata el STATEMENT, pero el
+// backend se queda esperando que el cliente lea el error. El cliente está
+// congelado y no va a leer nunca. (El comentario que decía lo contrario acá
+// estaba mal; se comprobó en prod el 02/sep/2026 viendo un zombie de 233s, muy
+// por encima del statement_timeout de 12s.)
+//
+// Y una sola alcanza para tapar todo: se midió que Supavisor mantiene UNA
+// conexión contra Postgres. Cada timeout se comía la única que había → más
+// timeouts → más zombies. Ésa es la espiral que obligaba a reiniciar el
+// proyecto en Supabase, que es literalmente "tirar las conexiones colgadas".
+//
+// Cerrar el socket sí lo resuelve: Postgres ve la desconexión y da de baja el
+// backend. Con `max: 1` la que se cierra es exactamente la envenenada, y la
+// próxima query levanta uno nuevo.
+//
+// Costo: las queries hermanas que iban por esa conexión mueren. Es un mal
+// negocio sólo en apariencia — ya estaban sobre una conexión comprometida, y
+// perder un render es infinitamente más barato que perder la conexión para
+// siempre. Además fallan con error de conexión, que sí es reintentable.
+// ════════════════════════════════════════════════════════════════════════════
+function discardPoisonedConnection(): void {
+  const client = _rawClient;
+  if (!client) return;
+  // Primero soltamos las referencias: si el cierre tarda, la próxima query ya
+  // construye un cliente nuevo en vez de esperar a éste.
+  _rawClient = null;
+  _db = null;
+  if (global.__pgClient === client) global.__pgClient = undefined;
+  try {
+    // `timeout: 0` = cerrar ya, sin esperar a las queries en vuelo (que es
+    // justo lo que queremos: la que está en vuelo es la que no vuelve).
+    void Promise.resolve(client.end({ timeout: 0 })).catch(() => {});
+  } catch {
+    /* si ya estaba cerrándose, no hay nada que hacer */
+  }
+}
+
 // Corre UN intento contra el reloj. Devuelve además si es seguro reintentarlo.
 function runAttempt(
   client: PgClient,
@@ -124,15 +176,15 @@ function runAttempt(
           /* puede no estar cancelable todavía */
         }
       }
-      // Si YA salió, NO se cancela. postgres.js pipelinea varias queries sobre
-      // una misma conexión, y el cancel de una pipelineada se manda con el
-      // backend key de la conexión: cancela lo que ese backend esté corriendo,
-      // o sea puede matar a una query HERMANA (verificado en el test local: el
-      // cancel de la query con timeout mató la query larga que ocupaba la
-      // conexión). Para esas queda el `statement_timeout` de 12s del server,
-      // que las reapea antes que este tope de 15s — el server sí sabe cuál
-      // matar. Tampoco se reintentan: la conexión ya está comprometida con
-      // ellas y reintentar sólo agregaría carga sobre un pooler saturado.
+      // Si YA salió, no alcanza con abandonarla: hay que CERRAR la conexión.
+      // Dejarla abierta con la query en vuelo es exactamente lo que produce los
+      // zombies `active/ClientRead` (ver discardPoisonedConnection). No se usa
+      // `cancel()`: postgres.js pipelinea sobre una misma conexión y el cancel
+      // se manda con el backend key de la conexión, así que puede matar a una
+      // query HERMANA (verificado en test local). Cerrar el socket es más
+      // contundente y no necesita adivinar a quién apuntar.
+      if (!neverSent) discardPoisonedConnection();
+
       resolve({
         ok: false,
         error: new QueryTimeoutError(QUERY_TIMEOUT_MS, 1),
@@ -241,7 +293,11 @@ declare global {
 }
 
 function getClient(): PgClient {
-  if (global.__pgClient) return global.__pgClient;
+  if (_rawClient) return _rawClient;
+  if (global.__pgClient) {
+    _rawClient = global.__pgClient;
+    return global.__pgClient;
+  }
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(
@@ -295,6 +351,7 @@ function getClient(): PgClient {
   if (process.env.NODE_ENV !== "production") {
     global.__pgClient = client;
   }
+  _rawClient = client;
   return client;
 }
 
