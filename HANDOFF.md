@@ -2,6 +2,82 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 02/sep/2026 (3) — LA CAUSA RAÍZ: el timeout fabricaba los zombies
+
+Si vas a leer una sola entrada de este HANDOFF, que sea ésta. Explica por qué la
+app se colgaba desde mayo y por qué reiniciar Supabase "lo arreglaba".
+
+#### La medición que lo destrabó (hacerla PRIMERO la próxima vez)
+
+Con la app colgada, en el SQL Editor:
+
+```
+Supavisor | active | Client:ClientRead | 1 conexión | 233 segundos
+cache_hit_pct 100.0 · activas 2 · esperando_lock 0 · audit_log 16 MB (la mayor)
+```
+
+Postgres **sano y ocioso** mientras la app vencía a los 8s. Eso descarta de una
+la base, su CPU y el volumen de datos, y deja el problema en el medio: el
+pooler. Antes de eso hubo dos diagnósticos errados en la misma sesión (primero
+"falta de conexiones", después "la DB no tiene CPU"), los dos por teorizar sin
+medir.
+
+#### La causa raíz, y era nuestra
+
+`db/index.ts`: cuando una query **ya había salido** y vencía nuestro reloj de 8s,
+la **abandonábamos**. La conexión quedaba con la query en vuelo, el render
+fallaba, la función respondía, y Vercel **congelaba** la instancia con esa
+conexión abierta a medio consumir. Del otro lado quedaba `active/ClientRead`
+**para siempre**.
+
+El comentario del archivo decía que el `statement_timeout` del server las
+reapeaba: **es falso**. Mata el *statement*, no la conexión — el backend queda
+esperando que el cliente lea el error, y ese cliente está congelado. El zombie
+de 233s, con `statement_timeout` en 12s, lo prueba.
+
+Y con Supavisor manteniendo **una sola** conexión contra Postgres, **una basta
+para tapar todo**: más zombies → menos slots → más timeouts → más zombies.
+
+**Por eso reiniciar el proyecto en Supabase siempre funcionaba y siempre volvía**:
+el restart tira las conexiones colgadas. Nunca arregló nada, vaciaba el desagote.
+
+#### El fix
+
+Cuando una query que ya salió vence, la conexión es inservible y se **CIERRA**
+(`discardPoisonedConnection` en `db/index.ts`), no se abandona. Postgres ve la
+desconexión y da de baja el backend. Con `max: 1` la que se cierra es exactamente
+la envenenada. No se usa `cancel()`: sobre una conexión pipelineada el cancel va
+con el backend key y puede matar una query hermana.
+
+Verificado contra Postgres 16 local replicando la secuencia real:
+
+| | conexión retenida |
+|---|---|
+| Abandonar la query (antes) | **1** (`idle/ClientRead`) |
+| Cerrar la conexión (fix) | **0** |
+
+#### Otros dos bugs propios, corregidos en el camino (PR #259)
+
+- **El reintento del error boundary hacía loop infinito.** Guardaba el "ya
+  reintenté" en un `useRef`, pero cuando `reset()` re-renderiza y vuelve a
+  fallar, React DESMONTA el fallback y monta una instancia NUEVA: el ref se
+  reinicializa y reintenta otra vez, cada 2s, para siempre. Cada reintento del
+  dashboard son ~24 queries. El contador ahora vive en scope de **módulo**, con
+  tope de 1 por error y por ruta.
+- **La degradación mentía.** `allSettled` + fallbacks evita tumbar la vista, pero
+  el dashboard mostraba **$0 facturado y 0 cuentas activas como datos reales**.
+  Ahora las páginas juntan qué secciones fallaron y lo dicen arriba, con botón de
+  reintentar (`components/degraded-notice.tsx`). Regla: **degradar a vacío sin
+  avisar es peor que un error honesto.**
+
+#### Lo que quedó descartado con evidencia (no volver sobre esto)
+
+- **CPU / tamaño de la DB**: `cache_hit_pct = 100`, 2 conexiones activas, tablas
+  de pocos MB. No es la base.
+- **`max_connections` (60)**: nunca fue el techo.
+- **`max_lifetime` de postgres.js**: también es `setTimeout`, así que una Lambda
+  congelada tampoco lo ejecuta. No sirve para esto.
+
 ### Cambios de la sesión 02/sep/2026 (2) — El tratamiento, a toda la app + Usuarios y roles
 
 Continuación directa del incidente de abajo. Con el pooler ya en 25, cambiar la
@@ -4227,6 +4303,9 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+3751459  fix(db): el timeout de query fabricaba las conexiones zombie (#260)
+2c6ba3b  fix: el reintento hacia loop, y la degradacion mentia (#259)
+88c0d11  docs: las dos migraciones del 02/sep quedaron aplicadas en prod (#258)
 8c76941  perf: el tratamiento del calendario, extendido a toda la app (#257)
 ad458e8  feat(configuracion): Usuarios y roles — la seccion deja de ser un placeholder (#257)
 ff8652c  fix(calendario): el mismo tratamiento que planes y proyectos (#257)
@@ -5011,6 +5090,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
 | Activar RLS / cerrar la REST API pública de Supabase | `db/rls.sql` — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` en todas las tablas de `public`. Pegarlo en el SQL Editor. La app no se ve afectada (conecta como `postgres`, dueño → bypassa RLS; no se usa `FORCE`). **Toda tabla nueva** necesita su propio ENABLE. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
+| Una query vence / hay zombies en el pooler | `db/index.ts` → `discardPoisonedConnection`. **Regla dura: una query que YA SALIÓ y vence deja la conexión inservible — hay que CERRARLA, no abandonarla.** Abandonarla es lo que fabricaba los zombies `active/ClientRead` que colgaban la app (HANDOFF 02/sep (3)). El `statement_timeout` del server NO los reapea: mata el statement, no la conexión. |
 | Configurar conexión DB                 | `db/index.ts` — `max: 1` (**no subirlo**: con `max: N` la concurrencia de la app es *pool size / N*; el pool size del Supavisor está en 25), `connect_timeout`, `connection.statement_timeout` y el **timeout de cliente con reintento** (`QUERY_TIMEOUT_MS`, `MAX_ATTEMPTS`). **Invariante**: el peor caso del reintento tiene que quedar muy por debajo del `maxDuration` (45s); si se pasa, la función muere antes del error y deja conexiones zombie en el pooler. |
 | Timeout de las llamadas a Supabase Auth | `lib/supabase/fetch-with-timeout.ts` (8s), inyectado vía `global.fetch` en `lib/supabase/server.ts` y `lib/supabase/middleware.ts`. Es la única llamada de red del render fuera del timeout de queries. |
 | Invalidar caché después de mutar       | `invalidate(TAG, ...)` de `lib/cache-invalidate.ts`, al lado del `revalidatePath` de la action. Tags en `lib/cache-tags.ts`, uno por área. **Toda action que muta tiene que llamarlo**: el TTL es de 600s, así que sin invalidar la vista queda hasta 10 min desfasada. Usa `updateTag` (read-your-own-writes) y cae a `revalidateTag` si la llaman desde un route handler. |
