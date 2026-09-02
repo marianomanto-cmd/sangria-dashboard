@@ -9,6 +9,18 @@ import { getCurrentUser } from "@/lib/auth";
 // conectarse a la DB durante la fase "Generating static pages".
 export const dynamic = "force-dynamic";
 
+// Tope de duración para TODAS las páginas del grupo (los segment configs
+// cascadean del layout a las páginas; una página puede subirlo — el dashboard
+// usa 60 para su primer render en frío).
+//
+// El default de Vercel es 300s, y ese default era parte del problema: cuando el
+// pooler de Supabase se saturaba, el render quedaba esperando una conexión que
+// no llegaba nunca y la función se moría recién a los 5 minutos, dejando su
+// conexión trabada en el pooler todo ese tiempo → más saturación → espiral de
+// horas. Cortando a 45s la conexión se libera ~7x antes y el usuario ve el
+// error boundary (recargable) en vez de un skeleton eterno.
+export const maxDuration = 45;
+
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {

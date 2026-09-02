@@ -111,6 +111,7 @@ export function DashboardOperaciones({
                   <td className="px-4 py-2.5">
                     <Link
                       href={`/proyectos/${r.code}`}
+                      prefetch={false}
                       className="font-medium text-ink hover:text-accent hover:underline"
                     >
                       {r.name}
@@ -153,6 +154,7 @@ export function DashboardOperaciones({
             <Link
               key={r.id}
               href={`/proyectos/${r.code}`}
+              prefetch={false}
               className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
             >
               <div className="flex items-start justify-between gap-2">
@@ -260,6 +262,7 @@ function OpsItem({ entry, lang }: { entry: PendingEntry; lang: Language }) {
         <span className="text-[11px] text-muted truncate">{entry.meta}</span>
         <Link
           href={entry.href}
+          prefetch={false}
           className="text-[11px] font-medium text-accent hover:underline shrink-0"
         >
           {es ? "Abrir →" : "Open →"}

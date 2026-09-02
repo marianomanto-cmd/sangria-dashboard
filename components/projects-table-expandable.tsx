@@ -202,6 +202,7 @@ function ProjectCard({
   return (
     <Link
       href={`/proyectos/${project.code}`}
+      prefetch={false}
       className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
     >
       <div className="flex items-start justify-between gap-2">
@@ -324,6 +325,7 @@ function ProjectRowExpandable({
         <td className={cellPad}>
           <Link
             href={`/proyectos/${project.code}`}
+            prefetch={false}
             className="font-medium text-ink hover:underline"
           >
             {project.name}
@@ -333,6 +335,7 @@ function ProjectRowExpandable({
           <td className={`${cellPad} text-ink-2`}>
             <Link
               href={`/clientes/${project.clientSlug}`}
+              prefetch={false}
               className="hover:underline"
             >
               {project.clientName}
@@ -504,6 +507,7 @@ function PlanWithBreakdown({
         <td className="px-3 py-1.5">
           <Link
             href={`/proyectos/${projectCode}/planes/${plan.id}`}
+            prefetch={false}
             className="font-medium text-ink hover:underline"
           >
             {plan.name}

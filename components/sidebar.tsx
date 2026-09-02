@@ -130,6 +130,12 @@ function NavItem({
   return (
     <Link
       href={href}
+      // Sin prefetch: el sidebar tiene 13 destinos y TODOS son páginas pesadas
+      // (cada una dispara sus propias queries). Con el prefetch por viewport,
+      // cada carga de cualquier página de la app disparaba ~13 renders de golpe
+      // contra el pooler de Supabase — la tormenta que lo saturaba. Next igual
+      // prefetchea al hacer hover, que es cuando hay intención real de navegar.
+      prefetch={false}
       onClick={onNavigate}
       data-active={active}
       className="group relative flex items-center gap-2.5 rounded-md px-2 py-2 text-[13px] text-white/[0.62] hover:bg-white/5 hover:text-white data-[active=true]:bg-white/[0.09] data-[active=true]:text-white transition-colors duration-150"

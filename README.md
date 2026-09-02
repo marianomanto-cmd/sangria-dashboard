@@ -1788,8 +1788,42 @@ Prevención (ya aplicada):
   ALTER ROLE postgres SET idle_in_transaction_session_timeout = '20s';
   ```
   (Scripts largos como `db:seed` pueden overridear con `SET statement_timeout = 0;`.)
+  Desde el 02/sep/2026 el código además manda `connection.statement_timeout`
+  (12s) al abrir la conexión, así que el tope existe aunque el `ALTER ROLE`
+  no se haya corrido.
 - `enumerateMonths` blindado contra fechas malformadas (no más loop infinito).
 - `max: 8` conexiones por instancia (ver "Pool de conexiones").
+
+#### Por qué el `statement_timeout` NO alcanzaba (02/sep/2026)
+
+Con todo lo de arriba aplicado, la app se seguía colgando **horas** con el
+skeleton en pantalla. El agujero: `statement_timeout` es un parámetro
+**server-side**, sólo corre una vez que el statement empezó a ejecutarse en un
+backend de Postgres. No cubre los dos momentos donde realmente se colgaba:
+
+1. **La cola de postgres.js.** Cuando las `max` conexiones están ocupadas, la
+   query se encola — y **esa cola no tiene timeout**: la promesa espera para
+   siempre hasta que se libere una conexión (`src/index.js`, `handler`).
+2. **La cola del Transaction Pooler.** Supabase acepta la conexión TCP pero no
+   tiene backend libre para atenderla. Como la conexión ya está *abierta*,
+   `connect_timeout` tampoco aplica, y el statement nunca llega al server.
+
+En los dos casos la query no falla: **espera**. El render se queda colgado sin
+error hasta que Vercel mata la función, y cada función muerta deja su conexión
+trabada → más saturación → espiral que dura horas.
+
+El fix es un **timeout del lado del cliente** (`QUERY_TIMEOUT_MS`, 15s, en
+`db/index.ts`): envuelve el cliente postgres.js y corre cada query contra el
+reloj, cancelándola y rechazando si no responde. La página cae en su error
+boundary (recargable) en vez de quedarse en el skeleton, y la conexión se
+libera. Verificado contra un Postgres 16 local saturando el pool a propósito
+(`max: 1` + una query larga): la query encolada rechaza en el tope, mientras que
+sin el wrapper espera a que se libere el pool. Los errores reales de SQL siguen
+propagando sin tocar.
+
+Las transacciones (`db.transaction`) quedan fuera del tope a propósito: usan una
+conexión reservada, viven sólo en server actions puntuales y cortarlas por la
+mitad es peor que dejarlas terminar.
 
 ---
 

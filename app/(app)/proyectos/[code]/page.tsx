@@ -263,6 +263,7 @@ function PlanCard({
       />
       <Link
         href={`/proyectos/${projectCode}/planes/${plan.id}`}
+        prefetch={false}
         className="block rounded-lg border border-line bg-white dark:bg-paper-2 p-4 hover:border-ink-2 transition-colors"
       >
         <div className="flex items-start justify-between gap-2">

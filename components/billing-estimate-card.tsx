@@ -617,6 +617,7 @@ function EstimateRowDesktop({
         ) : (
           <Link
             href={`/proyectos/${p.projectCode}`}
+            prefetch={false}
             className="text-ink-2 hover:underline"
           >
             {p.projectName}
@@ -718,6 +719,7 @@ function EstimateCardMobile({
   return (
     <Link
       href={`/proyectos/${p.projectCode}`}
+      prefetch={false}
       className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
     >
       {head}

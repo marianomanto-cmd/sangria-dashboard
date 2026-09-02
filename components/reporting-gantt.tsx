@@ -408,6 +408,7 @@ function GanttRow({
           {report.projectCode && !readOnly ? (
             <Link
               href={`/proyectos/${report.projectCode}`}
+              prefetch={false}
               className="text-sm font-medium text-ink hover:text-accent truncate"
               title={report.projectName}
             >

@@ -436,6 +436,7 @@ function GroupedByProject({
               <div className="min-w-0">
                 <Link
                   href={`/proyectos/${g.projectCode}`}
+                  prefetch={false}
                   className="font-semibold text-ink hover:text-accent transition-colors"
                 >
                   {g.projectName}
@@ -445,6 +446,7 @@ function GroupedByProject({
                   <span className="text-line">·</span>{" "}
                   <Link
                     href={`/clientes/${g.clientSlug}`}
+                    prefetch={false}
                     className="hover:text-ink transition-colors"
                   >
                     {g.clientName}
@@ -574,6 +576,7 @@ function PlanRowCells({
       <td className={cellPad}>
         <Link
           href={`/proyectos/${p.projectCode}/planes/${p.id}`}
+          prefetch={false}
           className="font-medium text-ink hover:underline"
         >
           {p.name}
@@ -588,6 +591,7 @@ function PlanRowCells({
         <td className={cellPad}>
           <Link
             href={`/proyectos/${p.projectCode}`}
+            prefetch={false}
             className="text-ink-2 hover:underline"
           >
             {p.projectName}
@@ -599,6 +603,7 @@ function PlanRowCells({
         <td className={cellPad}>
           <Link
             href={`/clientes/${p.clientSlug}`}
+            prefetch={false}
             className="text-ink-2 hover:underline"
           >
             {p.clientName}
@@ -661,6 +666,7 @@ function PlanCard({
   return (
     <Link
       href={`/proyectos/${p.projectCode}/planes/${p.id}`}
+      prefetch={false}
       className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
     >
       <div className="flex items-start justify-between gap-2">
