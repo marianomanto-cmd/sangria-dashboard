@@ -1,15 +1,17 @@
-import { unstable_cache } from "next/cache";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { normalizeDashView } from "@/components/dashboard/types";
 import {
-  getDashboardKpis,
-  getDashboardProjects,
-  getMonthlyTotals,
   type DashboardKpis,
   type DashboardProjects,
   type MonthlyTotal,
 } from "@/db/queries/dashboard";
-import { getDashboardPendings, type DashboardPendings } from "@/db/queries/pendings";
+import { type DashboardPendings } from "@/db/queries/pendings";
+import {
+  cachedKpis,
+  cachedMonthly,
+  cachedPendings,
+  cachedProjects,
+} from "@/db/queries/cached";
 import {
   resolveClientFromSearchParams,
   type ResolvedClientFilter,
@@ -28,36 +30,9 @@ type Props = {
 // arranque en frío.
 export const maxDuration = 60;
 
-// ─── Cache de datos del dashboard ─────────────────────────────────────────────
-// El dashboard es la página más pesada (dispara ~15-20 queries agregadas por
-// carga). Sin cache, cada (re)carga / cambio de cliente arma una tormenta de
-// conexiones concurrentes contra el pooler de Supabase, que bajo carga se
-// satura/corrompe ("Postgres.js: Unknown Message", "Failed query", timeouts).
-// Cacheamos por cliente (revalida cada 60s): tras la primera carga, las
-// siguientes salen del Data Cache → 0 queries, instantáneo y sin presión sobre
-// la DB. Si una query falla en un cache-miss, unstable_cache NO cachea el error
-// → el `allSettled` de abajo degrada esa sección y el próximo intento reintenta.
-const REVALIDATE = 60;
-const cachedKpis = unstable_cache(
-  (clientId: string | null) => getDashboardKpis({ clientId }),
-  ["dash-kpis-v1"],
-  { revalidate: REVALIDATE },
-);
-const cachedProjects = unstable_cache(
-  (clientId: string | null) => getDashboardProjects({ clientId }),
-  ["dash-projects-v1"],
-  { revalidate: REVALIDATE },
-);
-const cachedMonthly = unstable_cache(
-  (clientId: string | null) => getMonthlyTotals({ clientId }),
-  ["dash-monthly-v1"],
-  { revalidate: REVALIDATE },
-);
-const cachedPendings = unstable_cache(
-  (clientId: string | null) => getDashboardPendings(clientId),
-  ["dash-pendings-v1"],
-  { revalidate: REVALIDATE },
-);
+// Los envoltorios cacheados viven en `db/queries/cached.ts`: los comparte
+// `/proyectos`, que usa la MISMA `getDashboardProjects` (12 round-trips). Ver
+// ese módulo para el porqué y la política de invalidación.
 
 // Fallbacks vacíos por sección. Si una query falla, degradamos esa parte (la UI
 // muestra ceros / vacío) en vez de tumbar toda la vista con el error boundary.

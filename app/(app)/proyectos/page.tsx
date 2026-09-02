@@ -9,8 +9,8 @@ import {
 import { YearSelector } from "@/components/year-selector";
 import { PageShell } from "@/components/page-shell";
 import { buttonVariants } from "@/components/button";
-import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
-import { getDashboardProjects, type DashboardProjectRow } from "@/db/queries/dashboard";
+import { type DashboardProjectRow } from "@/db/queries/dashboard";
+import { cachedBudgetOrigins, cachedProjects } from "@/db/queries/cached";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { DEFAULT_LANGUAGE, t } from "@/lib/i18n";
 import { availableYears, periodMatchesYear, resolveYearParam } from "@/lib/year-filter";
@@ -60,10 +60,12 @@ export default async function ProyectosPage({ searchParams }: Props) {
   const client = await resolveClientFromSearchParams(sp);
   const clientId = client?.id ?? null;
   const lang = client?.language ?? DEFAULT_LANGUAGE;
-  const allOrigins = await listAllBudgetOrigins({ clientId });
+  // Cacheadas: /proyectos y / comparten `getDashboardProjects` (12 round-trips
+  // a la DB). Ver db/queries/cached.ts.
+  const allOrigins = await cachedBudgetOrigins(clientId);
   const validOrigin =
     sp.origin && allOrigins.some((o) => o.id === sp.origin) ? sp.origin : null;
-  const data = await getDashboardProjects({ budgetOriginId: validOrigin, clientId });
+  const data = await cachedProjects(clientId, validOrigin);
 
   // Filtro de año (default: año actual). Se calcula en memoria sobre el período
   // derivado de los planes de cada proyecto.

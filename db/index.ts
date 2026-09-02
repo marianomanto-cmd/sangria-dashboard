@@ -248,33 +248,39 @@ function getClient(): PgClient {
       "DATABASE_URL no está definida — revisá .env.local (en dev) o las env vars del deploy.",
     );
   }
-  // `max: 3` por warm-instance. NO subirlo sin recalcular esto:
+  // ══════════════════════════════════════════════════════════════════════
+  // `max: 1` por instancia. NO subirlo sin leer esto entero.
+  // ══════════════════════════════════════════════════════════════════════
   //
-  // El Transaction Pooler de Supabase tiene un pool de servidor acotado (~15
-  // conexiones en las instancias chicas). En serverless cada request cae en su
-  // propia instancia de Lambda, y cada instancia abre hasta `max` conexiones
-  // propias. Con `max: 8`, una sola carga de la página del plan (que dispara
-  // ~12 queries en paralelo) se lleva 8 de esos 15 slots: DOS cargas
-  // concurrentes agotan el pooler y la tercera query se queda esperando una
-  // conexión que no llega — que es el `QueryTimeoutError` que se veía.
+  // EL PROBLEMA DE FONDO en serverless: este pool vive en scope de módulo, o
+  // sea que sobrevive entre invocaciones de la MISMA instancia de Lambda. Y
+  // Vercel no mata la instancia al terminar el request: la CONGELA. Una
+  // instancia congelada no ejecuta timers, así que `idle_timeout` nunca
+  // dispara y sus conexiones quedan abiertas del lado de Supabase — visibles
+  // como `ClientRead` en pg_stat_activity, esperando a un cliente que no va a
+  // hablar hasta que llegue otro request (o nunca, si Vercel la recicla).
   //
-  // Con 3, cinco instancias concurrentes entran en los 15 slots. Las ~12
-  // queries de la página no sufren: postgres.js las pipelinea sobre las
-  // conexiones abiertas, y desde que las FK tienen índice (db/fk-indexes.sql)
-  // cada una tarda milisegundos.
+  // Con `max: N`, cada instancia caliente retiene hasta N slots del pooler. En
+  // un pico Vercel levanta varias instancias, y el total retenido es
+  // instancias × N. Ése es el goteo que obligaba a reiniciar el proyecto en
+  // Supabase: no es una fuga por funciones muertas, es el modelo de conexiones
+  // persistentes chocando con el ciclo de vida serverless.
   //
-  // Historial: estuvo en 3, se subió a 8 el 22/may/2026 atribuyendo la fuga de
-  // conexiones a un loop infinito en enumerateMonths. El loop era real y está
-  // arreglado, pero la saturación no venía sólo de ahí.
+  // Con 1, cada instancia retiene exactamente una. No perdemos throughput:
+  // Vercel sirve UN request por instancia a la vez, y postgres.js pipelinea
+  // varias queries sobre la misma conexión (no las serializa), así que las ~24
+  // round-trips del dashboard salen igual. Es además la recomendación estándar
+  // para serverless contra un pooler en modo transacción.
+  //
+  // Historial: 3 → 8 (22/may/2026) → 3 (02/sep/2026, PR #248) → 1.
+  //
   // `connect_timeout: 10` evita que cuelgue indefinido al levantar la conn.
-  // `connection.statement_timeout` pone el tope server-side desde el código:
-  // antes dependía de un `ALTER ROLE ... SET statement_timeout` manual en
-  // Supabase, que si no se corrió (o se pierde al recrear el rol) deja a la app
-  // sin ninguna red de contención. La red de contención real del lado del
+  // `connection.statement_timeout` pone el tope server-side desde el código,
+  // sin depender del `ALTER ROLE` manual. La red de contención del lado del
   // cliente es QUERY_TIMEOUT_MS, arriba.
   const client = postgres(connectionString, {
     prepare: false,
-    max: 3,
+    max: 1,
     idle_timeout: 20,
     connect_timeout: 10,
     connection: { statement_timeout: 12_000 },
