@@ -8,8 +8,9 @@
 -- drop-plan-traffic.sql aparece sólo como información: es destructiva, y este
 -- control nunca la propone.
 --
--- Corrido en prod el 02/sep/2026: las 50 filas en true. Después se sumó
--- reports-fk-index.sql, así que ahora son 51 objetos.
+-- Corrido en prod el 02/sep/2026: las 50 filas en true. Después se sumaron
+-- reports-fk-index.sql y app-users.sql (ambas aplicadas en prod el mismo día),
+-- así que ahora son 56 objetos.
 -- ════════════════════════════════════════════════════════════════════════════
 
 with objetos(migracion, objeto, aplicada) as (
@@ -50,6 +51,20 @@ with objetos(migracion, objeto, aplicada) as (
   select 'billing-fees-no-cascade.sql (parte 1)', 'FK plan_billing_fees.media_plan_fee_id sin cascade',
          exists (select 1 from pg_constraint where conname = 'plan_billing_fees_media_plan_fee_id_media_plan_fees_id_fk' and confdeltype = 'a')
   union all
+  -- app-users.sql (02/sep/2026)
+  select 'app-users.sql', 'type app_user_role',
+         exists (select 1 from pg_type where typname = 'app_user_role')
+  union all
+  select 'app-users.sql', 'table app_users',
+         exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'app_users')
+  union all
+  select 'app-users.sql', 'idx_app_users_role',
+         exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'idx_app_users_role')
+  union all
+  select 'app-users.sql', 'seed de admins (>=1)',
+         exists (select 1 from pg_tables where schemaname = 'public' and tablename = 'app_users')
+         and (select count(*) from app_users where role = 'admin') >= 1
+  union all
   -- rls.sql · RLS habilitado en las tablas que existen
   select 'rls.sql', 'RLS en ' || t.tablename, t.rowsecurity
   from pg_tables t
@@ -58,7 +73,7 @@ with objetos(migracion, objeto, aplicada) as (
                         'media_plan_publishers','media_plan_placements','media_plan_fees','media_plan_aux_sheets',
                         'media_plan_snapshots','media_plan_qa_runs','media_plan_qa_checks','media_plan_planning_qa_runs',
                         'media_plan_planning_qa_checks','plan_billings','plan_billing_publishers','plan_billing_fees',
-                        'project_reports','manual_reports','creative_billings')
+                        'project_reports','manual_reports','creative_billings','app_users')
   union all
   -- timeouts a nivel rol (README → "Prevención")
   select 'ALTER ROLE postgres (timeouts)', s,

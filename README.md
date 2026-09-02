@@ -235,6 +235,8 @@ db/
   fk-indexes.sql            # índices en foreign keys (Postgres no los crea solos). Aplicado en prod el 02/sep/2026; idempotente
   migrations-check.sql      # CONTROL read-only: qué migraciones de db/ ya están aplicadas (una fila por objeto, aplicada true/false). Correrlo antes de decidir si falta algo
   rls-creative-billings.sql # habilita RLS en creative_billings (la única tabla que quedó abierta; su migración no lo hacía). Idempotente
+  reports-fk-index.sql      # índice en project_reports.project_id — la FK que fk-indexes.sql se había salteado, y la que joinean las dos queries del calendario. Aplicado en prod el 02/sep/2026; idempotente
+  app-users.sql             # tabla app_users + enum de roles + seed de admins (Configuración → Usuarios y roles). Aplicado en prod el 02/sep/2026; idempotente
   drop-plan-traffic.sql     # BAJA de la sección Tráfico: dropea media_plan_traffic_ads/_adsets/_briefs y ad_types. ⚠️ borra datos; no toca planes, publishers, placements, fees ni billings
   plan-planning-qa.sql      # migración del QA DE PLANIFICACIÓN: enum planning_qa_item_kind + tablas media_plan_planning_qa_runs/_checks + RLS. Puramente aditiva: no toca el QA que ya existía ni traba ningún plan
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
