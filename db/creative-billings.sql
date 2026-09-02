@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS creative_billings (
 );
 CREATE INDEX IF NOT EXISTS idx_creative_billings_month  ON creative_billings (month);
 CREATE INDEX IF NOT EXISTS idx_creative_billings_client ON creative_billings (client_id);
+-- RLS sin policies, como el resto de las tablas (rls.sql). Cierra la REST pública.
+ALTER TABLE creative_billings ENABLE ROW LEVEL SECURITY;
 
 INSERT INTO creative_billings
   (client_id, invoice_number, campaign_code, project_name, month, amount_usd, status)

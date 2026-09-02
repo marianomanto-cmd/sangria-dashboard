@@ -190,6 +190,7 @@ db/
   plan-health-check.sql     # chequeo de salud READ-ONLY de todos los planes: 14 controles (una fila cada uno, aunque den 0) — tipos de ad cruzados entre clientes, status drifteados, gates de tráfico que bloquean el avance, live sin cerrar, planes que caen en el año actual por falta de fechas, tarifas huérfanas en metrics_json
   fk-indexes.sql            # índices en foreign keys (Postgres no los crea solos). Aplicado en prod el 02/sep/2026; idempotente
   migrations-check.sql      # CONTROL read-only: qué migraciones de db/ ya están aplicadas (una fila por objeto, aplicada true/false). Correrlo antes de decidir si falta algo
+  rls-creative-billings.sql # habilita RLS en creative_billings (la única tabla que quedó abierta; su migración no lo hacía). Idempotente
   drop-plan-traffic.sql     # BAJA de la sección Tráfico: dropea media_plan_traffic_ads/_adsets/_briefs y ad_types. ⚠️ borra datos; no toca planes, publishers, placements, fees ni billings
   plan-planning-qa.sql      # migración del QA DE PLANIFICACIÓN: enum planning_qa_item_kind + tablas media_plan_planning_qa_runs/_checks + RLS. Puramente aditiva: no toca el QA que ya existía ni traba ningún plan
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%

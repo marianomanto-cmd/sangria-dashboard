@@ -11,6 +11,7 @@
 -- Corrido en prod el 02/sep/2026: las 50 filas en true (nada pendiente).
 -- ════════════════════════════════════════════════════════════════════════════
 
+with objetos(migracion, objeto, aplicada) as (
   -- fk-indexes.sql (02/sep/2026)
   select 'fk-indexes.sql', i, exists (select 1 from pg_indexes where schemaname = 'public' and indexname = i)
   from unnest(array['idx_mpp_plan','idx_mpp_publisher','idx_media_plans_project','idx_plan_billings_plan',
@@ -52,7 +53,7 @@
                         'media_plan_publishers','media_plan_placements','media_plan_fees','media_plan_aux_sheets',
                         'media_plan_snapshots','media_plan_qa_runs','media_plan_qa_checks','media_plan_planning_qa_runs',
                         'media_plan_planning_qa_checks','plan_billings','plan_billing_publishers','plan_billing_fees',
-                        'project_reports','manual_reports')
+                        'project_reports','manual_reports','creative_billings')
   union all
   -- timeouts a nivel rol (README → "Prevención")
   select 'ALTER ROLE postgres (timeouts)', s,

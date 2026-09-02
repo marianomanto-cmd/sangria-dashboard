@@ -104,6 +104,19 @@ código viejo todavía vivas — y nada después. Se recomienda mirar los logs d
 Vercel un día después: cero "timed out after 45 seconds" es la señal de que la
 espiral está cortada.
 
+#### Cierre de la sesión: migraciones y RLS
+
+- Se corrió en prod `db/migrations-check.sql` (control read-only, nuevo):
+  **50/50 en `true`** — no había migraciones pendientes.
+- Un chequeo de RLS sobre TODAS las tablas dio una sola en `false`:
+  `creative_billings` (su migración no habilitaba RLS y `rls.sql` es anterior).
+  Migración: **`db/rls-creative-billings.sql`** (una línea, idempotente),
+  entregada en el chat para el SQL Editor. `creative-billings.sql` ahora
+  también la habilita, y el control la cubre.
+- Bug propio: `db/migrations-check.sql` se commiteó en #251 sin la línea
+  `with objetos(...) as (` — el archivo del repo no parseaba (la copia que se
+  corrió en prod era la sana). Reparado y probado el archivo del repo.
+
 #### Pendientes
 
 - **Reactivar "última edición"** sin el scan: o se lo pide aparte (endpoint +
