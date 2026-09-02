@@ -11,6 +11,7 @@
 -- Corrido en prod el 02/sep/2026: las 50 filas en true (nada pendiente).
 -- ════════════════════════════════════════════════════════════════════════════
 
+with objetos(migracion, objeto, aplicada) as (
   -- fk-indexes.sql (02/sep/2026)
   select 'fk-indexes.sql', i, exists (select 1 from pg_indexes where schemaname = 'public' and indexname = i)
   from unnest(array['idx_mpp_plan','idx_mpp_publisher','idx_media_plans_project','idx_plan_billings_plan',
