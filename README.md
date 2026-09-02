@@ -28,11 +28,29 @@ npm install
 Crear `.env.local` en la raíz del proyecto con:
 
 ```
-DATABASE_URL=postgresql://postgres.bgbqraoowtoyzgzubple:TU_PASSWORD@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql://postgres.hhubbahbmurrukftezea:TU_PASSWORD@aws-1-us-east-2.pooler.supabase.com:6543/postgres
 ```
 
 **Importante:**
 - Usar el **Transaction Pooler** (puerto **6543**), no el Session Pooler (5432) ni la Direct Connection.
+
+  **Verificado el 02/sep/2026** en `pg_stat_activity`: la app aparece como
+  `Supavisor`, no como `postgres.js` — o sea que entra por el pooler y éste
+  multiplexa (una sola conexión a Postgres para toda la app).
+
+- **`pg_stat_activity` NO ve las conexiones de la app.** Ve las de Supavisor a
+  Postgres, que son poquísimas. Contar ahí para diagnosticar saturación es medir
+  la capa equivocada: `max_connections` (60) es de Postgres y **no** es el techo
+  de la app. El techo real es el de Supavisor — Settings → Database → Connection
+  pooling: *Pool Size* y *Max client connections* — y no se consulta por SQL.
+  Las conexiones en `ClientRead` que aparecen ahí suelen ser servicios internos
+  de Supabase (`postgrest`, `storage`, el exporter) en su estado normal: **no
+  son fugas de la app**, y terminarlas no arregla nada.
+
+- **Región**: la DB vive en `aws-1-us-east-2` (Ohio) y las funciones de Vercel
+  corren en `iad1` (Virginia): ~15ms de ida y vuelta. No es un problema en sí,
+  pero **cada round-trip a la DB cuesta**, y por eso importa el fan-out de
+  queries por página (ver `db/queries/cached.ts`).
 - El password sale de Supabase → Settings → Database → Database password → Reset (Supabase no muestra el password antiguo).
 - El connection string completo se copia desde Supabase → Settings → Database → Connection string → tab **Transaction pooler**.
 
