@@ -236,12 +236,24 @@ function getClient(): PgClient {
       "DATABASE_URL no está definida — revisá .env.local (en dev) o las env vars del deploy.",
     );
   }
-  // `max: 8` por warm-instance. El motivo original para bajarlo a 3 era la
-  // fuga de conexiones, pero esa fuga la causaba un loop infinito en
-  // enumerateMonths (ya arreglado): una función que colgaba 300s, se mataba por
-  // timeout y dejaba conexiones trabadas. Sin ese loop, conviene MÁS pool para
-  // que las ~12 queries concurrentes del dashboard no queueen ni se traben si
-  // alguna conexión queda lenta.
+  // `max: 3` por warm-instance. NO subirlo sin recalcular esto:
+  //
+  // El Transaction Pooler de Supabase tiene un pool de servidor acotado (~15
+  // conexiones en las instancias chicas). En serverless cada request cae en su
+  // propia instancia de Lambda, y cada instancia abre hasta `max` conexiones
+  // propias. Con `max: 8`, una sola carga de la página del plan (que dispara
+  // ~12 queries en paralelo) se lleva 8 de esos 15 slots: DOS cargas
+  // concurrentes agotan el pooler y la tercera query se queda esperando una
+  // conexión que no llega — que es el `QueryTimeoutError` que se veía.
+  //
+  // Con 3, cinco instancias concurrentes entran en los 15 slots. Las ~12
+  // queries de la página no sufren: postgres.js las pipelinea sobre las
+  // conexiones abiertas, y desde que las FK tienen índice (db/fk-indexes.sql)
+  // cada una tarda milisegundos.
+  //
+  // Historial: estuvo en 3, se subió a 8 el 22/may/2026 atribuyendo la fuga de
+  // conexiones a un loop infinito en enumerateMonths. El loop era real y está
+  // arreglado, pero la saturación no venía sólo de ahí.
   // `connect_timeout: 10` evita que cuelgue indefinido al levantar la conn.
   // `connection.statement_timeout` pone el tope server-side desde el código:
   // antes dependía de un `ALTER ROLE ... SET statement_timeout` manual en
@@ -250,7 +262,7 @@ function getClient(): PgClient {
   // cliente es QUERY_TIMEOUT_MS, arriba.
   const client = postgres(connectionString, {
     prepare: false,
-    max: 8,
+    max: 3,
     idle_timeout: 20,
     connect_timeout: 10,
     connection: { statement_timeout: 12_000 },
