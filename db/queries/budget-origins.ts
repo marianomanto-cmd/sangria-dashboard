@@ -33,3 +33,17 @@ export async function listAllBudgetOrigins(
     ? base.where(eq(budgetOrigins.clientId, options.clientId))
     : base;
 }
+
+// Origins de UN cliente, sólo id + nombre: es lo que necesita el dropdown del
+// panel de edición de un proyecto. Vivía inline en
+// app/(app)/proyectos/[code]/page.tsx; se movió acá para poder cachearlo
+// (db/queries/cached.ts) como el resto de los catálogos.
+export async function listBudgetOriginsForClient(
+  clientId: string,
+): Promise<{ id: string; name: string }[]> {
+  return db
+    .select({ id: budgetOrigins.id, name: budgetOrigins.name })
+    .from(budgetOrigins)
+    .where(eq(budgetOrigins.clientId, clientId))
+    .orderBy(asc(budgetOrigins.name));
+}

@@ -2,6 +2,8 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { BILLING_TAG, DASHBOARD_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { creativeBillings } from "@/db/schema";
@@ -55,5 +57,6 @@ export async function setCreativeBillingPaid(input: {
   });
 
   revalidatePath("/creative");
+  invalidate(BILLING_TAG, DASHBOARD_TAG);
   return { ok: true };
 }

@@ -8,10 +8,10 @@ import {
   relativeUpdateLabel,
 } from "@/components/campaign-tracker-bits";
 import {
-  getCampaignTrackerHub,
   type CampaignHubClient,
   type CampaignHubFilter,
 } from "@/db/queries/campaign-tracker";
+import { cachedTrackerHub } from "@/db/queries/cached";
 import { buildHrefWithClient } from "@/lib/client-filter";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
@@ -31,7 +31,7 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
   const lang = client?.language ?? DEFAULT_LANGUAGE;
   const filter = parseFilter(sp.filter);
 
-  const { clients, totals, statusCounts } = await getCampaignTrackerHub(
+  const { clients, totals, statusCounts } = await cachedTrackerHub(
     client?.id ?? null,
     filter,
   );

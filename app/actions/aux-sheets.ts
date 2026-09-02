@@ -2,6 +2,8 @@
 
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { PLANS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import {
@@ -28,6 +30,7 @@ async function revalidatePlanPaths(planId: string) {
   if (row) {
     revalidatePath(`/proyectos/${row.code}`);
     revalidatePath(`/proyectos/${row.code}/planes/${planId}`);
+    invalidate(PLANS_TAG);
   }
 }
 

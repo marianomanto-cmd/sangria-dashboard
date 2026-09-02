@@ -2,6 +2,8 @@
 
 import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { ANALYSIS_TAG, BILLING_TAG, DASHBOARD_TAG, PLANS_TAG, TRACKER_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
@@ -101,6 +103,7 @@ export async function createPlan(input: {
     .where(eq(projects.id, input.projectId))
     .limit(1);
   if (proj) revalidatePath(`/proyectos/${proj.code}`);
+  invalidate(PLANS_TAG, DASHBOARD_TAG, TRACKER_TAG, ANALYSIS_TAG, BILLING_TAG);
 
   return { ok: true, planId: plan.id };
 }
@@ -141,6 +144,7 @@ export async function deletePlan(input: { planId: string }): Promise<Result> {
     .limit(1);
   if (proj) revalidatePath(`/proyectos/${proj.code}`);
   revalidatePath("/configuracion/papelera-planes");
+  invalidate(PLANS_TAG, DASHBOARD_TAG, TRACKER_TAG, ANALYSIS_TAG, BILLING_TAG);
 
   return { ok: true };
 }
@@ -198,6 +202,7 @@ export async function restorePlan(input: { planId: string }): Promise<Result> {
     .limit(1);
   if (proj) revalidatePath(`/proyectos/${proj.code}`);
   revalidatePath("/configuracion/papelera-planes");
+  invalidate(PLANS_TAG, DASHBOARD_TAG, TRACKER_TAG, ANALYSIS_TAG, BILLING_TAG);
 
   return { ok: true };
 }
@@ -232,6 +237,7 @@ export async function hardDeletePlan(input: { planId: string }): Promise<Result>
   });
 
   revalidatePath("/configuracion/papelera-planes");
+  invalidate(PLANS_TAG, DASHBOARD_TAG, TRACKER_TAG, ANALYSIS_TAG, BILLING_TAG);
 
   return { ok: true };
 }
@@ -391,6 +397,7 @@ export async function duplicatePlan(input: {
   });
 
   revalidatePath(`/proyectos/${target.code}`);
+  invalidate(PLANS_TAG, DASHBOARD_TAG, TRACKER_TAG, ANALYSIS_TAG, BILLING_TAG);
 
   return { ok: true, planId: newPlan.id };
 }
@@ -664,6 +671,7 @@ export async function transitionPlanStatus(input: {
   if (proj) {
     revalidatePath(`/proyectos/${proj.code}`);
     revalidatePath(`/proyectos/${proj.code}/planes/${input.planId}`);
+    invalidate(PLANS_TAG, DASHBOARD_TAG, TRACKER_TAG, ANALYSIS_TAG, BILLING_TAG);
   }
 
   return { ok: true };
@@ -1004,6 +1012,7 @@ export async function revertPlanToApprovedSnapshot(input: {
   if (proj) {
     revalidatePath(`/proyectos/${proj.code}`);
     revalidatePath(`/proyectos/${proj.code}/planes/${input.planId}`);
+    invalidate(PLANS_TAG, DASHBOARD_TAG, TRACKER_TAG, ANALYSIS_TAG, BILLING_TAG);
   }
 
   return { ok: true };
@@ -1546,6 +1555,7 @@ export async function bulkUpdatePlacementDates(input: {
   if (proj) {
     revalidatePath(`/proyectos/${proj.code}`);
     revalidatePath(`/proyectos/${proj.code}/planes/${input.planId}`);
+    invalidate(PLANS_TAG, DASHBOARD_TAG, TRACKER_TAG, ANALYSIS_TAG, BILLING_TAG);
   }
 
   return { ok: true, updated: changed.length, total: rows.length };

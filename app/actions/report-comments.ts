@@ -8,8 +8,9 @@
 // Autor denormalizado como en audit_log.
 
 import { asc, eq } from "drizzle-orm";
-import { revalidatePath, updateTag } from "next/cache";
-import { REPORTS_TAG } from "@/db/queries/cached";
+import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { REPORTS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
@@ -117,7 +118,7 @@ export async function addReportComment(input: {
     });
 
     revalidatePath("/reportes/calendario");
-    updateTag(REPORTS_TAG);
+    invalidate(REPORTS_TAG);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
@@ -158,7 +159,7 @@ export async function updateReportComment(input: {
   });
 
   revalidatePath("/reportes/calendario");
-  updateTag(REPORTS_TAG);
+  invalidate(REPORTS_TAG);
   return { ok: true };
 }
 
@@ -182,6 +183,6 @@ export async function deleteReportComment(input: {
   });
 
   revalidatePath("/reportes/calendario");
-  updateTag(REPORTS_TAG);
+  invalidate(REPORTS_TAG);
   return { ok: true };
 }

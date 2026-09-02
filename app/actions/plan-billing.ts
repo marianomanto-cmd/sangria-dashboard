@@ -2,6 +2,8 @@
 
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { BILLING_TAG, DASHBOARD_TAG, PLANS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import {
@@ -136,6 +138,7 @@ export async function ensureBillingForMonth(input: {
   if (proj) {
     revalidatePath(`/proyectos/${proj.code}/planes/${input.planId}/billing`);
     revalidatePath("/billing");
+    invalidate(BILLING_TAG, DASHBOARD_TAG, PLANS_TAG);
   }
 
   return { ok: true, billingId: billing.id };
@@ -723,6 +726,7 @@ async function persistTransition(
     if (proj) {
       revalidatePath(`/proyectos/${proj.code}/planes/${before.mediaPlanId}/billing`);
       revalidatePath("/billing");
+      invalidate(BILLING_TAG, DASHBOARD_TAG, PLANS_TAG);
     }
   }
 

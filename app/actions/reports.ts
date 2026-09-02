@@ -1,8 +1,9 @@
 "use server";
 
 import { eq } from "drizzle-orm";
-import { revalidatePath, updateTag } from "next/cache";
-import { DASHBOARD_TAG, REPORTS_TAG } from "@/db/queries/cached";
+import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { DASHBOARD_TAG, REPORTS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import {
   clients,
@@ -85,10 +86,7 @@ export async function setProjectStatus(input: {
   revalidatePath("/proyectos");
   revalidatePath(`/proyectos/${before.code}`);
   revalidatePath("/reportes/calendario");
-  updateTag(REPORTS_TAG);
-  // El dashboard muestra el estado de los proyectos y los reportes
-  // pendientes/vencidos: si no lo invalidamos, queda hasta 60s desfasado.
-  updateTag(DASHBOARD_TAG);
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -183,7 +181,7 @@ export async function setReportDeliveryDate(input: {
   }
 
   revalidatePath("/reportes/calendario");
-  updateTag(REPORTS_TAG);
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -245,10 +243,9 @@ export async function markReportDelivered(input: {
     });
 
     revalidatePath("/reportes/calendario");
-    updateTag(REPORTS_TAG);
     revalidatePath("/proyectos");
     if (projBefore) revalidatePath(`/proyectos/${projBefore.code}`);
-    updateTag(DASHBOARD_TAG);
+    invalidate(REPORTS_TAG, DASHBOARD_TAG);
     return { ok: true };
   }
 
@@ -276,7 +273,7 @@ export async function markReportDelivered(input: {
   });
 
   revalidatePath("/reportes/calendario");
-  updateTag(REPORTS_TAG);
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -359,7 +356,7 @@ export async function setReportPptUrl(input: {
   }
 
   revalidatePath("/reportes/calendario");
-  updateTag(REPORTS_TAG);
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -420,7 +417,7 @@ export async function createManualReport(input: {
   }
 
   revalidatePath("/reportes/calendario");
-  updateTag(REPORTS_TAG);
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -444,6 +441,6 @@ export async function deleteManualReport(input: {
   });
 
   revalidatePath("/reportes/calendario");
-  updateTag(REPORTS_TAG);
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }

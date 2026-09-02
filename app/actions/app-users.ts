@@ -2,6 +2,8 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { CATALOG_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import { isMissingTableError } from "@/db/queries/app-users";
@@ -79,6 +81,7 @@ export async function setUserRole(input: {
   }
 
   revalidatePath("/configuracion/usuarios");
+  invalidate(CATALOG_TAG);
   return { ok: true };
 }
 
@@ -122,6 +125,7 @@ export async function setUserActive(input: {
   }
 
   revalidatePath("/configuracion/usuarios");
+  invalidate(CATALOG_TAG);
   return { ok: true };
 }
 
@@ -174,5 +178,6 @@ export async function addUserByEmail(input: {
   }
 
   revalidatePath("/configuracion/usuarios");
+  invalidate(CATALOG_TAG);
   return { ok: true };
 }
