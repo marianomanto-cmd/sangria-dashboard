@@ -52,7 +52,7 @@
                         'media_plan_publishers','media_plan_placements','media_plan_fees','media_plan_aux_sheets',
                         'media_plan_snapshots','media_plan_qa_runs','media_plan_qa_checks','media_plan_planning_qa_runs',
                         'media_plan_planning_qa_checks','plan_billings','plan_billing_publishers','plan_billing_fees',
-                        'project_reports','manual_reports')
+                        'project_reports','manual_reports','creative_billings')
   union all
   -- timeouts a nivel rol (README → "Prevención")
   select 'ALTER ROLE postgres (timeouts)', s,
