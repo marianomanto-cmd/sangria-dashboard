@@ -1812,18 +1812,38 @@ En los dos casos la query no falla: **espera**. El render se queda colgado sin
 error hasta que Vercel mata la función, y cada función muerta deja su conexión
 trabada → más saturación → espiral que dura horas.
 
-El fix es un **timeout del lado del cliente** (`QUERY_TIMEOUT_MS`, 15s, en
-`db/index.ts`): envuelve el cliente postgres.js y corre cada query contra el
-reloj, cancelándola y rechazando si no responde. La página cae en su error
-boundary (recargable) en vez de quedarse en el skeleton, y la conexión se
-libera. Verificado contra un Postgres 16 local saturando el pool a propósito
-(`max: 1` + una query larga): la query encolada rechaza en el tope, mientras que
-sin el wrapper espera a que se libere el pool. Los errores reales de SQL siguen
-propagando sin tocar.
+El fix vive en `db/index.ts`, que envuelve el cliente postgres.js con dos capas:
 
-Las transacciones (`db.transaction`) quedan fuera del tope a propósito: usan una
-conexión reservada, viven sólo en server actions puntuales y cortarlas por la
-mitad es peor que dejarlas terminar.
+1. **Reintento seguro** — hasta 3 intentos con backoff (200ms, 600ms). Un pico
+   de carga es transitorio: si la query no consiguió conexión, reintentar la
+   resuelve sin que el usuario se entere. Se reintenta **sólo** cuando es
+   demostrable que la query nunca se ejecutó: `query.state == null` significa
+   que ninguna conexión la tomó (`connection.js` hace `q.state = backend` al
+   tomarla), así que no llegó al server ni siquiera si escribe. También se
+   reintentan las lecturas (`select`) que fallan por error de conexión.
+2. **Timeout de cliente** (`QUERY_TIMEOUT_MS`, 15s) — si el reintento tampoco
+   alcanza, falla rápido y explícito: la página cae en su error boundary
+   (recargable) en vez de quedarse en el skeleton, y la conexión se libera.
+
+**Ojo con cancelar: sólo se cancela lo que nunca salió.** Para una query
+encolada, `cancel()` es puramente local (la saca de la cola, no toca el server).
+Pero postgres.js **pipelinea** varias queries sobre una misma conexión, y el
+cancel de una pipelineada se manda con el *backend key de la conexión*: cancela
+lo que ese backend esté corriendo, o sea **puede matar a una query hermana**.
+Verificado en el test local — el cancel de la query vencida mataba la query
+larga que ocupaba la conexión. Por eso las que ya salieron **no** se cancelan ni
+se reintentan: para ésas está el `connection.statement_timeout` de 12s, que las
+reapea desde el server (que sí sabe cuál matar) antes que el tope de 15s del
+cliente, y reintentarlas sólo agregaría carga sobre un pooler ya saturado.
+
+Verificado contra un Postgres 16 local (6 casos): query normal, `.values()`,
+params y errores reales de SQL pasan intactos; una query encolada de verdad se
+cancela y **se reintenta hasta salir bien**; una query en vuelo que vence falla
+en el tope **sin matar a su hermana** en la misma conexión.
+
+Las transacciones (`db.transaction`) quedan fuera de todo esto a propósito: usan
+una conexión reservada, viven sólo en server actions puntuales, y reintentarlas
+o cortarlas por la mitad es peor que dejarlas terminar.
 
 ---
 

@@ -30,14 +30,32 @@ pooler → más saturación → espiral de horas. Detalle en README → "Por qu�
 `statement_timeout` NO alcanzaba".
 
 **Fixes**:
-- **`db/index.ts`**: timeout de cliente por query (`QUERY_TIMEOUT_MS = 15s`).
-  Envuelve el cliente postgres.js y corre cada query contra el reloj,
-  cancelándola y rechazando si no responde. Verificado contra un Postgres 16
-  local saturando el pool a propósito (`max: 1` + query larga): la query
-  encolada rechaza en el tope, mientras que sin el wrapper espera a que se
-  libere el pool; los errores reales de SQL siguen propagando intactos. Se
-  agregó además `connection.statement_timeout` (12s) para no depender del
-  `ALTER ROLE` manual. Las transacciones quedan fuera del tope a propósito.
+- **`db/index.ts`**: dos capas sobre el cliente postgres.js.
+  1. **Reintento seguro** (3 intentos, backoff 200/600ms) — un pico es
+     transitorio, así que reintentar lo resuelve sin que el usuario vea nada. Se
+     reintenta **sólo** cuando es demostrable que la query no se ejecutó:
+     `query.state == null` ⟹ ninguna conexión la tomó (`connection.js` hace
+     `q.state = backend` al tomarla) ⟹ no llegó al server ni siquiera si
+     escribe. También lecturas que fallan por error de conexión.
+  2. **Timeout de cliente** (`QUERY_TIMEOUT_MS = 15s`) como red de contención.
+  Más `connection.statement_timeout` (12s) para no depender del `ALTER ROLE`
+  manual. Las transacciones quedan fuera a propósito.
+
+  **Hallazgo del test — sólo se cancela lo que nunca salió**: postgres.js
+  pipelinea varias queries sobre una misma conexión, y el cancel de una
+  pipelineada va con el *backend key de la conexión* → cancela lo que ese
+  backend esté corriendo, o sea **puede matar a una query hermana**. Se
+  reprodujo en el Postgres local. Las que ya salieron no se cancelan ni se
+  reintentan: para ésas está el `statement_timeout` del server (12s, reapea
+  antes que el tope de 15s del cliente) y reintentarlas sólo sumaría carga.
+
+  Verificado contra un Postgres 16 local, 6 casos: query normal, `.values()`,
+  params y errores de SQL pasan intactos; una query encolada de verdad se
+  cancela y **se reintenta hasta salir bien**; una en vuelo que vence falla en
+  el tope **sin matar a su hermana**. El test también destapó un unhandled
+  rejection (la promesa de `cancel()` descartada sin handler) — los
+  `unrecoverable error: Unhandled Rejection` que se veían en prod son de esa
+  familia; ya está manejado.
 - **`components/sidebar.tsx`**: `prefetch={false}` en `NavItem`. El sidebar
   tiene **13 destinos y todos son páginas pesadas**: con el prefetch por
   viewport, cada carga de cualquier página disparaba ~13 renders de golpe. Es la
