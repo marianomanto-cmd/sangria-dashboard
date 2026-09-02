@@ -47,6 +47,27 @@ DATABASE_URL=postgresql://postgres.hhubbahbmurrukftezea:TU_PASSWORD@aws-1-us-eas
   de Supabase (`postgrest`, `storage`, el exporter) en su estado normal: **no
   son fugas de la app**, y terminarlas no arregla nada.
 
+- **Los números del pooler (Settings → Database → Connection pooling)**, medidos
+  el 02/sep/2026 con compute **Nano**:
+  - **Max client connections: 200** (fijo en Nano). Cuántas Lambdas pueden estar
+    conectadas a Supavisor. Con `max: 1` en `db/index.ts` harían falta 200
+    instancias calientes a la vez: **no es el techo**.
+  - **Connection pool size: 15** (editable). Cuántas conexiones mantiene
+    Supavisor **contra Postgres**. En modo transacción, cada query en vuelo
+    ocupa uno de esos 15 mientras corre: **éste es el techo real de la app**.
+
+  De ahí sale por qué `max` importa tanto. Con `max: 3`, una sola carga de
+  página podía tener 3 statements en vuelo → sólo **5 páginas concurrentes**
+  antes de agotar los 15. Con `max: 1`, cada instancia ocupa como mucho 1 slot →
+  **15 concurrentes**. El costo es que las queries de la página se serializan
+  sobre una conexión (~15ms cada una), lo que hace que el fan-out por página y
+  la caché importen todavía más.
+
+  **Si hace falta más concurrencia**: subir *Connection pool size*. Hay lugar —
+  se midieron 9 conexiones en uso contra `max_connections = 60`, y los servicios
+  internos de Supabase (postgrest, storage, cron, exporter) usan ~8. Con 25 el
+  total queda en ~33 de 60. Es un cambio de dashboard, sin redeploy.
+
 - **Región**: la DB vive en `aws-1-us-east-2` (Ohio) y las funciones de Vercel
   corren en `iad1` (Virginia): ~15ms de ida y vuelta. No es un problema en sí,
   pero **cada round-trip a la DB cuesta**, y por eso importa el fan-out de
