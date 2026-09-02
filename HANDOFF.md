@@ -56,18 +56,30 @@ pooler → más saturación → espiral de horas. Detalle en README → "Por qu�
   rejection (la promesa de `cancel()` descartada sin handler) — los
   `unrecoverable error: Unhandled Rejection` que se veían en prod son de esa
   familia; ya está manejado.
-- **`components/sidebar.tsx`**: `prefetch={false}` en `NavItem`. El sidebar
-  tiene **13 destinos y todos son páginas pesadas**: con el prefetch por
-  viewport, cada carga de cualquier página disparaba ~13 renders de golpe. Es la
-  mayor fuente de carga de la app y explica los contadores casi uniformes de
-  `/planes` (647), `/reportes/calendario` (573), `/billing` (563), `/` (562).
-  Ya se había sospechado en la sesión del 16/jun/2026 pero nunca se arregló.
+- **`components/top-nav.tsx` y `components/sidebar.tsx`**: `prefetch={false}`.
+  Los dos renderizan los mismos **13 destinos, todos páginas pesadas**
+  (`[...PRIMARY_NAV, ...FOOTER_NAV]`): con el prefetch por viewport, cada carga
+  de cualquier página disparaba ~13 renders de golpe. Es la mayor fuente de
+  carga de la app y explica los contadores casi uniformes de `/planes` (647),
+  `/reportes/calendario` (573), `/billing` (563), `/` (562). Ya se había
+  sospechado en la sesión del 16/jun/2026 pero nunca se arregló.
+
+  **La `TopNav` es la nav real en desktop** (`hidden lg:flex`, montada desde
+  `topbar.tsx`); el `Sidebar` es el equivalente para pantallas chicas. En el
+  primer intento se parcheó sólo el sidebar y la tormenta siguió igual: se vio
+  en los logs del deploy, con los 13 destinos golpeados en una ráfaga de 4s.
+  **Si se toca la navegación, hay que tocar los dos.**
 - **`prefetch={false}` en los links de fila** (24 sitios) de las tablas y
   listados que hacen fan-out a páginas pesadas: `projects-table-expandable`,
   `plans-table-client`, `billing-table`, `reporting-calendar-client`,
   `reporting-gantt`, `billing-estimate-card`, `dashboard/view-operaciones` y las
-  cards de plan de `app/(app)/proyectos/[code]/page.tsx`. Next sigue
-  prefetcheando al hacer **hover**, que es cuando hay intención real de navegar.
+  cards de plan de `app/(app)/proyectos/[code]/page.tsx`.
+
+  **Ojo con la semántica**: en Next 16 `prefetch={false}` apaga el prefetch por
+  completo, **también el de hover/touch** — `prefetchEnabled` corta en
+  `onMouseEnter` y `onTouchStart` (`client/app-dir/link.js`). O sea que estos
+  links cargan recién al hacer click, con su skeleton. Es el trade deliberado:
+  vale para links que se repiten por fila, no para un botón suelto.
 - **`app/(app)/layout.tsx`**: `export const maxDuration = 45`. Los segment
   configs cascadean del layout a las páginas (verificado en el manifest del
   build: todas las rutas del grupo quedan en 45, y `/` conserva su 60 propio).
@@ -4811,7 +4823,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Activar RLS / cerrar la REST API pública de Supabase | `db/rls.sql` — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` en todas las tablas de `public`. Pegarlo en el SQL Editor. La app no se ve afectada (conecta como `postgres`, dueño → bypassa RLS; no se usa `FORCE`). **Toda tabla nueva** necesita su propio ENABLE. |
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
 | Configurar conexión DB                 | `db/index.ts` — pool, `connect_timeout` y el **timeout de cliente por query** (`QUERY_TIMEOUT_MS`), que es lo que evita que un pooler saturado cuelgue el render (la cola de postgres.js no tiene timeout propio). |
-| Agregar un `<Link>` a una lista/tabla  | Poner **`prefetch={false}`** si apunta a una página pesada y se repite por fila: sin eso, el prefetch por viewport dispara un render por fila contra el pooler. Mismo criterio en `components/sidebar.tsx` (`NavItem`). Ver HANDOFF 02/sep/2026. |
+| Agregar un `<Link>` a una lista/tabla  | Poner **`prefetch={false}`** si apunta a una página pesada y se repite por fila: sin eso, el prefetch por viewport dispara un render por fila contra el pooler. En Next 16 eso apaga TAMBIÉN el prefetch por hover, así que la página carga recién al click. Ver HANDOFF 02/sep/2026. |
+| Tocar la **navegación** | Son **DOS** componentes con la misma lista (`lib/nav.ts`): `components/top-nav.tsx` es la nav de desktop (`hidden lg:flex`, montada desde `topbar.tsx`) y `components/sidebar.tsx` la de pantallas chicas. Un cambio en una sin la otra pasa desapercibido en desarrollo — ya pasó con el `prefetch={false}`. |
 | Cambiar el tope de duración de una página | `export const maxDuration` — el de `app/(app)/layout.tsx` (45s) cascadea a todo el grupo; una página puede subirlo (`app/(app)/page.tsx` usa 60). |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |
 | Catálogo de cost methods, etc.         | `db/schema.ts` (enums) + `editor.tsx` (mapping principal) |

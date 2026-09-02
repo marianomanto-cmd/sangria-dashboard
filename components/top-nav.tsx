@@ -124,6 +124,12 @@ export function TopNav() {
               itemRefs.current[i] = el;
             }}
             href={buildHrefWithClient(entry.href, clientSlug)}
+            // Sin prefetch: la TopNav lista los 13 destinos de la app y TODOS
+            // son páginas pesadas (cada una dispara sus propias queries). Con
+            // el prefetch por viewport, cada carga de cualquier página
+            // disparaba ~13 renders de golpe contra el pooler de Supabase — la
+            // tormenta que lo saturaba. Mismo criterio en `sidebar.tsx`.
+            prefetch={false}
             data-active={active}
             title={entry.label}
             className={itemClass(active)}
@@ -173,6 +179,7 @@ export function TopNav() {
                 key={entry.href}
                 role="menuitem"
                 href={buildHrefWithClient(entry.href, clientSlug)}
+                prefetch={false}
                 onClick={() => setOpen(false)}
                 className={`flex items-center gap-2 px-3 py-1.5 text-[13px] whitespace-nowrap ${
                   active
