@@ -1,12 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlanDetail } from "@/db/queries/project-detail";
-import { getPlanAuditEvents } from "@/db/queries/audit-log";
-import {
-  getPlanQaState,
-  getPlanVersionDiff,
-  getPlanVersionList,
-} from "@/db/queries/plan-qa";
+import { getPlanQaState, getPlanVersionList } from "@/db/queries/plan-qa";
 import {
   getPlanningQaRows,
   getPlanningQaState,
@@ -17,10 +12,9 @@ import {
   listMetricsForClient,
   listPublishersForClient,
 } from "@/app/actions/plans";
-import { DEFAULT_LANGUAGE, formatDate, type Language } from "@/lib/i18n";
+import { DEFAULT_LANGUAGE, type Language } from "@/lib/i18n";
 import { getCurrentUser } from "@/lib/auth";
 import { canApprovePlans } from "@/lib/permissions";
-import { isPlanSigned } from "@/lib/plan-status";
 import { PlanEditor } from "./editor";
 
 type Props = {
@@ -34,31 +28,13 @@ export default async function PlanDetailPage({ params }: Props) {
   if (detail.project.code !== code) notFound();
   const lang: Language = detail.client.language ?? DEFAULT_LANGUAGE;
 
-  // Ventana de la "versión vigente" para el historial de cambios:
-  // - draft / ready_to_send → el borrador en curso: cambios desde la última
-  //   aprobación (o desde la creación si nunca se aprobó).
-  // - firmados (approved / qa_done / live) y archived → los cambios que
-  //   produjeron la versión aprobada vigente: desde la aprobación ANTERIOR
-  //   (v−1), incluida la aprobación.
-  const locked =
-    isPlanSigned(detail.plan.status) || detail.plan.status === "archived";
-  const sinceVersion = locked
-    ? detail.plan.currentVersion - 1
-    : detail.plan.currentVersion;
-  const sinceSnap =
-    detail.snapshots.find((s) => s.versionNumber === sinceVersion) ?? null;
-
-  const newestApprovedVersion = detail.snapshots[0]?.versionNumber ?? null;
-
   const [
     allPublishers,
     allMarkets,
     allMetrics,
     user,
-    editEvents,
     qaState,
     versionHistory,
-    newestVersionDiff,
     planningQaState,
     planningRows,
   ] = await Promise.all([
@@ -66,7 +42,6 @@ export default async function PlanDetailPage({ params }: Props) {
     listMarketsForClient(detail.client.id),
     listMetricsForClient(detail.client.id),
     getCurrentUser(),
-    getPlanAuditEvents(planId, { since: sinceSnap?.approvedAt ?? null }),
     // Estado del QA de la versión vigente (alimenta el modal de QA) y la LISTA
     // de versiones para el desplegable de abajo del editor.
     //
@@ -78,15 +53,6 @@ export default async function PlanDetailPage({ params }: Props) {
     // versión nueva. Era lo que colgaba esta página (incidente 02/sep/2026).
     getPlanQaState(planId, detail.plan.currentVersion),
     getPlanVersionList(planId),
-    // El diff de la versión más reciente (la que arranca abierta): 2 snapshots,
-    // no los de todo el plan. Los demás los pide el componente al desplegar.
-    //
-    // Es la última versión APROBADA (`detail.snapshots` viene ordenado desc),
-    // no `currentVersion`: con un draft encima, currentVersion va adelantada y
-    // todavía no tiene snapshot.
-    newestApprovedVersion === null
-      ? Promise.resolve(null)
-      : getPlanVersionDiff(planId, newestApprovedVersion),
     // QA de planificación de la versión que este draft va a ser: el estado del
     // run y las líneas que el modal lista para tildar.
     getPlanningQaState(planId, planningQaVersion(detail.plan.currentVersion)),
@@ -95,12 +61,6 @@ export default async function PlanDetailPage({ params }: Props) {
 
   const canApprove = canApprovePlans(user?.email);
 
-  const windowNote = sinceSnap
-    ? `Desde la aprobación de v${sinceSnap.versionNumber} (${formatDate(
-        sinceSnap.approvedAt.toISOString().slice(0, 10),
-        lang,
-      )})`
-    : "Desde la creación del plan";
 
   return (
     <main className="px-8 py-10 max-w-[1800px] mx-auto w-full">
@@ -130,10 +90,19 @@ export default async function PlanDetailPage({ params }: Props) {
         allMetrics={allMetrics}
         lang={lang}
         canApprove={canApprove}
-        editHistory={{ events: editEvents, windowNote }}
+        // TEMPORAL (02/sep/2026): el indicador de "última edición" queda
+        // apagado. `getPlanAuditEvents` hace un scan de audit_log —que crece
+        // sin techo— con un OR de condiciones sobre jsonb que ningún índice
+        // puede servir (filtra por claves DENTRO de before_json/after_json, una
+        // de ellas envuelta en coalesce). Acaparaba una conexión varios
+        // segundos en CADA render de la página del plan, dejando al resto de
+        // las queries en cola hasta el timeout: por eso fallaban TODOS los
+        // planes mientras /proyectos andaba bien.
+        //
+        // Se reactiva pidiéndolo aparte (como el diff de versiones), no en el
+        // render. Ver HANDOFF 02/sep/2026.
         qaState={qaState}
         versionHistory={versionHistory}
-        initialVersionDiff={newestVersionDiff}
         planningQa={planningQaState}
         planningRows={planningRows}
       />

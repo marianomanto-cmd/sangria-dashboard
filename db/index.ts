@@ -36,9 +36,21 @@ dns.setDefaultResultOrder("ipv4first");
 //    rápido y explícito: la página cae en su error boundary (recargable) en vez
 //    de quedarse en el skeleton, y la conexión se libera enseguida en vez de
 //    quedar tomada hasta que muere la función.
-const QUERY_TIMEOUT_MS = 15_000;
-const MAX_ATTEMPTS = 3;
-const RETRY_BACKOFF_MS = [200, 600];
+//
+// PRESUPUESTO TOTAL: el peor caso (todos los intentos vencidos) tiene que quedar
+// MUY por debajo del `maxDuration` de la página (45s en app/(app)/layout.tsx).
+// Si la suma se pasa, Vercel mata la función antes de que lleguemos a lanzar el
+// error: no se ve nada en los logs (sólo "Task timed out"), el error boundary no
+// se renderiza y —lo peor— la función muere con sus conexiones abiertas, que
+// quedan colgadas en el pooler de Supabase esperando a un cliente que ya no
+// existe (`active` / `Client:ClientRead` en pg_stat_activity). Cada una ocupa un
+// slot para siempre. Se vio en prod el 02/sep/2026 con 3 × 15s + backoff =
+// 45,8s > 45s: el reintento fabricaba las zombies que después saturaban todo.
+//
+// Hoy: 2 × 8s + 0,3s ≈ 16,3s. Deja margen para el auth y el render.
+const QUERY_TIMEOUT_MS = 8_000;
+const MAX_ATTEMPTS = 2;
+const RETRY_BACKOFF_MS = [300];
 
 export class QueryTimeoutError extends Error {
   constructor(ms: number, attempts: number) {
