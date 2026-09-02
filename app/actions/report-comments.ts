@@ -9,6 +9,8 @@
 
 import { asc, eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { REPORTS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
@@ -116,6 +118,7 @@ export async function addReportComment(input: {
     });
 
     revalidatePath("/reportes/calendario");
+    invalidate(REPORTS_TAG);
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error desconocido";
@@ -156,6 +159,7 @@ export async function updateReportComment(input: {
   });
 
   revalidatePath("/reportes/calendario");
+  invalidate(REPORTS_TAG);
   return { ok: true };
 }
 
@@ -179,5 +183,6 @@ export async function deleteReportComment(input: {
   });
 
   revalidatePath("/reportes/calendario");
+  invalidate(REPORTS_TAG);
   return { ok: true };
 }

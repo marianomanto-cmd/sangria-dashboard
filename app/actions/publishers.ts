@@ -2,6 +2,8 @@
 
 import { eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { CATALOG_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { publishers } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
@@ -21,6 +23,7 @@ function slugify(name: string): string {
 
 function pathsToRevalidate(clientSlug?: string) {
   if (clientSlug) revalidatePath(`/configuracion/clientes/${clientSlug}`);
+  invalidate(CATALOG_TAG);
 }
 
 // ════════════════════════════════════════════════════════════════════════════

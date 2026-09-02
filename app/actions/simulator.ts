@@ -2,6 +2,8 @@
 
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { PLANS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import {
@@ -83,6 +85,7 @@ export async function createScenario(input: {
     .returning({ id: simulatorScenarios.id });
 
   revalidatePath("/reportes/simulador");
+  invalidate(PLANS_TAG);
   return { ok: true, data: { id: row.id } };
 }
 
@@ -114,6 +117,7 @@ export async function updateScenario(input: {
   if (!result.length) return { ok: false, error: "Escenario no encontrado" };
 
   revalidatePath("/reportes/simulador");
+  invalidate(PLANS_TAG);
   return { ok: true };
 }
 
@@ -127,6 +131,7 @@ export async function deleteScenario(input: {
   if (!result.length) return { ok: false, error: "Escenario no encontrado" };
 
   revalidatePath("/reportes/simulador");
+  invalidate(PLANS_TAG);
   return { ok: true };
 }
 
@@ -333,6 +338,7 @@ export async function promoteScenarioToPlan(input: {
   revalidatePath(`/proyectos/${project.code}`);
   revalidatePath("/planes");
   revalidatePath("/reportes/simulador");
+  invalidate(PLANS_TAG);
 
   return { ok: true, data: { planId: plan.id, projectCode: project.code } };
 }
@@ -401,5 +407,6 @@ export async function duplicateScenario(input: {
     .returning({ id: simulatorScenarios.id });
 
   revalidatePath("/reportes/simulador");
+  invalidate(PLANS_TAG);
   return { ok: true, data: { id: row.id } };
 }

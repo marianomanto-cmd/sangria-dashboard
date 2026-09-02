@@ -2,6 +2,8 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { CATALOG_TAG, DASHBOARD_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
@@ -59,6 +61,7 @@ export async function createClient(input: {
 
     revalidatePath("/configuracion/clientes");
     revalidatePath("/clientes");
+    invalidate(CATALOG_TAG, DASHBOARD_TAG);
     return { ok: true, id: row.id, slug: row.slug };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error desconocido";
@@ -113,6 +116,7 @@ export async function updateClient(input: {
   revalidatePath("/configuracion/clientes");
   revalidatePath("/clientes");
   revalidatePath(`/clientes/${after.slug}`);
+  invalidate(CATALOG_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 

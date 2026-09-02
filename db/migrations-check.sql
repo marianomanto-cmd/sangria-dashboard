@@ -8,7 +8,8 @@
 -- drop-plan-traffic.sql aparece sólo como información: es destructiva, y este
 -- control nunca la propone.
 --
--- Corrido en prod el 02/sep/2026: las 50 filas en true (nada pendiente).
+-- Corrido en prod el 02/sep/2026: las 50 filas en true. Después se sumó
+-- reports-fk-index.sql, así que ahora son 51 objetos.
 -- ════════════════════════════════════════════════════════════════════════════
 
 with objetos(migracion, objeto, aplicada) as (
@@ -17,6 +18,10 @@ with objetos(migracion, objeto, aplicada) as (
   from unnest(array['idx_mpp_plan','idx_mpp_publisher','idx_media_plans_project','idx_plan_billings_plan',
                     'idx_pbp_billing','idx_pbf_billing','idx_pbf_fee','idx_mpf_plan','idx_projects_client',
                     'idx_projects_origin','idx_audit_before_plan','idx_audit_after_plan']) as i
+  union all
+  -- reports-fk-index.sql (02/sep/2026)
+  select 'reports-fk-index.sql', 'idx_project_reports_project',
+         exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'idx_project_reports_project')
   union all
   -- plan-planning-qa.sql
   select 'plan-planning-qa.sql', 'type planning_qa_item_kind', exists (select 1 from pg_type where typname = 'planning_qa_item_kind')

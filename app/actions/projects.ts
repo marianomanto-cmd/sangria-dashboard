@@ -2,6 +2,8 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { DASHBOARD_TAG, PLANS_TAG, REPORTS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { normalizeExternalUrl } from "@/lib/external-url";
@@ -102,6 +104,7 @@ export async function createProject(input: {
     });
 
     revalidatePath("/proyectos");
+    invalidate(PLANS_TAG, DASHBOARD_TAG, REPORTS_TAG);
     return { ok: true, projectId: proj.id, code: proj.code };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error desconocido";
@@ -187,6 +190,7 @@ export async function updateProject(input: {
 
   revalidatePath("/proyectos");
   revalidatePath(`/proyectos/${before.code}`);
+  invalidate(PLANS_TAG, DASHBOARD_TAG, REPORTS_TAG);
   return { ok: true };
 }
 
@@ -212,6 +216,7 @@ export async function deleteProject(input: {
   });
 
   revalidatePath("/proyectos");
+  invalidate(PLANS_TAG, DASHBOARD_TAG, REPORTS_TAG);
   return { ok: true };
 }
 

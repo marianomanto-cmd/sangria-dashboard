@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FolderOpen, Plus } from "lucide-react";
-import { asc, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { budgetOrigins } from "@/db/schema";
 import { ProjectStatusChanger } from "@/components/project-status-changer";
 import { StatusBadge } from "@/components/status-badge";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
-import { getProjectWithPlans, type ProjectPlanSummary } from "@/db/queries/project-detail";
+import { type ProjectPlanSummary } from "@/db/queries/project-detail";
+import {
+  cachedClientBudgetOrigins,
+  cachedProjectDetail,
+} from "@/db/queries/cached";
 import { ProjectEditPanel } from "./edit-panel";
 import { DeletePlanButton } from "@/components/delete-plan-button";
 import { buttonVariants } from "@/components/button";
@@ -23,18 +24,14 @@ type Props = { params: Promise<{ code: string }> };
 
 export default async function ProjectDetailPage({ params }: Props) {
   const { code } = await params;
-  const detail = await getProjectWithPlans(code);
+  const detail = await cachedProjectDetail(code);
   if (!detail) notFound();
 
   const { project, client, budgetOrigin, plans } = detail;
   const lang: Language = client.language ?? DEFAULT_LANGUAGE;
 
   // Budget origins del cliente — para el dropdown del panel de edición.
-  const clientOrigins = await db
-    .select({ id: budgetOrigins.id, name: budgetOrigins.name })
-    .from(budgetOrigins)
-    .where(eq(budgetOrigins.clientId, client.id))
-    .orderBy(asc(budgetOrigins.name));
+  const clientOrigins = await cachedClientBudgetOrigins(client.id);
 
   // Fin del proyecto = último placement de sus planes; aviso si termina ≤7 días.
   const derivedEnd = projectPeriod(plans).end;

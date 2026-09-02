@@ -2,6 +2,97 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 02/sep/2026 (2) — El tratamiento, a toda la app + Usuarios y roles
+
+Continuación directa del incidente de abajo. Con el pooler ya en 25, cambiar la
+fecha de un reporte seguía tirando "Algo salió mal" (digest **268176261**). No
+era el calendario: era que **la vista nunca había recibido el tratamiento** que
+sí tenían el dashboard y proyectos. Revisada la app entera, faltaba en casi
+todas.
+
+#### Qué era el bug del calendario
+
+`getSentReports` vencía a los 8s. La página hacía `Promise.all` de 7
+round-trips **sin caché**, y las acciones llaman a
+`revalidatePath("/reportes/calendario")`, así que mover una fecha
+re-renderizaba la página completa contra la DB: la mutación guardaba bien y
+después moría el re-render. Con `Promise.all`, una sola lectura vencida se
+llevaba puesta toda la vista.
+
+#### El tratamiento, ahora generalizado
+
+1. **Un tag de caché por área** — `lib/cache-tags.ts` (dashboard, reports,
+   plans, billing, tracker, analysis, catalog).
+2. **Invalidación explícita** — `lib/cache-invalidate.ts` expone
+   `invalidate(...tags)`, llamado al lado de cada `revalidatePath` en las 16
+   action files. Usa `updateTag` (expira de una: read-your-own-writes) y cae a
+   `revalidateTag` cuando no hay server action — `transitionBillingStatus` se
+   reusa desde `app/api/portal/billing/mark-paid`, y ahí `updateTag` **tira**.
+   Nunca propaga: fallar al invalidar no puede tumbar una mutación ya guardada.
+3. **Recién entonces, TTL 60s → 600s.** El orden importa: alargar el TTL sin
+   cablear la invalidación habría mostrado data vieja. El TTL no es el
+   mecanismo de frescura, es la red de seguridad — con 60s cada expiración
+   mandaba a **un** usuario por el camino frío (el fan-out completo), y si el
+   pooler estaba apretado justo ahí, ese usuario veía la vista rota.
+4. **Lecturas nuevas cacheadas**: calendario de reportes, `/proyectos/[code]`,
+   hub del Campaign Tracker, origins del cliente, y
+   **`resolveClientFromSearchParams`** — la usan 14 páginas y es lo PRIMERO que
+   corre en cada una.
+5. **Degradación por sección** en el calendario (`Promise.allSettled` +
+   fallbacks), como `app/(app)/page.tsx`.
+6. **Reintento automático en `app/(app)/error.tsx`**: la causa dominante de esa
+   pantalla es un timeout transitorio del pooler, que se cura solo. Ahora
+   reintenta UNA vez a los 2s antes de mostrar el error. Uno solo y con delay:
+   reintentar en loop contra una DB saturada es lo que la satura más.
+
+#### Next 16: `revalidateTag` cambió de firma
+
+`revalidateTag(tag)` quedó **deprecado**; ahora es `revalidateTag(tag, profile)`
+y con `"max"` es **stale-while-revalidate** — serviría el valor viejo justo
+después de editarlo, que en una app interna se lee como "no se guardó". Para
+mutaciones va **`updateTag(tag)`**, que expira la entrada de una pero sólo se
+puede llamar desde una server action. Verificado en
+`next/dist/server/web/spec-extension/revalidate.js`.
+
+#### Usuarios y roles (Configuración)
+
+La tarjeta estaba en "próximamente" y la ruta no existía. Ahora existe y manda
+en permisos reales:
+
+- **`app_users`** es la capa de la app sobre Supabase Auth (no crea cuentas ni
+  guarda contraseñas). Se auto-puebla: `getCurrentUser()` hace upsert por email,
+  **throttleado a 1/hora por instancia y fire-and-forget** — no íbamos a meter
+  una escritura en el camino caliente de cada render justo después de esta
+  sesión.
+- Roles: Admin, Aprobador, Media Planner, Account Manager, Finance, Viewer. Hoy
+  gobiernan **aprobar planes** (Admin/Aprobador) y **el acceso a la sección**
+  (Admin). El resto queda registrado; la pantalla lo aclara.
+- `lib/permissions.ts` resuelve por rol pero **mantiene la allowlist hardcodeada
+  como red de seguridad**: si la tabla no existe, el usuario no está cargado o
+  la lectura falla, se cae a ella. Sin eso un problema de DB dejaba a todos sin
+  poder aprobar. `canApprovePlans` pasó a ser **async**.
+- Los tipos y el catálogo de roles viven en **`lib/roles.ts`**, no en el módulo
+  de queries: importarlos desde el componente cliente habría arrastrado el
+  driver de Postgres al bundle del browser.
+
+#### Acciones requeridas en prod
+
+| Qué | Archivo | Rompe algo si no se corre |
+|-----|---------|---------------------------|
+| Índice de FK que faltaba | `db/reports-fk-index.sql` | No. Sólo performance del calendario. |
+| Tabla de usuarios y roles | `db/app-users.sql` | No. La sección explica que falta el SQL y aprobar planes sigue con la allowlist. |
+
+Ambas idempotentes y probadas contra el Postgres 16 local.
+
+#### Pendiente
+
+- Rotar el password de la DB (se pegó en un chat) + `DATABASE_URL` en Vercel ×3
+  + Redeploy.
+- Falta caché en `/planes`, `/billing`, `/billing-tracker` y `/analisis`: sus
+  queries toman filtros con mucha cardinalidad, así que cachearlas tal cual da
+  poco hit rate. Si vuelven a fallar, el camino es cachear las *filter options*
+  (que sí son de baja cardinalidad) y no el listado.
+
 ### Cambios de la sesión 02/sep/2026 — Incidente: la app se colgaba horas (PRs #245 a #256)
 
 Esta entrada reemplaza a la que se escribió al principio de la sesión, que
@@ -4126,6 +4217,9 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+8c76941  perf: el tratamiento del calendario, extendido a toda la app (#257)
+ad458e8  feat(configuracion): Usuarios y roles — la seccion deja de ser un placeholder (#257)
+ff8652c  fix(calendario): el mismo tratamiento que planes y proyectos (#257)
 a064168  docs: los numeros reales del pooler y por que max:1 triplica la concurrencia (#256)
 b1f7839  docs: que significa (y que no) pg_stat_activity con Supavisor de por medio (#255)
 fd34731  perf(db): max de conexiones a 1 + cache compartida de las lecturas pesadas (#254)
@@ -4909,7 +5003,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cargar más datos demo                  | `scripts/seed.ts` + `npm run db:seed`                     |
 | Configurar conexión DB                 | `db/index.ts` — `max: 1` (**no subirlo**: con `max: N` la concurrencia de la app es *pool size / N*; el pool size del Supavisor está en 25), `connect_timeout`, `connection.statement_timeout` y el **timeout de cliente con reintento** (`QUERY_TIMEOUT_MS`, `MAX_ATTEMPTS`). **Invariante**: el peor caso del reintento tiene que quedar muy por debajo del `maxDuration` (45s); si se pasa, la función muere antes del error y deja conexiones zombie en el pooler. |
 | Timeout de las llamadas a Supabase Auth | `lib/supabase/fetch-with-timeout.ts` (8s), inyectado vía `global.fetch` en `lib/supabase/server.ts` y `lib/supabase/middleware.ts`. Es la única llamada de red del render fuera del timeout de queries. |
-| Cachear una lectura pesada             | `db/queries/cached.ts` — envoltorios `unstable_cache` de las lecturas caras, compartidos entre rutas (`getDashboardProjects` son 12 round-trips y la usan `/` y `/proyectos`). Invalidar con `revalidateTag("dashboard")`. Al agregar una ruta pesada, cachearla acá y no inline en la página. |
+| Invalidar caché después de mutar       | `invalidate(TAG, ...)` de `lib/cache-invalidate.ts`, al lado del `revalidatePath` de la action. Tags en `lib/cache-tags.ts`, uno por área. **Toda action que muta tiene que llamarlo**: el TTL es de 600s, así que sin invalidar la vista queda hasta 10 min desfasada. Usa `updateTag` (read-your-own-writes) y cae a `revalidateTag` si la llaman desde un route handler. |
+| Usuarios, roles y permisos             | `lib/roles.ts` (catálogo de roles, sin nada server-only — lo importa el componente cliente), `db/queries/app-users.ts` (lecturas + el upsert throttleado de quien entra), `app/actions/app-users.ts` (cambios de rol, con la barrera real), `lib/permissions.ts` (`canApprovePlans` **async**, con allowlist de respaldo), `app/(app)/configuracion/usuarios/`. Tabla: `app_users` (`db/app-users.sql`). |
+| Cachear una lectura pesada             | `db/queries/cached.ts` — envoltorios `unstable_cache`, compartidos entre rutas (`getDashboardProjects` son 12 round-trips y la usan `/` y `/proyectos`). TTL **600s**, con invalidación explícita vía `invalidate(...)` desde las actions. Al agregar una ruta pesada, cachearla acá (no inline en la página) **y** sumar su tag a las actions que la mutan. |
 | ¿Hay migraciones pendientes?           | Correr **`db/migrations-check.sql`** en el SQL Editor (read-only): una fila por objeto, `aplicada = true/false`. Nunca proponer `drop-plan-traffic.sql` desde ahí (destructiva). Al agregar una migración nueva a `db/`, sumar sus objetos al control. |
 | Índices en foreign keys                | `db/fk-indexes.sql` (aplicado en prod el 02/sep/2026). Postgres NO los crea solos: al agregar una FK nueva en `db/schema.ts`, agregar también su `index(...)`. |
 | Historial de versiones del plan (diff) | `db/queries/plan-qa.ts`: `getPlanVersionList` (sin `snapshot_json`, para la página) + `getPlanVersionDiff` (2 snapshots, vía `app/api/plans/[planId]/version-diff/route.ts`, lo pide `version-history.tsx` al desplegar). `getPlanVersionHistory` (todo) queda sólo para el Excel. **Nunca traer todos los `snapshot_json` en un render.** |

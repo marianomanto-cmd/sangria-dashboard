@@ -2,6 +2,8 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { DASHBOARD_TAG, REPORTS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import {
   clients,
@@ -84,6 +86,7 @@ export async function setProjectStatus(input: {
   revalidatePath("/proyectos");
   revalidatePath(`/proyectos/${before.code}`);
   revalidatePath("/reportes/calendario");
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -178,6 +181,7 @@ export async function setReportDeliveryDate(input: {
   }
 
   revalidatePath("/reportes/calendario");
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -241,6 +245,7 @@ export async function markReportDelivered(input: {
     revalidatePath("/reportes/calendario");
     revalidatePath("/proyectos");
     if (projBefore) revalidatePath(`/proyectos/${projBefore.code}`);
+    invalidate(REPORTS_TAG, DASHBOARD_TAG);
     return { ok: true };
   }
 
@@ -268,6 +273,7 @@ export async function markReportDelivered(input: {
   });
 
   revalidatePath("/reportes/calendario");
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -350,6 +356,7 @@ export async function setReportPptUrl(input: {
   }
 
   revalidatePath("/reportes/calendario");
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -410,6 +417,7 @@ export async function createManualReport(input: {
   }
 
   revalidatePath("/reportes/calendario");
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }
 
@@ -433,5 +441,6 @@ export async function deleteManualReport(input: {
   });
 
   revalidatePath("/reportes/calendario");
+  invalidate(REPORTS_TAG, DASHBOARD_TAG);
   return { ok: true };
 }

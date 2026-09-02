@@ -2,6 +2,8 @@
 
 import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { CATALOG_TAG, DASHBOARD_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { budgetOrigins, projects } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
@@ -14,6 +16,7 @@ function pathsToRevalidate(clientSlug?: string) {
   revalidatePath("/proyectos");
   revalidatePath("/planes");
   if (clientSlug) revalidatePath(`/configuracion/clientes/${clientSlug}`);
+  invalidate(CATALOG_TAG, DASHBOARD_TAG);
 }
 
 export async function createBudgetOrigin(input: {

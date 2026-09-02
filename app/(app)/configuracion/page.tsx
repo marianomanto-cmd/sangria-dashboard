@@ -36,8 +36,8 @@ const SECTIONS: Array<{
   {
     href: "/configuracion/usuarios",
     title: "Usuarios y roles",
-    description: "Gestión de usuarios (Account Manager, Media Planner, Finance, Viewer). Llega después de Auth.",
-    status: "soon",
+    description: "Quién tiene acceso y con qué rol (Admin, Aprobador, Media Planner, Account Manager, Finance, Viewer). Solo para Admin.",
+    status: "ready",
   },
 ];
 

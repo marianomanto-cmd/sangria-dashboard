@@ -2,6 +2,8 @@
 
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { invalidate } from "@/lib/cache-invalidate";
+import { DASHBOARD_TAG, TRACKER_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import {
@@ -124,6 +126,7 @@ export async function setPlacementActual(input: {
 
   revalidatePath(`/campaign-tracker/${input.planId}`);
   revalidatePath("/campaign-tracker");
+  invalidate(TRACKER_TAG, DASHBOARD_TAG);
 
   return { ok: true };
 }
@@ -258,6 +261,7 @@ export async function closeDailyLoad(input: {
 
   revalidatePath(`/campaign-tracker/${input.planId}`);
   revalidatePath("/campaign-tracker");
+  invalidate(TRACKER_TAG, DASHBOARD_TAG);
 
   return { ok: true, snapshotDate, rowCount: values.length };
 }
