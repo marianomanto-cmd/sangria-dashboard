@@ -10,9 +10,15 @@
 // El diff se computa server-side desde los snapshots inmutables
 // (lib/plan-version-diff.ts) — no del audit_log: el snapshot es exactamente lo
 // que se aprobó, así que lo que se lee acá es lo que el cliente firmó.
+//
+// El diff se pide POR VERSIÓN, al desplegarla (`/api/plans/[planId]/version-diff`).
+// Antes venía calculado para todas las versiones en el render de la página, lo
+// que obligaba a leer el `snapshot_json` de TODAS: megabytes por una conexión
+// del pooler en cada carga y en cada `router.refresh()` post-guardado, peor con
+// cada versión nueva. Era lo que colgaba la página (incidente del 02/sep/2026).
 // ════════════════════════════════════════════════════════════════════════════
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ChevronRight,
   Download,
@@ -22,40 +28,99 @@ import {
   Plus,
   ShieldCheck,
 } from "lucide-react";
-import type { PlanVersionEntry } from "@/db/queries/plan-qa";
+import type { PlanVersionSummary } from "@/db/queries/plan-qa";
 import type {
   FeeChange,
   FieldChange,
   LineChange,
+  PlanVersionDiff,
   PublisherChange,
 } from "@/lib/plan-version-diff";
 import { formatUsd } from "@/lib/format";
 import { formatDate, type Language } from "@/lib/i18n";
 
+type DiffState =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "ready"; diff: PlanVersionDiff };
+
 export function PlanVersionHistory({
   planId,
   entries,
+  initialDiff = null,
   lang,
 }: {
   planId: string;
-  entries: PlanVersionEntry[];
+  entries: PlanVersionSummary[];
+  // Diff de la versión más reciente, ya resuelto en el server: es la que arranca
+  // abierta, así que viene con la página en vez de pedirse aparte. Son 2
+  // snapshots, no los de todo el plan.
+  initialDiff?: PlanVersionDiff | null;
   lang: Language;
 }) {
   // La versión más reciente arranca abierta: es la que se mira el 90% de las
-  // veces ("¿qué cambió en la última?").
+  // veces ("¿qué cambió en la última?"). Su diff se pide al montar; el de las
+  // demás, recién al desplegarlas.
   const [open, setOpen] = useState<Set<number>>(
     () => new Set(entries.length > 0 ? [entries[0].versionNumber] : []),
+  );
+  const [diffs, setDiffs] = useState<Map<number, DiffState>>(() => {
+    const m = new Map<number, DiffState>();
+    if (initialDiff && entries.length > 0) {
+      m.set(entries[0].versionNumber, { status: "ready", diff: initialDiff });
+    }
+    return m;
+  });
+
+  const loadDiff = useCallback(
+    async (version: number) => {
+      let alreadyRequested = false;
+      setDiffs((prev) => {
+        if (prev.has(version)) {
+          alreadyRequested = true;
+          return prev;
+        }
+        return new Map(prev).set(version, { status: "loading" });
+      });
+      if (alreadyRequested) return;
+
+      try {
+        const res = await fetch(
+          `/api/plans/${planId}/version-diff?version=${version}`,
+        );
+        if (!res.ok) throw new Error(String(res.status));
+        const body = (await res.json()) as { diff: PlanVersionDiff };
+        setDiffs((prev) =>
+          new Map(prev).set(version, { status: "ready", diff: body.diff }),
+        );
+      } catch {
+        setDiffs((prev) => new Map(prev).set(version, { status: "error" }));
+      }
+    },
+    [planId],
   );
 
   if (entries.length === 0) return null;
 
-  const toggle = (v: number) =>
+  const toggle = (v: number) => {
     setOpen((prev) => {
       const s = new Set(prev);
       if (s.has(v)) s.delete(v);
       else s.add(v);
       return s;
     });
+    void loadDiff(v);
+  };
+
+  // Reintento explícito: borra el estado de error para que loadDiff vuelva a pedir.
+  const retryDiff = (v: number) => {
+    setDiffs((prev) => {
+      const m = new Map(prev);
+      m.delete(v);
+      return m;
+    });
+    void loadDiff(v);
+  };
 
   return (
     <section>
@@ -91,7 +156,7 @@ export function PlanVersionHistory({
                       lang,
                     )}
                   </span>
-                  <ChangeSummary entry={entry} />
+                  <ChangeSummary state={diffs.get(entry.versionNumber)} />
                 </button>
 
                 <QaChip entry={entry} lang={lang} />
@@ -128,7 +193,13 @@ export function PlanVersionHistory({
                 </span>
               </div>
 
-              {isOpen && <VersionDetail entry={entry} />}
+              {isOpen && (
+                <VersionDetail
+                  entry={entry}
+                  state={diffs.get(entry.versionNumber)}
+                  onRetry={() => retryDiff(entry.versionNumber)}
+                />
+              )}
             </li>
           );
         })}
@@ -138,8 +209,14 @@ export function PlanVersionHistory({
 }
 
 // Resumen de una línea: "+3 líneas · 2 modificadas · −1" o "versión inicial".
-function ChangeSummary({ entry }: { entry: PlanVersionEntry }) {
-  const { diff } = entry;
+function ChangeSummary({ state }: { state?: DiffState }) {
+  if (!state || state.status === "loading") {
+    return <span className="text-xs text-muted truncate">calculando cambios…</span>;
+  }
+  if (state.status === "error") {
+    return <span className="text-xs text-muted truncate">—</span>;
+  }
+  const { diff } = state;
   if (diff.isInitial) {
     return (
       <span className="text-xs text-muted truncate">
@@ -175,7 +252,7 @@ function ChangeSummary({ entry }: { entry: PlanVersionEntry }) {
   );
 }
 
-function QaChip({ entry, lang }: { entry: PlanVersionEntry; lang: Language }) {
+function QaChip({ entry, lang }: { entry: PlanVersionSummary; lang: Language }) {
   const qa = entry.qa;
   if (!qa?.completedAt) {
     return (
@@ -201,8 +278,37 @@ function QaChip({ entry, lang }: { entry: PlanVersionEntry; lang: Language }) {
 
 // ── Detalle desplegado ──────────────────────────────────────────────────────
 
-function VersionDetail({ entry }: { entry: PlanVersionEntry }) {
-  const { diff } = entry;
+function VersionDetail({
+  entry,
+  state,
+  onRetry,
+}: {
+  entry: PlanVersionSummary;
+  state?: DiffState;
+  onRetry: () => void;
+}) {
+  if (!state || state.status === "loading") {
+    return (
+      <div className="border-t border-line-soft bg-paper-2/40 px-4 py-3.5 text-xs text-muted">
+        Cargando los cambios de esta versión…
+      </div>
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <div className="border-t border-line-soft bg-paper-2/40 px-4 py-3.5 text-xs text-muted flex items-center gap-2">
+        <span>No se pudieron cargar los cambios de esta versión.</span>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="text-accent hover:underline font-medium"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+  const { diff } = state;
 
   return (
     <div className="border-t border-line-soft bg-paper-2/40 px-4 py-3.5 space-y-3">

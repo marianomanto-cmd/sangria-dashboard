@@ -63,7 +63,8 @@ import type {
   PlanPlacement,
   PlanPublisherGroup,
 } from "@/db/queries/project-detail";
-import type { PlanQaState, PlanVersionEntry } from "@/db/queries/plan-qa";
+import type { PlanQaState, PlanVersionSummary } from "@/db/queries/plan-qa";
+import type { PlanVersionDiff } from "@/lib/plan-version-diff";
 import type {
   markets as marketsTable,
   metricsCatalog as metricsTable,
@@ -121,6 +122,7 @@ export function PlanEditor({
   editHistory,
   qaState,
   versionHistory = [],
+  initialVersionDiff = null,
   planningQa,
   planningRows = [],
 }: {
@@ -140,7 +142,8 @@ export function PlanEditor({
   // el modal de QA y el contador del header.
   qaState?: PlanQaState;
   // Una entrada por versión aprobada, con el diff contra la anterior.
-  versionHistory?: PlanVersionEntry[];
+  versionHistory?: PlanVersionSummary[];
+  initialVersionDiff?: PlanVersionDiff | null;
   // QA DE PLANIFICACIÓN (el del planner, antes de la firma): estado del run de
   // la versión que este draft va a ser + las líneas que el modal lista para
   // tildar.
@@ -939,6 +942,7 @@ export function PlanEditor({
       <PlanVersionHistory
         planId={detail.plan.id}
         entries={versionHistory}
+        initialDiff={initialVersionDiff}
         lang={lang}
       />
 

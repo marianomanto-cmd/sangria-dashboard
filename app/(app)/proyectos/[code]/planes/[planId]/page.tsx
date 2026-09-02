@@ -2,7 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getPlanDetail } from "@/db/queries/project-detail";
 import { getPlanAuditEvents } from "@/db/queries/audit-log";
-import { getPlanQaState, getPlanVersionHistory } from "@/db/queries/plan-qa";
+import {
+  getPlanQaState,
+  getPlanVersionDiff,
+  getPlanVersionList,
+} from "@/db/queries/plan-qa";
 import {
   getPlanningQaRows,
   getPlanningQaState,
@@ -44,6 +48,8 @@ export default async function PlanDetailPage({ params }: Props) {
   const sinceSnap =
     detail.snapshots.find((s) => s.versionNumber === sinceVersion) ?? null;
 
+  const newestApprovedVersion = detail.snapshots[0]?.versionNumber ?? null;
+
   const [
     allPublishers,
     allMarkets,
@@ -52,6 +58,7 @@ export default async function PlanDetailPage({ params }: Props) {
     editEvents,
     qaState,
     versionHistory,
+    newestVersionDiff,
     planningQaState,
     planningRows,
   ] = await Promise.all([
@@ -60,10 +67,26 @@ export default async function PlanDetailPage({ params }: Props) {
     listMetricsForClient(detail.client.id),
     getCurrentUser(),
     getPlanAuditEvents(planId, { since: sinceSnap?.approvedAt ?? null }),
-    // Estado del QA de la versión vigente (alimenta el modal de QA) e historial
-    // de versiones con su diff (el desplegable de abajo del editor).
+    // Estado del QA de la versión vigente (alimenta el modal de QA) y la LISTA
+    // de versiones para el desplegable de abajo del editor.
+    //
+    // Es `getPlanVersionList`, no `getPlanVersionHistory`: la lista no toca
+    // `snapshot_json`. El diff de cada versión lo pide el componente al
+    // desplegarla. Traer los snapshots de todas las versiones acá era
+    // transferir megabytes por una conexión del pooler en CADA render —
+    // incluido el `router.refresh()` de después de guardar, y peor con cada
+    // versión nueva. Era lo que colgaba esta página (incidente 02/sep/2026).
     getPlanQaState(planId, detail.plan.currentVersion),
-    getPlanVersionHistory(planId),
+    getPlanVersionList(planId),
+    // El diff de la versión más reciente (la que arranca abierta): 2 snapshots,
+    // no los de todo el plan. Los demás los pide el componente al desplegar.
+    //
+    // Es la última versión APROBADA (`detail.snapshots` viene ordenado desc),
+    // no `currentVersion`: con un draft encima, currentVersion va adelantada y
+    // todavía no tiene snapshot.
+    newestApprovedVersion === null
+      ? Promise.resolve(null)
+      : getPlanVersionDiff(planId, newestApprovedVersion),
     // QA de planificación de la versión que este draft va a ser: el estado del
     // run y las líneas que el modal lista para tildar.
     getPlanningQaState(planId, planningQaVersion(detail.plan.currentVersion)),
@@ -110,6 +133,7 @@ export default async function PlanDetailPage({ params }: Props) {
         editHistory={{ events: editEvents, windowNote }}
         qaState={qaState}
         versionHistory={versionHistory}
+        initialVersionDiff={newestVersionDiff}
         planningQa={planningQaState}
         planningRows={planningRows}
       />
