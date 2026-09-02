@@ -51,10 +51,24 @@ const EMPTY_PENDINGS: DashboardPendings = {
   invoices: [],
 };
 
-function unwrap<T>(r: PromiseSettledResult<T>, fallback: T, label: string): T {
+// Nombres para el aviso de la UI: el usuario no sabe qué es "pendings".
+const SECTION_LABELS: Record<string, string> = {
+  kpis: "los KPIs",
+  projects: "los proyectos",
+  monthly: "la facturación mensual",
+  pendings: "los pendientes",
+};
+
+function unwrap<T>(
+  r: PromiseSettledResult<T>,
+  fallback: T,
+  label: string,
+  failed: string[],
+): T {
   if (r.status === "fulfilled") return r.value;
   const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
   console.error(`DASHQ[${label}]:${msg.slice(0, 80)}`, r.reason);
+  failed.push(SECTION_LABELS[label] ?? label);
   return fallback;
 }
 
@@ -84,10 +98,14 @@ export default async function DashboardPage({ searchParams }: Props) {
   ]);
   const user = await userP;
 
-  const kpis = unwrap(kpisR, EMPTY_KPIS, "kpis");
-  const projects = unwrap(projectsR, EMPTY_PROJECTS, "projects");
-  const monthly = unwrap<MonthlyTotal[]>(monthlyR, [], "monthly");
-  const pendings = unwrap(pendingsR, EMPTY_PENDINGS, "pendings");
+  // Degradamos por sección para no tumbar la vista, pero hay que DECIRLO: un
+  // dashboard en $0 sin aviso se lee como "la agencia no facturó nada", no como
+  // "la DB no respondió".
+  const failedSections: string[] = [];
+  const kpis = unwrap(kpisR, EMPTY_KPIS, "kpis", failedSections);
+  const projects = unwrap(projectsR, EMPTY_PROJECTS, "projects", failedSections);
+  const monthly = unwrap<MonthlyTotal[]>(monthlyR, [], "monthly", failedSections);
+  const pendings = unwrap(pendingsR, EMPTY_PENDINGS, "pendings", failedSections);
 
   return (
     <DashboardView
@@ -100,6 +118,7 @@ export default async function DashboardPage({ searchParams }: Props) {
       clientSlug={client?.slug ?? null}
       userName={user?.name ?? null}
       lang={lang}
+      failedSections={failedSections}
     />
   );
 }

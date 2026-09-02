@@ -1,4 +1,5 @@
 import { PageShell } from "@/components/page-shell";
+import { DegradedNotice } from "@/components/degraded-notice";
 import { ReportingCalendarClient } from "@/components/reporting-calendar-client";
 import type { ReportingCalendarData, SentReport } from "@/db/queries/reports";
 import {
@@ -22,10 +23,22 @@ type Props = {
 // solo `getSentReports` vencido dejaba la pantalla en "Algo salió mal".
 const EMPTY_CALENDAR: ReportingCalendarData = { pending: [], inProgress: [] };
 
-function unwrap<T>(r: PromiseSettledResult<T>, fallback: T, label: string): T {
+const SECTION_LABELS: Record<string, string> = {
+  calendar: "los reportes pendientes",
+  sent: "los reportes enviados",
+  clientOptions: "la lista de clientes",
+};
+
+function unwrap<T>(
+  r: PromiseSettledResult<T>,
+  fallback: T,
+  label: string,
+  failed: string[],
+): T {
   if (r.status === "fulfilled") return r.value;
   const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
   console.error(`CALQ[${label}]:${msg.slice(0, 80)}`, r.reason);
+  failed.push(SECTION_LABELS[label] ?? label);
   return fallback;
 }
 
@@ -48,12 +61,14 @@ export default async function ReportingCalendarPage({ searchParams }: Props) {
     cachedClientOptions(),
   ]);
 
-  const data = unwrap(dataR, EMPTY_CALENDAR, "calendar");
-  const sent = unwrap<SentReport[]>(sentR, [], "sent");
+  const failedSections: string[] = [];
+  const data = unwrap(dataR, EMPTY_CALENDAR, "calendar", failedSections);
+  const sent = unwrap<SentReport[]>(sentR, [], "sent", failedSections);
   const clientOptions = unwrap<{ id: string; name: string }[]>(
     clientOptionsR,
     [],
     "clientOptions",
+    failedSections,
   );
 
   return (
@@ -66,6 +81,7 @@ export default async function ReportingCalendarPage({ searchParams }: Props) {
           : "Closed projects pending their final report. Assign delivery dates and track open commitments. Marking as delivered moves the project to 'reported' status and removes it from the calendar."
       }
     >
+      <DegradedNotice sections={failedSections} />
       <ReportingCalendarClient
         pending={data.pending}
         inProgress={data.inProgress}
