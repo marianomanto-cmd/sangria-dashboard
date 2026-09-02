@@ -75,14 +75,23 @@ en permisos reales:
   de queries: importarlos desde el componente cliente habría arrastrado el
   driver de Postgres al bundle del browser.
 
-#### Acciones requeridas en prod
+#### Acciones en prod — **HECHAS** (las corrió el dueño del repo el 02/sep/2026)
 
-| Qué | Archivo | Rompe algo si no se corre |
-|-----|---------|---------------------------|
-| Índice de FK que faltaba | `db/reports-fk-index.sql` | No. Sólo performance del calendario. |
-| Tabla de usuarios y roles | `db/app-users.sql` | No. La sección explica que falta el SQL y aprobar planes sigue con la allowlist. |
+| Qué | Archivo | Estado |
+|-----|---------|--------|
+| Índice de FK que faltaba (`project_reports.project_id`) | `db/reports-fk-index.sql` | ✅ Aplicado |
+| Tabla de usuarios y roles + enum + seed de los 2 admins | `db/app-users.sql` | ✅ Aplicado |
 
-Ambas idempotentes y probadas contra el Postgres 16 local.
+El control previo dio las tres en `false`, así que ninguna estaba aplicada de
+antes. Ambas idempotentes y probadas contra el Postgres 16 local antes de
+entregarlas. **Los objetos de las dos ya están sumados a
+`db/migrations-check.sql`** (56 objetos), que es lo que hay que correr la
+próxima vez para saber si falta algo.
+
+Ninguna de las dos era bloqueante: sin la primera el calendario andaba igual,
+sólo más lento; sin la segunda la sección de usuarios explicaba que faltaba el
+SQL y aprobar planes seguía con la allowlist de `lib/permissions.ts`. Esa
+allowlist **queda igual** como red de seguridad.
 
 #### Pendiente
 
@@ -241,7 +250,8 @@ espiral está cortada.
 #### Cierre de la sesión: migraciones y RLS
 
 - Se corrió en prod `db/migrations-check.sql` (control read-only, nuevo):
-  **50/50 en `true`** — no había migraciones pendientes.
+  **50/50 en `true`** — no había migraciones pendientes. (Con las dos migraciones
+  de la sesión siguiente el control pasó a **56 objetos**.)
 - Un chequeo de RLS sobre TODAS las tablas dio una sola en `false`:
   `creative_billings` (su migración no habilitaba RLS y `rls.sql` es anterior).
   Migración: **`db/rls-creative-billings.sql`** (una línea, idempotente),
@@ -5006,7 +5016,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Invalidar caché después de mutar       | `invalidate(TAG, ...)` de `lib/cache-invalidate.ts`, al lado del `revalidatePath` de la action. Tags en `lib/cache-tags.ts`, uno por área. **Toda action que muta tiene que llamarlo**: el TTL es de 600s, así que sin invalidar la vista queda hasta 10 min desfasada. Usa `updateTag` (read-your-own-writes) y cae a `revalidateTag` si la llaman desde un route handler. |
 | Usuarios, roles y permisos             | `lib/roles.ts` (catálogo de roles, sin nada server-only — lo importa el componente cliente), `db/queries/app-users.ts` (lecturas + el upsert throttleado de quien entra), `app/actions/app-users.ts` (cambios de rol, con la barrera real), `lib/permissions.ts` (`canApprovePlans` **async**, con allowlist de respaldo), `app/(app)/configuracion/usuarios/`. Tabla: `app_users` (`db/app-users.sql`). |
 | Cachear una lectura pesada             | `db/queries/cached.ts` — envoltorios `unstable_cache`, compartidos entre rutas (`getDashboardProjects` son 12 round-trips y la usan `/` y `/proyectos`). TTL **600s**, con invalidación explícita vía `invalidate(...)` desde las actions. Al agregar una ruta pesada, cachearla acá (no inline en la página) **y** sumar su tag a las actions que la mutan. |
-| ¿Hay migraciones pendientes?           | Correr **`db/migrations-check.sql`** en el SQL Editor (read-only): una fila por objeto, `aplicada = true/false`. Nunca proponer `drop-plan-traffic.sql` desde ahí (destructiva). Al agregar una migración nueva a `db/`, sumar sus objetos al control. |
+| ¿Hay migraciones pendientes?           | Correr **`db/migrations-check.sql`** en el SQL Editor (read-only): una fila por objeto, `aplicada = true/false` (hoy, 56 objetos; todos aplicados al 02/sep/2026). Nunca proponer `drop-plan-traffic.sql` desde ahí (destructiva). Al agregar una migración nueva a `db/`, sumar sus objetos al control. |
 | Índices en foreign keys                | `db/fk-indexes.sql` (aplicado en prod el 02/sep/2026). Postgres NO los crea solos: al agregar una FK nueva en `db/schema.ts`, agregar también su `index(...)`. |
 | Historial de versiones del plan (diff) | `db/queries/plan-qa.ts`: `getPlanVersionList` (sin `snapshot_json`, para la página) + `getPlanVersionDiff` (2 snapshots, vía `app/api/plans/[planId]/version-diff/route.ts`, lo pide `version-history.tsx` al desplegar). `getPlanVersionHistory` (todo) queda sólo para el Excel. **Nunca traer todos los `snapshot_json` en un render.** |
 | Indicador "última edición" del plan     | **Apagado** desde el 02/sep/2026 (`getPlanAuditEvents` en `db/queries/audit-log.ts` scanea `audit_log` por claves del jsonb, no indexable). Para reactivarlo: pedirlo aparte + hacerlo indexable (columna `media_plan_id` en `audit_log`). Ver HANDOFF 02/sep → Pendientes. |
