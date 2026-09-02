@@ -188,6 +188,7 @@ db/
   plan-publisher-balance-check.sql # diagnóstico: publishers cuyo total no cuadra con la suma de placements, en planes ya congelados (previos a la regla de cuadre)
   plan-qa-status.sql        # migración del QA de planes: enum qa_done/live + tablas media_plan_qa_runs/_checks + RLS + backfill approved → live con QA hecho
   plan-health-check.sql     # chequeo de salud READ-ONLY de todos los planes: 14 controles (una fila cada uno, aunque den 0) — tipos de ad cruzados entre clientes, status drifteados, gates de tráfico que bloquean el avance, live sin cerrar, planes que caen en el año actual por falta de fechas, tarifas huérfanas en metrics_json
+  queries/cached.ts         # envoltorios unstable_cache de las lecturas caras, compartidos entre rutas (/ y /proyectos)
   fk-indexes.sql            # índices en foreign keys (Postgres no los crea solos). Aplicado en prod el 02/sep/2026; idempotente
   migrations-check.sql      # CONTROL read-only: qué migraciones de db/ ya están aplicadas (una fila por objeto, aplicada true/false). Correrlo antes de decidir si falta algo
   rls-creative-billings.sql # habilita RLS en creative_billings (la única tabla que quedó abierta; su migración no lo hacía). Idempotente
@@ -1738,13 +1739,18 @@ en frío que puebla el cache.
 
 ### Pool de conexiones
 - `prepare: false` para Transaction Pooler (puerto 6543).
-- **`max: 3` por instancia de Lambda. No subirlo sin recalcular.** El pooler
-  tiene ~15 slots; cada request cae en su propia instancia y cada instancia
-  abre hasta `max` conexiones propias. Con 8, dos cargas concurrentes de la
-  página del plan agotaban el pooler. Con 3 entran cinco instancias. Las ~12
-  queries de una página no sufren: postgres.js las pipelinea, y con las FK
-  indexadas cada una tarda milisegundos. (Estuvo en 3, se subió a 8 el
-  22/may/2026 y se volvió a 3 el 02/sep/2026 — ver el incidente abajo.)
+- **`max: 1` por instancia. No subirlo sin leer el comentario de `db/index.ts`.**
+  El pool vive en scope de módulo, así que sobrevive entre invocaciones de la
+  misma instancia de Lambda. Vercel no la mata al terminar el request: la
+  **congela**, y una instancia congelada no ejecuta timers → `idle_timeout`
+  nunca dispara y sus conexiones quedan abiertas del lado de Supabase
+  (`ClientRead`). Con `max: N`, cada instancia caliente retiene N slots del
+  pooler; en un pico, instancias × N. **Ése es el goteo que obligaba a
+  reiniciar el proyecto en Supabase** — no es una fuga por funciones muertas,
+  es el modelo de conexiones persistentes chocando con el ciclo de vida
+  serverless. Con 1 no se pierde throughput: Vercel sirve un request por
+  instancia a la vez y postgres.js pipelinea las queries sobre la misma
+  conexión. Historial: 3 → 8 (22/may) → 3 (02/sep, #248) → 1 (02/sep, #254).
 - `idle_timeout: 20`, `connect_timeout: 10`, `connection.statement_timeout: 12s`.
 - **Timeout de cliente + reintento** (`QUERY_TIMEOUT_MS = 8s`, `MAX_ATTEMPTS = 2`).
   Invariante: el peor caso (todos los intentos vencidos) tiene que quedar muy
