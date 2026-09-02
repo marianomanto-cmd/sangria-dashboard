@@ -47,6 +47,30 @@ DATABASE_URL=postgresql://postgres.hhubbahbmurrukftezea:TU_PASSWORD@aws-1-us-eas
   de Supabase (`postgrest`, `storage`, el exporter) en su estado normal: **no
   son fugas de la app**, y terminarlas no arregla nada.
 
+- **Los números del pooler (Settings → Database → Connection pooling)**, medidos
+  el 02/sep/2026 con compute **Nano**:
+  - **Max client connections: 200** (fijo en Nano). Cuántas Lambdas pueden estar
+    conectadas a Supavisor. Con `max: 1` en `db/index.ts` harían falta 200
+    instancias calientes a la vez: **no es el techo**.
+  - **Connection pool size: 25** (editable; era 15 y se subió el 02/sep/2026).
+    Cuántas conexiones mantiene Supavisor **contra Postgres**. En modo
+    transacción, cada query en vuelo ocupa uno de esos slots mientras corre:
+    **éste es el techo real de la app**.
+
+  De ahí sale por qué `max` importa tanto. Con `max: 3`, una sola carga de
+  página podía tener 3 statements en vuelo → con los 15 de entonces, sólo
+  **5 páginas concurrentes**. Con `max: 1` cada instancia ocupa como mucho 1
+  slot, así que la concurrencia es directamente el pool size: 15 antes, **25
+  ahora**. El costo es que las queries de la página se serializan sobre una
+  conexión (~15ms cada una), lo que hace que el fan-out por página y la caché
+  importen todavía más.
+
+  **Si hiciera falta más**: se puede volver a subir *Connection pool size*.
+  Sigue habiendo lugar — se midieron 9 conexiones en uso contra
+  `max_connections = 60`, y los servicios internos de Supabase (postgrest,
+  storage, cron, exporter) usan ~8, así que con 25 el total queda en ~33 de 60.
+  Es un cambio de dashboard, sin redeploy y sin tocar código.
+
 - **Región**: la DB vive en `aws-1-us-east-2` (Ohio) y las funciones de Vercel
   corren en `iad1` (Virginia): ~15ms de ida y vuelta. No es un problema en sí,
   pero **cada round-trip a la DB cuesta**, y por eso importa el fan-out de
@@ -1769,6 +1793,9 @@ en frío que puebla el cache.
   serverless. Con 1 no se pierde throughput: Vercel sirve un request por
   instancia a la vez y postgres.js pipelinea las queries sobre la misma
   conexión. Historial: 3 → 8 (22/may) → 3 (02/sep, #248) → 1 (02/sep, #254).
+- El **techo de concurrencia no está acá**: es el *Connection pool size* de
+  Supavisor (**25** desde el 02/sep/2026, era 15). Con `max: 1`, ése número
+  **son** las páginas concurrentes. Ver "Los números del pooler" más arriba.
 - `idle_timeout: 20`, `connect_timeout: 10`, `connection.statement_timeout: 12s`.
 - **Timeout de cliente + reintento** (`QUERY_TIMEOUT_MS = 8s`, `MAX_ATTEMPTS = 2`).
   Invariante: el peor caso (todos los intentos vencidos) tiene que quedar muy
@@ -1826,7 +1853,7 @@ Prevención (ya aplicada):
   (12s) al abrir la conexión, así que el tope existe aunque el `ALTER ROLE`
   no se haya corrido.
 - `enumerateMonths` blindado contra fechas malformadas (no más loop infinito).
-- `max: 3` conexiones por instancia (ver "Pool de conexiones").
+- `max: 1` conexión por instancia (ver "Pool de conexiones").
 
 #### Incidente del 02/sep/2026: la espiral completa (y qué NO era)
 

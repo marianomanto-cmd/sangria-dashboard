@@ -274,6 +274,13 @@ function getClient(): PgClient {
   //
   // Historial: 3 → 8 (22/may/2026) → 3 (02/sep/2026, PR #248) → 1.
   //
+  // EL TECHO NO ESTÁ ACÁ: es el "Connection pool size" de Supavisor (Supabase →
+  // Settings → Database → Connection pooling), 25 desde el 02/sep/2026 (era
+  // 15). En modo transacción cada query en vuelo ocupa uno de esos slots, así
+  // que con `max: 1` la concurrencia de la app ES ese número; con `max: N`
+  // sería 25/N. Ojo: `max_connections` (60) es de Postgres y no es el techo, y
+  // pg_stat_activity NO ve las conexiones de la app (ve las de Supavisor).
+  //
   // `connect_timeout: 10` evita que cuelgue indefinido al levantar la conn.
   // `connection.statement_timeout` pone el tope server-side desde el código,
   // sin depender del `ALTER ROLE` manual. La red de contención del lado del
