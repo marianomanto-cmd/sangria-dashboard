@@ -4531,7 +4531,7 @@ Lo que insertó el último `npm run db:seed`:
 3. **Importante**: usar el **Transaction Pooler** (puerto **6543**), no el
    Session Pooler ni la Direct Connection. Formato:
    ```
-   DATABASE_URL=postgresql://postgres.bgbqraoowtoyzgzubple:TU_PASSWORD@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
+   DATABASE_URL=postgresql://postgres.hhubbahbmurrukftezea:TU_PASSWORD@aws-1-us-east-2.pooler.supabase.com:6543/postgres
    ```
 4. `npm run dev` y abrir `http://localhost:3000`.
 

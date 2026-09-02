@@ -28,7 +28,7 @@ npm install
 Crear `.env.local` en la raíz del proyecto con:
 
 ```
-DATABASE_URL=postgresql://postgres.bgbqraoowtoyzgzubple:TU_PASSWORD@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql://postgres.hhubbahbmurrukftezea:TU_PASSWORD@aws-1-us-east-2.pooler.supabase.com:6543/postgres
 ```
 
 **Importante:**
