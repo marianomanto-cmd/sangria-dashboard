@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/button";
 import { SectionBoundary } from "@/components/section-boundary";
 import { DashboardCuentas } from "@/components/dashboard/view-cuentas";
 import { DashboardOperaciones } from "@/components/dashboard/view-operaciones";
@@ -31,6 +34,11 @@ type Props = {
   clientSlug: string | null;
   userName: string | null;
   lang: Language;
+  // Secciones cuya lectura falló. La página degrada cada una a vacío para no
+  // tumbar la vista entera, pero "vacío" y "no se pudo cargar" NO son lo mismo:
+  // sin este aviso el dashboard muestra $0 y 0 cuentas activas como si fueran
+  // datos reales. Pasó en prod el 02/sep/2026 y se leyó como "la app no anda".
+  failedSections: string[];
 };
 
 // Contenedor del dashboard rediseñado. El toggle de vistas vive ACÁ (estado de
@@ -38,8 +46,13 @@ type Props = {
 // cargada, no se re-fetchea nada. Refleja la vista en la URL con
 // history.replaceState (deep-link/refresh) SIN disparar navegación de Next.
 // Cada vista va en su SectionBoundary (degradación por sección).
-export function DashboardView({ initialView, ...rest }: Props) {
+export function DashboardView({
+  initialView,
+  failedSections,
+  ...rest
+}: Props) {
   const [view, setView] = useState<DashView>(initialView);
+  const router = useRouter();
 
   const select = (v: DashView) => {
     setView(v);
@@ -77,6 +90,35 @@ export function DashboardView({ initialView, ...rest }: Props) {
           })}
         </div>
       </div>
+
+      {failedSections.length > 0 && (
+        <div
+          role="status"
+          className="mb-5 rounded-lg border border-warn/30 bg-warn-soft/40 px-4 py-3 flex items-start gap-3"
+        >
+          <AlertTriangle size={16} className="text-warn shrink-0 mt-0.5" />
+          <div className="text-[13px] leading-relaxed text-ink-2 flex-1">
+            <p className="font-medium text-ink">
+              Los números de abajo están incompletos
+            </p>
+            <p className="mt-0.5">
+              No se pudo leer {failedSections.join(", ")} de la base de datos, así
+              que esas secciones muestran cero.{" "}
+              <strong className="text-ink-2">No son datos reales</strong> — no es
+              que la agencia no haya facturado.
+            </p>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => router.refresh()}
+            className="shrink-0"
+          >
+            <RotateCcw size={14} />
+            Reintentar
+          </Button>
+        </div>
+      )}
 
       <DashViewContext.Provider value={select}>
         <SectionBoundary name={`dashboard-${view}`}>
