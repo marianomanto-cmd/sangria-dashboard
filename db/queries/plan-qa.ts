@@ -3,9 +3,20 @@
 //
 //   • getPlanQaState        → estado del QA de UNA versión (el run + qué líneas
 //                             ya están controladas). Alimenta el modal de QA.
-//   • getPlanVersionHistory → una fila por versión aprobada, con qué cambió
-//                             respecto de la anterior y el QA de esa versión.
-//                             Alimenta el historial desplegable del editor.
+//   • getPlanVersionList    → una fila por versión aprobada SIN el diff (o sea
+//                             sin tocar `snapshot_json`). Es lo que renderiza
+//                             la página del plan.
+//   • getPlanVersionDiff    → el diff de UNA versión contra la anterior. Se
+//                             pide al desplegar esa versión en el historial.
+//   • getPlanVersionHistory → todas las versiones CON su diff. Carga todos los
+//                             `snapshot_json` del plan, así que queda sólo para
+//                             el Excel, que los necesita todos de una.
+//
+// Por qué está partido: `snapshot_json` congela el plan ENTERO (publishers,
+// placements, fees) por versión. Traerlos todos en cada render de la página era
+// transferir megabytes por una conexión del pooler en cada carga y en cada
+// `router.refresh()` post-guardado — y peor con cada versión nueva. Fue la
+// causa de que la página del plan se colgara (incidente del 02/sep/2026).
 // ════════════════════════════════════════════════════════════════════════════
 
 import { and, asc, eq, inArray } from "drizzle-orm";
@@ -105,6 +116,130 @@ export type PlanVersionEntry = {
   } | null;
 };
 
+// Metadata de cada versión, SIN `snapshot_json`. Es lo que la página necesita
+// para dibujar la lista; el diff se pide aparte, al desplegar.
+export type PlanVersionSummary = Omit<PlanVersionEntry, "diff">;
+
+export async function getPlanVersionList(
+  planId: string,
+): Promise<PlanVersionSummary[]> {
+  const [snaps, runs] = await Promise.all([
+    db
+      .select({
+        versionNumber: mediaPlanSnapshots.versionNumber,
+        approvedAt: mediaPlanSnapshots.approvedAt,
+        notes: mediaPlanSnapshots.notes,
+        pdfUrl: mediaPlanSnapshots.pdfUrl,
+        signedPdfUrl: mediaPlanSnapshots.signedPdfUrl,
+      })
+      .from(mediaPlanSnapshots)
+      .where(eq(mediaPlanSnapshots.mediaPlanId, planId))
+      .orderBy(asc(mediaPlanSnapshots.versionNumber)),
+    db
+      .select()
+      .from(mediaPlanQaRuns)
+      .where(eq(mediaPlanQaRuns.mediaPlanId, planId)),
+  ]);
+  if (snaps.length === 0) return [];
+
+  const runByVersion = new Map(runs.map((r) => [r.versionNumber, r]));
+  const runIds = runs.map((r) => r.id);
+  const checkRows = runIds.length
+    ? await db
+        .select({ qaRunId: mediaPlanQaChecks.qaRunId })
+        .from(mediaPlanQaChecks)
+        .where(inArray(mediaPlanQaChecks.qaRunId, runIds))
+    : [];
+  const checksByRun = new Map<string, number>();
+  for (const c of checkRows) {
+    checksByRun.set(c.qaRunId, (checksByRun.get(c.qaRunId) ?? 0) + 1);
+  }
+
+  const entries = snaps.map((snap) => {
+    const run = runByVersion.get(snap.versionNumber) ?? null;
+    return {
+      versionNumber: snap.versionNumber,
+      approvedAt: snap.approvedAt,
+      notes: snap.notes,
+      pdfUrl: snap.pdfUrl,
+      signedPdfUrl: snap.signedPdfUrl,
+      qa: run
+        ? {
+            completedAt: run.completedAt,
+            completedByEmail: run.completedByEmail,
+            notes: run.notes,
+            checkedCount: checksByRun.get(run.id) ?? 0,
+          }
+        : null,
+    };
+  });
+
+  // Más reciente arriba (mismo orden que getPlanVersionHistory).
+  return entries.reverse();
+}
+
+// Diff de UNA versión contra la anterior: toca sólo esos dos `snapshot_json`,
+// no los del plan entero. `null` si la versión no existe.
+export async function getPlanVersionDiff(
+  planId: string,
+  versionNumber: number,
+): Promise<PlanVersionDiff | null> {
+  if (!Number.isInteger(versionNumber) || versionNumber < 1) return null;
+
+  const rows = await db
+    .select({
+      versionNumber: mediaPlanSnapshots.versionNumber,
+      snapshotJson: mediaPlanSnapshots.snapshotJson,
+    })
+    .from(mediaPlanSnapshots)
+    .where(
+      and(
+        eq(mediaPlanSnapshots.mediaPlanId, planId),
+        inArray(mediaPlanSnapshots.versionNumber, [
+          versionNumber - 1,
+          versionNumber,
+        ]),
+      ),
+    );
+
+  const curr = rows.find((r) => r.versionNumber === versionNumber);
+  if (!curr) return null;
+  // La primera versión no tiene anterior: el diff sale como "todo nuevo".
+  const prev = rows.find((r) => r.versionNumber === versionNumber - 1) ?? null;
+
+  const names = await catalogNames();
+  return buildPlanVersionDiff(
+    (prev?.snapshotJson ?? null) as CapturedSnapshot | null,
+    (curr.snapshotJson ?? {}) as CapturedSnapshot,
+    names,
+  );
+}
+
+// Catálogos para resolver nombres: el snapshot congela ids, el nombre correcto
+// es el de HOY (mismo criterio que getPlanDetailAtVersion).
+async function catalogNames() {
+  const [pubRows, mktRows, metricRows] = await Promise.all([
+    db.select({ id: publishers.id, name: publishers.name }).from(publishers),
+    db.select({ id: markets.id, name: markets.name }).from(markets),
+    db
+      .select({ slug: metricsCatalog.slug, name: metricsCatalog.name })
+      .from(metricsCatalog),
+  ]);
+  const pubById = new Map(pubRows.map((r) => [r.id, r.name]));
+  const mktById = new Map(mktRows.map((r) => [r.id, r.name]));
+  // El catálogo de métricas es per-cliente, así que un mismo slug puede
+  // repetirse con distinto nombre; para el label del diff cualquiera sirve.
+  const metricBySlug = new Map(metricRows.map((r) => [r.slug, r.name]));
+  return {
+    publisherName: (id: string) => pubById.get(id) ?? "(publisher borrado)",
+    marketName: (id: string | null) => (id ? (mktById.get(id) ?? null) : null),
+    metricName: (slug: string) => metricBySlug.get(slug) ?? slug,
+  };
+}
+
+// Historial COMPLETO con diffs. Carga todos los `snapshot_json` del plan: caro,
+// así que queda sólo para el Excel (que arma una hoja con todo el historial).
+// La página usa getPlanVersionList + getPlanVersionDiff.
 export async function getPlanVersionHistory(
   planId: string,
 ): Promise<PlanVersionEntry[]> {
