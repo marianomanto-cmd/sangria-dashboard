@@ -130,7 +130,7 @@ app/
   (app)/                    # layout principal (TopNav en el header ≥lg + Sidebar drawer <lg + Topbar) — todo requiere login
     layout.tsx              # async, llama getCurrentUser() una vez, monta AppProviders + MobileNavProvider
     loading.tsx             # skeleton de página durante la navegación del router (usa PageSkeleton)
-    error.tsx               # error boundary recuperable (retry) — captura errores de server components
+    error.tsx               # error boundary recuperable — REINTENTA solo una vez a los 2s antes de mostrar el error (la causa dominante es un timeout transitorio del pooler)
     not-found.tsx           # 404 con EmptyState
     page.tsx                # Dashboard (3 vistas: ?view=cuentas|operaciones|ejecutivo; default cuentas)
     clientes/               # /clientes y /clientes/[slug]
@@ -155,6 +155,7 @@ app/
       markets/, metricas/     # accesos a catálogos per-cliente
       clientes/               # alta/edición de clientes + config per-cliente (publishers, métricas, tipos de ad, mercados, budget origins)
       papelera-planes/        # papelera de planes borrados (soft delete) + restaurar
+      usuarios/               # Usuarios y roles: quién tiene acceso y con qué rol. Solo Admin. La identidad la da Supabase Auth; acá se asigna el rol (tabla app_users)
     reportes/
       page.tsx              # landing con cards a las 3 herramientas
       calendario/           # Reporting Calendar (closed → reportado, link PPT por reporte)
@@ -299,6 +300,42 @@ next.config.ts              # outputFileTracingIncludes del logo para las rutas 
 ---
 
 ## Arquitectura: convenciones clave
+
+### Caché de lecturas e invalidación (regla de oro)
+
+El recurso escaso de esta app no es CPU ni datos: son las **conexiones del
+pooler** (ver "Pool de conexiones"). Cada round-trip a la DB en un render
+compite por ellas, y cuando no hay una libre la query se encola y termina
+venciendo a los 8s — que es como se ven casi todos los "Algo salió mal".
+
+Por eso las lecturas caras se cachean, y la caché se invalida a mano:
+
+1. **La lectura cacheada va en `db/queries/cached.ts`**, nunca inline en la
+   página. Así la comparten las rutas que piden lo mismo (`/` y `/proyectos`
+   usan la misma `getDashboardProjects`, que sola son 12 round-trips).
+2. **Cada envoltorio lleva un tag de área** de `lib/cache-tags.ts` (`dashboard`,
+   `reports`, `plans`, `billing`, `tracker`, `analysis`, `catalog`).
+3. **Toda server action que muta llama `invalidate(TAG, ...)`**
+   (`lib/cache-invalidate.ts`) al lado de su `revalidatePath`. Esto **no es
+   opcional**: el TTL es de 600s, así que una action que no invalida deja la
+   vista hasta 10 minutos desfasada.
+
+El TTL largo es deliberado: **el TTL no es el mecanismo de frescura, es la red
+de seguridad**. Con TTL corto, cada expiración manda a un usuario por el camino
+frío (el fan-out completo contra la DB) y, si el pooler está apretado en ese
+momento, ese usuario ve la vista rota. Con invalidación explícita el camino frío
+es raro y la data igual se actualiza al instante cuando alguien edita.
+
+`invalidate` usa **`updateTag`**, no `revalidateTag`: en Next 16
+`revalidateTag(tag, "max")` es stale-while-revalidate y mostraría el valor viejo
+justo después de editarlo. `updateTag` expira la entrada de una
+(read-your-own-writes), pero **sólo se puede llamar desde una server action** —
+por eso `invalidate` cae a `revalidateTag` cuando la llaman desde un route
+handler (pasa con `transitionBillingStatus`, que reusa
+`app/api/portal/billing/mark-paid`).
+
+Al agregar una vista pesada: cachear su lectura acá **y** sumar su tag a las
+actions que la mutan. Las dos cosas, o no sirve.
 
 ### Cifras numéricas: SIEMPRE formato US
 - Punto = decimales, coma = separador de miles (ej: `15,000.00`, `1,500,000`).
@@ -1963,15 +2000,18 @@ Idempotente: limpia las tablas antes de insertar.
 
 ## Issues conocidos / a resolver
 
-- **Permisos por rol**: ya hay autenticación (Google OAuth, sangria.agency-only
-  — ver "Auth" arriba) y RLS cierra la REST API pública de Supabase. Falta el
-  modelo de roles general (Account Manager, Media Planner, Finance, Viewer): hoy
-  casi todo usuario logueado del dominio tiene acceso total dentro de la app.
-  **Única excepción hoy**: aprobar un plan (ready_to_send → approved) está
-  restringido a una allowlist de emails en `lib/permissions.ts`
-  (`canApprovePlans`). El chequeo real está en la server action
-  `transitionPlanStatus`; el editor esconde el botón "Aprobar (firmado)" para
-  el resto. Cuando se arme el modelo de roles, migrar esta allowlist a roles.
+- **Permisos por rol**: hay autenticación (Google OAuth, sangria.agency-only —
+  ver "Auth" arriba), RLS cierra la REST API pública de Supabase, y desde el
+  02/sep/2026 hay **modelo de roles**: `app_users` + Configuración → Usuarios y
+  roles (Admin, Aprobador, Media Planner, Account Manager, Finance, Viewer).
+  Se auto-puebla con quien entra (upsert throttleado en `getCurrentUser`).
+  **Lo que el rol gobierna HOY**: aprobar un plan (ready_to_send → approved,
+  Admin/Aprobador) y el acceso a la sección de usuarios (Admin). Para el resto
+  de las áreas el rol queda registrado pero **todavía no restringe**: cualquier
+  usuario logueado del dominio sigue teniendo acceso. `canApprovePlans` es
+  **async** y lee el rol, con la allowlist de `lib/permissions.ts` como red de
+  seguridad si la tabla no existe o la lectura falla. El chequeo real está en la
+  server action `transitionPlanStatus`; el editor sólo esconde el botón.
   **El QA del plan (`approved` → `qa_done`) y el pase a `live` NO están
   restringidos**: los hace cualquier usuario logueado, como se pidió ("el
   planner hace el QA, y después cualquiera lo marca Live"). Igual queda
