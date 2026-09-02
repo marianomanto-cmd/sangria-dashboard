@@ -25,11 +25,16 @@ function mediaFeeByMonth(rows: BillingListRow[]): MediaFeeMonth[] {
   return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month));
 }
 import { PageShell } from "@/components/page-shell";
+import { DegradedNotice } from "@/components/degraded-notice";
+import { cachedBillingFilterOptions } from "@/db/queries/cached";
 import {
-  getBillingFilterOptions,
   getBillingsList,
+  type BillingFilterOptions,
 } from "@/db/queries/billing";
-import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
+import {
+  resolveClientFromSearchParams,
+  type ResolvedClientFilter,
+} from "@/lib/client-filter.server";
 import { DEFAULT_LANGUAGE } from "@/lib/i18n";
 
 type SearchParams = {
@@ -77,24 +82,76 @@ function enumerateMonths(start: string, end: string): string[] {
   return out;
 }
 
+const EMPTY_FILTER_OPTIONS: BillingFilterOptions = {
+  budgetOrigins: [],
+  projects: [],
+  minMonth: null,
+  maxMonth: null,
+};
+
+const SECTION_LABELS: Record<string, string> = {
+  filters: "las opciones de filtro",
+  rows: "las facturas",
+};
+
+function unwrap<T>(
+  r: PromiseSettledResult<T>,
+  fallback: T,
+  label: string,
+  failed: string[],
+): T {
+  if (r.status === "fulfilled") return r.value;
+  const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+  console.error(`BILLQ[${label}]:${msg.slice(0, 80)}`, r.reason);
+  failed.push(SECTION_LABELS[label] ?? label);
+  return fallback;
+}
+
 export default async function BillingPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const client = await resolveClientFromSearchParams(sp);
+
+  // Resolver el cliente no debe tumbar la página: si falla, seguimos sin filtro.
+  let client: ResolvedClientFilter = null;
+  try {
+    client = await resolveClientFromSearchParams(sp);
+  } catch (e) {
+    console.error("BILLQ[client]:", e instanceof Error ? e.message : e);
+  }
   const lang = client?.language ?? DEFAULT_LANGUAGE;
 
-  // Las opciones de filtros se calculan a partir de billings que existen
-  // para el cliente seleccionado (o todos si no hay ?client=). El proyecto
-  // y budget origin filtran a partir de ahí.
-  const filterOptions = await getBillingFilterOptions(client?.id ?? null);
+  // Las dos lecturas son INDEPENDIENTES entre sí (el listado filtra por
+  // searchParams, no por lo que devuelvan las opciones), así que van en una
+  // sola tanda en vez de dos round-trips en serie. Con `max: 1` cada `await`
+  // suelto es un viaje completo a Ohio esperando al anterior.
+  //
+  // `allSettled`: si una falla, degradamos ESA parte y lo avisamos, en vez de
+  // tumbar la vista entera con el error boundary del grupo. Mismo patrón que
+  // el dashboard y el calendario de reportes.
+  const failedSections: string[] = [];
+  const [filterOptionsR, rowsR] = await Promise.allSettled([
+    cachedBillingFilterOptions(client?.id ?? null),
+    getBillingsList({
+      clientId: client?.id ?? null,
+      budgetOriginId: sp.budgetOrigin || null,
+      projectId: sp.project || null,
+      status: parseBillingStatus(sp.status),
+      fromMonth: sp.from || null,
+      toMonth: sp.to || null,
+    }),
+  ]);
 
-  const rows = await getBillingsList({
-    clientId: client?.id ?? null,
-    budgetOriginId: sp.budgetOrigin || null,
-    projectId: sp.project || null,
-    status: parseBillingStatus(sp.status),
-    fromMonth: sp.from || null,
-    toMonth: sp.to || null,
-  });
+  const filterOptions = unwrap(
+    filterOptionsR,
+    EMPTY_FILTER_OPTIONS,
+    "filters",
+    failedSections,
+  );
+  const rows = unwrap<Awaited<ReturnType<typeof getBillingsList>>>(
+    rowsR,
+    [],
+    "rows",
+    failedSections,
+  );
 
   const monthsList = filterOptions.minMonth && filterOptions.maxMonth
     ? enumerateMonths(filterOptions.minMonth, filterOptions.maxMonth)
@@ -123,6 +180,7 @@ export default async function BillingPage({ searchParams }: Props) {
       title={title}
       subtitle={`${invoicesWord}${subtitleTail}`}
     >
+      <DegradedNotice sections={failedSections} />
       <BillingFilters
         budgetOrigins={filterOptions.budgetOrigins}
         projects={filterOptions.projects}

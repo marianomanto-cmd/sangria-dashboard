@@ -4,6 +4,7 @@
 
 import {
   LayoutGrid,
+  Gauge,
   Briefcase,
   FileText,
   FileCheck,
@@ -28,6 +29,11 @@ export type NavEntry = {
 
 export const PRIMARY_NAV: NavEntry[] = [
   { href: "/", label: "Dashboard", icon: LayoutGrid },
+  // Dashboard v2, cableado de cero (db/queries/dashboard-v2.ts): 4 queries en
+  // una tanda contra las ~24 en serie del viejo. Convive con el de arriba a
+  // propósito, para poder compararlos en prod. Cuando se confirme que anda, el
+  // viejo se borra y éste pasa a "/".
+  { href: "/dashboard", label: "Dashboard v2", icon: Gauge },
   { href: "/proyectos", label: "Proyectos", icon: Briefcase },
   { href: "/planes", label: "Planes de Medios", icon: FileText },
   { href: "/billing", label: "Billing", icon: FileCheck },

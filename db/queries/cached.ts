@@ -40,6 +40,7 @@ import { getClientOptions } from "@/db/queries/clients";
 import { getProjectWithPlans } from "@/db/queries/project-detail";
 import { getCampaignTrackerHub, type CampaignHubFilter } from "@/db/queries/campaign-tracker";
 import { listBudgetOriginsForClient } from "@/db/queries/budget-origins";
+import { getBillingFilterOptions } from "@/db/queries/billing";
 
 export {
   ANALYSIS_TAG,
@@ -52,6 +53,7 @@ export {
 } from "@/lib/cache-tags";
 
 import {
+  BILLING_TAG,
   CATALOG_TAG,
   DASHBOARD_TAG,
   PLANS_TAG,
@@ -155,4 +157,14 @@ export const cachedTrackerHub = unstable_cache(
     getCampaignTrackerHub(clientId, filter),
   ["tracker-hub-v1"],
   { revalidate: REVALIDATE, tags: [TRACKER_TAG] },
+);
+
+// Opciones de filtro de /billing: baja cardinalidad (una entrada por cliente)
+// y cambian sólo cuando se crea o borra un billing, así que cachean bien. El
+// LISTADO no se cachea: sus filtros (origen, proyecto, estado, rango de meses)
+// tienen demasiadas combinaciones y el hit rate sería casi cero.
+export const cachedBillingFilterOptions = unstable_cache(
+  (clientId: string | null) => getBillingFilterOptions(clientId),
+  ["billing-filter-options-v1"],
+  { revalidate: REVALIDATE, tags: [BILLING_TAG] },
 );
