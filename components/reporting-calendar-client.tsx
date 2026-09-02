@@ -411,6 +411,7 @@ export function ReportingCalendarClient({
                         {r.projectCode ? (
                           <Link
                             href={`/proyectos/${r.projectCode}`}
+                            prefetch={false}
                             className="font-medium text-ink hover:text-accent"
                           >
                             {r.projectName}
@@ -468,6 +469,7 @@ export function ReportingCalendarClient({
                       {r.projectCode ? (
                         <Link
                           href={`/proyectos/${r.projectCode}`}
+                          prefetch={false}
                           className="font-medium text-ink hover:text-accent"
                         >
                           {r.projectName}
@@ -948,6 +950,7 @@ function SentReportsSection({
                       {r.projectCode ? (
                         <Link
                           href={`/proyectos/${r.projectCode}`}
+                          prefetch={false}
                           className="font-medium text-ink hover:text-accent"
                         >
                           {r.projectName}
@@ -1036,6 +1039,7 @@ function SentReportsSection({
                     {r.projectCode ? (
                       <Link
                         href={`/proyectos/${r.projectCode}`}
+                        prefetch={false}
                         className="font-medium text-ink hover:text-accent"
                       >
                         {r.projectName}

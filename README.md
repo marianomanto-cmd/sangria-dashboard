@@ -1788,8 +1788,62 @@ Prevención (ya aplicada):
   ALTER ROLE postgres SET idle_in_transaction_session_timeout = '20s';
   ```
   (Scripts largos como `db:seed` pueden overridear con `SET statement_timeout = 0;`.)
+  Desde el 02/sep/2026 el código además manda `connection.statement_timeout`
+  (12s) al abrir la conexión, así que el tope existe aunque el `ALTER ROLE`
+  no se haya corrido.
 - `enumerateMonths` blindado contra fechas malformadas (no más loop infinito).
 - `max: 8` conexiones por instancia (ver "Pool de conexiones").
+
+#### Por qué el `statement_timeout` NO alcanzaba (02/sep/2026)
+
+Con todo lo de arriba aplicado, la app se seguía colgando **horas** con el
+skeleton en pantalla. El agujero: `statement_timeout` es un parámetro
+**server-side**, sólo corre una vez que el statement empezó a ejecutarse en un
+backend de Postgres. No cubre los dos momentos donde realmente se colgaba:
+
+1. **La cola de postgres.js.** Cuando las `max` conexiones están ocupadas, la
+   query se encola — y **esa cola no tiene timeout**: la promesa espera para
+   siempre hasta que se libere una conexión (`src/index.js`, `handler`).
+2. **La cola del Transaction Pooler.** Supabase acepta la conexión TCP pero no
+   tiene backend libre para atenderla. Como la conexión ya está *abierta*,
+   `connect_timeout` tampoco aplica, y el statement nunca llega al server.
+
+En los dos casos la query no falla: **espera**. El render se queda colgado sin
+error hasta que Vercel mata la función, y cada función muerta deja su conexión
+trabada → más saturación → espiral que dura horas.
+
+El fix vive en `db/index.ts`, que envuelve el cliente postgres.js con dos capas:
+
+1. **Reintento seguro** — hasta 3 intentos con backoff (200ms, 600ms). Un pico
+   de carga es transitorio: si la query no consiguió conexión, reintentar la
+   resuelve sin que el usuario se entere. Se reintenta **sólo** cuando es
+   demostrable que la query nunca se ejecutó: `query.state == null` significa
+   que ninguna conexión la tomó (`connection.js` hace `q.state = backend` al
+   tomarla), así que no llegó al server ni siquiera si escribe. También se
+   reintentan las lecturas (`select`) que fallan por error de conexión.
+2. **Timeout de cliente** (`QUERY_TIMEOUT_MS`, 15s) — si el reintento tampoco
+   alcanza, falla rápido y explícito: la página cae en su error boundary
+   (recargable) en vez de quedarse en el skeleton, y la conexión se libera.
+
+**Ojo con cancelar: sólo se cancela lo que nunca salió.** Para una query
+encolada, `cancel()` es puramente local (la saca de la cola, no toca el server).
+Pero postgres.js **pipelinea** varias queries sobre una misma conexión, y el
+cancel de una pipelineada se manda con el *backend key de la conexión*: cancela
+lo que ese backend esté corriendo, o sea **puede matar a una query hermana**.
+Verificado en el test local — el cancel de la query vencida mataba la query
+larga que ocupaba la conexión. Por eso las que ya salieron **no** se cancelan ni
+se reintentan: para ésas está el `connection.statement_timeout` de 12s, que las
+reapea desde el server (que sí sabe cuál matar) antes que el tope de 15s del
+cliente, y reintentarlas sólo agregaría carga sobre un pooler ya saturado.
+
+Verificado contra un Postgres 16 local (6 casos): query normal, `.values()`,
+params y errores reales de SQL pasan intactos; una query encolada de verdad se
+cancela y **se reintenta hasta salir bien**; una query en vuelo que vence falla
+en el tope **sin matar a su hermana** en la misma conexión.
+
+Las transacciones (`db.transaction`) quedan fuera de todo esto a propósito: usan
+una conexión reservada, viven sólo en server actions puntuales, y reintentarlas
+o cortarlas por la mitad es peor que dejarlas terminar.
 
 ---
 

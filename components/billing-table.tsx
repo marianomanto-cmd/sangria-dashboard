@@ -167,6 +167,7 @@ export function BillingTable({
                       <td className="px-2 py-3 align-middle">
                         <Link
                           href={detailHref}
+                          prefetch={false}
                           aria-label={lang === "es" ? "Abrir" : "Open"}
                           className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted group-hover:text-ink group-hover:bg-paper transition-colors"
                         >
@@ -188,6 +189,7 @@ export function BillingTable({
                 <Link
                   key={r.id}
                   href={detailHref}
+                  prefetch={false}
                   className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -275,6 +277,7 @@ function RowCell({
     <td className="p-0">
       <Link
         href={href}
+        prefetch={false}
         className={`block px-5 py-3 ${align === "right" ? "text-right" : ""}`}
       >
         {children}
