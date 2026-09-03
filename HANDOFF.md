@@ -57,10 +57,11 @@ por token en `united-states` y las dos burbujas se superpondrían.
 v1 (el PDF firmado sigue igual), y al correr por SQL no queda registro en
 `audit_log`. El QA no se invalida — sus checks son por `placement_id`.
 
-**Qué mercados son T1 y cuáles T2 va en las notas del plan** (`notes_md`, mismo
-archivo): la línea guarda el tier pero no su composición, así que el bloque con
-los 13 estados —con sigla al lado, que es como aparecen en `audience`— se anexa
-a las notas. No pisa lo que ya hubiera y es idempotente.
+**Qué mercados son T1 y cuáles T2 va en las notas del plan** (`notes_md`): la
+línea guarda el tier pero no su composición. Eso **no se carga por SQL** — lo
+escribe el planner a mano en el bloque "Notas del plan" del editor; el texto
+acordado (con la sigla al lado del nombre, como aparecen en `audience`) queda
+al pie de `db/felix-plan-markets-tiers.sql` para no reinventarlo.
 
 **Paridad pantalla↔export, que faltaba**: el editor muestra "Notas del plan" y
 el Excel no las tenía. Se agregó una fila `Notas` al bloque de metadata del Tab
