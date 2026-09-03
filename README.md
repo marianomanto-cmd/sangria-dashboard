@@ -243,6 +243,7 @@ db/
   app-users.sql             # tabla app_users + enum de roles + seed de admins (Configuración → Usuarios y roles). Aplicado en prod el 02/sep/2026; idempotente
   drop-plan-traffic.sql     # BAJA de la sección Tráfico: dropea media_plan_traffic_ads/_adsets/_briefs y ad_types. ⚠️ borra datos; no toca planes, publishers, placements, fees ni billings
   plan-planning-qa.sql      # migración del QA DE PLANIFICACIÓN: enum planning_qa_item_kind + tablas media_plan_planning_qa_runs/_checks + RLS. Puramente aditiva: no toca el QA que ya existía ni traba ningún plan
+  felix-markets-usa.sql     # catálogo de mercados de Félix: los 13 estados de EE.UU. (California, New York, New Jersey, Texas, Florida, Arizona, Illinois, Colorado, North Carolina, Georgia, Washington, Pennsylvania, New Mexico). Idempotente; incluye la verificación y la lectura del plan por placement
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
@@ -951,9 +952,15 @@ conviene no confundirlas:
   "Exports del plan".
 
 ### Mercados como catálogo editable
-- `markets` puede tener países (`costa-rica`, `panama`) o agrupaciones
-  (`centroamerica`, `latam`). Editable desde `/configuracion/markets`.
+- `markets` puede tener países (`costa-rica`, `panama`), agrupaciones
+  (`centroamerica`, `latam`) o **subdivisiones** de un país: Félix planifica por
+  estado de EE.UU. (`california`, `new-york`, `texas`…, ver
+  `db/felix-markets-usa.sql`). Editable desde `/configuracion/markets`.
 - `media_plan_placements.market_id` es FK con `ON DELETE SET NULL`.
+- El catálogo se lee **sin caché** (`listMarketsForClient` en
+  `app/actions/plans.ts` y la página de configuración van directo a la DB), así
+  que un mercado cargado por SQL aparece en el dropdown del editor al refrescar
+  — no hace falta deploy ni invalidar tags.
 
 ### Publishers per cliente
 - `publishers` es **per-cliente** (igual que `markets` y `metrics_catalog`):
@@ -1446,7 +1453,9 @@ conviene no confundirlas:
   resuelve por (1) match exacto normalizado y (2) match por **token** — una
   clave conocida que aparece como palabra dentro del nombre, así
   "Estados Unidos - Varios" → `estados-unidos`. Cubre países LATAM + agrupaciones
-  (`centroamerica`/`latam`/…). Devuelve además `level` (país/ciudad/región, ver
+  (`centroamerica`/`latam`/…) + los **estados de EE.UU.** de Félix (California,
+  New York, Texas…), que van como `region` porque world-atlas no tiene siluetas
+  sub-nacionales a las que fitear el zoom. Devuelve además `level` (país/ciudad/región, ver
   arriba). Los no reconocidos se listan aparte ("Sin ubicación en el mapa").
   **Para sumar/ajustar un mercado, editá `GEO` en `lib/market-geo.ts`**
   (centroide + `feature` = nombre del país en world-atlas).
