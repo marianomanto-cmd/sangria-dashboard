@@ -248,7 +248,8 @@ db/
   felix-plan-markets-tiers.sql # mercado por línea del plan de Félix: crea los mercados-tier `estados-unidos-t1`/`-t2` (hoy `Estados Unidos - Varios (T1)`/`(T2)`, ver db/markets-nomenclatura.sql) y asigna las 18 líneas leyendo el T1/T2 del nombre del placement. No se puede taggear por estado: cada línea corre sobre todos los estados de su tier y market_id es una sola FK
   felix-markets-usa.sql     # catálogo de mercados de Félix: los 13 estados de EE.UU. (hoy `Estados Unidos - <Estado>`, ver db/markets-nomenclatura.sql) (California, New York, New Jersey, Texas, Florida, Arizona, Illinois, Colorado, North Carolina, Georgia, Washington, Pennsylvania, New Mexico). Idempotente; incluye la verificación y la lectura del plan por placement
   copa-varios-desarmar.sql  # PASO A de la normalización de mercados: desarma el mercado "Varios" de Copa (17 líneas, USD 820.275,98) reasignando LÍNEA POR LÍNEA — 5 a su país (creándolos), 10 multi-país a LATAM, 2 always-on a un mercado nuevo "Global". Repunta cierres y snapshots de versión; sólo borra "Varios" si quedó vacío. Idempotente
-  markets-nomenclatura.sql  # ⚙️ GENERADO (`npm run gen:markets-sql`) — normaliza el catálogo de mercados de TODOS los clientes a la nomenclatura única y fusiona los duplicados, repuntando placements, cierres y los marketId embebidos en snapshot_json / rows_json. 4 bloques: diagnóstico · dry-run · aplicar · verificación. Idempotente
+  markets-catalogo-2026-09-03.csv # la foto del catálogo de mercados en prod (salida del bloque 0). Es el INPUT del generador: el plan de renombres sale de cruzarla con la taxonomía
+  markets-nomenclatura.sql  # ⚙️ GENERADO (`npm run gen:markets-sql`) — PASO B: normaliza el catálogo de TODOS los clientes y fusiona los duplicados, repuntando placements, cierres y los marketId embebidos en snapshot_json / rows_json. Es un PLAN EXPLÍCITO (una fila por mercado con su destino ya resuelto), no un diccionario que resuelve la base. 3 bloques: dry-run · aplicar · verificación. Idempotente
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
@@ -1011,10 +1012,16 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
 - **Lo que no se puede mapear con certeza no se toca.** "Santiago" a secas es
   Chile o República Dominicana: queda como está y se lista aparte para que lo
   desambigüe una persona desde el form.
-- La normalización de prod está en `db/markets-nomenclatura.sql`, que **es
-  generado** (`npm run gen:markets-sql`) desde esos mismos diccionarios: la base
-  y la app no pueden divergir. El diccionario aparece UNA vez, dentro de la
-  función `public.market_canonical_name(text)`, y los cuatro bloques la llaman.
+- La normalización de prod son **dos pasos**, los dos generados o probados
+  contra el Postgres local: `db/copa-varios-desarmar.sql` (paso A, desarma el
+  mercado "Varios" de Copa reasignando línea por línea) y
+  `db/markets-nomenclatura.sql` (paso B, renombra y fusiona el catálogo).
+- **El paso B es generado** (`npm run gen:markets-sql`) cruzando
+  `db/markets-catalogo-2026-09-03.csv` —la foto de prod— con la taxonomía, así
+  que la base no puede divergir de la app. Y lo que emite es un **plan
+  explícito**: una fila por mercado con su nombre destino ya resuelto, para que
+  se lea entero antes de aplicarlo. Un mercado que esté en la base y no en el
+  plan (cargado después de la foto) no se toca y sale reportado.
 - `media_plan_placements.market_id` es FK con `ON DELETE SET NULL`.
 - El catálogo se lee **sin caché** (`listMarketsForClient` en
   `app/actions/plans.ts` y la página de configuración van directo a la DB), así

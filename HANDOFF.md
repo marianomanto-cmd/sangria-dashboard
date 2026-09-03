@@ -58,12 +58,22 @@ centroides de las plazas del diccionario (ciudades de la red de Copa + los 50
 estados), así que dos plazas del mismo país ya no apilan sus burbujas en el
 mismo punto.
 
-**El SQL es generado, no escrito**: `npm run gen:markets-sql` vuelca los
-diccionarios de `lib/market-nomenclature.ts` a `db/markets-nomenclatura.sql`, así
-la base normaliza exactamente igual que la app. El diccionario entra UNA sola vez,
-dentro de la función `public.market_canonical_name(text)` (que se puede dropear
-al final), y los cuatro bloques la llaman: diagnóstico · dry-run · aplicar ·
-verificación. El dry-run es la parte importante — muestra
+**El SQL es generado, no escrito**, y son DOS pasos:
+`db/copa-varios-desarmar.sql` (paso A, el mercado "Varios") y
+`db/markets-nomenclatura.sql` (paso B, el resto del catálogo). El paso B sale de
+`npm run gen:markets-sql`, que cruza `db/markets-catalogo-2026-09-03.csv` —la
+foto de prod, salida del bloque 0— con la taxonomía de
+`lib/market-nomenclature.ts`. Lo que emite es un **plan explícito**: una fila por
+mercado con su destino ya resuelto, que se puede leer entero. La primera versión
+mandaba los diccionarios a la base para que resolviera ella y daba 900 líneas en
+las que no se veía qué iba a pasar con cada mercado.
+
+Dos detalles del plan que costaron una vuelta: el join tiene que emparejar por
+el slug ACTUAL **o** por el slug DESTINO (`order by (market_slug = m.slug) desc
+limit 1`), porque después del rename los slugs cambian y si no la verificación
+reporta todo como "no estaba en el plan" y la segunda corrida no reconoce nada.
+Y el generador tira error si el slug actual de un mercado es el slug destino de
+OTRA fila que apunta a otro lado: después del rename ese join quedaría ambiguo. El dry-run es la parte importante — muestra
 `renombrar` / `FUSIONAR EN →` / `SIN MAPEAR` fila por fila **antes** de tocar
 nada.
 
