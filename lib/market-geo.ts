@@ -74,6 +74,32 @@ const GEO: Record<string, MarketGeo> = {
   eeuu: { lat: 39.8, lng: -98.6, kind: "country", feature: "United States of America" },
   "ee-uu": { lat: 39.8, lng: -98.6, kind: "country", feature: "United States of America" },
   canada: { lat: 56.1, lng: -106.3, kind: "country", feature: "Canada" },
+  // ── Estados de EE.UU. ───────────────────────────────────────────────────
+  // Mercados de Félix, que planifica por estado y no por país. Van como
+  // `region` (no `country`): world-atlas/countries-110m no tiene siluetas
+  // sub-nacionales, así que no hay `feature` al que fitear el zoom — se fitean
+  // por centroide, y la burbuja queda bordó (nivel ciudad/región), que es lo
+  // correcto: un estado es una plaza DENTRO de un país, no el país entero.
+  // Los dos TIERS con los que se compra: cada línea del plan corre sobre todos
+  // los estados del tier a la vez (el presupuesto se distribuye entre ellos),
+  // así que el tier —no el estado— es lo que entra en el `market_id` de la
+  // línea. Centroide = promedio de los estados que lo componen, para que las
+  // dos burbujas no se pisen en el mapa.
+  "estados-unidos-t1": { lat: 36.1, lng: -90.3, kind: "region" }, // CA NY NJ TX FL
+  "estados-unidos-t2": { lat: 38.0, lng: -96.7, kind: "region" }, // AZ IL CO NC GA WA PA NM
+  california: { lat: 37.2, lng: -119.7, kind: "region" },
+  "new-york": { lat: 43.0, lng: -75.5, kind: "region" },
+  "new-jersey": { lat: 40.1, lng: -74.7, kind: "region" },
+  texas: { lat: 31.5, lng: -99.3, kind: "region" },
+  florida: { lat: 28.6, lng: -82.4, kind: "region" },
+  arizona: { lat: 34.3, lng: -111.7, kind: "region" },
+  illinois: { lat: 40.0, lng: -89.2, kind: "region" },
+  colorado: { lat: 39.0, lng: -105.5, kind: "region" },
+  "north-carolina": { lat: 35.5, lng: -79.4, kind: "region" },
+  georgia: { lat: 32.6, lng: -83.4, kind: "region" },
+  washington: { lat: 47.4, lng: -120.5, kind: "region" },
+  pennsylvania: { lat: 40.9, lng: -77.8, kind: "region" },
+  "new-mexico": { lat: 34.4, lng: -106.1, kind: "region" },
   // ── Agrupaciones (sin feature: se fitean por centroide + span) ──────────
   centroamerica: { lat: 12.8, lng: -85.6, kind: "region" },
   "central-america": { lat: 12.8, lng: -85.6, kind: "region" },
