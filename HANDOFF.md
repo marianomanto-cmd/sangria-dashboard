@@ -36,9 +36,26 @@ hay mercados nuevos que geocodear), y la migración sin el deploy tampoco (los
 mercados aparecen igual en el dropdown del editor; sólo el mapa de /analisis los
 listaría como "sin ubicación"). Van en cualquier orden.
 
-**Pendiente**: falta asignarle mercado a cada uno de los 18 placements del plan
-de Félix. La query de lectura para decidirlo está al pie de
-`db/felix-markets-usa.sql`; el UPDATE se arma por `placement_id`.
+**Y el plan no se puede taggear por estado** — `db/felix-plan-markets-tiers.sql`:
+las 18 líneas del plan "Félix Pago | Back to School" (live v1) corren cada una
+sobre TODOS los estados de su tier a la vez, con el presupuesto distribuido
+entre ellos, y `media_plan_placements.market_id` es UNA sola FK. Así que lo que
+va en la línea es el **tier**, igual que "Centroamérica" o "LATAM" en el
+catálogo: se crean `estados-unidos-t1` / `estados-unidos-t2` y se asigna leyendo
+el T1/T2 del NOMBRE del placement (`… | T1`, `… | T1 | Félix Pago`). Sólo toca
+líneas con `market_id is null`. Da 9 líneas T1 (992.172,20) + 9 T2 (417.828,00)
+= 1.410.000, que cuadra con los tres bloques (960k CTV + 350k + 100k).
+El desglose de estados sigue en `audience`, y los 13 estados quedan en el
+catálogo para el plan que sí se abra por estado.
+
+Los centroides de los dos tiers también van en `lib/market-geo.ts` (promedio de
+sus estados, separados para que las burbujas no se pisen). Si algún día se
+renombran al inglés ("United States - T1"), hay que sumar esas keys: hoy caerían
+por token en `united-states` y las dos burbujas se superpondrían.
+
+⚠️ El plan está **live v1**: el UPDATE no crea versión nueva ni toca el snapshot
+v1 (el PDF firmado sigue igual), y al correr por SQL no queda registro en
+`audit_log`. El QA no se invalida — sus checks son por `placement_id`.
 
 ### Cambios de la sesión 03/sep/2026 (3) — el tiempo se iba en la FILA, no en la base
 

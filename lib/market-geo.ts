@@ -80,6 +80,13 @@ const GEO: Record<string, MarketGeo> = {
   // sub-nacionales, así que no hay `feature` al que fitear el zoom — se fitean
   // por centroide, y la burbuja queda bordó (nivel ciudad/región), que es lo
   // correcto: un estado es una plaza DENTRO de un país, no el país entero.
+  // Los dos TIERS con los que se compra: cada línea del plan corre sobre todos
+  // los estados del tier a la vez (el presupuesto se distribuye entre ellos),
+  // así que el tier —no el estado— es lo que entra en el `market_id` de la
+  // línea. Centroide = promedio de los estados que lo componen, para que las
+  // dos burbujas no se pisen en el mapa.
+  "estados-unidos-t1": { lat: 36.1, lng: -90.3, kind: "region" }, // CA NY NJ TX FL
+  "estados-unidos-t2": { lat: 38.0, lng: -96.7, kind: "region" }, // AZ IL CO NC GA WA PA NM
   california: { lat: 37.2, lng: -119.7, kind: "region" },
   "new-york": { lat: 43.0, lng: -75.5, kind: "region" },
   "new-jersey": { lat: 40.1, lng: -74.7, kind: "region" },

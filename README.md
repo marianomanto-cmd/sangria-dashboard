@@ -243,6 +243,7 @@ db/
   app-users.sql             # tabla app_users + enum de roles + seed de admins (Configuración → Usuarios y roles). Aplicado en prod el 02/sep/2026; idempotente
   drop-plan-traffic.sql     # BAJA de la sección Tráfico: dropea media_plan_traffic_ads/_adsets/_briefs y ad_types. ⚠️ borra datos; no toca planes, publishers, placements, fees ni billings
   plan-planning-qa.sql      # migración del QA DE PLANIFICACIÓN: enum planning_qa_item_kind + tablas media_plan_planning_qa_runs/_checks + RLS. Puramente aditiva: no toca el QA que ya existía ni traba ningún plan
+  felix-plan-markets-tiers.sql # mercado por línea del plan de Félix: crea los mercados-tier `estados-unidos-t1`/`-t2` y asigna las 18 líneas leyendo el T1/T2 del nombre del placement. No se puede taggear por estado: cada línea corre sobre todos los estados de su tier y market_id es una sola FK
   felix-markets-usa.sql     # catálogo de mercados de Félix: los 13 estados de EE.UU. (California, New York, New Jersey, Texas, Florida, Arizona, Illinois, Colorado, North Carolina, Georgia, Washington, Pennsylvania, New Mexico). Idempotente; incluye la verificación y la lectura del plan por placement
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
   queries/
