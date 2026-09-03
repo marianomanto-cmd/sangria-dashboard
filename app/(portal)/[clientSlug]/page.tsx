@@ -12,9 +12,9 @@ import {
 import { isReservedTopLevelSlug } from "@/lib/client-portal";
 import { hasPortalAccess } from "@/lib/client-portal.server";
 import {
-  getPortalClient,
-  getPortalFilterOptions,
-} from "@/db/queries/client-portal";
+  cachedPortalClient,
+  cachedPortalFilterOptions,
+} from "@/db/queries/cached";
 import { DEFAULT_LANGUAGE } from "@/lib/i18n";
 import { PortalLogin } from "./portal-login";
 import { PortalLogout } from "./portal-logout";
@@ -60,7 +60,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
   const { clientSlug } = await params;
   if (isReservedTopLevelSlug(clientSlug)) notFound();
 
-  const client = await getPortalClient(clientSlug);
+  const client = await cachedPortalClient(clientSlug);
   if (!client) notFound();
 
   // Gate del portal (cookie). Sin acceso → form de login.
@@ -109,7 +109,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
   };
 
   const lang = client.language ?? DEFAULT_LANGUAGE;
-  const opts = await getPortalFilterOptions(client.id);
+  const opts = await cachedPortalFilterOptions(client.id);
 
   return (
     // Contenedor de scroll propio del portal con la barra oculta (el cliente

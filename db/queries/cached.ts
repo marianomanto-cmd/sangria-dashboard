@@ -40,6 +40,11 @@ import { getClientOptions } from "@/db/queries/clients";
 import { getCampaignTrackerHub, type CampaignHubFilter } from "@/db/queries/campaign-tracker";
 import { listBudgetOriginsForClient } from "@/db/queries/budget-origins";
 import { getBillingFilterOptions } from "@/db/queries/billing";
+import {
+  getClientSpendByPublisher,
+  getPortalClient,
+  getPortalFilterOptions,
+} from "@/db/queries/client-portal";
 
 export {
   ANALYSIS_TAG,
@@ -55,6 +60,7 @@ import {
   BILLING_TAG,
   CATALOG_TAG,
   DASHBOARD_TAG,
+  PLANS_TAG,
   REPORTS_TAG,
   TRACKER_TAG,
 } from "@/lib/cache-tags";
@@ -171,4 +177,54 @@ export const cachedBillingFilterOptions = unstable_cache(
   (clientId: string | null) => getBillingFilterOptions(clientId),
   ["billing-filter-options-v1"],
   { revalidate: REVALIDATE, tags: [BILLING_TAG] },
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+// PORTAL DEL CLIENTE — lo que ve el cliente, cacheado.
+//
+// Este es el caso donde la caché vale MÁS que en la app interna, por dos
+// razones que no aplican adentro:
+//
+// 1. El portal es de SOLO LECTURA. No hay read-your-own-writes que proteger:
+//    nadie edita desde acá, así que servir una entrada de caché no puede
+//    mostrarle a nadie "su" cambio como si no se hubiera guardado.
+// 2. El portal COMPARTE EL POOLER con la app interna, y no al revés. El
+//    03/sep/2026 /felix se cayó con tres queries muertas por contención
+//    mientras el equipo tenía 49 renders del editor de un plan en vuelo. El
+//    portal de ese cliente es la página más BARATA de la app (1 proyecto,
+//    1 plan, 0 billings): no se cayó por su costo, se cayó por el de al lado.
+//    Con caché, la visita del cliente hace CERO queries y deja de depender de
+//    lo que esté haciendo el equipo.
+//
+// La frescura sigue saliendo de la invalidación por tag, no del TTL: se usan
+// los tags que las actions YA invalidan (ver el conteo en app/actions/), así
+// que no hay plomería nueva que se pueda olvidar. Un cambio de plan o de
+// billing expira esto al instante.
+// ════════════════════════════════════════════════════════════════════════════
+
+// El cliente por slug. Es la PRIMERA query del portal y la que abortó el
+// 03/sep: si falla, no hay página. Los clientes son catálogo y cambian casi
+// nunca.
+export const cachedPortalClient = unstable_cache(
+  (slug: string) => getPortalClient(slug),
+  ["portal-client-v1"],
+  { revalidate: REVALIDATE, tags: [CATALOG_TAG] },
+);
+
+// Opciones de los filtros: orígenes, proyectos, campañas y el rango de meses.
+// Adentro es UNA tanda de 5 queries (ver db/queries/client-portal.ts). Depende
+// de proyectos/planes (PLANS_TAG) y de los meses facturados (BILLING_TAG).
+export const cachedPortalFilterOptions = unstable_cache(
+  (clientId: string) => getPortalFilterOptions(clientId),
+  ["portal-filter-options-v1"],
+  { revalidate: REVALIDATE, tags: [CATALOG_TAG, PLANS_TAG, BILLING_TAG] },
+);
+
+// Inversión por publisher: el chart del tab Resumen, que es donde CAE el
+// cliente al abrir el link. Keyada sólo por clientId, así que el hit rate es
+// alto de verdad (a diferencia de las vistas con filtros de alta cardinalidad).
+export const cachedPortalSpendByPublisher = unstable_cache(
+  (clientId: string) => getClientSpendByPublisher(clientId),
+  ["portal-spend-by-publisher-v1"],
+  { revalidate: REVALIDATE, tags: [DASHBOARD_TAG, BILLING_TAG] },
 );

@@ -74,11 +74,29 @@ function enumerateMonths(start: string, end: string): string[] {
   return out;
 }
 
+// ── Opciones de los filtros del portal ──────────────────────────────────────
+//
+// LAS CINCO QUERIES SALEN EN UNA SOLA TANDA. Antes eran cinco `await` sueltos,
+// uno detrás del otro, y ninguna depende de las otras: las cinco se filtran
+// nada más que por `clientId`. Con el pool en `max: 3` (db/index.ts) cada
+// `await` suelto paga un round-trip completo a Ohio esperando al anterior, así
+// que eran cinco viajes para armar unos combos. En un `Promise.all`, postgres.js
+// las pipelinea y es ~1.
+//
+// Por qué importa acá más que en otras vistas: esto es lo PRIMERO que corre en
+// el portal del cliente, antes de cualquier contenido, y el portal comparte el
+// pooler con la app interna. El 03/sep, mientras el equipo tenía 49 renders del
+// editor de un plan en vuelo, /felix se cayó con tres queries muertas por
+// contención — y una era la primera de la página. Menos olas acá es menos
+// superficie expuesta a lo que esté haciendo el equipo del otro lado.
+//
+// Si mañana hay que agregar otro filtro: sumalo al `Promise.all`, no como un
+// `await` nuevo.
 export async function getPortalFilterOptions(
   clientId: string,
 ): Promise<PortalFilterOptions> {
   // Budget origins de los proyectos del cliente.
-  const origins = await db
+  const originsQuery = db
     .selectDistinct({ id: budgetOrigins.id, name: budgetOrigins.name })
     .from(projects)
     .innerJoin(budgetOrigins, eq(projects.budgetOriginId, budgetOrigins.id))
@@ -86,7 +104,7 @@ export async function getPortalFilterOptions(
     .orderBy(asc(budgetOrigins.name));
 
   // Proyectos del cliente (con al menos un plan vivo).
-  const projs = await db
+  const projsQuery = db
     .selectDistinct({
       id: projects.id,
       code: projects.code,
@@ -102,7 +120,7 @@ export async function getPortalFilterOptions(
 
   // Campañas del cliente = planes APROBADOS (lo que muestra la pestaña
   // Proyectos del portal). Alimentan el filtro multi-select por nombre.
-  const campaigns = await db
+  const campaignsQuery = db
     .select({ id: mediaPlans.id, name: mediaPlans.name })
     .from(mediaPlans)
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
@@ -116,7 +134,7 @@ export async function getPortalFilterOptions(
     .orderBy(asc(mediaPlans.name));
 
   // Rango de meses: combina meses de billings + spans de placements del cliente.
-  const [billingRange] = await db
+  const billingRangeQuery = db
     .select({
       min: sql<string | null>`min(${planBillings.month})`,
       max: sql<string | null>`max(${planBillings.month})`,
@@ -129,7 +147,7 @@ export async function getPortalFilterOptions(
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(eq(projects.clientId, clientId));
 
-  const [placementRange] = await db
+  const placementRangeQuery = db
     .select({
       min: sql<string | null>`min(${mediaPlanPlacements.startDate})::text`,
       max: sql<string | null>`max(${mediaPlanPlacements.endDate})::text`,
@@ -145,6 +163,15 @@ export async function getPortalFilterOptions(
     )
     .innerJoin(projects, eq(mediaPlans.projectId, projects.id))
     .where(eq(projects.clientId, clientId));
+
+  const [origins, projs, campaigns, [billingRange], [placementRange]] =
+    await Promise.all([
+      originsQuery,
+      projsQuery,
+      campaignsQuery,
+      billingRangeQuery,
+      placementRangeQuery,
+    ]);
 
   const candidatesMin = [
     billingRange?.min ?? null,
