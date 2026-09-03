@@ -37,6 +37,10 @@ export type NameLookups = {
   // Nombre visible de una métrica del catálogo por slug (para el diff de
   // metrics_json). Si no está en el catálogo se usa el slug.
   metricName: (slug: string) => string;
+  // true si el slug es una métrica direct (delivery). El delivery se guarda
+  // exacto y se muestra redondeado, así que el diff lo formatea sin decimales
+  // para no contradecir a la grilla, al PDF y al Excel.
+  metricIsCount: (slug: string) => boolean;
 };
 
 export type FieldChange = {
@@ -152,10 +156,13 @@ function metricFieldChanges(
     const bv = typeof b[k] === "number" && Number.isFinite(b[k]) ? b[k] : null;
     const av = typeof a[k] === "number" && Number.isFinite(a[k]) ? a[k] : null;
     if (bv === av) continue;
+    const count = names.metricIsCount(k);
+    const fmt = (v: number) =>
+      v.toLocaleString("en-US", count ? { maximumFractionDigits: 0 } : undefined);
     out.push({
       label: names.metricName(k),
-      before: bv == null ? "—" : bv.toLocaleString("en-US"),
-      after: av == null ? "—" : av.toLocaleString("en-US"),
+      before: bv == null ? "—" : fmt(bv),
+      after: av == null ? "—" : fmt(av),
     });
   }
   return out;

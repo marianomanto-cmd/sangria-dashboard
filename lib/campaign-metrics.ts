@@ -236,7 +236,13 @@ export function buildMetricRows(
 
   for (const d of directGoals) {
     const actual = actuals[d.key] ?? 0;
-    const goal = d.goal > 0 ? d.goal : null;
+    const unit = d.key === "amount" ? "$" : "count";
+    // El delivery del plan se guarda EXACTO (9,113333) y se muestra redondeado
+    // ("9"). El goal del tracker es el número CONTRA EL QUE CARGA la trafficker,
+    // así que va redondeado: si no, cargar los 9 que ve la pantalla daría 98,7%
+    // y la barra no se llenaría nunca. La plata (amount) no se toca.
+    const rounded = unit === "count" ? Math.round(d.goal) : d.goal;
+    const goal = rounded > 0 ? rounded : null;
     rows.push({
       key: d.key,
       label: labelFor(
@@ -244,7 +250,7 @@ export function buildMetricRows(
         DIRECT_METRIC_LABELS[d.key] ?? d.key,
       ),
       kind: "direct",
-      unit: d.key === "amount" ? "$" : "count",
+      unit,
       goal,
       actual,
       goalPct: goal != null ? (actual / goal) * 100 : null,

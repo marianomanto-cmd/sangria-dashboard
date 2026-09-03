@@ -2,7 +2,7 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
-### Cambios de la sesión 03/sep/2026 (2) — el tiempo se iba en la FILA, no en la base
+### Cambios de la sesión 03/sep/2026 (3) — el tiempo se iba en la FILA, no en la base
 
 La entrada de abajo cuenta el diagnóstico. Ésta, el arreglo. **Si algo se vuelve
 a colgar, leé primero "la medición" acá.**
@@ -109,6 +109,89 @@ sobrevive 4 de 5. Ésa es la falla de prod, reproducida en el contenedor.
   `rowsecurity = false`. No tiene que ver con los cuelgues; es un agujero
   aparte, y la REST pública la deja legible con la anon key.
 
+### Cambios de la sesión 03/sep/2026 (2) — el delivery se guardaba redondeado y volvía como otra tarifa
+
+**El síntoma**: el dueño cargaba un CPA de $450 en el editor del plan y a los
+segundos la pantalla le mostraba $455,67. Sospechaba un buffer o un margen
+configurado. No había ninguno.
+
+**La causa**, con los números del caso real (plan `COPA.m1227.LosCabosTarifasV2`,
+placement de $4.101,50, métrica `cc_los_cabos`): el editor calculaba el delivery
+`4101,50 / 450 = 9,1144` y lo guardaba **`Math.round` → 9**. Como esa métrica no
+tenía su calculada de costo en el catálogo, la tarifa no se persistía y la
+pantalla la re-derivaba desde el delivery ya redondeado: `4101,50 / 9 = 455,72`.
+El "+5,72" era el redondeo volviendo por la ventana.
+
+Dos cosas lo habían mantenido invisible hasta ahora: el error relativo es
+`0,5 / delivery`, así que en impresiones (millones) es 0,00005% y en 9 tickets
+es 5,6%; y la columna Tarifa para métricas custom es de la sesión del 28/ago
+(`deff3be`) — antes el planner cargaba el delivery a mano y ese número iba tal
+cual al PPT.
+
+**Lo que se arregló** (`577f973`, `8923828`):
+
+- **El delivery se guarda exacto y se muestra redondeado.** Seis puntos de
+  escritura dejan de redondear: `applyPrimaryPairChange` (ramas rate y
+  delivery), `recomputeMetricsForAmount`, `MetricsEditor.onChangeRate` y
+  `onChangeDelivery` — los cinco en `editor.tsx` — más
+  `placementMetricsFromRow` del simulador, que estaba fuera de ese archivo y
+  hacía que todo plan promovido desde un escenario naciera con la tarifa mal
+  re-derivada.
+- **Al escribir la tarifa, ahora se redondea la tarifa PRIMERO** y el delivery
+  se deriva de esa tarifa ya guardada. Con eso el warning de "tarifa y delivery
+  no coinciden" deja de autodispararse (con delivery 9 daba 1,26% contra un
+  umbral de 0,5%) y los dos caminos de edición producen el mismo double.
+- **Los inputs numéricos ya no pisan el dato al perder el foco.** `RateInput`
+  pintaba `455.72` sobre `455.722222` y su umbral de commit era `1e-6`, así que
+  entrar y salir del campo —o recorrer la columna con Enter, que hace `blur()`—
+  reescribía la tarifa de cada placement sin que nadie editara nada. Ese bug
+  probablemente explica por qué los goals de Puerto Rico se movieron solos.
+  `DeliveryInput` tenía el defecto espejo (umbral 1): con `9.114444` guardado,
+  tipear "9" para forzar el entero nunca llegaba a commitear. Los dos pasan a
+  commitear sólo si el planner efectivamente escribió.
+- **Corolarios**: `campaign-metrics.ts` redondea el goal de las métricas direct
+  (es el número contra el que carga la trafficker: si no, cargar los 9 que ve
+  daba 98,7% y la barra no se llenaba nunca) y `plan-readiness.ts` exige que la
+  métrica principal sea `>= 1` ya redondeada (antes lo garantizaba el
+  `Math.round`; sin eso un 0,4 pasaba a Listo y salía "0" en el PDF de firma).
+- **Los displays se blindaron primero**, en un commit aparte y no-op:
+  `qa-modal` imprimía el TOTAL MEDIA y los subtotales por publisher con el
+  default de `toLocaleString` (3 decimales) y `plan-version-diff` hacía lo
+  mismo con el diff de `metrics_json`, que alimenta tanto el desplegable del
+  historial como la hoja "Historial de versiones" del Excel. `NameLookups` suma
+  `metricIsCount` para eso.
+
+**Retrocompatible y sin migración**: `metrics_json` es jsonb sin constraint de
+tipo, y un delivery entero ya guardado sigue funcionando igual — se vuelve
+exacto la primera vez que alguien re-edita ese par. **No hay backfill**:
+decisión explícita del dueño de no tocar planes viejos.
+
+**Verificación**: `tsc --noEmit` y `eslint` limpios, `next build` OK, y el
+round-trip chequeado numéricamente — la tarifa queda en $450,00, el delivery
+guardado es `9.114444` y se muestra "9", y la suma de goals de los 7 placements
+pasa de 63 a 63,80 (se muestra 64), que es la verdad: $28.709,50 / 450.
+
+#### Acción requerida en prod — **`db/metrics-cost-pairs.sql`**
+
+Seis métricas direct de Copa no tenían su calculada de costo, así que su tarifa
+se descartaba en cada carga: `cc_los_cabos`, `cc_canada`, `cc_costa_rica`,
+`cc_tickets_argentina`, `cc_origen_san_diego` y `tickets_rep_dom`. El archivo
+las agrega. Es **puramente aditivo** (`on conflict do nothing`), no toca ningún
+plan ni ningún `metrics_json`, y está probado contra un Postgres 16 local con el
+catálogo real (corrido dos veces: idempotente).
+
+No es bloqueante para el deploy del código: son cambios independientes. Pero
+hasta que se corra, esas seis métricas siguen sin poder guardar su tarifa.
+
+⚠️ Los planes ya cargados **no** se arreglan solos: no tienen la clave de tarifa
+en `metrics_json`, así que siguen mostrando la tarifa re-derivada hasta que
+alguien la re-cargue a mano en el editor. La tarifa original no se puede
+recuperar — nunca salió del browser, así que no está ni en `audit_log`.
+
+⚠️ Efecto visible en planes viejos aunque no se toque su data: los exports arman
+sus columnas con las calculadas que resuelven, así que un plan con
+`cc_los_cabos` cargado va a **ganar una columna** "CPA CC Los Cabos" en el Excel
+y el PDF, con el valor derivado. No cambia ningún número existente.
 ### Cambios de la sesión 03/sep/2026 — medir antes de tocar
 
 Reporte: dashboard, billing tracker y calendario de reportes tiran "No se pudo
@@ -4450,6 +4533,10 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+4ecaf8b  fix(db): el tiempo se iba en la FILA, no en la base — max 1→3, tres fases y el reintento roto (#269)
+236fae6  docs(db): control read-only de la estructura actual + que dicen los logs de Vercel (#269)
+8923828  fix: el delivery se guarda exacto y se muestra redondeado
+577f973  fix: los displays de delivery formatean sin decimales
 3751459  fix(db): el timeout de query fabricaba las conexiones zombie (#260)
 2c6ba3b  fix: el reintento hacia loop, y la degradacion mentia (#259)
 88c0d11  docs: las dos migraciones del 02/sep quedaron aplicadas en prod (#258)
@@ -5168,6 +5255,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
+| Tocar el **par tarifa↔delivery** de un placement | `applyPrimaryPairChange` (métrica principal) y `MetricsEditor.onChangeRate`/`onChangeDelivery` (indicadores estimados), los dos en `editor.tsx`; `recomputeMetricsForAmount` para el rate-anchoring al cambiar el monto. **Regla dura: el delivery se guarda EXACTO (`exactDelivery`, 6 decimales) y se muestra redondeado** — ver README. Al escribir la tarifa se redondea la tarifa primero y el delivery se deriva de ella. De qué slug sale la tarifa lo decide `buildMetricRatePairs` en `lib/cost-methods.ts`: sin una calculada `amount / <slug>` en el catálogo del cliente, la tarifa NO se persiste y se re-deriva de `amount / delivery`. |
+| Que un input numérico no pise el dato al salir del campo | `RateInput` / `DeliveryInput` en `editor.tsx`. Los dos pintan con menos precisión de la que guardan, así que **no commitean si el planner no escribió** (flag en el primer `onInput`, apagado al commitear). No volver al umbral numérico: comparar el texto reparseado contra el valor guardado es justo lo que reescribía las tarifas con sólo tabular. |
 | Tocar el **cambio masivo de fechas** de los placements | UI: `app/(app)/proyectos/[code]/planes/[planId]/bulk-dates-modal.tsx`, abierto desde el botón "Cambiar fechas de todos" del strip de metadata del `editor.tsx` (pegado al período derivado). Action: `bulkUpdatePlacementDates` en `app/actions/plans.ts`. **Regla dura: sólo sobre un plan en `draft`** — la action lo chequea server-side, así el cambio pasa sí o sí por "Editar (nueva versión)" → aprobación de la v(N+1) → QA nuevo → Live. No se pueden **vaciar** fechas en masa ni dejar un rango invertido (`fin < inicio`): en los dos casos `prorateByMonth` manda la plata a `NO_DATE_KEY` y desaparece del estimado. Auditoría: **una** row a nivel `media_plan` (no una por línea). |
 | Tocar la **carpeta de Drive** de un proyecto | Columna `projects.drive_folder_url`. Se carga en `app/(app)/proyectos/nuevo/form.tsx` (alta) y `app/(app)/proyectos/[code]/edit-panel.tsx` (edición); el botón vive en el header de `app/(app)/proyectos/[code]/page.tsx`, al lado del `ProjectStatusChanger`. Validación/normalización: **`normalizeExternalUrl` en `lib/external-url.ts`** (agrega `https://` si falta, rechaza esquemas ≠ http/https porque el valor sale como `href`), usada por `createProject`/`updateProject` y por los forms. |
 | Tocar el **cuadrito de audiencia al hover** (vista del plan) | `components/audience-hover-card.tsx` — envuelve el nombre del placement en la **planilla** (`PlacementGridRow`) y en la **vista previa tipo Excel** (`ExcelPreview`), ambas en `editor.tsx`. El delay (2s) es `AUDIENCE_HOVER_DELAY_MS`. Es `fixed` con coordenadas del ancla porque dentro de las tablas un `absolute` lo recorta el `overflow`; `pointer-events: none` para no comerse clicks. |

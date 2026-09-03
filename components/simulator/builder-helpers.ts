@@ -151,9 +151,14 @@ export function placementMetricsFromRow(
   const rates = effectiveRates(row, bench);
   const est = estimateDelivery(row, rates);
   const result: Record<string, number> = {};
-  if (est.impressions != null) result.impressions = Math.round(est.impressions);
-  if (est.clicks != null) result.clicks = Math.round(est.clicks);
-  if (est.views != null) result.views = Math.round(est.views);
+  // Delivery EXACTO (acotado a 6 decimales), igual criterio que el editor del
+  // plan: redondear acá hacía que el placement promovido naciera con la tarifa
+  // mal re-derivada (monto / deliveryRedondeado ≠ el CPM/CPC del escenario).
+  // Todas las vistas lo muestran redondeado.
+  const exact = (v: number) => Number(v.toFixed(6));
+  if (est.impressions != null) result.impressions = exact(est.impressions);
+  if (est.clicks != null) result.clicks = exact(est.clicks);
+  if (est.views != null) result.views = exact(est.views);
   return result;
 }
 
