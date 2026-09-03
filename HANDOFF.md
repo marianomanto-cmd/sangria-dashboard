@@ -4691,6 +4691,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+e725a0b  feat(markets): el plan de Félix se taggea por tier, no por estado
 ab69edb  feat(markets): los 13 estados de EE.UU. de Félix + su geocoding
 4ecaf8b  fix(db): el tiempo se iba en la FILA, no en la base — max 1→3, tres fases y el reintento roto (#269)
 236fae6  docs(db): control read-only de la estructura actual + que dicen los logs de Vercel (#269)
