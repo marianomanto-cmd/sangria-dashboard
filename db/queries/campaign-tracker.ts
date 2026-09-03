@@ -374,7 +374,12 @@ export type CampaignTrackerPlan = {
 export async function getCampaignTrackerPlan(
   planId: string,
 ): Promise<CampaignTrackerPlan | null> {
-  const [planRow] = await db
+  // `planRow` y `pubRows` dependen las dos de `planId` y de nada más, así que
+  // salen JUNTAS. Con `max: 1` (db/index.ts) cada `await` suelto es un
+  // round-trip completo a Ohio esperando al anterior; postgres.js sólo
+  // pipelinea lo que se dispara a la vez. Mismo criterio que
+  // db/queries/dashboard-v2.ts.
+  const planQuery = db
     .select({
       planId: mediaPlans.id,
       planName: mediaPlans.name,
@@ -395,9 +400,7 @@ export async function getCampaignTrackerPlan(
     .where(and(eq(mediaPlans.id, planId), isNull(mediaPlans.deletedAt)))
     .limit(1);
 
-  if (!planRow) return null;
-
-  const pubRows = await db
+  const pubQuery = db
     .select({
       id: mediaPlanPublishers.id,
       publisherName: publishers.name,
@@ -409,6 +412,10 @@ export async function getCampaignTrackerPlan(
     .innerJoin(publishers, eq(mediaPlanPublishers.publisherId, publishers.id))
     .where(eq(mediaPlanPublishers.mediaPlanId, planId))
     .orderBy(asc(mediaPlanPublishers.sortOrder));
+
+  const [planRows, pubRows] = await Promise.all([planQuery, pubQuery]);
+  const planRow = planRows[0];
+  if (!planRow) return null;
 
   const mppIds = pubRows.map((r) => r.id);
 
@@ -427,13 +434,42 @@ export async function getCampaignTrackerPlan(
 
   const placementIds = placementRows.map((r) => r.placement.id);
 
-  const actualRows =
+  // Las TRES lecturas que quedan son independientes entre sí: actuals y
+  // snapshots sólo necesitan `placementIds`, y el catálogo sólo el clientId que
+  // ya tenemos. Van en una tanda en vez de tres round-trips en serie.
+  const [actualRows, snapshotRows, catalogRows] = await Promise.all([
     placementIds.length === 0
       ? []
-      : await db
+      : db
           .select()
           .from(campaignPlacementActuals)
-          .where(inArray(campaignPlacementActuals.placementId, placementIds));
+          .where(inArray(campaignPlacementActuals.placementId, placementIds)),
+
+    placementIds.length === 0
+      ? []
+      : db
+          .select({
+            placementId: campaignActualSnapshots.placementId,
+            metricKey: campaignActualSnapshots.metricKey,
+            valueAccumulated: campaignActualSnapshots.valueAccumulated,
+            snapshotDate: campaignActualSnapshots.snapshotDate,
+          })
+          .from(campaignActualSnapshots)
+          .where(inArray(campaignActualSnapshots.placementId, placementIds))
+          .orderBy(desc(campaignActualSnapshots.snapshotDate)),
+
+    db
+      .select({
+        slug: metricsCatalog.slug,
+        name: metricsCatalog.name,
+        kind: metricsCatalog.kind,
+        unit: metricsCatalog.unit,
+        formula: metricsCatalog.formula,
+        enabled: metricsCatalog.enabled,
+      })
+      .from(metricsCatalog)
+      .where(eq(metricsCatalog.clientId, planRow.clientId)),
+  ]);
 
   // actuals[placementId][metricKey] = value
   const actualsByPlacement = new Map<string, Map<string, number>>();
@@ -450,20 +486,6 @@ export async function getCampaignTrackerPlan(
 
   // Histórico: valores de la última carga cerrada, para "Comparar con última
   // carga". lastCloseDate = snapshot_date más reciente del plan.
-  const snapshotRows =
-    placementIds.length === 0
-      ? []
-      : await db
-          .select({
-            placementId: campaignActualSnapshots.placementId,
-            metricKey: campaignActualSnapshots.metricKey,
-            valueAccumulated: campaignActualSnapshots.valueAccumulated,
-            snapshotDate: campaignActualSnapshots.snapshotDate,
-          })
-          .from(campaignActualSnapshots)
-          .where(inArray(campaignActualSnapshots.placementId, placementIds))
-          .orderBy(desc(campaignActualSnapshots.snapshotDate));
-
   let lastCloseDate: string | null = null;
   for (const s of snapshotRows) {
     if (!lastCloseDate || s.snapshotDate > lastCloseDate)
@@ -483,17 +505,7 @@ export async function getCampaignTrackerPlan(
   // clasificar direct (cargables) vs calculated (derivadas). El tracker ya NO
   // usa una lista hardcodeada — muestra todas las métricas que el plan usa,
   // incluidas las custom del cliente (tickets, reservas, etc.).
-  const catalogRows = await db
-    .select({
-      slug: metricsCatalog.slug,
-      name: metricsCatalog.name,
-      kind: metricsCatalog.kind,
-      unit: metricsCatalog.unit,
-      formula: metricsCatalog.formula,
-      enabled: metricsCatalog.enabled,
-    })
-    .from(metricsCatalog)
-    .where(eq(metricsCatalog.clientId, planRow.clientId));
+  // (Se trae arriba, en la misma tanda que actuals y snapshots.)
   const labelBySlug = new Map(catalogRows.map((r) => [r.slug, r.name]));
   // Slugs direct habilitados → editables en el tracker (igual criterio que el
   // editor/exports, que solo muestran métricas enabled).

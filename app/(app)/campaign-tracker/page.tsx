@@ -13,7 +13,11 @@ import {
 } from "@/db/queries/campaign-tracker";
 import { cachedTrackerHub } from "@/db/queries/cached";
 import { buildHrefWithClient } from "@/lib/client-filter";
-import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
+import {
+  resolveClientFromSearchParams,
+  type ResolvedClientFilter,
+} from "@/lib/client-filter.server";
+import { DegradedNotice } from "@/components/degraded-notice";
 import { formatUsd, formatUsdCompact } from "@/lib/format";
 import { DEFAULT_LANGUAGE, formatDate } from "@/lib/i18n";
 
@@ -27,14 +31,42 @@ function parseFilter(raw: string | undefined): CampaignHubFilter {
 
 export default async function CampaignTrackerPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const client = await resolveClientFromSearchParams(sp);
+
+  // Resolver el cliente del filtro no debe tumbar la página: si falla,
+  // seguimos sin filtro en vez de tirar el error boundary del grupo.
+  let client: ResolvedClientFilter = null;
+  try {
+    client = await resolveClientFromSearchParams(sp);
+  } catch (e) {
+    console.error("TRACKQ[client]:", e instanceof Error ? e.message : e);
+  }
   const lang = client?.language ?? DEFAULT_LANGUAGE;
   const filter = parseFilter(sp.filter);
 
-  const { clients, totals, statusCounts } = await cachedTrackerHub(
-    client?.id ?? null,
-    filter,
-  );
+  // Si la lectura falla, degradamos a vacío PERO lo avisamos: un hub sin
+  // campañas se lee como "no hay nada", que no es lo mismo que "no se pudo
+  // leer". Mismo criterio que el dashboard y el calendario.
+  const failedSections: string[] = [];
+  let clients: Awaited<ReturnType<typeof cachedTrackerHub>>["clients"] = [];
+  let totals: Awaited<ReturnType<typeof cachedTrackerHub>>["totals"] = {
+    plansCount: 0,
+    clientsCount: 0,
+    goalInvestmentUsd: 0,
+    actualInvestmentUsd: 0,
+    staleCount: 0,
+    offPaceCount: 0,
+  };
+  let statusCounts: Awaited<ReturnType<typeof cachedTrackerHub>>["statusCounts"] =
+    { vigente: 0, concluido: 0 };
+  try {
+    ({ clients, totals, statusCounts } = await cachedTrackerHub(
+      client?.id ?? null,
+      filter,
+    ));
+  } catch (e) {
+    console.error("TRACKQ[hub]:", e instanceof Error ? e.message : e);
+    failedSections.push("las campañas");
+  }
 
   const filterLabels: Record<CampaignHubFilter, { word: string; words: string }> = {
     vigente: { word: "vigente", words: "vigentes" },
@@ -55,6 +87,7 @@ export default async function CampaignTrackerPage({ searchParams }: Props) {
 
   return (
     <PageShell eyebrow="Campaign Tracker" title={title} subtitle={subtitle}>
+      <DegradedNotice sections={failedSections} />
       {/* Filtro de estado */}
       <div className="flex flex-wrap items-center gap-2 mb-4 text-xs">
         <FilterPill label="Estado">
