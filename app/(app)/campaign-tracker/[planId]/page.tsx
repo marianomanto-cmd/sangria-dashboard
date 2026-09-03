@@ -3,7 +3,10 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { getCampaignTrackerPlan } from "@/db/queries/campaign-tracker";
 import { buildHrefWithClient } from "@/lib/client-filter";
-import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
+import {
+  resolveClientFromSearchParams,
+  type ResolvedClientFilter,
+} from "@/lib/client-filter.server";
 import { parseLocalDate } from "@/lib/campaign-metrics";
 import { formatUsd } from "@/lib/format";
 import { formatDate } from "@/lib/i18n";
@@ -21,7 +24,14 @@ export default async function CampaignTrackerPlanPage({
 }: Props) {
   const { planId } = await params;
   const sp = await searchParams;
-  const client = await resolveClientFromSearchParams(sp);
+  // El filtro de cliente acá es sólo para armar los links de vuelta: si su
+  // lectura falla no tiene por qué tumbar la vista del plan.
+  let client: ResolvedClientFilter = null;
+  try {
+    client = await resolveClientFromSearchParams(sp);
+  } catch (e) {
+    console.error("TRACKQ[client]:", e instanceof Error ? e.message : e);
+  }
 
   const data = await getCampaignTrackerPlan(planId);
   if (!data) notFound();
