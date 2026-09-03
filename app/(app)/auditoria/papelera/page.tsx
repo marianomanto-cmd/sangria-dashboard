@@ -76,7 +76,7 @@ export default async function PapeleraPage({ searchParams }: Props) {
       subtitle={`Histórico de items eliminados. ${rows.length} item${rows.length === 1 ? "" : "s"}${typeFilter ? ` · filtro: ${entityNoun(typeFilter).singular}` : ""}. Los datos del item al momento del borrado quedan guardados acá para consulta.`}
     >
       <div className="mb-4 flex items-center gap-2">
-        <Link
+        <Link prefetch={false}
           href="/auditoria"
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 transition-colors"
         >
@@ -342,7 +342,7 @@ function FilterChoice({
   label: string;
 }) {
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       data-active={active}
       className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"

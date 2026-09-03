@@ -171,14 +171,14 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   </td>
                   <td className="px-2 py-2 text-center">
                     <div className="inline-flex items-center gap-0.5">
-                      <Link
+                      <Link prefetch={false}
                         href={`/configuracion/clientes/${c.slug}`}
                         className="text-muted hover:text-accent inline-flex p-1"
                         title="Publishers / métricas / mercados de este cliente"
                       >
                         <Settings size={14} />
                       </Link>
-                      <Link
+                      <Link prefetch={false}
                         href={`/clientes/${c.slug}`}
                         className="text-muted hover:text-ink inline-flex p-1"
                         title="Ver cliente"
@@ -214,14 +214,14 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   </p>
                 </div>
                 <div className="inline-flex items-center gap-0.5 shrink-0">
-                  <Link
+                  <Link prefetch={false}
                     href={`/configuracion/clientes/${c.slug}`}
                     className="text-muted hover:text-accent inline-flex p-1"
                     title="Publishers / métricas / mercados de este cliente"
                   >
                     <Settings size={14} />
                   </Link>
-                  <Link
+                  <Link prefetch={false}
                     href={`/clientes/${c.slug}`}
                     className="text-muted hover:text-ink inline-flex p-1"
                     title="Ver cliente"

@@ -12,6 +12,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:check": "node --env-file=.env.local scripts/db-check.mjs",
+    "test:db": "tsx scripts/db-connection-test.ts",
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "db:backfill-reports": "node --env-file=.env.local scripts/backfill-reports.mjs"
   },

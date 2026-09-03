@@ -19,7 +19,7 @@ function Notice({
       <div className="text-[13px] leading-relaxed text-ink-2">
         <p className="font-semibold text-ink">{title}</p>
         <div className="mt-1">{children}</div>
-        <Link
+        <Link prefetch={false}
           href="/configuracion"
           className="mt-3 inline-flex items-center gap-1.5 text-accent hover:underline"
         >

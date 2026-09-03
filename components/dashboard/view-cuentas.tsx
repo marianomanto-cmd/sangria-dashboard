@@ -161,7 +161,7 @@ function ClientChip({
   active: boolean;
 }) {
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       className={`px-3.5 py-1.5 rounded-full text-[13px] border transition-colors ${
         active
@@ -204,7 +204,7 @@ function Progress({ pct }: { pct: number }) {
 function ClientCard({ c, lang }: { c: ClientAgg; lang: Language }) {
   const es = lang === "es";
   return (
-    <Link
+    <Link prefetch={false}
       href={buildHrefWithClient("/proyectos", c.slug)}
       className="group rounded-2xl border border-line bg-surface p-5 transition-all duration-200 hover:-translate-y-1 hover:shadow-[var(--shadow-card-hover)] hover:border-accent/40"
     >

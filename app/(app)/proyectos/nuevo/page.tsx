@@ -29,7 +29,7 @@ export default async function NuevoProyectoPage() {
       subtitle="El AM define cliente, budget origin, nombre y total gross budget. Después el media planner crea los planes adentro."
     >
       <nav className="text-xs text-muted mb-3">
-        <Link href="/proyectos" className="hover:text-ink">
+        <Link prefetch={false} href="/proyectos" className="hover:text-ink">
           ← Volver a Proyectos
         </Link>
       </nav>

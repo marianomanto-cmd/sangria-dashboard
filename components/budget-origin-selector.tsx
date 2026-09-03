@@ -148,7 +148,7 @@ function DropdownItem({
   onClick: () => void;
 }) {
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       onClick={onClick}
       role="option"

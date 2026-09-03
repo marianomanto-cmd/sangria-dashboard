@@ -141,7 +141,7 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
             const active = t.id === tab;
             // Cambiar de tab limpia los filtros para no arrastrarlos a otra vista.
             return (
-              <Link
+              <Link prefetch={false}
                 key={t.id}
                 href={`?tab=${t.id}`}
                 role="tab"

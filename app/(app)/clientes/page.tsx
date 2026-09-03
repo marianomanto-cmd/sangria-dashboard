@@ -15,7 +15,7 @@ export default async function ClientesPage() {
     >
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {clientsList.map((c) => (
-          <Link
+          <Link prefetch={false}
             key={c.id}
             href={`/clientes/${c.slug}`}
             className="group rounded-lg border border-line bg-white dark:bg-paper-2 p-5 hover:border-ink-2 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:border-accent"

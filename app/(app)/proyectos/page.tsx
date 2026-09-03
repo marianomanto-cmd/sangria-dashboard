@@ -135,7 +135,7 @@ export default async function ProyectosPage({ searchParams }: Props) {
       }
       subtitle={`${projectsWord}${filteredText}${subtitleTail}`}
       actions={
-        <Link
+        <Link prefetch={false}
           href="/proyectos/nuevo"
           className={buttonVariants({ size: "md" })}
         >

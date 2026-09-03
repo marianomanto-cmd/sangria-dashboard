@@ -10,7 +10,7 @@ export default function ReportesPage() {
       subtitle="Herramientas que consolidan la data acumulada de planes y campaign tracker para soportar nuevas planificaciones y análisis de performance."
     >
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Link
+        <Link prefetch={false}
           href="/reportes/calendario"
           className="block rounded-lg border border-line bg-white dark:bg-paper-2 p-5 hover:border-accent transition-colors group"
         >
@@ -32,7 +32,7 @@ export default function ReportesPage() {
           </div>
         </Link>
 
-        <Link
+        <Link prefetch={false}
           href="/reportes/simulador"
           className="block rounded-lg border border-line bg-white dark:bg-paper-2 p-5 hover:border-accent transition-colors group"
         >
@@ -54,7 +54,7 @@ export default function ReportesPage() {
           </div>
         </Link>
 
-        <Link
+        <Link prefetch={false}
           href="/reportes/generador"
           className="block rounded-lg border border-line bg-white dark:bg-paper-2 p-5 hover:border-accent transition-colors group"
         >

@@ -31,7 +31,7 @@ export default async function ClientDetailPage({ params, searchParams }: Props) 
     <main className="px-8 py-10 max-w-[1800px] mx-auto w-full">
       {/* Breadcrumb */}
       <nav aria-label="Breadcrumb" className="text-xs text-muted flex items-center gap-1.5 mb-3">
-        <Link href="/clientes" className="hover:text-ink">
+        <Link prefetch={false} href="/clientes" className="hover:text-ink">
           {lang === "es" ? "Clientes" : "Clients"}
         </Link>
         <span className="text-line">/</span>
@@ -192,7 +192,7 @@ function ResumenTab({
                     className="border-t border-line-soft hover:bg-paper-2 transition-colors"
                   >
                     <td className="px-5 py-3">
-                      <Link
+                      <Link prefetch={false}
                         href={`/proyectos/${p.code}`}
                         className="font-medium text-ink hover:underline"
                       >
@@ -247,7 +247,7 @@ function ResumenTab({
               const overConsumed = p.consumptionPct > 100;
               const barWidth = Math.min(p.consumptionPct, 100);
               return (
-                <Link
+                <Link prefetch={false}
                   key={p.id}
                   href={`/proyectos/${p.code}`}
                   className="block px-4 py-3.5 hover:bg-paper-2 transition-colors"
@@ -434,7 +434,7 @@ function TimelineTab({
               className="grid grid-cols-[260px_1fr] gap-3 items-center hover:bg-paper-2 rounded px-1 py-1 -mx-1 transition-colors"
             >
               <div className="min-w-0">
-                <Link
+                <Link prefetch={false}
                   href={`/proyectos/${p.code}`}
                   className="font-medium text-ink hover:underline truncate block text-sm"
                 >
@@ -515,7 +515,7 @@ function OriginTab({
 }) {
   const isActive = originId === currentOriginId;
   return (
-    <Link
+    <Link prefetch={false}
       href={buildHref(slug, originId, tab)}
       data-active={isActive}
       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
@@ -540,7 +540,7 @@ function TabLink({
 }) {
   const isActive = current === target;
   return (
-    <Link
+    <Link prefetch={false}
       href={buildHref(slug, originId, target)}
       data-active={isActive}
       className="-mb-px px-3.5 py-2 text-[13px] font-medium text-muted hover:text-ink-2 border-b-2 border-transparent data-[active=true]:text-ink data-[active=true]:border-accent transition-colors"

@@ -13,7 +13,7 @@ export default function NotFound() {
         title="No encontramos lo que buscabas"
         hint="El recurso no existe, fue movido o el link está mal. Volvé al dashboard y reintentá desde ahí."
         action={
-          <Link href="/" className={buttonVariants({ size: "sm" })}>
+          <Link prefetch={false} href="/" className={buttonVariants({ size: "sm" })}>
             Ir al dashboard
           </Link>
         }

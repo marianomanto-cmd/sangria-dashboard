@@ -974,7 +974,7 @@ export async function ProjectsSection({
                         <FileSpreadsheet size={13} />
                         Excel
                       </a>
-                      <Link
+                      <Link prefetch={false}
                         href={hrefWith(params, { plan: nextPlan.join(",") })}
                         scroll={false}
                         className="inline-flex items-center gap-1 text-xs text-accent hover:underline"

@@ -129,7 +129,7 @@ export function StatusDot({ tone }: { tone: Tone }) {
 // global (accent). Hover: bg accent / texto blanco.
 export function OpenLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       aria-label={label}
       className="shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-lg border border-line text-muted hover:bg-accent hover:border-accent hover:text-white transition-colors"

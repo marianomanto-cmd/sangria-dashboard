@@ -73,7 +73,7 @@ export default async function ClientConfigPage({ params }: Props) {
         aria-label="Breadcrumb"
         className="text-xs text-muted -mt-6 mb-6"
       >
-        <Link href="/configuracion/clientes" className="hover:text-accent">
+        <Link prefetch={false} href="/configuracion/clientes" className="hover:text-accent">
           ← volver al listado de clientes
         </Link>
       </nav>

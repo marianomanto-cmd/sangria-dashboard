@@ -294,7 +294,7 @@ function FilterChoice({
   const qs = params.toString();
   const href = qs ? `/campaign-tracker?${qs}` : "/campaign-tracker";
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       data-active={isActive}
       className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"
@@ -352,7 +352,7 @@ function ClientGroup({
             className="border-t border-line-soft group hover:bg-paper-2 transition-colors data-[stale=true]:bg-warn-soft/40"
           >
             <td className="px-5 py-2.5">
-              <Link href={href} className="block pl-7">
+              <Link prefetch={false} href={href} className="block pl-7">
                 <span className="font-medium text-ink group-hover:text-accent transition-colors">
                   {plan.planName}
                 </span>
@@ -374,7 +374,7 @@ function ClientGroup({
               </Link>
             </td>
             <td className="px-5 py-2.5">
-              <Link
+              <Link prefetch={false}
                 href={href}
                 className="block font-mono text-[11px] text-ink-2"
               >
@@ -384,14 +384,14 @@ function ClientGroup({
               </Link>
             </td>
             <td className="px-5 py-2.5 text-right">
-              <Link href={href} className="block font-mono text-ink-2">
+              <Link prefetch={false} href={href} className="block font-mono text-ink-2">
                 {plan.goalInvestmentUsd > 0
                   ? formatUsd(plan.goalInvestmentUsd)
                   : "—"}
               </Link>
             </td>
             <td className="px-5 py-2.5">
-              <Link href={href} className="flex items-center gap-2">
+              <Link prefetch={false} href={href} className="flex items-center gap-2">
                 <div className="flex-1">
                   <ConsumptionBar
                     progressPct={plan.progressPct}
@@ -405,12 +405,12 @@ function ClientGroup({
               </Link>
             </td>
             <td className="px-5 py-2.5">
-              <Link href={href} className="block">
+              <Link prefetch={false} href={href} className="block">
                 <PaceBadge status={plan.paceStatus} />
               </Link>
             </td>
             <td className="px-5 py-2.5">
-              <Link href={href} className="flex items-center gap-1.5">
+              <Link prefetch={false} href={href} className="flex items-center gap-1.5">
                 <FreshnessDots lastUpdateAt={plan.lastUpdateAt} />
                 <span className="text-[11px] text-muted">
                   {relativeUpdateLabel(plan.lastUpdateAt)}
@@ -418,7 +418,7 @@ function ClientGroup({
               </Link>
             </td>
             <td className="px-2 py-2.5">
-              <Link
+              <Link prefetch={false}
                 href={href}
                 aria-label="Abrir plan"
                 className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted group-hover:text-ink group-hover:bg-paper transition-colors"
@@ -471,7 +471,7 @@ function ClientGroupCards({
           const showConcluidoBadge =
             plan.status === "concluido" && filter !== "concluido";
           return (
-            <Link
+            <Link prefetch={false}
               key={plan.planId}
               href={href}
               data-stale={plan.isStale}
