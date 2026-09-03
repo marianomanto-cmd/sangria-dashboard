@@ -50,20 +50,21 @@ DATABASE_URL=postgresql://postgres.hhubbahbmurrukftezea:TU_PASSWORD@aws-1-us-eas
 - **Los números del pooler (Settings → Database → Connection pooling)**, medidos
   el 02/sep/2026 con compute **Nano**:
   - **Max client connections: 200** (fijo en Nano). Cuántas Lambdas pueden estar
-    conectadas a Supavisor. Con `max: 1` en `db/index.ts` harían falta 200
+    conectadas a Supavisor. Con `max: 3` en `db/index.ts` harían falta ~67
     instancias calientes a la vez: **no es el techo**.
   - **Connection pool size: 25** (editable; era 15 y se subió el 02/sep/2026).
     Cuántas conexiones mantiene Supavisor **contra Postgres**. En modo
     transacción, cada query en vuelo ocupa uno de esos slots mientras corre:
     **éste es el techo real de la app**.
 
-  De ahí sale por qué `max` importa tanto. Con `max: 3`, una sola carga de
-  página podía tener 3 statements en vuelo → con los 15 de entonces, sólo
-  **5 páginas concurrentes**. Con `max: 1` cada instancia ocupa como mucho 1
-  slot, así que la concurrencia es directamente el pool size: 15 antes, **25
-  ahora**. El costo es que las queries de la página se serializan sobre una
-  conexión (~15ms cada una), lo que hace que el fan-out por página y la caché
-  importen todavía más.
+  De ahí sale por qué `max` importa. Cada query **en vuelo** ocupa un slot
+  mientras corre, y el 03/sep se midió que las queries de la app duran ~20 ms
+  (pico histórico 907 ms), así que los slots se liberan enseguida: con `max: 3`
+  hacen falta 9 instancias calientes **simultáneas** para agotar los 25.
+  El experimento de bajarlo a 1 (02/sep) resultó contraproducente: no ahorraba
+  slots reales y en cambio serializaba las 4-16 queries de cada página sobre un
+  solo socket, donde las que no entraban morían en la cola local de postgres.js
+  sin llegar nunca al server. Ver "Pool de conexiones".
 
   **Si hiciera falta más**: se puede volver a subir *Connection pool size*.
   Sigue habiendo lugar — se midieron 9 conexiones en uso contra
@@ -255,6 +256,7 @@ db/
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
+  db-connection-test.ts     # TEST del ciclo de vida de conexión de db/index.ts (`npm run test:db`). Contra un Postgres LOCAL, nunca prod (congela el server con SIGSTOP). Fija las tres fases del timeout, que el 57014 lo tire Postgres y no nuestro reloj, y que sólo un socket muerto cierre la conexión
 lib/
   format.ts                 # formatUsd, formatPct, formatUsdCompact + inputs US: formatIntInput / formatAmountInput / parseNumberInput / evalNumberInput (fórmulas tipo Excel)
   i18n.ts                   # Language type + formatDate/formatMonth + dictionary `t`
@@ -1821,32 +1823,72 @@ en frío que puebla el cache.
 
 ### Pool de conexiones
 - `prepare: false` para Transaction Pooler (puerto 6543).
-- **`max: 1` por instancia. No subirlo sin leer el comentario de `db/index.ts`.**
-  El pool vive en scope de módulo, así que sobrevive entre invocaciones de la
-  misma instancia de Lambda. Vercel no la mata al terminar el request: la
-  **congela**, y una instancia congelada no ejecuta timers → `idle_timeout`
-  nunca dispara y sus conexiones quedan abiertas del lado de Supabase
-  (`ClientRead`). Con `max: N`, cada instancia caliente retiene N slots del
-  pooler; en un pico, instancias × N. **Ése es el goteo que obligaba a
-  reiniciar el proyecto en Supabase** — no es una fuga por funciones muertas,
-  es el modelo de conexiones persistentes chocando con el ciclo de vida
-  serverless. Con 1 no se pierde throughput: Vercel sirve un request por
-  instancia a la vez y postgres.js pipelinea las queries sobre la misma
-  conexión. Historial: 3 → 8 (22/may) → 3 (02/sep, #248) → 1 (02/sep, #254).
+- **`max: 3` por instancia** (03/sep/2026). Historial: 3 → 8 (22/may) → 3
+  (02/sep, #248) → 1 (02/sep, #254) → **3**. Por qué había bajado a 1: el pool
+  vive en scope de módulo, sobrevive entre invocaciones de la misma instancia, y
+  Vercel no la mata al terminar el request sino que la **congela** — una
+  instancia congelada no ejecuta timers, así que `idle_timeout` nunca dispara y
+  sus conexiones quedan abiertas del lado de Supabase (`ClientRead`). Con
+  `max: N`, cada instancia caliente retiene hasta N slots.
+- **Por qué volvió a 3, y el supuesto que era falso.** El comentario de este
+  archivo decía *"Vercel sirve un request por instancia a la vez, así que no se
+  pierde concurrencia"*. Aunque eso valga ENTRE requests, no vale **dentro** de
+  uno: una página dispara 4-16 queries y con `max: 1` todas comparten un solo
+  socket. Las que no entran se encolan en la cola **local** de postgres.js, que
+  no tiene timeout propio, y morían contra el reloj del cliente sin haber
+  salido. Medido el 03/sep con `pg_stat_statements` reseteado y una carga de
+  `/dashboard`: **21 ms** de trabajo real (20,48 + 0,98) y aun así la vista
+  fallaba, porque **dos de las cuatro queries nunca llegaron a Postgres** — no
+  figuraban en `pg_stat_statements`. Los 8 segundos se iban en la fila.
+  Reproducido en `npm run test:db`: con `max: 1` morían 5 de 5 queries en
+  contención; con 3, sobrevive 4 de 5.
 - El **techo de concurrencia no está acá**: es el *Connection pool size* de
-  Supavisor (**25** desde el 02/sep/2026, era 15). Con `max: 1`, ése número
-  **son** las páginas concurrentes. Ver "Los números del pooler" más arriba.
-- `idle_timeout: 20`, `connect_timeout: 10`, `connection.statement_timeout: 12s`.
-- **Timeout de cliente + reintento** (`QUERY_TIMEOUT_MS = 8s`, `MAX_ATTEMPTS = 2`).
-  Invariante: el peor caso (todos los intentos vencidos) tiene que quedar muy
-  por debajo del `maxDuration` de la página (45s). Ver "Si Vercel falla…".
-- **Al vencer una query que YA SALIÓ, se CIERRA la conexión** — no se abandona
-  (`discardPoisonedConnection`). Es la regla más importante de este archivo:
-  abandonarla deja la conexión con la query en vuelo, Vercel congela la
-  instancia así, y del lado de Supabase queda `active/ClientRead` **para
-  siempre**. El `statement_timeout` del server **no** la rescata: mata el
-  statement, no la conexión. Eso era lo que colgaba la app y lo que obligaba a
-  reiniciar el proyecto en Supabase — el restart no arreglaba nada, tiraba las
+  Supavisor (**25** desde el 02/sep/2026, era 15). En modo transacción cada
+  query **en vuelo** ocupa un slot, y como duran ~20 ms se liberan enseguida:
+  con `max: 3` hacen falta 9 instancias calientes simultáneas para agotarlo.
+  Ver "Los números del pooler" más arriba.
+- `idle_timeout: 20`, `connect_timeout: 10`,
+  `connection.statement_timeout: 10s` (`STATEMENT_TIMEOUT_MS`).
+- **TRES FASES, no dos** (`db/index.ts`). postgres.js **pipelinea**: cuando no
+  hay conexión libre no encola, le pasa la query a una conexión ocupada
+  (`index.js`, `busy.length ? go(busy.shift(), query)`), que la escribe al
+  socket igual y setea `q.state` (`connection.js`, `q.state = backend`). O sea
+  que **`state != null` NO significa "el server está trabajando en esto"**. La
+  señal que sí lo dice es `q.active`, que se pone en `true` sólo para la query
+  que la conexión está atendiendo, y la promueve el `ReadyForQuery` cuando
+  termina la anterior. De ahí las tres fases, cada una con su reloj, que arranca
+  cuando la query **entra** en esa fase:
+
+  | Fase | Estado | Reloj | Al vencer |
+  |------|--------|-------|-----------|
+  | `cola` | `!state` — en la cola local, nunca salió | 6s | `cancel()` **local**, no toca el server. Reintentable siempre, incluso escrituras. |
+  | `pipeline` | `state && !active` — salió, espera a sus hermanas | 6s | **No se toca la conexión**: está sana y ocupada; cerrarla mataría a las hermanas. Se suelta la espera y postgres.js lee la respuesta cuando llegue. |
+  | `ejecucion` | `state && active` — el server está en esta query | 12s | **Se cierra la conexión** (`discardPoisonedConnection`). Único caso que lo hace. |
+
+- **El reloj de ejecución (12s) es a propósito MAYOR que el `statement_timeout`
+  del server (10s).** Así el que corta una query lenta es SIEMPRE Postgres, que
+  contesta un `57014` por la misma conexión y la deja limpia y reusable. Si
+  ganara nuestro reloj habría que cerrar el socket — que es lo que fabricaba
+  zombies. Invertir ese orden convierte el camino normal de falla en uno que no
+  rompe nada. Fijado en `npm run test:db`, caso 2.
+- **El reintento resuelve el cliente en CADA intento, no lo captura.** Era un
+  bug: `resilientQuery` capturaba el cliente en un closure, así que si en el
+  medio `discardPoisonedConnection` lo cerraba, postgres.js rechazaba al toque
+  (`handler()` hace `if (ending) return query.reject(CONNECTION_ENDED)`, y
+  `ending` **nunca se resetea**). El "segundo intento" fallaba en 0 ms sin tocar
+  la red, o sea que `MAX_ATTEMPTS = 2` valía 1 — y ése era el
+  `CONNECTION_ENDED ...pooler.supabase.com:6543` de los logs: **nos lo hacíamos
+  solos, no lo tiraba el pooler.**
+- **`discardPoisonedConnection` recibe el cliente**, no lo saca de `_rawClient`.
+  Antes cerraba el cliente *actual*, que no tiene por qué ser el dueño de la
+  query que venció: si otro timeout ya lo había reemplazado, cerraba una
+  conexión **sana** y dejaba la envenenada abierta.
+- **Presupuesto.** El peor caso tiene que quedar por debajo del `maxDuration` de
+  la página (45s): si Vercel mata la función antes de que se lance el error, la
+  instancia se congela con la conexión abierta y vuelve la espiral del 02/sep.
+  Sólo la fase `cola` es reintentable siempre y vence a los 6s, así que el peor
+  caso es `cola(6s) + backoff(0,3s) + [cola(6s) + pipeline(6s) + ejec(12s)]` =
+  **30,3s**, más el auth (8s) — por debajo de 45s.
   conexiones colgadas. Ver HANDOFF 02/sep/2026 (3).
 
 ---
@@ -1901,7 +1943,7 @@ Prevención (ya aplicada):
   (12s) al abrir la conexión, así que el tope existe aunque el `ALTER ROLE`
   no se haya corrido.
 - `enumerateMonths` blindado contra fechas malformadas (no más loop infinito).
-- `max: 1` conexión por instancia (ver "Pool de conexiones").
+- `max: 3` conexiones por instancia (era 1; ver "Pool de conexiones").
 
 #### Si la app se cuelga: QUÉ MEDIR PRIMERO
 
@@ -1966,11 +2008,17 @@ datos (son chicos).
 
 **Lo que hay hoy en `db/index.ts`** (sobre el cliente postgres.js):
 
-- **Timeout de cliente** `QUERY_TIMEOUT_MS = 8s` y **reintento** `MAX_ATTEMPTS = 2`
-  (backoff 300ms). Se reintenta sólo cuando es demostrable que la query nunca
-  salió: `query.state == null` ⟹ ninguna conexión la tomó ⟹ no llegó al server
-  ni siquiera si escribe. También lecturas (`select`) con error de conexión.
-- **Invariante**: 2 × 8s + 0,3s ≈ 16s, **muy por debajo del `maxDuration`** (45s).
+- **Timeout de cliente en TRES FASES** —- `cola` 6s, `pipeline` 6s,
+  `ejecucion` 12s —- y **reintento** `MAX_ATTEMPTS = 2` (backoff 300ms). La
+  fase la decide `query.state` + `query.active`; ver la tabla en "Pool de
+  conexiones". Se reintenta siempre la fase `cola` (la query no salió, ni
+  siquiera si escribe) y, en las otras dos, sólo las lecturas (`select`).
+  El reintento **resuelve el cliente de nuevo**: capturarlo hacía que un
+  descarte previo lo dejara inútil.
+- **Invariante**: peor caso 30,3s, **por debajo del `maxDuration`** (45s), con
+  8s más de auth. `EXEC_TIMEOUT_MS (12s) > STATEMENT_TIMEOUT_MS (10s)` a
+  propósito, para que las queries lentas las corte Postgres con un 57014 y la
+  conexión quede reusable.
   Si la suma se pasa, la función muere antes del error y vuelve el punto 2.
 - **Sólo se cancela lo que nunca salió.** postgres.js pipelinea varias queries
   sobre una conexión, y el cancel de una pipelineada va con el backend key de
@@ -1982,8 +2030,14 @@ datos (son chicos).
 **Fuera de `db/index.ts`**: `lib/supabase/fetch-with-timeout.ts` le pone
 `AbortSignal.timeout(8s)` a `auth.getUser()` (proxy + layout) — era la única
 llamada de red del render sin tope; `db/fk-indexes.sql` (12 índices, aplicado);
-`maxDuration = 45` en `app/(app)/layout.tsx`; `prefetch={false}` en las navs y
-en los links de fila (en Next 16 apaga también el hover: cargan al click).
+`maxDuration = 45` en `app/(app)/layout.tsx`; **`prefetch={false}` en TODOS los
+`<Link>` de `app/` y `components/`** (84 links en 39 archivos, 03/sep/2026 — el
+tratamiento del 02/sep sólo había llegado a las dos navs y a las tablas de
+proyectos y planes, y quedaban afuera campaign-tracker, billing-tracker,
+clientes, auditoría, configuración y reportes). El log de Vercel del 03/sep
+muestra por qué: entre las 13:04:12 y las 13:04:16, **7 páginas de detalle de
+`/campaign-tracker` renderizadas a la vez** por prefetch de las filas de la
+tabla. Regla: en esta app un `<Link>` nuevo va SIEMPRE con `prefetch={false}`
 
 Diagnóstico de zombies (SQL Editor). Contar:
 ```sql

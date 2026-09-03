@@ -195,7 +195,7 @@ export default async function BillingTrackerPage({ searchParams }: Props) {
   );
 }
 
-// ─── Tabs nav (URL-based, server-rendered con <Link>) ──────────────────────
+// ─── Tabs nav (URL-based, server-rendered con <Link prefetch={false}>) ──────────────────────
 
 function TabsNav({
   current,
@@ -248,7 +248,7 @@ function TabsNav({
         const Icon = t.icon;
         const active = current === t.id;
         return (
-          <Link
+          <Link prefetch={false}
             key={t.id}
             href={t.href}
             role="tab"
@@ -284,7 +284,7 @@ function ProjectCard({
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <Link
+              <Link prefetch={false}
                 href={`/proyectos/${project.code}`}
                 className="font-semibold text-ink hover:text-accent transition-colors truncate"
               >
@@ -295,7 +295,7 @@ function ProjectCard({
               </span>
             </div>
             <p className="text-xs text-muted mt-0.5">
-              <Link
+              <Link prefetch={false}
                 href={`/clientes/${project.clientSlug}`}
                 className="hover:text-ink transition-colors"
               >
@@ -417,7 +417,7 @@ function PlanBlock({
                   <BillingStatusBadge status={inv.status} lang={lang} />
                 </RowCell>
                 <td className="px-2 py-2.5 align-middle">
-                  <Link
+                  <Link prefetch={false}
                     href={href}
                     aria-label={lang === "es" ? "Abrir" : "Open"}
                     className="inline-flex items-center justify-center w-7 h-7 rounded-md text-muted group-hover:text-ink group-hover:bg-paper transition-colors"
@@ -437,7 +437,7 @@ function PlanBlock({
         {plan.invoices.map((inv) => {
           const href = `/proyectos/${projectCode}/planes/${plan.id}/billing?month=${inv.month}`;
           return (
-            <Link
+            <Link prefetch={false}
               key={inv.id}
               href={href}
               className="block px-5 py-3.5 hover:bg-paper-2 transition-colors"
@@ -548,7 +548,7 @@ function RowCell({
 }) {
   return (
     <td className="p-0">
-      <Link
+      <Link prefetch={false}
         href={href}
         className={`block px-5 py-2.5 ${align === "right" ? "text-right" : ""}`}
       >

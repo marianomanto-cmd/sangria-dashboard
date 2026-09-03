@@ -417,7 +417,7 @@ export function BillingMonthEditor({
         Una vez emitida la factura, el monto queda inmutable.
       </p>
       <div className="text-[11px] text-muted">
-        <Link
+        <Link prefetch={false}
           href={`/proyectos/${projectCode}/planes/${planId}`}
           className="hover:underline"
         >

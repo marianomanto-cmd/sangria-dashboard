@@ -66,7 +66,7 @@ function YearChoice({
   active: boolean;
 }) {
   return (
-    <Link
+    <Link prefetch={false}
       href={href}
       data-active={active}
       className="px-2 py-0.5 rounded text-xs text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"

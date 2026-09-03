@@ -4,7 +4,7 @@
 //
 // - `Button`: para elementos <button>.
 // - `buttonVariants()`: devuelve el className para reusar el mismo look en
-//   <Link>/<a> (que no son <button>). Mismo patrón que shadcn/ui.
+//   <Link prefetch={false}>/<a> (que no son <button>). Mismo patrón que shadcn/ui.
 //
 // El focus ring lo pone el `*:focus-visible` global de globals.css (accent), por
 // eso NO seteamos outline acá.

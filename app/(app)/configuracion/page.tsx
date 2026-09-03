@@ -68,7 +68,7 @@ export default async function ConfiguracionPage({ searchParams }: Props) {
             </p>
             <p className="mt-0.5">
               Para editar publishers, métricas y mercados de este cliente entrá a{" "}
-              <Link
+              <Link prefetch={false}
                 href={`/configuracion/clientes/${client.slug}`}
                 className="text-accent hover:underline"
               >
@@ -83,7 +83,7 @@ export default async function ConfiguracionPage({ searchParams }: Props) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {SECTIONS.map((s) =>
           s.status === "ready" ? (
-            <Link
+            <Link prefetch={false}
               key={s.href}
               href={client ? `${s.href}?client=${client.slug}` : s.href}
               className="group rounded-lg border border-line bg-white dark:bg-paper-2 p-5 hover:border-ink-2 transition-colors"

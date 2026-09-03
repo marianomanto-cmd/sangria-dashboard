@@ -52,7 +52,7 @@ export default async function PlanTrashPage({ searchParams }: Props) {
                     </p>
                   </td>
                   <td className="px-4 py-2.5">
-                    <Link
+                    <Link prefetch={false}
                       href={`/proyectos/${p.projectCode}`}
                       className="text-ink-2 hover:text-accent"
                     >
@@ -93,7 +93,7 @@ export default async function PlanTrashPage({ searchParams }: Props) {
                 </span>
               </div>
               <p className="text-[13px] mt-1.5">
-                <Link
+                <Link prefetch={false}
                   href={`/proyectos/${p.projectCode}`}
                   className="text-ink-2 hover:text-accent"
                 >

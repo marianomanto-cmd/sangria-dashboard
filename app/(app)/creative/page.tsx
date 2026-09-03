@@ -125,7 +125,7 @@ function StatusFilter({
       {opts.map((o) => {
         const active = current === o.id;
         return (
-          <Link
+          <Link prefetch={false}
             key={o.label}
             href={href(o.id)}
             className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${

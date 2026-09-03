@@ -37,7 +37,7 @@ export default async function AuditoriaPage({ searchParams }: Props) {
     >
       {/* Acceso a papelera */}
       <div className="mb-4">
-        <Link
+        <Link prefetch={false}
           href="/auditoria/papelera"
           className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 transition-colors"
         >
@@ -85,7 +85,7 @@ export default async function AuditoriaPage({ searchParams }: Props) {
         </FilterPill>
 
         {(filters.entityType || filters.action || filters.sinceDate) && (
-          <Link
+          <Link prefetch={false}
             href="/auditoria"
             className="px-2 py-0.5 rounded text-muted hover:text-ink underline-offset-2 hover:underline"
           >
@@ -156,7 +156,7 @@ function FilterChoice({
 }) {
   const isActive = current === value;
   return (
-    <Link
+    <Link prefetch={false}
       href={buildHref(value)}
       data-active={isActive}
       className="px-2 py-0.5 rounded text-muted hover:text-ink data-[active=true]:bg-white dark:data-[active=true]:bg-paper data-[active=true]:text-ink data-[active=true]:shadow-sm transition-colors"

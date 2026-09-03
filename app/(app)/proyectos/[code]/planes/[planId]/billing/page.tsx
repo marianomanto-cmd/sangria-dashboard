@@ -287,17 +287,17 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
         aria-label="Breadcrumb"
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
-        <Link href="/proyectos" className="hover:text-ink">Proyectos</Link>
+        <Link prefetch={false} href="/proyectos" className="hover:text-ink">Proyectos</Link>
         <span className="text-line">/</span>
-        <Link href={`/clientes/${planRow.client.slug}`} className="hover:text-ink">
+        <Link prefetch={false} href={`/clientes/${planRow.client.slug}`} className="hover:text-ink">
           {planRow.client.name}
         </Link>
         <span className="text-line">/</span>
-        <Link href={`/proyectos/${planRow.project.code}`} className="hover:text-ink">
+        <Link prefetch={false} href={`/proyectos/${planRow.project.code}`} className="hover:text-ink">
           {planRow.project.name}
         </Link>
         <span className="text-line">/</span>
-        <Link
+        <Link prefetch={false}
           href={`/proyectos/${planRow.project.code}/planes/${planId}`}
           className="hover:text-ink"
         >
@@ -351,7 +351,7 @@ export default async function PlanBillingPage({ params, searchParams }: Props) {
                 const isSelected = selectedMonth === m;
                 return (
                   <li key={m}>
-                    <Link
+                    <Link prefetch={false}
                       href={`?month=${m}`}
                       data-selected={isSelected}
                       className="flex items-center justify-between gap-2 px-4 py-2 hover:bg-paper-2 data-[selected=true]:bg-paper-2 data-[selected=true]:border-l-2 data-[selected=true]:border-accent transition-colors"

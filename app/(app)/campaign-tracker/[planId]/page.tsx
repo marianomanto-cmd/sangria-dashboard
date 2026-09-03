@@ -70,13 +70,13 @@ export default async function CampaignTrackerPlanPage({
         aria-label="Breadcrumb"
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
-        <Link href={hubHref} className="hover:text-ink">
+        <Link prefetch={false} href={hubHref} className="hover:text-ink">
           Campaign Tracker
         </Link>
         <span className="text-line">/</span>
         <span className="hover:text-ink">{data.client.name}</span>
         <span className="text-line">/</span>
-        <Link
+        <Link prefetch={false}
           href={`/proyectos/${data.project.code}`}
           className="hover:text-ink"
         >
@@ -191,7 +191,7 @@ export default async function CampaignTrackerPlanPage({
         <div className="rounded-lg border border-warn-soft bg-warn-soft/50 px-5 py-3 mb-5 text-sm text-warn">
           Este plan no tiene goals definidos en sus placements. Cargá montos y
           métricas en el{" "}
-          <Link
+          <Link prefetch={false}
             href={`/proyectos/${data.project.code}/planes/${data.plan.id}`}
             className="underline font-medium"
           >
@@ -210,7 +210,7 @@ export default async function CampaignTrackerPlanPage({
       />
 
       <div className="mt-5">
-        <Link
+        <Link prefetch={false}
           href={hubHref}
           className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink"
         >

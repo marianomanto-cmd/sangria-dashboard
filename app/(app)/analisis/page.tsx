@@ -37,7 +37,7 @@ export default async function AnalisisPage({
           Una vez que filtres por cliente vas a ver el mapa de activaciones por
           mercado y el detalle filtrable por publisher, mercado y período.
           <div className="mt-4">
-            <Link href="/" className="text-xs text-accent hover:underline">
+            <Link prefetch={false} href="/" className="text-xs text-accent hover:underline">
               ← Volver al dashboard
             </Link>
           </div>

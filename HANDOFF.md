@@ -2,6 +2,113 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 03/sep/2026 (2) — el tiempo se iba en la FILA, no en la base
+
+La entrada de abajo cuenta el diagnóstico. Ésta, el arreglo. **Si algo se vuelve
+a colgar, leé primero "la medición" acá.**
+
+#### La medición que lo cerró
+
+`pg_stat_statements` llevaba **114 días sin resetear** (`stats_reset` =
+12/may/2026), así que todos los totales del triage anterior eran acumulados y no
+decían nada de la ráfaga. Reseteado y cargando **una sola** vez `/dashboard`:
+
+| query de /dashboard | calls | ms |
+|---|---|---|
+| `projects ⋈ clients ⋈ media_plans ⋈ plan_billings ⋈ plan_billing_publishers` | 1 | **20,48** |
+| facturación real por mes | 1 | **0,98** |
+| las otras dos de `getDashboardV2` | **0** | — |
+
+**21 ms de trabajo real**, y la vista igual falló: dos de las cuatro queries
+**nunca llegaron a Postgres** — no figuran en `pg_stat_statements` porque no se
+ejecutaron. La que aparece en el error de Vercel de esa misma carga
+(`DASH2[data]`, el `sum(plan_billings.total_usd)`) es una de esas dos.
+
+Para calibrar: en esa misma ventana el **SQL Editor de Supabase gastó 248 ms**
+(`with f as (...)` 157 ms, `pg_available_extensions` 70 ms). Tener la consola
+abierta le cuesta a esa base 12× más que renderizar el dashboard entero.
+
+Conclusión, medida y no supuesta: **la base nunca fue el cuello**. El tiempo se
+iba esperando turno sobre una única conexión.
+
+#### Los cuatro bugs, en orden de impacto
+
+1. **`max: 1` serializaba las 4-16 queries de cada página.** El comentario de
+   `db/index.ts` justificaba el 1 con *"Vercel sirve un request por instancia a
+   la vez, así que no se pierde concurrencia"* — cierto entre requests,
+   **falso dentro de uno**. Vuelve a **3**.
+2. **El reloj no distinguía "esperando turno" de "el server no contesta".** Y
+   la primera versión de este arreglo, que usaba `query.state` para separarlas,
+   **la tumbó el test local**: postgres.js *pipelinea* — cuando no hay conexión
+   libre no encola, le pasa la query a una conexión ocupada, que la escribe al
+   socket y setea `state` igual. La señal correcta es `query.active`. Quedan
+   **tres fases** (`cola` / `pipeline` / `ejecucion`), cada una con su reloj, y
+   sólo `ejecucion` cierra la conexión.
+3. **El reloj de cliente (8s) le ganaba al `statement_timeout` del server
+   (12s)**, así que el camino normal de una query lenta terminaba en *nosotros*
+   cerrando el socket. Ahora es al revés: `EXEC_TIMEOUT_MS` (12s) >
+   `STATEMENT_TIMEOUT_MS` (10s), y las corta Postgres con un `57014` por la
+   misma conexión, que queda limpia.
+4. **El reintento usaba el cliente que acabábamos de cerrar.**
+   `resilientQuery` lo capturaba en un closure; `handler()` de postgres.js hace
+   `if (ending) return query.reject(CONNECTION_ENDED)` y **`ending` no se
+   resetea nunca**. O sea que el segundo intento fallaba en 0 ms sin tocar la
+   red y `MAX_ATTEMPTS = 2` valía 1. **Ése era el
+   `CONNECTION_ENDED ...pooler.supabase.com:6543` de los logs: nos lo hacíamos
+   solos.** Y de paso `discardPoisonedConnection` cerraba el cliente *vigente*,
+   no el dueño de la query vencida — con dos timeouts encadenados cerraba una
+   conexión sana y dejaba la envenenada abierta.
+
+Y el amplificador: **`prefetch={false}` en los 84 `<Link>` de `app/` y
+`components/`** (39 archivos). El tratamiento del 02/sep sólo había llegado a
+las dos navs y a las tablas de proyectos y planes. El log de Vercel del 03/sep
+muestra lo que faltaba: 13:04:12–13:04:16, **7 páginas de detalle de
+`/campaign-tracker` renderizándose a la vez** por prefetch de las filas.
+
+#### El test
+
+`npm run test:db` (`scripts/db-connection-test.ts`) — 16 aserciones contra un
+Postgres **local**, nunca prod (el caso 5 congela el server con `SIGSTOP` para
+simular un socket muerto). Fija las tres fases, el orden de los relojes y la
+recuperación tras un descarte.
+
+Contra el código anterior a este PR **fallan 10 de 16**, y lo más elocuente está
+en el caso 3: con `max: 1` morían **las cinco** queries en contención; con 3
+sobrevive 4 de 5. Ésa es la falla de prod, reproducida en el contenedor.
+
+#### Lo que NO se tocó, y por qué
+
+- **`audit_log`** (16 MB, la tabla más grande, y la fila más cara del top de
+  `pg_stat_statements`): sus ~277 s son de `getPlanAuditEvents`, que **ya no
+  tiene ningún llamador** desde el PR #249 — código muerto medido sobre 114
+  días. No explica nada de la ráfaga.
+- **Los 6 FK sin índice**: reales pero irrelevantes acá. El más grande es
+  `campaign_actual_snapshots` (3.519 filas) y el más chico `budget_origins`
+  (14 filas, 32 kB): un seq scan ahí son microsegundos, no 12 segundos.
+- **La ventana de medición**: cualquier conclusión sacada de
+  `pg_stat_statements` sin mirar `pg_stat_statements_info` primero es sospechosa.
+  En esta sesión invalidó dos hipótesis mías.
+
+#### Pendiente (medido, no hecho)
+
+- **`components/topbar.tsx` corre una query SIN caché en CADA página** del grupo
+  `(app)`, y es literalmente `select slug, name from clients where status <>
+  'archived'` — la del grupo de error con 65 ocurrencias y la de los `57014`.
+  Envolverla en `unstable_cache` con `CATALOG_TAG` es una línea y saca un
+  round-trip de cada render. **Es lo próximo que hay que hacer.**
+- **No hay error boundary por encima del layout**: si falla el topbar, la
+  degradación por sección de `/dashboard`, `/billing` y el calendario no sirve
+  de nada porque la falla está arriba. Falta `app/global-error.tsx`.
+- **`/proyectos` son ~13 queries en ~6 olas seriales y sin un solo `try/catch`**;
+  `/planes` no tiene nada cacheado (ni los budget origins, que ya tienen
+  wrapper). Son las dos vistas que quedan sin el tratamiento.
+- **El throttle de `touchUser` borra su marca en el `catch`**, así que cuando la
+  DB falla escribe en cada render — se autoamplifica justo en el pico.
+- **`creative_billings` sigue sin RLS** (`db/rls-creative-billings.sql`, PR #253,
+  nunca aplicado). Confirmado el 03/sep: es la única tabla con
+  `rowsecurity = false`. No tiene que ver con los cuelgues; es un agujero
+  aparte, y la REST pública la deja legible con la anon key.
+
 ### Cambios de la sesión 03/sep/2026 — medir antes de tocar
 
 Reporte: dashboard, billing tracker y calendario de reportes tiran "No se pudo
@@ -5049,6 +5156,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Quiero...                              | Mirar...                                                  |
 |----------------------------------------|-----------------------------------------------------------|
 | Cambiar el schema                      | `db/schema.ts`                                            |
+| Entender/tocar el timeout de queries o el pool | `db/index.ts` — **tres fases** (`cola` / `pipeline` / `ejecucion`), decididas por `query.state` + `query.active` de postgres.js. Regla dura: `EXEC_TIMEOUT_MS` > `STATEMENT_TIMEOUT_MS`, para que las queries lentas las corte Postgres (57014, conexión reusable) y no nuestro reloj (que obliga a cerrar el socket). Test: `npm run test:db` contra un Postgres LOCAL — 16 aserciones; con el código anterior al 03/sep fallan 10. |
 | Ver la estructura REAL de la base (o medir por qué se cae) | `db/estructura-actual.sql` — read-only, 8 bloques, **uno por vez** en el SQL Editor. Bloques 1-5 = estructura y volumen; 6-8 = medición **con la app caída** (salud en vivo, `pg_stat_statements`, `EXPLAIN` de la query del dashboard). El bloque 4 (FK sin índice) trae el DDL sugerido en una columna. |
 | Agregar una query                      | `db/queries/<dominio>.ts`                                 |
 | Agregar una server action              | `app/actions/<dominio>.ts`                                |
@@ -5141,7 +5249,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Índices en foreign keys                | `db/fk-indexes.sql` (aplicado en prod el 02/sep/2026). Postgres NO los crea solos: al agregar una FK nueva en `db/schema.ts`, agregar también su `index(...)`. |
 | Historial de versiones del plan (diff) | `db/queries/plan-qa.ts`: `getPlanVersionList` (sin `snapshot_json`, para la página) + `getPlanVersionDiff` (2 snapshots, vía `app/api/plans/[planId]/version-diff/route.ts`, lo pide `version-history.tsx` al desplegar). `getPlanVersionHistory` (todo) queda sólo para el Excel. **Nunca traer todos los `snapshot_json` en un render.** |
 | Indicador "última edición" del plan     | **Apagado** desde el 02/sep/2026 (`getPlanAuditEvents` en `db/queries/audit-log.ts` scanea `audit_log` por claves del jsonb, no indexable). Para reactivarlo: pedirlo aparte + hacerlo indexable (columna `media_plan_id` en `audit_log`). Ver HANDOFF 02/sep → Pendientes. |
-| Agregar un `<Link>` a una lista/tabla  | Poner **`prefetch={false}`** si apunta a una página pesada y se repite por fila: sin eso, el prefetch por viewport dispara un render por fila contra el pooler. En Next 16 eso apaga TAMBIÉN el prefetch por hover, así que la página carga recién al click. Ver HANDOFF 02/sep/2026. |
+| Agregar un `<Link>` | **SIEMPRE con `prefetch={false}`**, sin excepción — desde el 03/sep/2026 lo llevan los 84 `<Link>` de `app/` y `components/`. Sin eso, el prefetch por viewport dispara un render server-side por link visible: el 03/sep se midieron **7 páginas de `/campaign-tracker/[planId]` renderizándose a la vez** en 4 segundos. En Next 16 `prefetch={false}` apaga TAMBIÉN el prefetch por hover, así que la página carga recién al click. Hay un control: el script de `scripts/db-connection-test.ts` no lo cubre, pero `grep -rn '<Link' app components \| grep -v prefetch` tiene que dar vacío (ojo: los tags multilínea necesitan mirar el tag entero, no la línea). |
 | Tocar la **navegación** | Son **DOS** componentes con la misma lista (`lib/nav.ts`): `components/top-nav.tsx` es la nav de desktop (`hidden lg:flex`, montada desde `topbar.tsx`) y `components/sidebar.tsx` la de pantallas chicas. Un cambio en una sin la otra pasa desapercibido en desarrollo — ya pasó con el `prefetch={false}`. |
 | Cambiar el tope de duración de una página | `export const maxDuration` — el de `app/(app)/layout.tsx` (45s) cascadea a todo el grupo; una página puede subirlo (`app/(app)/page.tsx` usa 60). |
 | Agregar nueva ruta                     | `app/(app)/<...>/page.tsx`                                |

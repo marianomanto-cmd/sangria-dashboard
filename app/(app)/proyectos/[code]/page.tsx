@@ -49,11 +49,11 @@ export default async function ProjectDetailPage({ params }: Props) {
         aria-label="Breadcrumb"
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
-        <Link href="/proyectos" className="hover:text-ink">
+        <Link prefetch={false} href="/proyectos" className="hover:text-ink">
           {lang === "es" ? "Proyectos" : "Projects"}
         </Link>
         <span className="text-line">/</span>
-        <Link href={`/clientes/${client.slug}`} className="hover:text-ink">
+        <Link prefetch={false} href={`/clientes/${client.slug}`} className="hover:text-ink">
           {client.name}
         </Link>
         <span className="text-line">/</span>
@@ -100,7 +100,7 @@ export default async function ProjectDetailPage({ params }: Props) {
             )}
           </div>
         </div>
-        <Link
+        <Link prefetch={false}
           href={`/proyectos/${project.code}/planes/nuevo`}
           className={buttonVariants({ size: "md" })}
         >
@@ -125,7 +125,7 @@ export default async function ProjectDetailPage({ params }: Props) {
       {/* Metadata strip */}
       <section className="rounded-lg border border-line bg-white dark:bg-paper-2 px-5 py-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-3 mb-6">
         <Meta label={lang === "es" ? "Cliente" : "Client"}>
-          <Link
+          <Link prefetch={false}
             href={`/clientes/${client.slug}`}
             className="text-ink hover:underline font-medium text-sm"
           >
@@ -210,7 +210,7 @@ export default async function ProjectDetailPage({ params }: Props) {
                 ? "El media planner crea acá los planes del proyecto (Awareness, Consideration, Performance, etc.). Cada plan tiene su lifecycle de aprobación independiente."
                 : "The media planner creates the project's plans here (Awareness, Consideration, Performance, etc.). Each plan has its own approval lifecycle."}
             </p>
-            <Link
+            <Link prefetch={false}
               href={`/proyectos/${project.code}/planes/nuevo`}
               className={buttonVariants({ size: "md", className: "mt-4" })}
             >

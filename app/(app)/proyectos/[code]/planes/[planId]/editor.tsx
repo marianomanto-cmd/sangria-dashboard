@@ -491,7 +491,7 @@ export function PlanEditor({
             <FileText size={14} strokeWidth={2} />
             PDF
           </a>
-          <Link
+          <Link prefetch={false}
             href={`/proyectos/${detail.project.code}/planes/${detail.plan.id}/billing`}
             className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2"
           >

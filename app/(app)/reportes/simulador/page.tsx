@@ -44,7 +44,7 @@ export default async function SimuladorPage({ searchParams }: Props) {
               de hasta 3 escenarios.
             </li>
           </ul>
-          <Link
+          <Link prefetch={false}
             href="/reportes"
             className="inline-block mt-6 text-xs text-accent hover:underline"
           >

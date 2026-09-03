@@ -158,7 +158,7 @@ export function DashboardEjecutivo({
           ) : (
             <div className="divide-y divide-line-soft">
               {clients.map((c) => (
-                <Link
+                <Link prefetch={false}
                   key={c.slug}
                   href={buildHrefWithClient("/proyectos", c.slug)}
                   className="flex items-center gap-3 py-2.5 group"

@@ -88,7 +88,7 @@ export function TopbarClientPicker({ clients }: { clients: ClientOption[] }) {
           role="listbox"
           className="absolute right-0 top-full mt-1 w-[240px] rounded-md border border-line bg-white dark:bg-paper-2 shadow-lg z-30 max-h-[400px] overflow-auto py-1"
         >
-          <Link
+          <Link prefetch={false}
             href={buildHrefFor(null)}
             onClick={() => setOpen(false)}
             data-active={currentSlug === null}
@@ -101,7 +101,7 @@ export function TopbarClientPicker({ clients }: { clients: ClientOption[] }) {
           </Link>
           <div className="my-1 border-t border-line-soft" />
           {clients.map((c) => (
-            <Link
+            <Link prefetch={false}
               key={c.slug}
               href={buildHrefFor(c.slug)}
               onClick={() => setOpen(false)}

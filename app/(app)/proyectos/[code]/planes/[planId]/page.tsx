@@ -70,15 +70,15 @@ export default async function PlanDetailPage({ params }: Props) {
         aria-label="Breadcrumb"
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
-        <Link href="/proyectos" className="hover:text-ink">
+        <Link prefetch={false} href="/proyectos" className="hover:text-ink">
           {lang === "es" ? "Proyectos" : "Projects"}
         </Link>
         <span className="text-line">/</span>
-        <Link href={`/clientes/${detail.client.slug}`} className="hover:text-ink">
+        <Link prefetch={false} href={`/clientes/${detail.client.slug}`} className="hover:text-ink">
           {detail.client.name}
         </Link>
         <span className="text-line">/</span>
-        <Link href={`/proyectos/${detail.project.code}`} className="hover:text-ink">
+        <Link prefetch={false} href={`/proyectos/${detail.project.code}`} className="hover:text-ink">
           {detail.project.name}
         </Link>
         <span className="text-line">/</span>

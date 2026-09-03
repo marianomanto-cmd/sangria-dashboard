@@ -21,7 +21,7 @@ export async function Topbar({ user }: { user: AppUser | null }) {
         <MobileNavToggle />
 
         {/* Marca — solo desktop (en mobile la sostiene el drawer). */}
-        <Link
+        <Link prefetch={false}
           href="/"
           aria-label="Inicio"
           className="hidden lg:flex items-center gap-2.5 shrink-0"

@@ -33,9 +33,9 @@ export default async function NuevoPlanPage({ params }: Props) {
         aria-label="Breadcrumb"
         className="text-xs text-muted flex items-center gap-1.5 mb-3"
       >
-        <Link href="/proyectos" className="hover:text-ink">Proyectos</Link>
+        <Link prefetch={false} href="/proyectos" className="hover:text-ink">Proyectos</Link>
         <span className="text-line">/</span>
-        <Link href={`/proyectos/${project.code}`} className="hover:text-ink">
+        <Link prefetch={false} href={`/proyectos/${project.code}`} className="hover:text-ink">
           {project.name}
         </Link>
         <span className="text-line">/</span>
