@@ -30,7 +30,7 @@ import { Button } from "@/components/button";
 import { useToast } from "@/components/toast";
 import type { PlanDetail } from "@/db/queries/project-detail";
 import type { PlanQaCheck } from "@/db/queries/plan-qa";
-import { formatUsd } from "@/lib/format";
+import { formatIntInput, formatUsd } from "@/lib/format";
 import { formatDate, type Language } from "@/lib/i18n";
 import {
   placementMetricValue,
@@ -396,7 +396,7 @@ export function PlanQaModal({
                 {metricColumns.map((m) => (
                   <Td key={m.slug} className="text-right font-mono tabular-nums">
                     {m.kind === "direct"
-                      ? (metricTotals[m.slug] ?? 0).toLocaleString("en-US")
+                      ? formatIntInput(metricTotals[m.slug] ?? 0)
                       : "—"}
                   </Td>
                 ))}
@@ -572,7 +572,7 @@ function PublisherBlock({
         {metricColumns.map((m) => (
           <Td key={m.slug} className="text-right font-mono tabular-nums text-muted">
             {m.kind === "direct"
-              ? (subtotals[m.slug] ?? 0).toLocaleString("en-US")
+              ? formatIntInput(subtotals[m.slug] ?? 0)
               : ""}
           </Td>
         ))}

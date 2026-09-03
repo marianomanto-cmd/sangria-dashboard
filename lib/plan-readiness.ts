@@ -177,7 +177,11 @@ export function findPlanReadinessIssues(
         : null;
       if (primary) {
         const value = pl.metricsJson?.[primary];
-        if (typeof value !== "number" || !(value > 0)) {
+        // El delivery se guarda exacto y se muestra redondeado, así que el gate
+        // mira el número que va a IMPRIMIRSE: un 0,4 sale "0" en el Excel y en
+        // el PDF que firma el cliente, y eso no puede pasar a Listo. Antes lo
+        // frenaba el Math.round del editor; ahora hay que pedirlo acá.
+        if (typeof value !== "number" || !(Math.round(value) >= 1)) {
           missing.push(
             `la métrica principal del ${pl.costMethod} (${primary})`,
           );

@@ -842,6 +842,53 @@ conviene no confundirlas:
 - Las métricas se guardan en `media_plan_placements.metrics_json` (jsonb)
   con keys = slugs del catálogo `metrics_catalog`. Se persiste el delivery
   (impressions, clicks, etc.) y el rate (cpm, cpc, etc.) ingresado.
+- Al escribir la **tarifa**, primero se redondea la tarifa a 6 decimales y
+  DESPUÉS se deriva el delivery de esa tarifa ya guardada. Ese orden importa:
+  garantiza que `delivery === monto × multiplier / tarifaGuardada` se cumpla
+  exacto, así el warning de "tarifa y delivery no coinciden" no se
+  autodispara y los dos caminos de edición (escribir la tarifa vs. cambiar el
+  monto) producen el mismo número — lo que hace determinístico el diff de
+  versiones.
+
+### El delivery se guarda EXACTO y se muestra REDONDEADO (regla dura)
+- `metrics_json` guarda el delivery **fraccionario**, acotado a 6 decimales
+  (`exactDelivery` en `editor.tsx`, mismo criterio que las tarifas). Un CPA de
+  $450 sobre un placement de $4.101,50 guarda `9.114444`, no `9`.
+- **Ninguna superficie muestra decimales.** El delivery se redondea al
+  imprimirse: `formatIntInput` (`lib/format.ts`, `maximumFractionDigits: 0`) en
+  el editor, el QA modal y la vista previa; `numFmt "#,##0"` en el Excel del
+  plan (Excel guarda el valor real en la celda y pinta el entero, así que las
+  columnas suman bien); `maximumFractionDigits: 0` en el PDF; y el diff del
+  historial de versiones formatea sin decimales cuando el slug es `direct`
+  (`metricIsCount` de `NameLookups`, alimentado por `db/queries/plan-qa.ts`).
+  El valor exacto se puede ver en el `title` del input.
+- **Por qué**: redondear al guardar volvía por la ventana como una tarifa
+  distinta de la cargada. Con delivery 9 en vez de 9,1144, la tarifa
+  re-derivada pasaba de $450 a $455,72 — un 1,26% de error, que en volúmenes
+  chicos (tickets, conversiones) es enorme y en impresiones es invisible. Y al
+  sumar los goals de los placements el error se acumulaba: los 7 placements
+  del plan daban 63 en vez de 63,80 (= $28.709,50 / 450), y por eso los goals
+  no coincidían con el PPT que se le manda al cliente.
+- **Corolarios en dos lugares que asumían enteros**:
+  - `lib/campaign-metrics.ts` redondea el goal de las métricas **direct**: es
+    el número contra el que carga la trafficker, así que cargar los "9" que ve
+    la pantalla tiene que dar 100% y no 98,7%. La plata (`amount`) no se toca;
+    los "costo por X" **calculated** siguen exactos (ahí está la gracia: el
+    tracker vuelve a mostrar los $450 negociados).
+  - `lib/plan-readiness.ts` exige que la métrica principal sea `>= 1` **ya
+    redondeada**. Antes lo garantizaba el `Math.round` del editor; sin eso un
+    delivery de 0,4 pasaba a Listo y se imprimía "0" en el PDF que firma el
+    cliente.
+- El simulador escribe con el mismo criterio al promover un escenario a plan
+  (`placementMetricsFromRow` en `components/simulator/builder-helpers.ts`).
+- **Los inputs numéricos no commitean si no escribiste.** `RateInput` y
+  `DeliveryInput` pintan con menos precisión de la que guardan, así que
+  reparsear al `blur` el texto que ellos mismos pintaron reescribía el dato
+  con sólo tabular por la grilla (y `Enter` hace `blur()` para bajar de fila,
+  así que recorrer una columna mutaba todo el bloque). Ahora cada uno lleva un
+  flag que se prende en el primer `onInput` y se apaga al commitear. Efecto
+  lateral buscado: escribir "9" sobre un `9.114444` guardado **sí** commitea 9
+  — antes el umbral de 1 unidad lo bloqueaba y no se podía forzar el entero.
 
 ### Indicadores estimados (métricas secundarias)
 - El bloque debajo de la métrica principal permite agregar métricas
