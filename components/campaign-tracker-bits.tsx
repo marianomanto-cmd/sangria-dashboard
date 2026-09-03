@@ -117,9 +117,9 @@ export function GoalBar({
 // ── Freshness dots ──────────────────────────────────────────────────────────
 // 3 dots cuyo color indica qué tan reciente es la última carga.
 
-function freshnessTone(lastUpdateAt: Date | null): ("ok" | "warn" | "bad")[] {
+function freshnessTone(lastUpdateAt: string | null): ("ok" | "warn" | "bad")[] {
   if (!lastUpdateAt) return ["bad", "bad", "bad"];
-  const hours = (Date.now() - lastUpdateAt.getTime()) / 3_600_000;
+  const hours = (Date.now() - new Date(lastUpdateAt).getTime()) / 3_600_000;
   if (hours < 24) return ["ok", "ok", "ok"];
   if (hours < 48) return ["ok", "ok", "warn"];
   if (hours < 72) return ["ok", "warn", "warn"];
@@ -132,9 +132,9 @@ const DOT_CLS: Record<"ok" | "warn" | "bad", string> = {
   bad: "bg-danger",
 };
 
-export function relativeUpdateLabel(lastUpdateAt: Date | null): string {
+export function relativeUpdateLabel(lastUpdateAt: string | null): string {
   if (!lastUpdateAt) return "sin carga";
-  const ms = Date.now() - lastUpdateAt.getTime();
+  const ms = Date.now() - new Date(lastUpdateAt).getTime();
   const hours = ms / 3_600_000;
   if (hours < 1) return "recién";
   if (hours < 24) return `hace ${Math.floor(hours)}h`;
@@ -144,7 +144,7 @@ export function relativeUpdateLabel(lastUpdateAt: Date | null): string {
 export function FreshnessDots({
   lastUpdateAt,
 }: {
-  lastUpdateAt: Date | null;
+  lastUpdateAt: string | null;
 }) {
   const tones = freshnessTone(lastUpdateAt);
   return (
@@ -152,7 +152,7 @@ export function FreshnessDots({
       className="inline-flex items-center gap-[3px]"
       title={
         lastUpdateAt
-          ? `Última carga: ${lastUpdateAt.toLocaleString("es-AR")}`
+          ? `Última carga: ${new Date(lastUpdateAt).toLocaleString("es-AR")}`
           : "Sin carga registrada"
       }
     >
