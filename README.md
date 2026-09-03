@@ -1690,7 +1690,9 @@ Donde una calculated no resuelve para un placement, la celda queda en blanco.
 ### Excel (`export.xlsx/route.ts`, ExcelJS)
 
 - **Tab 1 "Media plan"**: banner de título + metadata (incluye `Período` general
-  del plan); tabla con columnas base (publisher/placement, market, start, end,
+  del plan y, si el plan tiene **Notas** cargadas, una fila `Notas` con el mismo
+  texto que muestra el editor — la fila se estira y envuelve si es multilínea;
+  el export espeja la pantalla); tabla con columnas base (publisher/placement, market, start, end,
   audience, notes, cost method, investment) + una por métrica. El **mercado** de
   cada placement va en su propia columna (antes se anexaba al nombre con ` · `).
   Filas: subtotal por

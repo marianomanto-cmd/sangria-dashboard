@@ -57,6 +57,17 @@ por token en `united-states` y las dos burbujas se superpondrían.
 v1 (el PDF firmado sigue igual), y al correr por SQL no queda registro en
 `audit_log`. El QA no se invalida — sus checks son por `placement_id`.
 
+**Qué mercados son T1 y cuáles T2 va en las notas del plan** (`notes_md`, mismo
+archivo): la línea guarda el tier pero no su composición, así que el bloque con
+los 13 estados —con sigla al lado, que es como aparecen en `audience`— se anexa
+a las notas. No pisa lo que ya hubiera y es idempotente.
+
+**Paridad pantalla↔export, que faltaba**: el editor muestra "Notas del plan" y
+el Excel no las tenía. Se agregó una fila `Notas` al bloque de metadata del Tab
+1 (`app/api/plans/[planId]/export.xlsx/route.ts`), que se estira y envuelve si
+el texto es multilínea. Al **PDF no** van: es el documento que firma el cliente,
+la excepción documentada en AGENTS.md.
+
 ### Cambios de la sesión 03/sep/2026 (3) — el tiempo se iba en la FILA, no en la base
 
 La entrada de abajo cuenta el diagnóstico. Ésta, el arreglo. **Si algo se vuelve

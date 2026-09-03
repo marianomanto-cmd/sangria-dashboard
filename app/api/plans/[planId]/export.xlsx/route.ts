@@ -172,6 +172,13 @@ export async function GET(
     ],
   ];
 
+  // Las notas del plan se ven en pantalla (bloque "Notas del plan" del editor),
+  // así que van también acá: el export espeja la vista. Multilínea → la fila se
+  // estira y la celda envuelve (ver el forEach de abajo). NO van al PDF: ése es
+  // el documento que firma el cliente, no una copia de la pantalla.
+  const planNotes = detail.plan.notesMd?.trim();
+  if (planNotes) headerPairs.push([t("common.notes", lang), planNotes]);
+
   headerPairs.forEach(([label, value], i) => {
     const rowIdx = i + 2; // fila 1 = banner de título
     const row = ws.getRow(rowIdx);
@@ -183,11 +190,17 @@ export async function GET(
       fgColor: { argb: ACCENT },
     };
     row.getCell(1).alignment = { vertical: "middle", horizontal: "left" };
+    const lineCount =
+      typeof value === "string" ? value.split("\n").length : 1;
     row.getCell(2).value = value;
     row.getCell(2).font = { bold: true };
-    row.getCell(2).alignment = { vertical: "middle", horizontal: "left" };
+    row.getCell(2).alignment = {
+      vertical: lineCount > 1 ? "top" : "middle",
+      horizontal: "left",
+      wrapText: lineCount > 1,
+    };
     ws.mergeCells(rowIdx, 2, rowIdx, totalCols);
-    row.height = 20;
+    row.height = lineCount > 1 ? Math.min(14 * lineCount + 6, 140) : 20;
   });
 
   // ─── Logo de marca (arriba a la derecha) ─────────────────────────────────

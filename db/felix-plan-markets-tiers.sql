@@ -96,3 +96,53 @@ update public.media_plan_placements pl
 --  where c.slug = 'felix' and mp.deleted_at is null
 --  group by 1
 --  order by 1;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- NOTAS DEL PLAN — qué mercados son T1 y cuáles T2
+-- ════════════════════════════════════════════════════════════════════════════
+--
+-- El tier que quedó en la línea dice "T1"/"T2" pero no QUÉ mercados son. La
+-- lista completa va en las notas del plan (`media_plans.notes_md`, el bloque
+-- "Notas del plan" del editor). Con las siglas al lado del nombre, que son las
+-- que usa la columna `audience` de las líneas de CTV.
+--
+-- Anexa, no pisa: si el plan ya tenía notas, agrega el bloque al final separado
+-- por una línea en blanco. Idempotente: no hace nada si el texto ya está
+-- ("Mercados por tier"). Sólo toca planes que efectivamente usan tiers.
+--
+-- Sale también en el Excel del plan (fila `Notas` del bloque de metadata del
+-- Tab 1) — la paridad pantalla↔export se agregó en el mismo PR. Al PDF NO: ése
+-- es el documento que firma el cliente.
+-- ════════════════════════════════════════════════════════════════════════════
+
+update public.media_plans mp
+   set notes_md = case
+         when coalesce(btrim(mp.notes_md), '') = '' then v.bloque
+         else btrim(mp.notes_md) || E'\n\n' || v.bloque
+       end
+  from public.projects pr
+  join public.clients c on c.id = pr.client_id
+  cross join (values (
+    E'Mercados por tier — cada línea corre sobre TODOS los mercados de su tier; el presupuesto se distribuye entre ellos.\n'
+    'T1 · Mercados Prioritarios: California (CA), New York (NY), New Jersey (NJ), Texas (TX), Florida (FL)\n'
+    'T2 · Mercados Secundarios: Arizona (AZ), Illinois (IL), Colorado (CO), North Carolina (NC), Georgia (GA), Washington (WA), Pennsylvania (PA), New Mexico (NM)'
+  )) as v(bloque)
+ where mp.project_id = pr.id
+   and c.slug = 'felix'
+   and mp.deleted_at is null
+   and position('Mercados por tier' in coalesce(mp.notes_md, '')) = 0
+   and exists (
+     select 1
+       from public.media_plan_publishers mpp2
+       join public.media_plan_placements pl2
+         on pl2.media_plan_publisher_id = mpp2.id
+      where mpp2.media_plan_id = mp.id
+        and pl2.placement_name ~ '\|\s*T[12](\s|$)'
+   );
+
+-- VERIFICACIÓN (aparte): tiene que devolver 1 fila con las tres líneas.
+-- select mp.name, mp.notes_md
+--   from public.media_plans mp
+--   join public.projects pr on pr.id = mp.project_id
+--   join public.clients c   on c.id = pr.client_id
+--  where c.slug = 'felix' and mp.deleted_at is null;
