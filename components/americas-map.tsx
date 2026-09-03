@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { scaleSqrt } from "d3-scale";
 import { formatUsd } from "@/lib/format";
 import { type Language } from "@/lib/i18n";
-import { type MarketLevel } from "@/lib/market-geo";
+import { type MarketGeo, type MarketLevel } from "@/lib/market-geo";
 
 // ════════════════════════════════════════════════════════════════════════════
 // Mapa de mercados con Leaflet (tiles reales de CARTO, zoom/pan nativos). Cada
@@ -22,7 +22,7 @@ export type MapPoint = {
   lat: number;
   lng: number;
   featureName?: string;
-  kind?: "country" | "region";
+  kind?: MarketGeo["kind"];
   // Nivel del mercado. La burbuja de nivel "country" (un país entero) se pinta
   // AZUL para diferenciarla de ciudad/región (bordó). Ver lib/market-geo.ts.
   level?: MarketLevel;

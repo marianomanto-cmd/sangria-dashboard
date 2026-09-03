@@ -2,6 +2,100 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 03/sep/2026 (6) — nomenclatura única de mercados: se elige, no se escribe
+
+**El problema.** El catálogo de `markets` es per-cliente y el nombre se tipeaba
+libre, así que el mismo lugar entró varias veces con distinta escritura. En Copa
+convivían "Panama", "Panamá", "Panama City" y "Ciudad de Panamá" como **cuatro
+mercados distintos**, cada uno con sus líneas: el Análisis los contaba separados,
+el dropdown del editor mostraba repetidos y los benchmarks del simulador
+quedaban partidos por la mitad. Félix tenía la otra mitad del problema: sus 13
+estados entraban pelados ("California"), sin el país delante.
+
+**La regla, ahora una sola para toda la app** (`lib/market-nomenclature.ts`):
+
+| Qué es el mercado         | Forma              | Ejemplo                     |
+| ------------------------- | ------------------ | --------------------------- |
+| El país entero            | `<País> (País)`    | `Argentina (País)`          |
+| Una plaza (ciudad/estado) | `<País> - <Plaza>` | `México - Ciudad de México` |
+| Varias plazas de un país  | `<País> - Varios`  | `Argentina - Varios`        |
+| Una región supranacional  | `<Región>`         | `Centroamérica` · `LATAM`   |
+
+Siempre arranca por el país. Las regiones quedan afuera de esa forma a propósito
+(Centroamérica no tiene país que la anteceda); sólo se les unifica la ortografía.
+Cuando hay más de un grupo multi-plaza en el mismo país lleva etiqueta —los dos
+tiers de Félix pasan a `Estados Unidos - Varios (T1)` / `(T2)`— porque dos
+"Varios" del mismo país colisionarían en el slug.
+
+**Cargar un mercado dejó de ser un input de texto.** `components/market-picker.tsx`
+hace elegir **nivel → país → plaza** y muestra en vivo el nombre que va a quedar;
+`app/actions/markets.ts` lo arma con `buildMarketName` y rechaza el alta si el
+slug canónico ya existe, nombrando al mercado que lo ocupa. La edición pasa por
+el mismo selector (antes era un input inline). Lo único que se escribe a mano es
+una plaza que no esté en el diccionario ("Otra…") y la etiqueta de un grupo, y
+ni ahí se puede romper la forma: el país sale del select.
+
+**Dos bugs que aparecieron en el camino:**
+
+- `updateMarket` **nunca regeneraba el slug**. Como el mapa de /analisis
+  geocodifica probando el **slug antes que el nombre**, un mercado renombrado
+  desde la UI seguía geocodificando por el slug viejo: mismo nombre en pantalla,
+  distinto comportamiento según la historia de la fila. Ahora el slug se deriva
+  siempre del nombre canónico.
+- `Argentina (País)` normalizaba a `argentina-pais`, que **no** matchea exacto,
+  caía en la rama por token y volvía como `city` — el país entero pintado de
+  bordó en vez de azul. `resolveMarketGeo` ahora tolera el sufijo calificador.
+
+**Y una mejora del mapa que salió de arrastre**: en el match por token ahora
+**gana el más específico** (plaza > región > país). Sin eso,
+`Estados Unidos - California` caía en el centroide de EE.UU. Se sumaron los
+centroides de las plazas del diccionario (ciudades de la red de Copa + los 50
+estados), así que dos plazas del mismo país ya no apilan sus burbujas en el
+mismo punto.
+
+**El SQL es generado, no escrito**: `npm run gen:markets-sql` vuelca los
+diccionarios de `lib/market-nomenclature.ts` a `db/markets-nomenclatura.sql`, así
+la base normaliza exactamente igual que la app. Cuatro bloques: diagnóstico ·
+dry-run · aplicar · verificación. El dry-run es la parte importante — muestra
+`renombrar` / `FUSIONAR EN →` / `SIN MAPEAR` fila por fila **antes** de tocar
+nada.
+
+**Lo que la fusión tiene que repuntar** (si se olvida uno, se pierde data en
+silencio): `media_plan_placements.market_id` y `campaign_actual_snapshots.market_id`
+son FK con `ON DELETE SET NULL`, y hay dos ids **embebidos en JSONB sin FK** —
+`media_plan_snapshots.snapshot_json → placements[].marketId` y
+`simulator_scenarios.rows_json → rows[].marketId`. El del snapshot es el que más
+duele: si queda un id muerto, "descartar borrador"
+(`revertPlanToApprovedSnapshot`) lo sanea a NULL y **borra el mercado de las
+líneas vivas**. Los perdedores se borran recién después de repuntar todo, y
+antes del rename (un perdedor puede estar ocupando el slug que el ganador
+necesita). El ganador de cada grupo es el que más líneas tiene; a igualdad, el
+que ya está bien escrito.
+
+**Lo que NO se toca a propósito**: los nombres ambiguos ("Santiago" es Chile o
+República Dominicana) y los que no son un lugar ("Q3 Boosting") salen listados
+como `SIN MAPEAR` y quedan igual, para que los resuelva una persona desde el
+form. La fusión nunca cruza clientes (`markets` es per-cliente y **nada** valida
+que el mercado de una línea sea del cliente del plan).
+
+**Probado** contra el Postgres 16 local con un fixture que reproduce el
+problema (3 clientes, 38 mercados, 24 líneas, snapshots de versión + escenario
+del simulador + un snapshot legacy sin la clave `placements`): fusiona 6, repunta
+6 líneas / 6 cierres / 1 snapshot / 1 escenario, borra 6 mercados y renombra 27,
+sin perder una línea ni un dólar (24 líneas y 22.500 USD antes y después, 0
+huérfanas) y sin cruzar Andina con Copa. Segunda y tercera corrida: todo en
+cero. `npm run check:markets` cubre idempotencia sobre 619 entradas, round-trip
+de 289 combinaciones del form, colisiones de slug, 38 casos reales y 19 de
+geocoding. `tsc`, `eslint` y `next build` en verde.
+
+**Acción en prod: sí — hay que correr el SQL** (`db/markets-nomenclatura.sql`,
+bloques 0 y 1 primero, que son read-only). Deploy y SQL son **independientes** y
+van en cualquier orden: con el código deployado y sin correr el SQL la app anda
+igual, sigue mostrando los duplicados viejos y el form ya no deja crear nuevos;
+con el SQL corrido y sin deployar el catálogo queda limpio pero
+`Argentina (País)` cae en el mapa como ciudad hasta el deploy. Correr por SQL
+**no** deja rastro en `audit_log` (lo escriben las server actions).
+
 ### Cambios de la sesión 03/sep/2026 (5) — las facturas de creative se cargan desde la app, y el cliente las ve
 
 Dos cosas que faltaban en Creative, pedidas en la misma sesión:
@@ -112,7 +206,9 @@ las 18 líneas del plan "Félix Pago | Back to School" (live v1) corren cada una
 sobre TODOS los estados de su tier a la vez, con el presupuesto distribuido
 entre ellos, y `media_plan_placements.market_id` es UNA sola FK. Así que lo que
 va en la línea es el **tier**, igual que "Centroamérica" o "LATAM" en el
-catálogo: se crean `estados-unidos-t1` / `estados-unidos-t2` y se asigna leyendo
+catálogo: se crean `estados-unidos-t1` / `estados-unidos-t2` (renombrados a
+`Estados Unidos - Varios (T1)` / `(T2)` por la nomenclatura única, ver la entrada
+03/sep (6)) y se asigna leyendo
 el T1/T2 del NOMBRE del placement (`… | T1`, `… | T1 | Félix Pago`). Sólo toca
 líneas con `market_id is null`. Da 9 líneas T1 (992.172,20) + 9 T2 (417.828,00)
 = 1.410.000, que cuadra con los tres bloques (960k CTV + 350k + 100k).
@@ -3264,7 +3360,7 @@ Ajustes pedidos sobre el portal recién mergeado:
 
 ### Cambios de la sesión 04/jun/2026 — Portal de cliente público (read-only) + favicon
 
-- **Nuevo portal de cliente** en `/<slug>` (ej. `/copa-airlines`, reusa el slug
+- **Nuevo portal de cliente** en `/<slug>` (ej. `/copa`, reusa el slug
   interno): vista **solo lectura** para compartir con el cliente, con tabs
   Resumen (KPIs + chart) · Billing Tracker · Estimación · Proyectos · Reportes ·
   Benchmarks. Todo scopeado al cliente reusando las queries internas (dashboard,
@@ -5491,6 +5587,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Entender/tocar el timeout de queries o el pool | `db/index.ts` — **tres fases** (`cola` / `pipeline` / `ejecucion`), decididas por `query.state` + `query.active` de postgres.js. Regla dura: `EXEC_TIMEOUT_MS` > `STATEMENT_TIMEOUT_MS`, para que las queries lentas las corte Postgres (57014, conexión reusable) y no nuestro reloj (que obliga a cerrar el socket). Test: `npm run test:db` contra un Postgres LOCAL — 16 aserciones; con el código anterior al 03/sep fallan 10. |
 | Tocar lo que ve el CLIENTE cuando el portal falla | `app/(portal)/error.tsx` (boundary bilingüe, 2 reintentos, contador en scope de módulo) y `app/(portal)/loading.tsx` (skeleton). **Ojo: `app/(app)/error.tsx` NO cubre el portal** — son segmentos distintos, y `error.js` tampoco cubre el layout de su propio segmento. Tampoco existe `app/global-error.tsx` todavía: una falla en `app/(app)/layout.tsx` (topbar, getCurrentUser) sigue sin red. |
 | Ver la estructura REAL de la base (o medir por qué se cae) | `db/estructura-actual.sql` — read-only, 8 bloques, **uno por vez** en el SQL Editor. Bloques 1-5 = estructura y volumen; 6-8 = medición **con la app caída** (salud en vivo, `pg_stat_statements`, `EXPLAIN` de la query del dashboard). El bloque 4 (FK sin índice) trae el DDL sugerido en una columna. |
+| Agregar / renombrar / fusionar un MERCADO | `lib/market-nomenclature.ts` es la fuente de verdad (diccionarios de países, plazas y regiones + `canonicalMarketName`/`buildMarketName`/`parseMarketName`). El alta y la edición son `components/market-picker.tsx` (nivel → país → plaza), nunca texto libre. Para tocar la base: `db/markets-nomenclatura.sql`, que **es generado** — se edita el diccionario y se corre `npm run gen:markets-sql`, no se edita el .sql. Control: `npm run check:markets`. Para el mapa, el centroide va en `GEO` de `lib/market-geo.ts`. |
+| Saber dónde queda guardado un `market_id` (antes de fusionar o borrar un mercado) | Dos FK `ON DELETE SET NULL` (`media_plan_placements.market_id`, `campaign_actual_snapshots.market_id`) **y dos ids embebidos en JSONB sin FK**: `media_plan_snapshots.snapshot_json → placements[].marketId` y `simulator_scenarios.rows_json → rows[].marketId`. Los JSONB son los que se olvidan: un id muerto en el snapshot hace que "descartar borrador" sanee a NULL y **borre el mercado de las líneas vivas** (`revertPlanToApprovedSnapshot`, `app/actions/plans.ts`). El nombre NO está desnormalizado en ningún lado: se resuelve por join vivo. |
 | Agregar una query                      | `db/queries/<dominio>.ts`                                 |
 | Agregar una server action              | `app/actions/<dominio>.ts`                                |
 | Cambiar la navegación (desktop ≥lg)    | `components/top-nav.tsx` (tira horizontal en el header). Entradas compartidas en `lib/nav.ts` (`PRIMARY_NAV`/`FOOTER_NAV`/`isNavActive`). |

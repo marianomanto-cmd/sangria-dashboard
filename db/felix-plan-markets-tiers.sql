@@ -1,4 +1,11 @@
 -- ════════════════════════════════════════════════════════════════════════════
+-- ⚠️  SUPERADO POR db/markets-nomenclatura.sql (nomenclatura única de mercados).
+--     Los nombres que carga este archivo son los de ANTES de la normalización:
+--     hoy los 13 estados son "Estados Unidos - <Estado>" y los tiers son
+--     "Estados Unidos - Varios (T1)" / "(T2)". Queda como registro histórico de
+--     lo que se corrió; NO volver a correrlo tal cual — reintroduciría los
+--     slugs viejos (`california`, `estados-unidos-t1`) como mercados nuevos.
+--
 -- Félix · plan "Félix Pago | Back to School" — mercado por línea (T1 / T2)
 -- ════════════════════════════════════════════════════════════════════════════
 --
