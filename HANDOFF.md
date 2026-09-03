@@ -1,6 +1,46 @@
-# Handoff — martes 02/sep/2026
+# Handoff — jueves 03/sep/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 03/sep/2026 — medir antes de tocar
+
+Reporte: dashboard, billing tracker y calendario de reportes tiran "No se pudo
+leer la base" / "Esta vista está incompleta". **No se tocó código de la app**:
+la sesión es de diagnóstico, y lo primero era mirar los logs de Vercel en vez
+de teorizar (que es lo que salió mal dos veces el 02/sep).
+
+**Lo que dicen los logs de Vercel** (proyecto `prj_OjxtC0M9dh3LcIW5y603QNgWfJwR`,
+último deploy de prod `dpl_EqFbQdiuC1bTtm3sRjnfAR15eW6D` = merge del PR #267):
+
+- Sigue pasando **sobre el deploy nuevo**, con todos los fixes del 02/sep
+  adentro: ráfaga del 03/sep 12:40–12:47 UTC en `/dashboard`, `/billing`,
+  `/reportes/calendario`, `/proyectos` y `/planes`.
+- **No es una vista**: caen las cinco. Eso descarta el fan-out del dashboard
+  viejo como causa (ya reemplazado por `dashboard-v2.ts`, 4 queries).
+- Los tres modos de falla conviven, y son de **transporte**, no de SQL:
+  1. `QueryTimeoutError` a los 8s (reloj nuestro, `db/index.ts`),
+  2. `57014 canceling statement due to statement timeout` (12s, **server-side**)
+     sobre queries triviales como `select slug, name from clients`,
+  3. `CONNECTION_ENDED aws-1-us-east-2.pooler.supabase.com:6543`.
+- El (2) es el dato nuevo y el que más pesa: si Postgres tarda **más de 12s**
+  en un `select` de dos columnas sobre una tabla chica, el problema ya no es
+  "el pooler no da conexión" — es la base o el compute. La medición del 02/sep
+  que decía "Postgres sano y ocioso" fue **una sola foto**, y no alcanza.
+
+**Lo que se entregó**: `db/estructura-actual.sql`, control read-only en 8
+bloques (estructura completa + volumen real + medición en vivo). Probado contra
+el Postgres 16 local. Las queries se entregaron **pegadas en el chat**, como
+manda la regla.
+
+**Pendiente para la próxima**: correr los bloques y decidir con los números.
+Las tres hipótesis abiertas, en orden de probabilidad:
+1. **Compute/CPU de Supabase** — un plan Nano saturado explica el `57014` en
+   queries triviales, y `cache_hit_pct = 100` NO lo descarta (descarta I/O, no
+   CPU).
+2. **Connection pool size de Supavisor** volvió a un valor bajo (se había
+   subido a 25 el 02/sep; el `CONNECTION_ENDED` es compatible con eso).
+3. **FK sin índice en tablas nuevas** — `fk-indexes.sql` cubrió 12, pero desde
+   entonces se sumaron tablas. El bloque 4 lo responde de una.
 
 ### Cambios de la sesión 02/sep/2026 (3) — LA CAUSA RAÍZ: el timeout fabricaba los zombies
 
@@ -5009,6 +5049,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Quiero...                              | Mirar...                                                  |
 |----------------------------------------|-----------------------------------------------------------|
 | Cambiar el schema                      | `db/schema.ts`                                            |
+| Ver la estructura REAL de la base (o medir por qué se cae) | `db/estructura-actual.sql` — read-only, 8 bloques, **uno por vez** en el SQL Editor. Bloques 1-5 = estructura y volumen; 6-8 = medición **con la app caída** (salud en vivo, `pg_stat_statements`, `EXPLAIN` de la query del dashboard). El bloque 4 (FK sin índice) trae el DDL sugerido en una columna. |
 | Agregar una query                      | `db/queries/<dominio>.ts`                                 |
 | Agregar una server action              | `app/actions/<dominio>.ts`                                |
 | Cambiar la navegación (desktop ≥lg)    | `components/top-nav.tsx` (tira horizontal en el header). Entradas compartidas en `lib/nav.ts` (`PRIMARY_NAV`/`FOOTER_NAV`/`isNavActive`). |
