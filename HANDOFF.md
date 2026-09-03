@@ -171,17 +171,45 @@ round-trip chequeado numéricamente — la tarifa queda en $450,00, el delivery
 guardado es `9.114444` y se muestra "9", y la suma de goals de los 7 placements
 pasa de 63 a 63,80 (se muestra 64), que es la verdad: $28.709,50 / 450.
 
-#### Acción requerida en prod — **`db/metrics-cost-pairs.sql`**
+#### Acción requerida en prod — **`db/metrics-cost-pairs.sql`** (3 bloques)
 
-Seis métricas direct de Copa no tenían su calculada de costo, así que su tarifa
-se descartaba en cada carga: `cc_los_cabos`, `cc_canada`, `cc_costa_rica`,
-`cc_tickets_argentina`, `cc_origen_san_diego` y `tickets_rep_dom`. El archivo
-las agrega. Es **puramente aditivo** (`on conflict do nothing`), no toca ningún
-plan ni ningún `metrics_json`, y está probado contra un Postgres 16 local con el
-catálogo real (corrido dos veces: idempotente).
+El control del catálogo de Copa dio **ocho** métricas direct sin costo por
+unidad, no seis. El archivo las cubre en tres bloques, todos probados contra un
+Postgres 16 local con el catálogo real (corridos dos veces: idempotentes) y
+verificados además con el código real de la app (`buildMetricRatePairs` +
+`evalFormula`):
+
+1. Las seis conversiones de destino: `cc_los_cabos`, `cc_canada`,
+   `cc_costa_rica`, `cc_tickets_argentina`, `cc_origen_san_diego` y
+   `tickets_rep_dom`. Aditivo.
+2. El CPCV de `completed_video_views`. Aditivo.
+3. **`YouTube public views`: el slug estaba roto**, y esto es lo que más vale
+   recordar. Tenía espacios y mayúsculas, y `parseCostFormula` baja la fórmula a
+   minúsculas y le saca los espacios antes de matchear — así que agregarle la
+   calculada NO servía: apareaba contra un slug fantasma `youtubepublicviews` y
+   la métrica real seguía con `rate: null`. Peor, `evalFormula` devolvía null,
+   o sea que ninguna calculada que la referenciara podía aparecer nunca en el
+   Excel, el PDF ni el tracker. Se renombra a `youtube_public_views` (el `name`
+   que ve el planner no cambia) y se le agrega su CPV. **El rename no toca
+   planes**: el scoping dio 1 fila en `metrics_catalog` y 0 en las otras cuatro
+   tablas donde un slug vive como dato — era una entrada huérfana.
+
+`frequency` y `revenue` aparecen en el control pero **no son un hallazgo**: son
+un ratio y plata, y `acceptsRate` las excluye de tener costo unitario (la app ni
+les ofrece columna Tarifa). La verificación del archivo ya las filtra para no
+dar falsos positivos.
+
+**Regla para el futuro**: el charset seguro de un slug `direct` es `^[a-z_]+$`
+— sin espacios, sin mayúsculas y **sin dígitos**. Los dígitos son la trampa
+silenciosa: `parseCostFormula` los acepta (`[a-z0-9_]+`) pero `evalFormula` no
+(`[a-z_]+`), así que un `views_2` formaría el par y guardaría la tarifa, pero su
+calculada nunca resolvería en ningún export ni en el tracker. El bloque de
+verificación (B) del archivo lo chequea: conviene correrlo antes de crear
+cualquier métrica direct nueva. `createMetric` (app/actions/metrics.ts) NO
+valida el slug — el campo es free-text.
 
 No es bloqueante para el deploy del código: son cambios independientes. Pero
-hasta que se corra, esas seis métricas siguen sin poder guardar su tarifa.
+hasta que se corra, esas ocho métricas siguen sin poder guardar su tarifa.
 
 ⚠️ Los planes ya cargados **no** se arreglan solos: no tienen la clave de tarifa
 en `metrics_json`, así que siguen mostrando la tarifa re-derivada hasta que
