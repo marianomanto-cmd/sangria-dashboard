@@ -33,8 +33,13 @@ const EMPTY: DashboardV2 = {
     consumptionPct: 0,
   },
   projects: [],
+  clients: [],
   monthly: [],
   plansInFlight: [],
+  pendingBillings: [],
+  pendingReports: [],
+  receivables: [],
+  staleTracking: [],
 };
 
 export default async function DashboardV2Page({ searchParams }: Props) {
