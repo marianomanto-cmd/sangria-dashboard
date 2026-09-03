@@ -6,6 +6,7 @@ import {
   FolderKanban,
   Gauge,
   Globe2,
+  Palette,
   Receipt,
   TrendingUp,
 } from "lucide-react";
@@ -25,6 +26,7 @@ import {
   type BenchmarkParams,
   BenchmarksSection,
   BillingSection,
+  CreativeSection,
   EstimateSection,
   type PortalParams,
   ProjectsSection,
@@ -47,6 +49,10 @@ type Props = {
 const TABS = [
   { id: "resumen", labelEs: "Resumen", labelEn: "Summary", icon: BarChart3 },
   { id: "billing", labelEs: "Billing Tracker", labelEn: "Billing Tracker", icon: Receipt },
+  // Creative: facturación del trabajo creativo (tabla propia, sin media plan
+  // detrás). Está para TODOS los clientes; si el cliente no tiene facturas
+  // cargadas, la sección muestra su vacío.
+  { id: "creative", labelEs: "Creative", labelEn: "Creative", icon: Palette },
   { id: "estimacion", labelEs: "Estimación", labelEn: "Estimate", icon: TrendingUp },
   { id: "proyectos", labelEs: "Proyectos", labelEn: "Projects", icon: FolderKanban },
   { id: "analisis", labelEs: "Análisis", labelEn: "Analysis", icon: Globe2 },
@@ -210,6 +216,13 @@ export default async function ClientPortalPage({ params, searchParams }: Props) 
             lang={lang}
             params={portalParams}
             availableMonths={opts.months}
+          />
+        )}
+        {tab === "creative" && (
+          <CreativeSection
+            clientId={client.id}
+            clientSlug={client.slug}
+            lang={lang}
           />
         )}
         {tab === "estimacion" && (

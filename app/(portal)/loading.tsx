@@ -10,9 +10,18 @@
 // Ver node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/loading.md:88
 //
 // Espeja la estructura real de app/(portal)/[clientSlug]/page.tsx: header con
-// la marca + nombre del cliente, tira de 7 tabs, y una grilla de tarjetas.
+// la marca + nombre del cliente, tira de 8 tabs, y una grilla de tarjetas.
 
-const TAB_WIDTHS = ["w-20", "w-28", "w-24", "w-24", "w-20", "w-22", "w-26"];
+const TAB_WIDTHS = [
+  "w-20",
+  "w-28",
+  "w-20",
+  "w-24",
+  "w-24",
+  "w-20",
+  "w-22",
+  "w-26",
+];
 
 export default function PortalLoading() {
   return (

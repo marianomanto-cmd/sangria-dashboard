@@ -2,6 +2,78 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 03/sep/2026 (4) — las facturas de creative se cargan desde la app, y el cliente las ve
+
+Dos cosas que faltaban en Creative, pedidas en la misma sesión:
+
+**1. Cargar una factura desde `/creative`.** Hasta acá las 21 facturas de 2025
+habían entrado **por SQL a mano** (`db/creative-billings.sql`) y no había forma
+de cargar la 22 sin abrir el SQL Editor. Ahora hay un panel arriba de la vista
+(`components/creative-invoice-form.tsx`) con la action
+`createCreativeBilling` (`app/actions/creative-billing.ts`) atrás.
+
+- Obligatorios: cliente · N° de factura · mes · monto. Opcionales: proyecto ·
+  código de campaña · fecha · estado (facturada/cobrada) · notas.
+- **Lo que valida la action, y por qué**: `invoice_number` es UNIQUE — se
+  pre-chequea para el mensaje en castellano **y** se atrapa el `23505` del
+  insert, porque entre el select y el insert se puede colar otra carga; `month`
+  contra `YYYY-MM` — la columna es `varchar(7)` **sin constraint**, así que un
+  "2025-13" rompería el chart y el orden de la tabla en silencio; monto > 0;
+  fecha `YYYY-MM-DD`; cliente vivo (la vista excluye archivados, una factura de
+  un cliente archivado quedaría invisible). Auditada como `creative_billing` /
+  `create`.
+- El panel **queda abierto** después de guardar y conserva cliente + mes +
+  estado: las facturas llegan por tanda mensual y se cargan varias seguidas.
+- **Editar y borrar siguen siendo SQL a mano.** Desde la UI sólo se carga y se
+  cobra / revierte el cobro.
+
+**2. Tab Creative en el portal del cliente**, genérico: está para **todos** los
+clientes, no para dos hardcodeados. Muestra los mismos 3 KPIs, el mismo chart
+mensual y la tabla de facturas; si el cliente no tiene creative cargado, muestra
+su vacío. Dos decisiones que valen la pena:
+
+- **El cliente ve sólo facturas EMITIDAS** (`emittedOnly` en
+  `getCreativeBillings`). `creative_billings.status` reusa el enum
+  `billing_status`, así que una fila en `draft` es trabajo interno que el
+  cliente no tiene por qué ver — mismo criterio que el Billing Tracker, que sólo
+  lista facturas con número.
+- **`CreativeSection` NO se cachea, a propósito.** Es el otro tab con una
+  escritura ("Marcar pagado"), y esa escritura entra por un route handler, donde
+  `invalidate()` no puede usar `updateTag` (sólo corre en Server Actions) y cae a
+  `revalidateTag(tag, "max")` = stale-while-revalidate. Cacheado, el
+  `router.refresh()` del click podía devolver la factura todavía "facturada",
+  como si no se hubiera guardado. Por eso lee directo, igual que
+  `BillingSection`. Está anotado en `db/queries/cached.ts` para que no se
+  "optimice" de vuelta.
+
+**"Marcar pagado" en creative**: el botón del portal ahora sirve las dos tablas
+de facturas. `portal-mark-paid.tsx` recibe `kind` (`billing` | `creative`) y con
+eso elige el endpoint; el nuevo es
+`app/api/portal/creative/mark-paid/route.ts`, gemelo del de billing, con las
+mismas tres barreras (cookie de portal del mismo cliente · ownership de la
+factura · **sólo** `invoiced → paid`). Revertir el cobro sigue siendo exclusivo
+de `/creative`. Se respetó la regla: una escritura nueva del portal va por un
+route handler autovalidante en `/api/portal/*`, nunca abriendo POST en `/<slug>`.
+
+**De paso**: `creative_billing` no estaba en el mapa de `lib/audit-format.ts`,
+así que `/auditoria` mostraba el `entityType` crudo para los cambios que la
+action ya venía escribiendo desde antes. Ahora dice "editó **la factura de
+creative** '1226'".
+
+**Sin cambios de schema. NO requiere acción en prod**: el alta escribe en las
+columnas que `creative_billings` ya tiene (`db/creative-billings.sql`), y no hay
+SQL para correr en esta sesión.
+
+**Probado** contra un Postgres 16 local con la forma real de la tabla (enum
+`billing_status` + `creative_billings` + `clients` + `audit_log`): 33
+aserciones sobre las 9 validaciones que tienen que rechazar (sin insertar
+nada), el alta feliz (trim del N°, monto exacto `7500.50`, notas vacías → null,
+`paid_at` sólo si nace cobrada), la auditoría, el borrador que la vista interna
+ve y el portal no, los totales del portal sin ese borrador, el `paidAt` como ISO
+(el payload sobrevive el round-trip JSON de la caché) y el camino de "Marcar
+pagado" con el actor `portal-<slug>@sangria.portal`. También `tsc --noEmit`,
+`eslint` y `next build` limpios.
+
 ### Cambios de la sesión 03/sep/2026 (3) — el tiempo se iba en la FILA, no en la base
 
 La entrada de abajo cuenta el diagnóstico. Ésta, el arreglo. **Si algo se vuelve
@@ -5385,7 +5457,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
 | Tocar algo que borre/recree fees de un plan | **Regla dura: lo facturado ya está facturado.** `plan_billing_fees.media_plan_fee_id` es `no action` (no cascade) — ver `db/schema.ts`. `revertPlanToApprovedSnapshot` reconcilia los fees en vez de borrarlos y `removeFee` bloquea el borrado si hay imputaciones > 0 (`app/actions/plans.ts`). Si agregás un camino nuevo que toque `media_plan_fees`, no uses delete+insert: rompe el histórico de billing. Migración de la FK: `db/billing-fees-no-cascade.sql`. |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert; param opcional `actorEmail` **sólo** para auditar al portal), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. **Ojo**: el portal también dispara `invoiced → paid` (ver la fila de abajo) — cualquier cambio de reglas tiene que contemplar ese camino. |
-| Tocar el botón "Marcar pagado" del portal (o agregar OTRA escritura al portal) | UI: `app/(portal)/[clientSlug]/portal-mark-paid.tsx` (client, se rendea al lado del badge en `BillingSection` de `portal-content.tsx`, desktop + mobile). Backend: `app/api/portal/billing/mark-paid/route.ts` (público en el proxy vía `/api/portal/*`, autovalidante). Barrera: `canWriteAsClientPortal` en `lib/client-portal.server.ts` + ownership de la factura + **sólo** `invoiced → paid`. Auditoría: `actorEmail` (`portal-<slug>@sangria.portal`) como fallback en `recordAudit` (`lib/audit.ts`). **Regla**: una escritura nueva del portal va SIEMPRE por un route handler en `/api/portal/*` con su propio chequeo de ownership — nunca abriendo POST en `/<slug>` (rompería el gate de los Server Actions internos). |
+| Tocar el botón "Marcar pagado" del portal (o agregar OTRA escritura al portal) | UI: `app/(portal)/[clientSlug]/portal-mark-paid.tsx` (client, al lado del badge en `BillingSection` **y** en `CreativeSection` de `portal-content.tsx`, desktop + mobile). El prop `kind` (`billing` | `creative`) elige el endpoint. Backend: `app/api/portal/billing/mark-paid/route.ts` (`plan_billings`) y `app/api/portal/creative/mark-paid/route.ts` (`creative_billings`), los dos públicos en el proxy vía `/api/portal/*` y autovalidantes. Barrera: `canWriteAsClientPortal` en `lib/client-portal.server.ts` + ownership de la factura + **sólo** `invoiced → paid`. Auditoría: `actorEmail` (`portal-<slug>@sangria.portal`) como fallback en `recordAudit` (`lib/audit.ts`). **Regla**: una escritura nueva del portal va SIEMPRE por un route handler en `/api/portal/*` con su propio chequeo de ownership — nunca abriendo POST en `/<slug>` (rompería el gate de los Server Actions internos). Y la sección que la muestra NO se cachea (ver `db/queries/cached.ts`). |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Geometría de columnas hardcodeada en el objeto `COL` (`{x, w}` relativo a `MARGIN`) + paleta/tamaños en las constantes de arriba del archivo; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). **Estilo (pedido explícito)**: header gris claro **sin bordó**, una sola tipografía (Helvetica) y mismo size en todas las celdas del cuerpo, y la Description hace wrap (fila de alto dinámico) en vez de truncarse — si tocás anchos, no vuelvas a truncar ni a meter Courier. |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
 | Tocar los filtros del Reporting Calendar | Todos client-side en `components/reporting-calendar-client.tsx`. Arriba de la página: **año** (por fecha objetivo / cierre, helpers en `lib/year-filter.ts`) + **budget origin**; aplican a pendientes y Gantt (el de budget origin también a enviados). Adentro de `SentReportsSection`: **año + mes por fecha de envío** (`delivered_at`, helper `sentDate`) + buscador de texto; el de Mes se deshabilita con año "Todos" a propósito. Los chips son `ChipGroup` / `FilterChip` en el mismo archivo. |
@@ -5393,7 +5465,9 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar los filtros de /billing | `components/billing-filters.tsx` (dropdowns budget origin/proyecto/estado + slider de meses). El filtro de estado usa `BILLING_STATUSES` + `billingStatusLabel` de `components/billing-status-badge.tsx`; se aplica en `getBillingsList` (`db/queries/billing.ts`, param `status`) y la page valida `?status=` contra el enum. Las opciones de origin/proyecto/rango vienen de `getBillingFilterOptions`. El **buscador en vivo** por N° de factura o nombre de plan es aparte (client-side): `components/billing-table.tsx`. |
 | Cambiar el filtro de Año/Mes del Billing Tracker del PORTAL | Params `?byr=` (años) y `?bmo=` (meses 01..12), propios de esa tab — **no** son `year`/`month`, que pertenecen a Estimación y Reportes. Vacío = año/mes EN CURSO, `all` = todos, o lista con coma. La ventana la arma `billingMonthWindow` en `app/(portal)/[clientSlug]/portal-content.tsx` (producto cartesiano año × mes). Los campos `years` / `monthnum` del multi-select viven en `portal-filters.tsx`. |
 | Tocar el chart de facturación de /billing | `components/billing-media-fee-chart.tsx` (barras apiladas medios+fees, LabelList por segmento + total arriba, subtotales abajo a la derecha). Los datos los agrupa `mediaFeeByMonth` en `app/(app)/billing/page.tsx` a partir de las MISMAS filas que muestra la tabla — si cambiás el filtrado, el chart lo sigue solo. Con >14 meses las etiquetas se apagan a propósito. |
-| Tocar la facturación de CREATIVE | Tabla propia `creative_billings` (`db/schema.ts`) — **no** cuelga de `media_plans`. Query: `db/queries/creative.ts` (`getCreativeBillings` devuelve lista + totales por mes + KPIs). UI: `app/(app)/creative/page.tsx`, `components/creative-chart.tsx` (barras apiladas cobrado/pendiente), `components/creative-table.tsx` (tabla + botón de cobro). Action: `app/actions/creative-billing.ts` (`setCreativeBillingPaid`, `invoiced ↔ paid`, con audit). Los códigos `c####` del Excel de facturación tienen numeración PROPIA: no se matchean por número contra los `m####` de `media_plans`. |
+| Tocar la facturación de CREATIVE | Tabla propia `creative_billings` (`db/schema.ts`) — **no** cuelga de `media_plans`. Query: `db/queries/creative.ts` (`getCreativeBillings` devuelve lista + totales por mes + KPIs; el flag `emittedOnly` es el que usa el portal para no mostrar borradores). UI: `app/(app)/creative/page.tsx`, `components/creative-chart.tsx` (barras apiladas cobrado/pendiente), `components/creative-table.tsx` (tabla + botón de cobro). Actions: `app/actions/creative-billing.ts` — `createCreativeBilling` (alta, con toda la validación: N° único + 23505, `month` YYYY-MM, monto > 0, cliente vivo) y `setCreativeBillingPaid` (`invoiced ↔ paid`), las dos con audit. Los códigos `c####` del Excel de facturación tienen numeración PROPIA: no se matchean por número contra los `m####` de `media_plans`. |
+| Cargar una factura de creative (o cambiar qué pide el formulario) | `components/creative-invoice-form.tsx` (panel client, arriba de `/creative`) + `createCreativeBilling` en `app/actions/creative-billing.ts`. El select de cliente sale de `cachedClientOptions()` (TODOS los clientes vivos, no sólo los que ya tienen creative). Después de guardar el panel queda abierto y conserva cliente + mes + estado — se cargan por tanda mensual. **Editar y borrar siguen siendo SQL a mano.** |
+| Tocar el tab CREATIVE del portal del cliente | `CreativeSection` en `app/(portal)/[clientSlug]/portal-content.tsx` + la entrada `creative` de `TABS` en `app/(portal)/[clientSlug]/page.tsx` (y el ancho de tab de más en `app/(portal)/loading.tsx`). Está para TODOS los clientes; sin facturas muestra su vacío. Lee `getCreativeBillings({ emittedOnly: true })` **directo, sin caché** — tiene escritura, y desde un route handler la invalidación es stale-while-revalidate (ver la nota del PORTAL en `db/queries/cached.ts`). |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
 | Tocar el gráfico "Avance de facturación" del billing del plan | Datos: `getPlanBillingProgress` en `db/queries/billing.ts` (denominador: MEDIOS = media facturable Σtotal_planned where agencia paga; FEE = mgmt sobre media TOTAL — se cobra sobre toda la media aunque el cliente pague directo; facturado por billing = media billable + fee imputado; emitido = invoiced/paid). El fee mensual lo imputa `autoRecomputeMgmtFees` en `app/actions/plan-billing.ts` (prorratea por consumo TOTAL). UI: `components/plan-billing-progress.tsx` (recharts, burn-up sobre unión de meses + barra + KPIs). Render en `app/(app)/proyectos/[code]/planes/[planId]/billing/page.tsx`. |
 | Tocar la tab Estimación (portal + interno) | Datos: `getBillingEstimate` en `db/queries/dashboard.ts` (una fila por mes; devuelve **facturado real** aunque no haya gross → sirve para meses cerrados). Cards: `components/billing-estimate-card.tsx` (`isPast` via `currentMonth` → lidera con el facturado real). Portal: `EstimateSection` en `app/(portal)/[clientSlug]/portal-content.tsx` con filtros **Año + Mes** (el Mes se scopea al año). La **ventana de meses** (vista y export) sale de `lib/estimate-window.ts` (`estimateWindowMonths` / `estimationMonthOptions(billingMonths, year)` / `estimationYearOptions`), fuente única compartida — el filtro de Año evita que el de Mes traiga meses de otros años. |

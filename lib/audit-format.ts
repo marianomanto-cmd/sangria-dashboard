@@ -35,6 +35,7 @@ const ENTITY_NOUN: Record<string, { singular: string; article: "el" | "la" }> = 
   plan_billing: { singular: "billing del plan", article: "el" },
   plan_billing_publisher: { singular: "consumo de publisher", article: "el" },
   plan_billing_fee: { singular: "imputación de fee", article: "la" },
+  creative_billing: { singular: "factura de creative", article: "la" },
   project_report: { singular: "reporte de proyecto", article: "el" },
   report_comment: { singular: "comentario de reporte", article: "el" },
   campaign_placement_actual: { singular: "valor real de placement", article: "el" },
@@ -95,6 +96,9 @@ export function entityLabel(
       return pick(["name", "code", "slug"]);
     case "plan_billing":
       return pick(["month"]);
+    case "creative_billing":
+      // El "nombre" de una factura de creative es su número (único).
+      return pick(["invoiceNumber", "invoice_number"]);
     case "project_report":
       return pick(["projectName", "deliveryDate"]);
     case "report_comment": {

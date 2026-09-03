@@ -12,6 +12,7 @@ import {
   cachedMonthly,
   cachedPortalSpendByPublisher,
 } from "@/db/queries/cached";
+import { getCreativeBillings } from "@/db/queries/creative";
 import { getReportingCalendar, getSentReports } from "@/db/queries/reports";
 import { getCampaignTrackerPlan } from "@/db/queries/campaign-tracker";
 import { getBenchmarks, getSimulatorCatalogs } from "@/db/queries/simulator";
@@ -20,6 +21,7 @@ import {
   getMarketActivations,
 } from "@/db/queries/analysis";
 import { MarketAnalysis } from "@/components/market-analysis";
+import { CreativeChart } from "@/components/creative-chart";
 import { FacturacionChart } from "@/components/facturacion-chart";
 import {
   CumulativeBillingChart,
@@ -411,6 +413,204 @@ export async function BillingSection({
           </div>
         </section>
       ))}
+    </div>
+  );
+}
+
+// ─── Creative ─────────────────────────────────────────────────────────────────
+
+// Facturación del trabajo CREATIVO del cliente. Vive en su propia tabla
+// (`creative_billings`, sin media plan detrás — ver README → Creative), así que
+// es un tab aparte y no se mezcla con el Billing Tracker: no tiene desglose
+// medios/fees ni cuelga de una campaña.
+//
+// Genérico para CUALQUIER cliente: el tab está siempre y muestra lo que ese
+// cliente tenga cargado en /creative. Sin filtros propios a propósito — el
+// volumen es de unas pocas facturas por año.
+//
+// Sólo facturas EMITIDAS (`emittedOnly` en la query): el cliente no ve borradores.
+//
+// Lectura DIRECTA, sin caché, igual que el Billing Tracker y por la misma razón:
+// el tab tiene una escritura ("Marcar pagado") que entra por un route handler,
+// donde la invalidación por tag es stale-while-revalidate. Cacheado, el refresh
+// del click podría devolver la factura todavía "facturada". Ver el bloque del
+// PORTAL en db/queries/cached.ts.
+export async function CreativeSection({
+  clientId,
+  clientSlug,
+  lang,
+}: {
+  clientId: string;
+  clientSlug: string;
+  lang: Language;
+}) {
+  const data = await getCreativeBillings({ clientId, emittedOnly: true });
+
+  if (data.invoices.length === 0) {
+    return (
+      <EmptyPortal
+        text={
+          lang === "es"
+            ? "Sin facturas de trabajo creativo. Acá aparecen las facturas de creative, que se emiten aparte de los planes de medios."
+            : "No creative invoices yet. Creative work is billed separately from media plans and shows up here."
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard
+          label={lang === "es" ? "Total facturado" : "Total invoiced"}
+          value={formatUsd(data.totalUsd)}
+        />
+        <KpiCard
+          label={lang === "es" ? "Cobrado" : "Paid"}
+          value={formatUsd(data.paidUsd)}
+        />
+        <KpiCard
+          label={lang === "es" ? "Pendiente de cobro" : "Pending"}
+          value={formatUsd(data.pendingUsd)}
+        />
+      </div>
+
+      <CreativeChart data={data.byMonth} lang={lang} />
+
+      <section className="rounded-lg border border-line bg-white dark:bg-paper-2 overflow-hidden">
+        <header className="flex items-start justify-between gap-4 px-5 py-3 border-b border-line bg-paper">
+          <div className="min-w-0">
+            <p className="font-semibold text-ink">
+              {lang === "es" ? "Facturas de creative" : "Creative invoices"}
+            </p>
+            <p className="text-[11px] text-muted mt-0.5">
+              {lang === "es"
+                ? "Facturación del trabajo creativo, aparte de los planes de medios."
+                : "Creative work billing, separate from media plans."}
+            </p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-[10px] uppercase tracking-[0.08em] text-muted">
+              Total
+            </p>
+            <p className="font-mono font-semibold text-ink">
+              {formatUsd(data.totalUsd)}
+            </p>
+          </div>
+        </header>
+
+        {/* Desktop: tabla. En mobile usamos tarjetas (abajo). */}
+        <div className="hidden lg:block overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
+            <thead className="bg-paper-2">
+              <tr className="text-[11px] uppercase tracking-[0.06em] text-muted">
+                <th className="text-left font-medium px-5 py-2">
+                  {lang === "es" ? "N° factura" : "Invoice #"}
+                </th>
+                <th className="text-left font-medium px-5 py-2">
+                  {lang === "es" ? "Proyecto" : "Project"}
+                </th>
+                <th className="text-left font-medium px-5 py-2">
+                  {lang === "es" ? "Mes" : "Month"}
+                </th>
+                <th className="text-left font-medium px-5 py-2">
+                  {lang === "es" ? "Fecha" : "Date"}
+                </th>
+                <th className="text-right font-medium px-5 py-2">
+                  {lang === "es" ? "Monto" : "Amount"}
+                </th>
+                <th className="text-left font-medium px-5 py-2">
+                  {lang === "es" ? "Estado" : "Status"}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.invoices.map((inv) => (
+                <tr key={inv.id} className="border-t border-line-soft">
+                  <td className="px-5 py-2 font-mono text-ink-2">
+                    {inv.invoiceNumber}
+                  </td>
+                  <td className="px-5 py-2 min-w-0">
+                    <p className="text-ink font-medium truncate">
+                      {inv.projectName ?? inv.campaignCode ?? "—"}
+                    </p>
+                    {inv.projectName && inv.campaignCode && (
+                      <p className="font-mono text-[10px] text-muted truncate">
+                        {inv.campaignCode}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-5 py-2 text-ink-2">
+                    {formatMonth(inv.month, lang)}
+                  </td>
+                  <td className="px-5 py-2 text-muted text-xs">
+                    {inv.invoiceDate ? formatDate(inv.invoiceDate, lang) : "—"}
+                  </td>
+                  <td className="px-5 py-2 text-right font-mono font-semibold text-ink">
+                    {formatUsd(inv.amountUsd)}
+                  </td>
+                  <td className="px-5 py-2">
+                    <span className="inline-flex items-center gap-2 flex-wrap">
+                      <BillingStatusBadge status={inv.status} lang={lang} size="sm" />
+                      {inv.status === "invoiced" && (
+                        <PortalMarkPaidButton
+                          kind="creative"
+                          billingId={inv.id}
+                          clientSlug={clientSlug}
+                          invoiceNumber={inv.invoiceNumber}
+                          lang={lang}
+                        />
+                      )}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Mobile: tarjetas (sin scroll horizontal). */}
+        <div className="lg:hidden divide-y divide-line-soft">
+          {data.invoices.map((inv) => (
+            <div key={inv.id} className="px-5 py-3.5">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-medium text-ink truncate">
+                    {inv.projectName ?? inv.campaignCode ?? "—"}
+                  </p>
+                  <p className="font-mono text-[11px] text-muted mt-0.5">
+                    {inv.invoiceNumber} · {formatMonth(inv.month, lang)}
+                  </p>
+                </div>
+                <span className="shrink-0 flex flex-col items-end gap-1.5">
+                  <BillingStatusBadge status={inv.status} lang={lang} size="sm" />
+                  {inv.status === "invoiced" && (
+                    <PortalMarkPaidButton
+                      kind="creative"
+                      billingId={inv.id}
+                      clientSlug={clientSlug}
+                      invoiceNumber={inv.invoiceNumber}
+                      lang={lang}
+                    />
+                  )}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <PortalCardStat
+                  label={lang === "es" ? "Monto" : "Amount"}
+                  value={formatUsd(inv.amountUsd)}
+                />
+                <PortalCardStat
+                  label={lang === "es" ? "Fecha" : "Date"}
+                  value={
+                    inv.invoiceDate ? formatDate(inv.invoiceDate, lang) : "—"
+                  }
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
