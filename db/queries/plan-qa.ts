@@ -222,7 +222,11 @@ async function catalogNames() {
     db.select({ id: publishers.id, name: publishers.name }).from(publishers),
     db.select({ id: markets.id, name: markets.name }).from(markets),
     db
-      .select({ slug: metricsCatalog.slug, name: metricsCatalog.name })
+      .select({
+        slug: metricsCatalog.slug,
+        name: metricsCatalog.name,
+        kind: metricsCatalog.kind,
+      })
       .from(metricsCatalog),
   ]);
   const pubById = new Map(pubRows.map((r) => [r.id, r.name]));
@@ -230,10 +234,12 @@ async function catalogNames() {
   // El catálogo de métricas es per-cliente, así que un mismo slug puede
   // repetirse con distinto nombre; para el label del diff cualquiera sirve.
   const metricBySlug = new Map(metricRows.map((r) => [r.slug, r.name]));
+  const metricKindBySlug = new Map(metricRows.map((r) => [r.slug, r.kind]));
   return {
     publisherName: (id: string) => pubById.get(id) ?? "(publisher borrado)",
     marketName: (id: string | null) => (id ? (mktById.get(id) ?? null) : null),
     metricName: (slug: string) => metricBySlug.get(slug) ?? slug,
+    metricIsCount: (slug: string) => metricKindBySlug.get(slug) === "direct",
   };
 }
 
@@ -256,7 +262,11 @@ export async function getPlanVersionHistory(
     db.select({ id: publishers.id, name: publishers.name }).from(publishers),
     db.select({ id: markets.id, name: markets.name }).from(markets),
     db
-      .select({ slug: metricsCatalog.slug, name: metricsCatalog.name })
+      .select({
+        slug: metricsCatalog.slug,
+        name: metricsCatalog.name,
+        kind: metricsCatalog.kind,
+      })
       .from(metricsCatalog),
     db
       .select()
@@ -269,11 +279,13 @@ export async function getPlanVersionHistory(
   // El catálogo de métricas es per-cliente, así que un mismo slug puede
   // repetirse con distinto nombre; para el label del diff cualquiera sirve.
   const metricBySlug = new Map(metricRows.map((r) => [r.slug, r.name]));
+  const metricKindBySlug = new Map(metricRows.map((r) => [r.slug, r.kind]));
 
   const names = {
     publisherName: (id: string) => pubById.get(id) ?? "(publisher borrado)",
     marketName: (id: string | null) => (id ? (mktById.get(id) ?? null) : null),
     metricName: (slug: string) => metricBySlug.get(slug) ?? slug,
+    metricIsCount: (slug: string) => metricKindBySlug.get(slug) === "direct",
   };
 
   const runByVersion = new Map(runs.map((r) => [r.versionNumber, r]));
