@@ -2,6 +2,73 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 03/sep/2026 (4) — mercados de Félix: 13 estados de EE.UU.
+
+Félix planifica por **estado**, no por país, y su catálogo de `markets` no tenía
+ninguno: sus 18 placements no se podían clasificar por mercado.
+
+- **`db/felix-markets-usa.sql`** (registro; la query se entregó en el chat y la
+  corre el dueño del repo): inserta los 13 estados pedidos —California, New
+  York, New Jersey, Texas, Florida, Arizona, Illinois, Colorado, North Carolina,
+  Georgia, Washington, Pennsylvania, New Mexico— para `clients.slug = 'felix'`,
+  habilitados, con `sort_order` continuando el máximo actual del cliente.
+  Idempotente: `on conflict on constraint markets_client_slug_uq do update set
+  enabled = true` (re-habilita sin pisar un `name` editado a mano). Los nombres
+  van **completos**, no las siglas: son los que salen impresos en el PDF del
+  plan y en el portal.
+- **`lib/market-geo.ts`**: centroides de los 13 estados. Van como `region` y no
+  `country` porque world-atlas/countries-110m no tiene siluetas sub-nacionales
+  a las que fitear el zoom; la burbuja queda bordó (nivel ciudad/región), que es
+  lo correcto — un estado es una plaza DENTRO de un país. Sin esto los 13 caían
+  en "Sin ubicación en el mapa". De yapa arregla `New Mexico`, que antes
+  matcheaba por token contra `mexico` y aterrizaba en el centroide de México.
+- **Probado** contra el Postgres 16 local con la forma de prod (felix: 1
+  proyecto, 1 plan, 3 publishers, 18 placements): la migración inserta 12 de 13
+  cuando uno ya existe, la segunda corrida no cambia nada, y un mercado
+  deshabilitado con nombre editado vuelve a `enabled` conservando el nombre. El
+  geocoding resuelve 13/13 sin centroides repetidos y no mueve ninguno de los
+  que ya andaban (Costa Rica, "Estados Unidos - Varios", LATAM, Ciudad de
+  Panamá, Centroamérica). `tsc` y `eslint` limpios.
+
+**Acción en prod: sí — hay que correr el SQL.** El código NO depende de la
+migración (deployar el geocoding sin correr el SQL no rompe nada: simplemente no
+hay mercados nuevos que geocodear), y la migración sin el deploy tampoco (los
+mercados aparecen igual en el dropdown del editor; sólo el mapa de /analisis los
+listaría como "sin ubicación"). Van en cualquier orden.
+
+**Y el plan no se puede taggear por estado** — `db/felix-plan-markets-tiers.sql`:
+las 18 líneas del plan "Félix Pago | Back to School" (live v1) corren cada una
+sobre TODOS los estados de su tier a la vez, con el presupuesto distribuido
+entre ellos, y `media_plan_placements.market_id` es UNA sola FK. Así que lo que
+va en la línea es el **tier**, igual que "Centroamérica" o "LATAM" en el
+catálogo: se crean `estados-unidos-t1` / `estados-unidos-t2` y se asigna leyendo
+el T1/T2 del NOMBRE del placement (`… | T1`, `… | T1 | Félix Pago`). Sólo toca
+líneas con `market_id is null`. Da 9 líneas T1 (992.172,20) + 9 T2 (417.828,00)
+= 1.410.000, que cuadra con los tres bloques (960k CTV + 350k + 100k).
+El desglose de estados sigue en `audience`, y los 13 estados quedan en el
+catálogo para el plan que sí se abra por estado.
+
+Los centroides de los dos tiers también van en `lib/market-geo.ts` (promedio de
+sus estados, separados para que las burbujas no se pisen). Si algún día se
+renombran al inglés ("United States - T1"), hay que sumar esas keys: hoy caerían
+por token en `united-states` y las dos burbujas se superpondrían.
+
+⚠️ El plan está **live v1**: el UPDATE no crea versión nueva ni toca el snapshot
+v1 (el PDF firmado sigue igual), y al correr por SQL no queda registro en
+`audit_log`. El QA no se invalida — sus checks son por `placement_id`.
+
+**Qué mercados son T1 y cuáles T2 va en las notas del plan** (`notes_md`): la
+línea guarda el tier pero no su composición. Eso **no se carga por SQL** — lo
+escribe el planner a mano en el bloque "Notas del plan" del editor; el texto
+acordado (con la sigla al lado del nombre, como aparecen en `audience`) queda
+al pie de `db/felix-plan-markets-tiers.sql` para no reinventarlo.
+
+**Paridad pantalla↔export, que faltaba**: el editor muestra "Notas del plan" y
+el Excel no las tenía. Se agregó una fila `Notas` al bloque de metadata del Tab
+1 (`app/api/plans/[planId]/export.xlsx/route.ts`), que se estira y envuelve si
+el texto es multilínea. Al **PDF no** van: es el documento que firma el cliente,
+la excepción documentada en AGENTS.md.
+
 ### Cambios de la sesión 03/sep/2026 (3) — el tiempo se iba en la FILA, no en la base
 
 La entrada de abajo cuenta el diagnóstico. Ésta, el arreglo. **Si algo se vuelve
@@ -4636,6 +4703,9 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+f2e3c13  feat(plan): la composición de T1/T2 en las notas del plan + paridad en el Excel
+e725a0b  feat(markets): el plan de Félix se taggea por tier, no por estado
+ab69edb  feat(markets): los 13 estados de EE.UU. de Félix + su geocoding
 4ecaf8b  fix(db): el tiempo se iba en la FILA, no en la base — max 1→3, tres fases y el reintento roto (#269)
 236fae6  docs(db): control read-only de la estructura actual + que dicen los logs de Vercel (#269)
 8923828  fix: el delivery se guarda exacto y se muestra redondeado
@@ -5428,6 +5498,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Tocar el portal de cliente (público; read-only salvo "Marcar pagado") | `app/(portal)/[clientSlug]/` (page + secciones + filtros + `portal-mark-paid.tsx`), `app/api/portal/{login,logout,billing/mark-paid}/route.ts`, `lib/client-portal.ts` (password/reservados/helpers edge-safe), `lib/client-portal.server.ts` (cookie + `canAccessClientExport` + `canWriteAsClientPortal`), `db/queries/client-portal.ts` (lookup + filtros). El gate público (solo GET para `/<slug>`) está en `lib/supabase/middleware.ts`. **Toda ruta top-level nueva de la app → sumala a `RESERVED_TOP_LEVEL_SLUGS`.** |
 | Cambiar el password / usuario del portal de cliente | `CLIENT_PORTAL_PASSWORD` en `lib/client-portal.ts` (compartido para todos). El usuario es el slug o el nombre del cliente. El admin (`/configuracion/clientes`) muestra link + usuario + password con copiar. |
 | Cambiar el favicon | `app/icon.svg` (App Router lo toma como icono; hoy "S" blanca sobre negro). No hay `favicon.ico`. |
+| Cargar / editar el catálogo de mercados de un cliente | `/configuracion/clientes/[slug]` (sección Mercados) para el ABM a mano; `app/actions/markets.ts` (create/update/delete + `slugify`); por SQL, el patrón está en `db/felix-markets-usa.sql` (insert idempotente contra `markets_client_slug_uq`). Si el mercado tiene que salir en el mapa de /analisis, sumá su centroide a `GEO` en `lib/market-geo.ts`. |
 | Tocar el análisis por publisher × mercado (mapa) | `components/market-analysis.tsx` (filtros + mapa + ranking + tabla, URL-based), `components/americas-map.tsx` (mapa **Leaflet** — burbujas divIcon; nivel país en azul vía `.mkt-bubble--country` en `globals.css`), `lib/market-geo.ts` (centroides + `level` país/ciudad/región — agregá acá un mercado nuevo), `db/queries/analysis.ts` (`getMarketActivations`, `getAnalysisFilterOptions`). Páginas: `/analisis` (interna) y el tab Análisis del portal. |
 | Wirear un user a un audit_log nuevo | Usar `await recordAudit({...})` de `lib/audit.ts` en server actions. Auto-detecta el user via `getCurrentUser()`. No insertar directo con `db.insert(auditLog)` desde server actions — si lo hacés a mano queda como "Sistema". |
 | Activar RLS / cerrar la REST API pública de Supabase | `db/rls.sql` — `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` en todas las tablas de `public`. Pegarlo en el SQL Editor. La app no se ve afectada (conecta como `postgres`, dueño → bypassa RLS; no se usa `FORCE`). **Toda tabla nueva** necesita su propio ENABLE. |
