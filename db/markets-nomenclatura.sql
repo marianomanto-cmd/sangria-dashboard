@@ -42,6 +42,8 @@
 --   Bloque 3 → verificación (aparte: el SQL Editor muestra sólo el último).
 --
 -- OJO:
+--   · Cada bloque es UN solo statement y se banca solo: el slug destino viene
+--     ya calculado en el plan, así que no hay que crear ninguna función antes.
 --   · Correr por SQL NO deja rastro en `audit_log`.
 --   · Los snapshots de versiones resuelven el nombre contra el catálogo de HOY:
 --     un PDF de una versión firmada, regenerado, va a decir el nombre nuevo.
@@ -55,22 +57,6 @@
 --   nuevas). Sin el deploy, "Argentina (País)" cae en el mapa como ciudad.
 -- ════════════════════════════════════════════════════════════════════════════
 
--- ────────────────────────────────────────────────────────────────────────────
--- norm(): la MISMA normalización que `slugify` en app/actions/markets.ts y
--- `norm` en lib/market-nomenclature.ts. Es inmutable y no toca datos; se puede
--- dejar creada o borrarla al final con `drop function public.norm(text);`.
--- ────────────────────────────────────────────────────────────────────────────
-
-create or replace function public.norm(v text) returns text
-  language sql immutable strict parallel safe
-as $fn$
-  select regexp_replace(
-          regexp_replace(
-            lower(translate(v, 'ÁÀÂÄÃÅáàâäãåÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÖÕóòôöõÚÙÛÜúùûüÝýÑñÇç', 'AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuYyNnCc')),
-            '[^a-z0-9]+', '-', 'g'),
-          '^-+|-+$', '', 'g')
-$fn$;
-
 -- ════════════════════════════════════════════════════════════════════════════
 -- BLOQUE 1 — DRY RUN (read-only). El plan de cambios, ANTES de tocar nada.
 --
@@ -79,76 +65,77 @@ $fn$;
 -- ════════════════════════════════════════════════════════════════════════════
 
 with
-  market_plan(client_slug, market_slug, target_name) as (values
-    ('copa', 'costa-rica', 'Costa Rica (País)'),
-    ('copa', 'panama', 'Panamá (País)'),
-    ('copa', 'guatemala', 'Guatemala (País)'),
-    ('copa', 'honduras', 'Honduras (País)'),
-    ('copa', 'el-salvador', 'El Salvador (País)'),
-    ('copa', 'nicaragua', 'Nicaragua (País)'),
-    ('copa', 'mexico', 'México (País)'),
-    ('copa', 'argentina', 'Argentina (País)'),
-    ('copa', 'brasil', 'Brasil (País)'),
-    ('copa', 'chile', 'Chile (País)'),
-    ('copa', 'colombia', 'Colombia (País)'),
-    ('copa', 'peru', 'Perú (País)'),
-    ('copa', 'centroamerica', 'Centroamérica'),
-    ('copa', 'latam', 'LATAM'),
-    ('copa', 'canada-toronto', 'Canadá - Toronto'),
-    ('copa', 'panama-panama', 'Panamá - Ciudad de Panamá'),
-    ('copa', 'estados-unidos', 'Estados Unidos (País)'),
-    ('copa', 'colombia-bogota', 'Colombia - Bogotá'),
-    ('copa', 'peru-lima', 'Perú - Lima'),
-    ('copa', 'brasil-sao-paulo', 'Brasil - São Paulo'),
-    ('copa', 'estados-unidos-varios', 'Estados Unidos (País)'),
-    ('copa', 'colombia-varios', 'Colombia - Varios'),
-    ('copa', 'argentina-varios', 'Argentina - Varios'),
-    ('copa', 'mexico-guadalajara', 'México - Guadalajara'),
-    ('copa', 'mexico-df', 'México - Ciudad de México'),
-    ('copa', 'mexico-monterrey', 'México - Monterrey'),
-    ('copa', 'mexico-los-cabos', 'México - Los Cabos'),
-    ('copa', 'ecuador-quito', 'Ecuador - Quito'),
-    ('copa', 'argentina-salta', 'Argentina - Salta'),
-    ('copa', 'argentina-cordoba', 'Argentina - Córdoba'),
-    ('copa', 'argentina-mendoza', 'Argentina - Mendoza'),
-    ('copa', 'argentina-buenos-aires', 'Argentina - Buenos Aires'),
-    ('copa', 'argentina-rosario', 'Argentina - Rosario'),
-    ('copa', 'venezuela', 'Venezuela (País)'),
-    ('copa', 'us-la-joya', 'Estados Unidos - La Jolla'),
-    ('copa', 'us-coronado', 'Estados Unidos - Coronado'),
-    ('copa', 'us-encinitas', 'Estados Unidos - Encinitas'),
-    ('copa', 'us-del-mar', 'Estados Unidos - Del Mar'),
-    ('copa', 'us-san-diego', 'Estados Unidos - San Diego'),
-    ('copa', 'co-bogota', 'Colombia - Bogotá'),
-    ('copa', 'co-medellin', 'Colombia - Medellín'),
-    ('copa', 'costa-rica-san-jose', 'Costa Rica - San José'),
-    ('copa', 'guatemala-guatemala-city', 'Guatemala - Ciudad de Guatemala'),
-    ('copa', 'global', 'Global'),
-    ('copa', 'puerto-rico-pais', 'Puerto Rico (País)'),
-    ('copa', 'paraguay-pais', 'Paraguay (País)'),
-    ('copa', 'trinidad-y-tobago-pais', 'Trinidad y Tobago (País)'),
-    ('copa', 'uruguay-pais', 'Uruguay (País)'),
-    ('copa', 'republica-dominicana-pais', 'República Dominicana (País)'),
-    ('felix', 'california', 'Estados Unidos - California'),
-    ('felix', 'new-york', 'Estados Unidos - New York'),
-    ('felix', 'new-jersey', 'Estados Unidos - New Jersey'),
-    ('felix', 'texas', 'Estados Unidos - Texas'),
-    ('felix', 'florida', 'Estados Unidos - Florida'),
-    ('felix', 'arizona', 'Estados Unidos - Arizona'),
-    ('felix', 'illinois', 'Estados Unidos - Illinois'),
-    ('felix', 'colorado', 'Estados Unidos - Colorado'),
-    ('felix', 'north-carolina', 'Estados Unidos - North Carolina'),
-    ('felix', 'georgia', 'Estados Unidos - Georgia'),
-    ('felix', 'washington', 'Estados Unidos - Washington'),
-    ('felix', 'pennsylvania', 'Estados Unidos - Pennsylvania'),
-    ('felix', 'new-mexico', 'Estados Unidos - New Mexico'),
-    ('felix', 'estados-unidos-t1', 'Estados Unidos - Varios (T1)'),
-    ('felix', 'estados-unidos-t2', 'Estados Unidos - Varios (T2)')
+  market_plan(client_slug, market_slug, target_name, target_slug) as (values
+    ('copa', 'costa-rica', 'Costa Rica (País)', 'costa-rica-pais'),
+    ('copa', 'panama', 'Panamá (País)', 'panama-pais'),
+    ('copa', 'guatemala', 'Guatemala (País)', 'guatemala-pais'),
+    ('copa', 'honduras', 'Honduras (País)', 'honduras-pais'),
+    ('copa', 'el-salvador', 'El Salvador (País)', 'el-salvador-pais'),
+    ('copa', 'nicaragua', 'Nicaragua (País)', 'nicaragua-pais'),
+    ('copa', 'mexico', 'México (País)', 'mexico-pais'),
+    ('copa', 'argentina', 'Argentina (País)', 'argentina-pais'),
+    ('copa', 'brasil', 'Brasil (País)', 'brasil-pais'),
+    ('copa', 'chile', 'Chile (País)', 'chile-pais'),
+    ('copa', 'colombia', 'Colombia (País)', 'colombia-pais'),
+    ('copa', 'peru', 'Perú (País)', 'peru-pais'),
+    ('copa', 'centroamerica', 'Centroamérica', 'centroamerica'),
+    ('copa', 'latam', 'LATAM', 'latam'),
+    ('copa', 'canada-toronto', 'Canadá - Toronto', 'canada-toronto'),
+    ('copa', 'panama-panama', 'Panamá - Ciudad de Panamá', 'panama-ciudad-de-panama'),
+    ('copa', 'estados-unidos', 'Estados Unidos (País)', 'estados-unidos-pais'),
+    ('copa', 'colombia-bogota', 'Colombia - Bogotá', 'colombia-bogota'),
+    ('copa', 'peru-lima', 'Perú - Lima', 'peru-lima'),
+    ('copa', 'brasil-sao-paulo', 'Brasil - São Paulo', 'brasil-sao-paulo'),
+    ('copa', 'estados-unidos-varios', 'Estados Unidos (País)', 'estados-unidos-pais'),
+    ('copa', 'colombia-varios', 'Colombia - Varios', 'colombia-varios'),
+    ('copa', 'argentina-varios', 'Argentina - Varios', 'argentina-varios'),
+    ('copa', 'mexico-guadalajara', 'México - Guadalajara', 'mexico-guadalajara'),
+    ('copa', 'mexico-df', 'México - Ciudad de México', 'mexico-ciudad-de-mexico'),
+    ('copa', 'mexico-monterrey', 'México - Monterrey', 'mexico-monterrey'),
+    ('copa', 'mexico-los-cabos', 'México - Los Cabos', 'mexico-los-cabos'),
+    ('copa', 'ecuador-quito', 'Ecuador - Quito', 'ecuador-quito'),
+    ('copa', 'argentina-salta', 'Argentina - Salta', 'argentina-salta'),
+    ('copa', 'argentina-cordoba', 'Argentina - Córdoba', 'argentina-cordoba'),
+    ('copa', 'argentina-mendoza', 'Argentina - Mendoza', 'argentina-mendoza'),
+    ('copa', 'argentina-buenos-aires', 'Argentina - Buenos Aires', 'argentina-buenos-aires'),
+    ('copa', 'argentina-rosario', 'Argentina - Rosario', 'argentina-rosario'),
+    ('copa', 'venezuela', 'Venezuela (País)', 'venezuela-pais'),
+    ('copa', 'us-la-joya', 'Estados Unidos - La Jolla', 'estados-unidos-la-jolla'),
+    ('copa', 'us-coronado', 'Estados Unidos - Coronado', 'estados-unidos-coronado'),
+    ('copa', 'us-encinitas', 'Estados Unidos - Encinitas', 'estados-unidos-encinitas'),
+    ('copa', 'us-del-mar', 'Estados Unidos - Del Mar', 'estados-unidos-del-mar'),
+    ('copa', 'us-san-diego', 'Estados Unidos - San Diego', 'estados-unidos-san-diego'),
+    ('copa', 'co-bogota', 'Colombia - Bogotá', 'colombia-bogota'),
+    ('copa', 'co-medellin', 'Colombia - Medellín', 'colombia-medellin'),
+    ('copa', 'costa-rica-san-jose', 'Costa Rica - San José', 'costa-rica-san-jose'),
+    ('copa', 'guatemala-guatemala-city', 'Guatemala - Ciudad de Guatemala', 'guatemala-ciudad-de-guatemala'),
+    ('copa', 'global', 'Global', 'global'),
+    ('copa', 'puerto-rico-pais', 'Puerto Rico (País)', 'puerto-rico-pais'),
+    ('copa', 'paraguay-pais', 'Paraguay (País)', 'paraguay-pais'),
+    ('copa', 'trinidad-y-tobago-pais', 'Trinidad y Tobago (País)', 'trinidad-y-tobago-pais'),
+    ('copa', 'uruguay-pais', 'Uruguay (País)', 'uruguay-pais'),
+    ('copa', 'republica-dominicana-pais', 'República Dominicana (País)', 'republica-dominicana-pais'),
+    ('felix', 'california', 'Estados Unidos - California', 'estados-unidos-california'),
+    ('felix', 'new-york', 'Estados Unidos - New York', 'estados-unidos-new-york'),
+    ('felix', 'new-jersey', 'Estados Unidos - New Jersey', 'estados-unidos-new-jersey'),
+    ('felix', 'texas', 'Estados Unidos - Texas', 'estados-unidos-texas'),
+    ('felix', 'florida', 'Estados Unidos - Florida', 'estados-unidos-florida'),
+    ('felix', 'arizona', 'Estados Unidos - Arizona', 'estados-unidos-arizona'),
+    ('felix', 'illinois', 'Estados Unidos - Illinois', 'estados-unidos-illinois'),
+    ('felix', 'colorado', 'Estados Unidos - Colorado', 'estados-unidos-colorado'),
+    ('felix', 'north-carolina', 'Estados Unidos - North Carolina', 'estados-unidos-north-carolina'),
+    ('felix', 'georgia', 'Estados Unidos - Georgia', 'estados-unidos-georgia'),
+    ('felix', 'washington', 'Estados Unidos - Washington', 'estados-unidos-washington'),
+    ('felix', 'pennsylvania', 'Estados Unidos - Pennsylvania', 'estados-unidos-pennsylvania'),
+    ('felix', 'new-mexico', 'Estados Unidos - New Mexico', 'estados-unidos-new-mexico'),
+    ('felix', 'estados-unidos-t1', 'Estados Unidos - Varios (T1)', 'estados-unidos-varios-t1'),
+    ('felix', 'estados-unidos-t2', 'Estados Unidos - Varios (T2)', 'estados-unidos-varios-t2')
   ),
   plan as (
     select m.id, m.client_id, m.name, m.slug, m.sort_order,
            c.slug as client_slug,
            mp.target_name,
+           mp.target_slug,
            (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
       from public.markets m
       join public.clients c on c.id = m.client_id
@@ -157,10 +144,10 @@ with
       -- corrida y la verificación no encontraban nada y reportaban todo como
       -- "no estaba en el plan". Gana siempre el match por slug actual.
       left join lateral (
-        select mp.target_name
+        select mp.target_name, mp.target_slug
           from market_plan mp
          where mp.client_slug = c.slug
-           and (mp.market_slug = m.slug or public.norm(mp.target_name) = m.slug)
+           and (mp.market_slug = m.slug or mp.target_slug = m.slug)
          order by (mp.market_slug = m.slug) desc
          limit 1
       ) mp on true
@@ -170,9 +157,8 @@ with
   -- bien escrito, y después el de menor sort_order.
   winner as (
     select p.*,
-           public.norm(p.target_name) as target_slug,
            first_value(p.id) over (
-             partition by p.client_id, public.norm(p.target_name)
+             partition by p.client_id, p.target_slug
              order by p.placements desc,
                       (case when p.name = p.target_name then 0 else 1 end),
                       p.sort_order, p.id
@@ -216,76 +202,77 @@ declare
 begin
   create temporary table _mkt_plan on commit drop as
   with
-    market_plan(client_slug, market_slug, target_name) as (values
-      ('copa', 'costa-rica', 'Costa Rica (País)'),
-      ('copa', 'panama', 'Panamá (País)'),
-      ('copa', 'guatemala', 'Guatemala (País)'),
-      ('copa', 'honduras', 'Honduras (País)'),
-      ('copa', 'el-salvador', 'El Salvador (País)'),
-      ('copa', 'nicaragua', 'Nicaragua (País)'),
-      ('copa', 'mexico', 'México (País)'),
-      ('copa', 'argentina', 'Argentina (País)'),
-      ('copa', 'brasil', 'Brasil (País)'),
-      ('copa', 'chile', 'Chile (País)'),
-      ('copa', 'colombia', 'Colombia (País)'),
-      ('copa', 'peru', 'Perú (País)'),
-      ('copa', 'centroamerica', 'Centroamérica'),
-      ('copa', 'latam', 'LATAM'),
-      ('copa', 'canada-toronto', 'Canadá - Toronto'),
-      ('copa', 'panama-panama', 'Panamá - Ciudad de Panamá'),
-      ('copa', 'estados-unidos', 'Estados Unidos (País)'),
-      ('copa', 'colombia-bogota', 'Colombia - Bogotá'),
-      ('copa', 'peru-lima', 'Perú - Lima'),
-      ('copa', 'brasil-sao-paulo', 'Brasil - São Paulo'),
-      ('copa', 'estados-unidos-varios', 'Estados Unidos (País)'),
-      ('copa', 'colombia-varios', 'Colombia - Varios'),
-      ('copa', 'argentina-varios', 'Argentina - Varios'),
-      ('copa', 'mexico-guadalajara', 'México - Guadalajara'),
-      ('copa', 'mexico-df', 'México - Ciudad de México'),
-      ('copa', 'mexico-monterrey', 'México - Monterrey'),
-      ('copa', 'mexico-los-cabos', 'México - Los Cabos'),
-      ('copa', 'ecuador-quito', 'Ecuador - Quito'),
-      ('copa', 'argentina-salta', 'Argentina - Salta'),
-      ('copa', 'argentina-cordoba', 'Argentina - Córdoba'),
-      ('copa', 'argentina-mendoza', 'Argentina - Mendoza'),
-      ('copa', 'argentina-buenos-aires', 'Argentina - Buenos Aires'),
-      ('copa', 'argentina-rosario', 'Argentina - Rosario'),
-      ('copa', 'venezuela', 'Venezuela (País)'),
-      ('copa', 'us-la-joya', 'Estados Unidos - La Jolla'),
-      ('copa', 'us-coronado', 'Estados Unidos - Coronado'),
-      ('copa', 'us-encinitas', 'Estados Unidos - Encinitas'),
-      ('copa', 'us-del-mar', 'Estados Unidos - Del Mar'),
-      ('copa', 'us-san-diego', 'Estados Unidos - San Diego'),
-      ('copa', 'co-bogota', 'Colombia - Bogotá'),
-      ('copa', 'co-medellin', 'Colombia - Medellín'),
-      ('copa', 'costa-rica-san-jose', 'Costa Rica - San José'),
-      ('copa', 'guatemala-guatemala-city', 'Guatemala - Ciudad de Guatemala'),
-      ('copa', 'global', 'Global'),
-      ('copa', 'puerto-rico-pais', 'Puerto Rico (País)'),
-      ('copa', 'paraguay-pais', 'Paraguay (País)'),
-      ('copa', 'trinidad-y-tobago-pais', 'Trinidad y Tobago (País)'),
-      ('copa', 'uruguay-pais', 'Uruguay (País)'),
-      ('copa', 'republica-dominicana-pais', 'República Dominicana (País)'),
-      ('felix', 'california', 'Estados Unidos - California'),
-      ('felix', 'new-york', 'Estados Unidos - New York'),
-      ('felix', 'new-jersey', 'Estados Unidos - New Jersey'),
-      ('felix', 'texas', 'Estados Unidos - Texas'),
-      ('felix', 'florida', 'Estados Unidos - Florida'),
-      ('felix', 'arizona', 'Estados Unidos - Arizona'),
-      ('felix', 'illinois', 'Estados Unidos - Illinois'),
-      ('felix', 'colorado', 'Estados Unidos - Colorado'),
-      ('felix', 'north-carolina', 'Estados Unidos - North Carolina'),
-      ('felix', 'georgia', 'Estados Unidos - Georgia'),
-      ('felix', 'washington', 'Estados Unidos - Washington'),
-      ('felix', 'pennsylvania', 'Estados Unidos - Pennsylvania'),
-      ('felix', 'new-mexico', 'Estados Unidos - New Mexico'),
-      ('felix', 'estados-unidos-t1', 'Estados Unidos - Varios (T1)'),
-      ('felix', 'estados-unidos-t2', 'Estados Unidos - Varios (T2)')
+    market_plan(client_slug, market_slug, target_name, target_slug) as (values
+      ('copa', 'costa-rica', 'Costa Rica (País)', 'costa-rica-pais'),
+      ('copa', 'panama', 'Panamá (País)', 'panama-pais'),
+      ('copa', 'guatemala', 'Guatemala (País)', 'guatemala-pais'),
+      ('copa', 'honduras', 'Honduras (País)', 'honduras-pais'),
+      ('copa', 'el-salvador', 'El Salvador (País)', 'el-salvador-pais'),
+      ('copa', 'nicaragua', 'Nicaragua (País)', 'nicaragua-pais'),
+      ('copa', 'mexico', 'México (País)', 'mexico-pais'),
+      ('copa', 'argentina', 'Argentina (País)', 'argentina-pais'),
+      ('copa', 'brasil', 'Brasil (País)', 'brasil-pais'),
+      ('copa', 'chile', 'Chile (País)', 'chile-pais'),
+      ('copa', 'colombia', 'Colombia (País)', 'colombia-pais'),
+      ('copa', 'peru', 'Perú (País)', 'peru-pais'),
+      ('copa', 'centroamerica', 'Centroamérica', 'centroamerica'),
+      ('copa', 'latam', 'LATAM', 'latam'),
+      ('copa', 'canada-toronto', 'Canadá - Toronto', 'canada-toronto'),
+      ('copa', 'panama-panama', 'Panamá - Ciudad de Panamá', 'panama-ciudad-de-panama'),
+      ('copa', 'estados-unidos', 'Estados Unidos (País)', 'estados-unidos-pais'),
+      ('copa', 'colombia-bogota', 'Colombia - Bogotá', 'colombia-bogota'),
+      ('copa', 'peru-lima', 'Perú - Lima', 'peru-lima'),
+      ('copa', 'brasil-sao-paulo', 'Brasil - São Paulo', 'brasil-sao-paulo'),
+      ('copa', 'estados-unidos-varios', 'Estados Unidos (País)', 'estados-unidos-pais'),
+      ('copa', 'colombia-varios', 'Colombia - Varios', 'colombia-varios'),
+      ('copa', 'argentina-varios', 'Argentina - Varios', 'argentina-varios'),
+      ('copa', 'mexico-guadalajara', 'México - Guadalajara', 'mexico-guadalajara'),
+      ('copa', 'mexico-df', 'México - Ciudad de México', 'mexico-ciudad-de-mexico'),
+      ('copa', 'mexico-monterrey', 'México - Monterrey', 'mexico-monterrey'),
+      ('copa', 'mexico-los-cabos', 'México - Los Cabos', 'mexico-los-cabos'),
+      ('copa', 'ecuador-quito', 'Ecuador - Quito', 'ecuador-quito'),
+      ('copa', 'argentina-salta', 'Argentina - Salta', 'argentina-salta'),
+      ('copa', 'argentina-cordoba', 'Argentina - Córdoba', 'argentina-cordoba'),
+      ('copa', 'argentina-mendoza', 'Argentina - Mendoza', 'argentina-mendoza'),
+      ('copa', 'argentina-buenos-aires', 'Argentina - Buenos Aires', 'argentina-buenos-aires'),
+      ('copa', 'argentina-rosario', 'Argentina - Rosario', 'argentina-rosario'),
+      ('copa', 'venezuela', 'Venezuela (País)', 'venezuela-pais'),
+      ('copa', 'us-la-joya', 'Estados Unidos - La Jolla', 'estados-unidos-la-jolla'),
+      ('copa', 'us-coronado', 'Estados Unidos - Coronado', 'estados-unidos-coronado'),
+      ('copa', 'us-encinitas', 'Estados Unidos - Encinitas', 'estados-unidos-encinitas'),
+      ('copa', 'us-del-mar', 'Estados Unidos - Del Mar', 'estados-unidos-del-mar'),
+      ('copa', 'us-san-diego', 'Estados Unidos - San Diego', 'estados-unidos-san-diego'),
+      ('copa', 'co-bogota', 'Colombia - Bogotá', 'colombia-bogota'),
+      ('copa', 'co-medellin', 'Colombia - Medellín', 'colombia-medellin'),
+      ('copa', 'costa-rica-san-jose', 'Costa Rica - San José', 'costa-rica-san-jose'),
+      ('copa', 'guatemala-guatemala-city', 'Guatemala - Ciudad de Guatemala', 'guatemala-ciudad-de-guatemala'),
+      ('copa', 'global', 'Global', 'global'),
+      ('copa', 'puerto-rico-pais', 'Puerto Rico (País)', 'puerto-rico-pais'),
+      ('copa', 'paraguay-pais', 'Paraguay (País)', 'paraguay-pais'),
+      ('copa', 'trinidad-y-tobago-pais', 'Trinidad y Tobago (País)', 'trinidad-y-tobago-pais'),
+      ('copa', 'uruguay-pais', 'Uruguay (País)', 'uruguay-pais'),
+      ('copa', 'republica-dominicana-pais', 'República Dominicana (País)', 'republica-dominicana-pais'),
+      ('felix', 'california', 'Estados Unidos - California', 'estados-unidos-california'),
+      ('felix', 'new-york', 'Estados Unidos - New York', 'estados-unidos-new-york'),
+      ('felix', 'new-jersey', 'Estados Unidos - New Jersey', 'estados-unidos-new-jersey'),
+      ('felix', 'texas', 'Estados Unidos - Texas', 'estados-unidos-texas'),
+      ('felix', 'florida', 'Estados Unidos - Florida', 'estados-unidos-florida'),
+      ('felix', 'arizona', 'Estados Unidos - Arizona', 'estados-unidos-arizona'),
+      ('felix', 'illinois', 'Estados Unidos - Illinois', 'estados-unidos-illinois'),
+      ('felix', 'colorado', 'Estados Unidos - Colorado', 'estados-unidos-colorado'),
+      ('felix', 'north-carolina', 'Estados Unidos - North Carolina', 'estados-unidos-north-carolina'),
+      ('felix', 'georgia', 'Estados Unidos - Georgia', 'estados-unidos-georgia'),
+      ('felix', 'washington', 'Estados Unidos - Washington', 'estados-unidos-washington'),
+      ('felix', 'pennsylvania', 'Estados Unidos - Pennsylvania', 'estados-unidos-pennsylvania'),
+      ('felix', 'new-mexico', 'Estados Unidos - New Mexico', 'estados-unidos-new-mexico'),
+      ('felix', 'estados-unidos-t1', 'Estados Unidos - Varios (T1)', 'estados-unidos-varios-t1'),
+      ('felix', 'estados-unidos-t2', 'Estados Unidos - Varios (T2)', 'estados-unidos-varios-t2')
     ),
     plan as (
       select m.id, m.client_id, m.name, m.slug, m.sort_order,
              c.slug as client_slug,
              mp.target_name,
+             mp.target_slug,
              (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
         from public.markets m
         join public.clients c on c.id = m.client_id
@@ -294,10 +281,10 @@ begin
         -- corrida y la verificación no encontraban nada y reportaban todo como
         -- "no estaba en el plan". Gana siempre el match por slug actual.
         left join lateral (
-          select mp.target_name
+          select mp.target_name, mp.target_slug
             from market_plan mp
            where mp.client_slug = c.slug
-             and (mp.market_slug = m.slug or public.norm(mp.target_name) = m.slug)
+             and (mp.market_slug = m.slug or mp.target_slug = m.slug)
            order by (mp.market_slug = m.slug) desc
            limit 1
         ) mp on true
@@ -307,9 +294,8 @@ begin
     -- bien escrito, y después el de menor sort_order.
     winner as (
       select p.*,
-             public.norm(p.target_name) as target_slug,
              first_value(p.id) over (
-               partition by p.client_id, public.norm(p.target_name)
+               partition by p.client_id, p.target_slug
                order by p.placements desc,
                         (case when p.name = p.target_name then 0 else 1 end),
                         p.sort_order, p.id
@@ -401,76 +387,77 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 
 with
-  market_plan(client_slug, market_slug, target_name) as (values
-    ('copa', 'costa-rica', 'Costa Rica (País)'),
-    ('copa', 'panama', 'Panamá (País)'),
-    ('copa', 'guatemala', 'Guatemala (País)'),
-    ('copa', 'honduras', 'Honduras (País)'),
-    ('copa', 'el-salvador', 'El Salvador (País)'),
-    ('copa', 'nicaragua', 'Nicaragua (País)'),
-    ('copa', 'mexico', 'México (País)'),
-    ('copa', 'argentina', 'Argentina (País)'),
-    ('copa', 'brasil', 'Brasil (País)'),
-    ('copa', 'chile', 'Chile (País)'),
-    ('copa', 'colombia', 'Colombia (País)'),
-    ('copa', 'peru', 'Perú (País)'),
-    ('copa', 'centroamerica', 'Centroamérica'),
-    ('copa', 'latam', 'LATAM'),
-    ('copa', 'canada-toronto', 'Canadá - Toronto'),
-    ('copa', 'panama-panama', 'Panamá - Ciudad de Panamá'),
-    ('copa', 'estados-unidos', 'Estados Unidos (País)'),
-    ('copa', 'colombia-bogota', 'Colombia - Bogotá'),
-    ('copa', 'peru-lima', 'Perú - Lima'),
-    ('copa', 'brasil-sao-paulo', 'Brasil - São Paulo'),
-    ('copa', 'estados-unidos-varios', 'Estados Unidos (País)'),
-    ('copa', 'colombia-varios', 'Colombia - Varios'),
-    ('copa', 'argentina-varios', 'Argentina - Varios'),
-    ('copa', 'mexico-guadalajara', 'México - Guadalajara'),
-    ('copa', 'mexico-df', 'México - Ciudad de México'),
-    ('copa', 'mexico-monterrey', 'México - Monterrey'),
-    ('copa', 'mexico-los-cabos', 'México - Los Cabos'),
-    ('copa', 'ecuador-quito', 'Ecuador - Quito'),
-    ('copa', 'argentina-salta', 'Argentina - Salta'),
-    ('copa', 'argentina-cordoba', 'Argentina - Córdoba'),
-    ('copa', 'argentina-mendoza', 'Argentina - Mendoza'),
-    ('copa', 'argentina-buenos-aires', 'Argentina - Buenos Aires'),
-    ('copa', 'argentina-rosario', 'Argentina - Rosario'),
-    ('copa', 'venezuela', 'Venezuela (País)'),
-    ('copa', 'us-la-joya', 'Estados Unidos - La Jolla'),
-    ('copa', 'us-coronado', 'Estados Unidos - Coronado'),
-    ('copa', 'us-encinitas', 'Estados Unidos - Encinitas'),
-    ('copa', 'us-del-mar', 'Estados Unidos - Del Mar'),
-    ('copa', 'us-san-diego', 'Estados Unidos - San Diego'),
-    ('copa', 'co-bogota', 'Colombia - Bogotá'),
-    ('copa', 'co-medellin', 'Colombia - Medellín'),
-    ('copa', 'costa-rica-san-jose', 'Costa Rica - San José'),
-    ('copa', 'guatemala-guatemala-city', 'Guatemala - Ciudad de Guatemala'),
-    ('copa', 'global', 'Global'),
-    ('copa', 'puerto-rico-pais', 'Puerto Rico (País)'),
-    ('copa', 'paraguay-pais', 'Paraguay (País)'),
-    ('copa', 'trinidad-y-tobago-pais', 'Trinidad y Tobago (País)'),
-    ('copa', 'uruguay-pais', 'Uruguay (País)'),
-    ('copa', 'republica-dominicana-pais', 'República Dominicana (País)'),
-    ('felix', 'california', 'Estados Unidos - California'),
-    ('felix', 'new-york', 'Estados Unidos - New York'),
-    ('felix', 'new-jersey', 'Estados Unidos - New Jersey'),
-    ('felix', 'texas', 'Estados Unidos - Texas'),
-    ('felix', 'florida', 'Estados Unidos - Florida'),
-    ('felix', 'arizona', 'Estados Unidos - Arizona'),
-    ('felix', 'illinois', 'Estados Unidos - Illinois'),
-    ('felix', 'colorado', 'Estados Unidos - Colorado'),
-    ('felix', 'north-carolina', 'Estados Unidos - North Carolina'),
-    ('felix', 'georgia', 'Estados Unidos - Georgia'),
-    ('felix', 'washington', 'Estados Unidos - Washington'),
-    ('felix', 'pennsylvania', 'Estados Unidos - Pennsylvania'),
-    ('felix', 'new-mexico', 'Estados Unidos - New Mexico'),
-    ('felix', 'estados-unidos-t1', 'Estados Unidos - Varios (T1)'),
-    ('felix', 'estados-unidos-t2', 'Estados Unidos - Varios (T2)')
+  market_plan(client_slug, market_slug, target_name, target_slug) as (values
+    ('copa', 'costa-rica', 'Costa Rica (País)', 'costa-rica-pais'),
+    ('copa', 'panama', 'Panamá (País)', 'panama-pais'),
+    ('copa', 'guatemala', 'Guatemala (País)', 'guatemala-pais'),
+    ('copa', 'honduras', 'Honduras (País)', 'honduras-pais'),
+    ('copa', 'el-salvador', 'El Salvador (País)', 'el-salvador-pais'),
+    ('copa', 'nicaragua', 'Nicaragua (País)', 'nicaragua-pais'),
+    ('copa', 'mexico', 'México (País)', 'mexico-pais'),
+    ('copa', 'argentina', 'Argentina (País)', 'argentina-pais'),
+    ('copa', 'brasil', 'Brasil (País)', 'brasil-pais'),
+    ('copa', 'chile', 'Chile (País)', 'chile-pais'),
+    ('copa', 'colombia', 'Colombia (País)', 'colombia-pais'),
+    ('copa', 'peru', 'Perú (País)', 'peru-pais'),
+    ('copa', 'centroamerica', 'Centroamérica', 'centroamerica'),
+    ('copa', 'latam', 'LATAM', 'latam'),
+    ('copa', 'canada-toronto', 'Canadá - Toronto', 'canada-toronto'),
+    ('copa', 'panama-panama', 'Panamá - Ciudad de Panamá', 'panama-ciudad-de-panama'),
+    ('copa', 'estados-unidos', 'Estados Unidos (País)', 'estados-unidos-pais'),
+    ('copa', 'colombia-bogota', 'Colombia - Bogotá', 'colombia-bogota'),
+    ('copa', 'peru-lima', 'Perú - Lima', 'peru-lima'),
+    ('copa', 'brasil-sao-paulo', 'Brasil - São Paulo', 'brasil-sao-paulo'),
+    ('copa', 'estados-unidos-varios', 'Estados Unidos (País)', 'estados-unidos-pais'),
+    ('copa', 'colombia-varios', 'Colombia - Varios', 'colombia-varios'),
+    ('copa', 'argentina-varios', 'Argentina - Varios', 'argentina-varios'),
+    ('copa', 'mexico-guadalajara', 'México - Guadalajara', 'mexico-guadalajara'),
+    ('copa', 'mexico-df', 'México - Ciudad de México', 'mexico-ciudad-de-mexico'),
+    ('copa', 'mexico-monterrey', 'México - Monterrey', 'mexico-monterrey'),
+    ('copa', 'mexico-los-cabos', 'México - Los Cabos', 'mexico-los-cabos'),
+    ('copa', 'ecuador-quito', 'Ecuador - Quito', 'ecuador-quito'),
+    ('copa', 'argentina-salta', 'Argentina - Salta', 'argentina-salta'),
+    ('copa', 'argentina-cordoba', 'Argentina - Córdoba', 'argentina-cordoba'),
+    ('copa', 'argentina-mendoza', 'Argentina - Mendoza', 'argentina-mendoza'),
+    ('copa', 'argentina-buenos-aires', 'Argentina - Buenos Aires', 'argentina-buenos-aires'),
+    ('copa', 'argentina-rosario', 'Argentina - Rosario', 'argentina-rosario'),
+    ('copa', 'venezuela', 'Venezuela (País)', 'venezuela-pais'),
+    ('copa', 'us-la-joya', 'Estados Unidos - La Jolla', 'estados-unidos-la-jolla'),
+    ('copa', 'us-coronado', 'Estados Unidos - Coronado', 'estados-unidos-coronado'),
+    ('copa', 'us-encinitas', 'Estados Unidos - Encinitas', 'estados-unidos-encinitas'),
+    ('copa', 'us-del-mar', 'Estados Unidos - Del Mar', 'estados-unidos-del-mar'),
+    ('copa', 'us-san-diego', 'Estados Unidos - San Diego', 'estados-unidos-san-diego'),
+    ('copa', 'co-bogota', 'Colombia - Bogotá', 'colombia-bogota'),
+    ('copa', 'co-medellin', 'Colombia - Medellín', 'colombia-medellin'),
+    ('copa', 'costa-rica-san-jose', 'Costa Rica - San José', 'costa-rica-san-jose'),
+    ('copa', 'guatemala-guatemala-city', 'Guatemala - Ciudad de Guatemala', 'guatemala-ciudad-de-guatemala'),
+    ('copa', 'global', 'Global', 'global'),
+    ('copa', 'puerto-rico-pais', 'Puerto Rico (País)', 'puerto-rico-pais'),
+    ('copa', 'paraguay-pais', 'Paraguay (País)', 'paraguay-pais'),
+    ('copa', 'trinidad-y-tobago-pais', 'Trinidad y Tobago (País)', 'trinidad-y-tobago-pais'),
+    ('copa', 'uruguay-pais', 'Uruguay (País)', 'uruguay-pais'),
+    ('copa', 'republica-dominicana-pais', 'República Dominicana (País)', 'republica-dominicana-pais'),
+    ('felix', 'california', 'Estados Unidos - California', 'estados-unidos-california'),
+    ('felix', 'new-york', 'Estados Unidos - New York', 'estados-unidos-new-york'),
+    ('felix', 'new-jersey', 'Estados Unidos - New Jersey', 'estados-unidos-new-jersey'),
+    ('felix', 'texas', 'Estados Unidos - Texas', 'estados-unidos-texas'),
+    ('felix', 'florida', 'Estados Unidos - Florida', 'estados-unidos-florida'),
+    ('felix', 'arizona', 'Estados Unidos - Arizona', 'estados-unidos-arizona'),
+    ('felix', 'illinois', 'Estados Unidos - Illinois', 'estados-unidos-illinois'),
+    ('felix', 'colorado', 'Estados Unidos - Colorado', 'estados-unidos-colorado'),
+    ('felix', 'north-carolina', 'Estados Unidos - North Carolina', 'estados-unidos-north-carolina'),
+    ('felix', 'georgia', 'Estados Unidos - Georgia', 'estados-unidos-georgia'),
+    ('felix', 'washington', 'Estados Unidos - Washington', 'estados-unidos-washington'),
+    ('felix', 'pennsylvania', 'Estados Unidos - Pennsylvania', 'estados-unidos-pennsylvania'),
+    ('felix', 'new-mexico', 'Estados Unidos - New Mexico', 'estados-unidos-new-mexico'),
+    ('felix', 'estados-unidos-t1', 'Estados Unidos - Varios (T1)', 'estados-unidos-varios-t1'),
+    ('felix', 'estados-unidos-t2', 'Estados Unidos - Varios (T2)', 'estados-unidos-varios-t2')
   ),
   plan as (
     select m.id, m.client_id, m.name, m.slug, m.sort_order,
            c.slug as client_slug,
            mp.target_name,
+           mp.target_slug,
            (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
       from public.markets m
       join public.clients c on c.id = m.client_id
@@ -479,10 +466,10 @@ with
       -- corrida y la verificación no encontraban nada y reportaban todo como
       -- "no estaba en el plan". Gana siempre el match por slug actual.
       left join lateral (
-        select mp.target_name
+        select mp.target_name, mp.target_slug
           from market_plan mp
          where mp.client_slug = c.slug
-           and (mp.market_slug = m.slug or public.norm(mp.target_name) = m.slug)
+           and (mp.market_slug = m.slug or mp.target_slug = m.slug)
          order by (mp.market_slug = m.slug) desc
          limit 1
       ) mp on true
@@ -492,9 +479,8 @@ with
   -- bien escrito, y después el de menor sort_order.
   winner as (
     select p.*,
-           public.norm(p.target_name) as target_slug,
            first_value(p.id) over (
-             partition by p.client_id, public.norm(p.target_name)
+             partition by p.client_id, p.target_slug
              order by p.placements desc,
                       (case when p.name = p.target_name then 0 else 1 end),
                       p.sort_order, p.id

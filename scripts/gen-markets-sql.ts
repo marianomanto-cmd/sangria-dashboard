@@ -111,19 +111,20 @@ const renames = mapped.filter((p) => p.name !== p.target);
 }
 
 const planRows = mapped
-  .map((p) => `    (${q(p.client)}, ${q(p.slug)}, ${q(p.target!)})`)
+  .map((p) => `    (${q(p.client)}, ${q(p.slug)}, ${q(p.target!)}, ${q(slugOf(p.target!))})`)
   .join(",\n");
 
 const clients = [...new Set(catalog.map((c) => c.client))].map(q).join(", ");
 
 // El plan se repite en los tres bloques; es corto, así que se inlinea.
-const PLAN_CTE = `market_plan(client_slug, market_slug, target_name) as (values
+const PLAN_CTE = `market_plan(client_slug, market_slug, target_name, target_slug) as (values
 ${planRows}
   ),
   plan as (
     select m.id, m.client_id, m.name, m.slug, m.sort_order,
            c.slug as client_slug,
            mp.target_name,
+           mp.target_slug,
            (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
       from public.markets m
       join public.clients c on c.id = m.client_id
@@ -132,10 +133,10 @@ ${planRows}
       -- corrida y la verificación no encontraban nada y reportaban todo como
       -- "no estaba en el plan". Gana siempre el match por slug actual.
       left join lateral (
-        select mp.target_name
+        select mp.target_name, mp.target_slug
           from market_plan mp
          where mp.client_slug = c.slug
-           and (mp.market_slug = m.slug or public.norm(mp.target_name) = m.slug)
+           and (mp.market_slug = m.slug or mp.target_slug = m.slug)
          order by (mp.market_slug = m.slug) desc
          limit 1
       ) mp on true
@@ -145,9 +146,8 @@ ${planRows}
   -- bien escrito, y después el de menor sort_order.
   winner as (
     select p.*,
-           public.norm(p.target_name) as target_slug,
            first_value(p.id) over (
-             partition by p.client_id, public.norm(p.target_name)
+             partition by p.client_id, p.target_slug
              order by p.placements desc,
                       (case when p.name = p.target_name then 0 else 1 end),
                       p.sort_order, p.id
@@ -217,6 +217,8 @@ ${unmapped.length ? unmapped.map((u) => `--   · ${u.client}: "${u.name}" (${u.l
 --   Bloque 3 → verificación (aparte: el SQL Editor muestra sólo el último).
 --
 -- OJO:
+--   · Cada bloque es UN solo statement y se banca solo: el slug destino viene
+--     ya calculado en el plan, así que no hay que crear ninguna función antes.
 --   · Correr por SQL NO deja rastro en \`audit_log\`.
 --   · Los snapshots de versiones resuelven el nombre contra el catálogo de HOY:
 --     un PDF de una versión firmada, regenerado, va a decir el nombre nuevo.
@@ -229,22 +231,6 @@ ${unmapped.length ? unmapped.map((u) => `--   · ${u.client}: "${u.name}" (${u.l
 --   (el alta ya no es texto libre) y lib/market-geo.ts (geocoding de las formas
 --   nuevas). Sin el deploy, "Argentina (País)" cae en el mapa como ciudad.
 -- ════════════════════════════════════════════════════════════════════════════
-
--- ────────────────────────────────────────────────────────────────────────────
--- norm(): la MISMA normalización que \`slugify\` en app/actions/markets.ts y
--- \`norm\` en lib/market-nomenclature.ts. Es inmutable y no toca datos; se puede
--- dejar creada o borrarla al final con \`drop function public.norm(text);\`.
--- ────────────────────────────────────────────────────────────────────────────
-
-create or replace function public.norm(v text) returns text
-  language sql immutable strict parallel safe
-as $fn$
-  select regexp_replace(
-          regexp_replace(
-            lower(translate(v, 'ÁÀÂÄÃÅáàâäãåÉÈÊËéèêëÍÌÎÏíìîïÓÒÔÖÕóòôöõÚÙÛÜúùûüÝýÑñÇç', 'AAAAAAaaaaaaEEEEeeeeIIIIiiiiOOOOOoooooUUUUuuuuYyNnCc')),
-            '[^a-z0-9]+', '-', 'g'),
-          '^-+|-+$', '', 'g')
-$fn$;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- BLOQUE 1 — DRY RUN (read-only). El plan de cambios, ANTES de tocar nada.
