@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ReactNode } from "react";
+import type { Language } from "@/lib/i18n";
 
 // Toggle de vistas. El dashboard viejo tenía tres pestañas (Cuentas /
 // Operaciones / Ejecutivo) porque cada rol mira cosas distintas; se conserva esa
@@ -11,29 +12,32 @@ import type { ReactNode } from "react";
 // Las secciones llegan como props ReactNode desde el server component: el
 // browser recibe el markup ya renderizado, no las queries ni los helpers.
 
-const TABS = [
-  ["cuentas", "Cuentas"],
-  ["operaciones", "Operaciones"],
-  ["ejecutivo", "Ejecutivo"],
-] as const;
+const TAB_IDS = ["cuentas", "operaciones", "ejecutivo"] as const;
+type TabId = (typeof TAB_IDS)[number];
 
-type TabId = (typeof TABS)[number][0];
+const LABELS: Record<Language, Record<TabId, string>> = {
+  es: { cuentas: "Cuentas", operaciones: "Operaciones", ejecutivo: "Ejecutivo" },
+  en: { cuentas: "Accounts", operaciones: "Operations", ejecutivo: "Executive" },
+};
 
 export function DashboardTabs({
+  lang,
   cuentas,
   operaciones,
   ejecutivo,
 }: {
+  lang: Language;
   cuentas: ReactNode;
   operaciones: ReactNode;
   ejecutivo: ReactNode;
 }) {
   const [tab, setTab] = useState<TabId>("cuentas");
+  const labels = LABELS[lang] ?? LABELS.es;
 
   return (
     <div className="space-y-5">
       <div className="inline-flex items-center gap-0.5 rounded-[10px] border border-line bg-paper-2 p-[3px]">
-        {TABS.map(([id, label]) => (
+        {TAB_IDS.map((id) => (
           <button
             key={id}
             type="button"
@@ -45,7 +49,7 @@ export function DashboardTabs({
                 : "text-muted hover:text-ink"
             }`}
           >
-            {label}
+            {labels[id]}
           </button>
         ))}
       </div>

@@ -45,9 +45,17 @@ export type DashV2Project = {
   spentUsd: number;
   consumptionPct: number;
   planCount: number;
+  // Gasto real por mes, alineado con `monthLabels`. Alimenta el sparkline de
+  // la fila del proyecto.
+  monthlySpend: number[];
 };
 
-export type DashV2Month = { month: string; totalUsd: number };
+// El mes lleva REAL y PROYECTADO: el gráfico compara los dos, como el viejo.
+export type DashV2Month = {
+  month: string;
+  realUsd: number;
+  projectedUsd: number;
+};
 
 export type DashV2Kpis = {
   pipelineActiveUsd: number;
@@ -72,6 +80,7 @@ export type PendingBilling = {
   projectCode: string;
   clientName: string;
   month: string;
+  href: string;
 };
 
 export type PendingReport = {
@@ -80,6 +89,7 @@ export type PendingReport = {
   clientName: string;
   deliveryDate: string;
   daysUntil: number; // negativo = vencido
+  href: string;
 };
 
 export type Receivable = {
@@ -90,6 +100,7 @@ export type Receivable = {
   month: string;
   amountUsd: number;
   daysOverdue: number | null; // null = todavía no vence
+  href: string;
 };
 
 export type StaleTracking = {
@@ -98,11 +109,16 @@ export type StaleTracking = {
   clientName: string;
   lastCloseDate: string | null;
   daysSinceClose: number | null;
+  href: string;
 };
 
 export type DashV2Client = {
   slug: string;
   name: string;
+  // Iniciales para el badge (COPA → "CO", "Félix" → "FÉL").
+  mark: string;
+  // Gasto real por mes, alineado con `monthLabels`.
+  spark: number[];
   budgetUsd: number;
   spentUsd: number;
   consumptionPct: number;
@@ -116,11 +132,20 @@ export type DashboardV2 = {
   clients: DashV2Client[];
   monthly: DashV2Month[];
   plansInFlight: DashV2Plan[];
+  monthLabels: string[];
   pendingBillings: PendingBilling[];
   pendingReports: PendingReport[];
   receivables: Receivable[];
   staleTracking: StaleTracking[];
 };
+
+// Iniciales del cliente para el badge: "COPA" → "COP", "Copa Airlines" → "CA".
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "—";
+  if (parts.length === 1) return parts[0].slice(0, 3).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
 
 const num = (v: string | number | null | undefined): number =>
   typeof v === "number" ? v : Number.parseFloat(v ?? "0") || 0;
@@ -161,10 +186,16 @@ export async function getDashboardV2(
     .groupBy(projects.id, clients.name, clients.slug)
     .orderBy(desc(sql`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`));
 
-  // ── Query 2: facturación real por mes (el gráfico).
+  // ── Query 2: gasto real por MES y PROYECTO.
+  //
+  // Agrupar también por proyecto sale igual de caro que agrupar sólo por mes,
+  // y con esas filas se derivan en JS las TRES series que la vista necesita:
+  // el total mensual del gráfico, el sparkline de cada cliente y el de cada
+  // proyecto. El dashboard viejo pedía cosas parecidas por separado.
   const monthlyQuery = db
     .select({
       month: planBillings.month,
+      projectId: projects.id,
       totalUsd: sql<string>`coalesce(sum(${planBillingPublishers.amountRealUsd}), 0)`,
     })
     .from(planBillings)
@@ -181,7 +212,7 @@ export async function getDashboardV2(
       eq(planBillingPublishers.planBillingId, planBillings.id),
     )
     .where(byClient.length ? and(...byClient) : undefined)
-    .groupBy(planBillings.month)
+    .groupBy(planBillings.month, projects.id)
     .orderBy(planBillings.month);
 
   // ── Query 3: facturado en el año (escalar). Es `plan_billings.total_usd`,
@@ -358,7 +389,33 @@ export async function getDashboardV2(
     limit 40
   `);
 
-  // UNA sola tanda con las OCHO queries. Ver el comentario de arriba: esto es
+  // ── Query 9: PROYECTADO por mes. El amount de cada placement de un plan
+  // firmado, repartido en partes iguales entre los meses de su [start, end].
+  // Misma regla de negocio que el dashboard viejo, pero resuelta en SQL con
+  // generate_series en vez de enumerar los meses en JS placement por placement.
+  const projectedQuery = db.execute<{ month: string; projected: string }>(sql`
+    select to_char(m, 'YYYY-MM') as month,
+           sum(pl.amount_usd / span.n) as projected
+    from media_plan_placements pl
+    join media_plan_publishers mpp on mpp.id = pl.media_plan_publisher_id
+    join media_plans mp on mp.id = mpp.media_plan_id and mp.deleted_at is null
+    join projects pr on pr.id = mp.project_id
+    cross join lateral (
+      select greatest(count(*), 1)::numeric as n
+      from generate_series(date_trunc('month', pl.start_date),
+                           date_trunc('month', pl.end_date), interval '1 month')
+    ) span
+    cross join lateral generate_series(date_trunc('month', pl.start_date),
+                                       date_trunc('month', pl.end_date),
+                                       interval '1 month') m
+    where pl.start_date is not null and pl.end_date is not null
+      and mp.status in ('approved','qa_done','live','finished')
+      ${clientSql}
+    group by 1
+    order by 1
+  `);
+
+  // UNA sola tanda con las NUEVE queries. Ver el comentario de arriba: esto es
   // lo que hace que la página cueste ~1 round-trip en vez de ~24 en serie.
   const [
     projectRows,
@@ -369,6 +426,7 @@ export async function getDashboardV2(
     pendingReportRows,
     receivableRows,
     staleTrackingRows,
+    projectedRows,
   ] = await Promise.all([
     projectsQuery,
     monthlyQuery,
@@ -378,6 +436,7 @@ export async function getDashboardV2(
     pendingReportsQuery,
     receivablesQuery,
     staleTrackingQuery,
+    projectedQuery,
   ]);
 
   // ── KPIs derivados en JS (sin tocar la DB de nuevo) ────────────────────────
@@ -390,6 +449,33 @@ export async function getDashboardV2(
     spentActiveUsd += num(r.spentUsd);
     activeClientIds.add(r.clientId);
   }
+
+  // ── Serie temporal: un eje de meses común para todos los sparklines ───────
+  // Se arma con la unión de los meses que aparecen en real Y en proyectado,
+  // para que las dos series del gráfico queden alineadas aunque una tenga
+  // meses que la otra no.
+  const projectedByMonth = new Map<string, number>();
+  for (const r of projectedRows) {
+    projectedByMonth.set(r.month, num(r.projected));
+  }
+  const realByMonth = new Map<string, number>();
+  const spendByProject = new Map<string, Map<string, number>>();
+  for (const r of monthlyRows) {
+    const v = num(r.totalUsd);
+    realByMonth.set(r.month, (realByMonth.get(r.month) ?? 0) + v);
+    let perMonth = spendByProject.get(r.projectId);
+    if (!perMonth) {
+      perMonth = new Map();
+      spendByProject.set(r.projectId, perMonth);
+    }
+    perMonth.set(r.month, (perMonth.get(r.month) ?? 0) + v);
+  }
+  const monthLabels = [
+    ...new Set([...realByMonth.keys(), ...projectedByMonth.keys()]),
+  ].sort();
+
+  const seriesFor = (perMonth: Map<string, number> | undefined): number[] =>
+    monthLabels.map((m) => perMonth?.get(m) ?? 0);
 
   const projectsOut: DashV2Project[] = projectRows.map((r) => {
     const budgetUsd = num(r.budgetUsd);
@@ -405,6 +491,7 @@ export async function getDashboardV2(
       spentUsd,
       consumptionPct: budgetUsd > 0 ? (spentUsd / budgetUsd) * 100 : 0,
       planCount: r.planCount,
+      monthlySpend: seriesFor(spendByProject.get(r.id)),
     };
   });
 
@@ -416,6 +503,8 @@ export async function getDashboardV2(
     const acc: DashV2Client = prev ?? {
       slug: p.clientSlug,
       name: p.clientName,
+      mark: initials(p.clientName),
+      spark: monthLabels.map(() => 0),
       budgetUsd: 0,
       spentUsd: 0,
       consumptionPct: 0,
@@ -424,6 +513,10 @@ export async function getDashboardV2(
     };
     acc.budgetUsd += p.budgetUsd;
     acc.spentUsd += p.spentUsd;
+    // El sparkline del cliente es la suma de los de sus proyectos.
+    for (let i = 0; i < acc.spark.length; i++) {
+      acc.spark[i] += p.monthlySpend[i] ?? 0;
+    }
     acc.projectCount += 1;
     if (p.status === "active") acc.activeProjects += 1;
     clientAgg.set(p.clientSlug, acc);
@@ -445,9 +538,11 @@ export async function getDashboardV2(
     },
     projects: projectsOut,
     clients: clientsOut,
-    monthly: monthlyRows.map((m) => ({
-      month: m.month,
-      totalUsd: num(m.totalUsd),
+    monthLabels,
+    monthly: monthLabels.map((m) => ({
+      month: m,
+      realUsd: realByMonth.get(m) ?? 0,
+      projectedUsd: projectedByMonth.get(m) ?? 0,
     })),
     plansInFlight: planRows,
     pendingBillings: [...pendingBillingRows].map((r) => ({
@@ -456,6 +551,7 @@ export async function getDashboardV2(
       projectCode: r.project_code,
       clientName: r.client_name,
       month: r.month,
+      href: `/proyectos/${r.project_code}/planes/${r.plan_id}/billing`,
     })),
     pendingReports: [...pendingReportRows].map((r) => ({
       id: r.id,
@@ -463,6 +559,7 @@ export async function getDashboardV2(
       clientName: r.client_name,
       deliveryDate: r.delivery_date,
       daysUntil: Number(r.days_until),
+      href: "/reportes/calendario",
     })),
     receivables: [...receivableRows].map((r) => ({
       id: r.id,
@@ -472,6 +569,7 @@ export async function getDashboardV2(
       month: r.month,
       amountUsd: num(r.amount_usd),
       daysOverdue: r.days_overdue === null ? null : Number(r.days_overdue),
+      href: "/billing",
     })),
     staleTracking: [...staleTrackingRows].map((r) => ({
       planId: r.plan_id,
@@ -479,6 +577,7 @@ export async function getDashboardV2(
       clientName: r.client_name,
       lastCloseDate: r.last_close,
       daysSinceClose: r.days_since === null ? null : Number(r.days_since),
+      href: `/campaign-tracker/${r.plan_id}`,
     })),
   };
 }

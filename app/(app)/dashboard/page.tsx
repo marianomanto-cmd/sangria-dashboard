@@ -5,6 +5,8 @@ import {
   resolveClientFromSearchParams,
   type ResolvedClientFilter,
 } from "@/lib/client-filter.server";
+import { getCurrentUser } from "@/lib/auth";
+import { DEFAULT_LANGUAGE, type Language } from "@/lib/i18n";
 
 type Props = {
   searchParams: Promise<{ client?: string }>;
@@ -34,6 +36,7 @@ const EMPTY: DashboardV2 = {
   },
   projects: [],
   clients: [],
+  monthLabels: [],
   monthly: [],
   plansInFlight: [],
   pendingBillings: [],
@@ -52,6 +55,12 @@ export default async function DashboardV2Page({ searchParams }: Props) {
     console.error("DASH2[client]:", e instanceof Error ? e.message : e);
   }
 
+  const lang: Language = client?.language ?? DEFAULT_LANGUAGE;
+
+  // El user es para el saludo de la vista Ejecutivo; es una llamada de auth,
+  // no una query, y si falla el saludo sale genérico.
+  const userP = getCurrentUser().catch(() => null);
+
   // Una sola lectura, un solo punto de falla. Si falla, lo decimos: mostrar
   // ceros como si fueran datos reales es peor que mostrar el error.
   let data = EMPTY;
@@ -62,6 +71,7 @@ export default async function DashboardV2Page({ searchParams }: Props) {
     failed = e instanceof Error ? e.message : String(e);
     console.error("DASH2[data]:", failed);
   }
+  const user = await userP;
 
   return (
     <PageShell
@@ -69,7 +79,13 @@ export default async function DashboardV2Page({ searchParams }: Props) {
       title={client ? `Dashboard · ${client.name}` : "Dashboard"}
       subtitle="Estado de la cartera: presupuesto comprometido, facturación real por mes y planes en curso."
     >
-      <DashboardV2View data={data} failed={failed} />
+      <DashboardV2View
+        data={data}
+        failed={failed}
+        lang={lang}
+        userName={user?.name ?? null}
+        currentClientSlug={client?.slug ?? null}
+      />
     </PageShell>
   );
 }
