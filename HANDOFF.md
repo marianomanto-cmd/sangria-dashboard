@@ -68,6 +68,39 @@ mercado con su destino ya resuelto, que se puede leer entero. La primera versió
 mandaba los diccionarios a la base para que resolviera ella y daba 900 líneas en
 las que no se veía qué iba a pasar con cada mercado.
 
+**Antes de correr el paso B se le pasó una revisión adversarial** (cuatro lentes
+independientes —pérdida silenciosa, corrección del SQL, efectos en la app,
+operación— más una pasada que intenta refutar cada hallazgo, todas levantando el
+Postgres local y corriendo el bloque de verdad). El SQL estaba bien; salieron
+cinco cosas de alrededor, todas arregladas:
+
+  · **La verificación no verificaba.** De los cinco controles, cuatro venían
+    comentados, así que pegar el "bloque 3" corría sólo el primero — el único
+    que NO ve una línea en NULL ni un `marketId` muerto, que es justo lo que la
+    migración puede romper en silencio. Ahora hay un **BLOQUE 0** que mide el
+    antes y un **BLOQUE 3** que devuelve una fila por control con `ok` /
+    `REVISAR` / `comparar`.
+  · **La cabecera mentía el número de renombres** (decía 49, el bloque imprime
+    47): el generador contaba a los dos perdedores de las fusiones como
+    renombres, y esos no se renombran, se borran. Ese notice es el único
+    criterio de aceptación que tiene quien lo corre.
+  · **Ventana de carrera**: entre el repunte y el `delete`, una línea guardada
+    contra un mercado condenado quedaba en `market_id` NULL sin error (FK
+    `ON DELETE SET NULL`). Se cierra con un `lock table … in share row
+    exclusive mode` como primer statement: el insert espera y después falla con
+    violación de FK — visible y reintentable. No bloquea lecturas.
+  · **Pegar el bloque 2 dos veces en el mismo Run** reventaba con
+    `relation "_mkt_plan" already exists`. Ahora hay `drop table if exists`.
+  · **El orden deploy↔SQL NO es indistinto**, como decía la cabecera. Si el SQL
+    corre primero, el geocoding viejo no reconoce los slugs nuevos y los dos
+    tiers de Félix (USD 1,4M) colapsan en la misma burbuja. **Deploy primero.**
+
+  Verificado de primera mano: cortando el bloque con `statement_timeout = 3ms`
+  el rollback es total (64 mercados intactos, las 9 líneas del perdedor en su
+  lugar, 0 huérfanas). Y una nota para el que lo corra: **no hay pre-imagen**;
+  si se quiere red, la copia va en un schema `bkp`, NUNCA en `public`, que
+  Supabase expone entero por PostgREST (ver db/rls.sql).
+
 Dos detalles del plan que costaron una vuelta: el join tiene que emparejar por
 el slug ACTUAL **o** por el slug DESTINO (`order by (market_slug = m.slug) desc
 limit 1`), porque después del rename los slugs cambian y si no la verificación

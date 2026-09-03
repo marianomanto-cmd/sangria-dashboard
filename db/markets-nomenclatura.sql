@@ -16,7 +16,7 @@
 --     (con etiqueta si hay más de un grupo: "Estados Unidos - Varios (T1)")
 --   una región          → "<Región>"            ej. Centroamérica · LATAM · Global
 --
--- EL PLAN, en números: 64 mercados en la foto · 49 se renombran · 2 fusiones · 0 sin mapear.
+-- EL PLAN, en números: 64 mercados en la foto · 47 se renombran · 2 fusiones · 0 sin mapear.
 --
 -- LAS FUSIONES (lo único que borra una fila del catálogo):
 --   · "Estados Unidos" + "Estados Unidos - Varios" → "Estados Unidos (País)" (32 líneas, USD 1.165.345,00); desaparece "Estados Unidos - Varios"
@@ -37,13 +37,38 @@
 --   renames son no-ops.
 --
 -- CÓMO APLICAR:
+--   Bloque 0 → la foto del antes. Anotar los seis números.
 --   Bloque 1 → el plan de cambios, read-only. Mirarlo ANTES de tocar nada.
---   Bloque 2 → aplica. Un solo statement, todo o nada.
---   Bloque 3 → verificación (aparte: el SQL Editor muestra sólo el último).
+--                Conviene re-correrlo justo antes del bloque 2: si alguien
+--                cargó un mercado en el medio, aparece como "NO ESTABA EN EL
+--                PLAN" (no se toca) y se ve antes de aplicar.
+--   Bloque 2 → aplica. Un solo statement, todo o nada. Tiene que imprimir en
+--                Messages: fusionados 2 · líneas repuntadas 11 · cierres 194 ·
+--                borrados 2 · renombrados 47. Otro número: frenar y avisar.
+--   Bloque 3 → el control (en su propio Run: el SQL Editor muestra sólo el
+--                resultado del último statement).
+--
+--   Cada bloque va en un Run SEPARADO. Pegar el archivo entero de una aplica
+--   el bloque 2 sin que llegues a mirar el dry-run.
 --
 -- OJO:
 --   · Cada bloque es UN solo statement y se banca solo: el slug destino viene
 --     ya calculado en el plan, así que no hay que crear ninguna función antes.
+--   · NO hay pre-imagen: la fusión es irreversible y el audit_log no sirve
+--     para restaurarla (lo escriben las server actions, no la base). Si querés
+--     red, sacá una copia ANTES — en un schema aparte, NO en `public`, que
+--     Supabase expone entero por PostgREST (ver db/rls.sql):
+--       create schema if not exists bkp;
+--       create table bkp.markets_20260903            as select * from public.markets;
+--       create table bkp.placements_20260903         as select id, market_id from public.media_plan_placements;
+--       create table bkp.cierres_20260903            as select id, market_id from public.campaign_actual_snapshots;
+--       create table bkp.plan_snapshots_20260903     as select id, snapshot_json from public.media_plan_snapshots;
+--       create table bkp.escenarios_20260903         as select id, rows_json from public.simulator_scenarios;
+--   · Los benchmarks del simulador SE MUEVEN: al fusionar, "Estados Unidos
+--     (País)" pasa de 95 a 289 cierres, así que un escenario guardado va a
+--     cotizar distinto. Es la consecuencia buscada de la fusión, no un bug.
+--   · Los links guardados con `?mkt=<uuid>` de los dos mercados que
+--     desaparecen dejan de filtrar (la vista sale vacía).
 --   · Correr por SQL NO deja rastro en `audit_log`.
 --   · Los snapshots de versiones resuelven el nombre contra el catálogo de HOY:
 --     un PDF de una versión firmada, regenerado, va a decir el nombre nuevo.
@@ -51,11 +76,36 @@
 --   · Ninguna de las dos columnas market_id tiene índice: el bloque 2 hace seq
 --     scan. Con estos volúmenes es instantáneo (ver db/fk-indexes.sql).
 --
--- COMPAÑERO EN CÓDIGO (deploy y SQL son independientes y van en cualquier
---   orden): lib/market-nomenclature.ts (taxonomía), components/market-picker.tsx
---   (el alta ya no es texto libre) y lib/market-geo.ts (geocoding de las formas
---   nuevas). Sin el deploy, "Argentina (País)" cae en el mapa como ciudad.
+-- COMPAÑERO EN CÓDIGO — DEPLOYAR PRIMERO, no es indistinto:
+--   lib/market-nomenclature.ts (taxonomía), components/market-picker.tsx (el
+--   alta ya no es texto libre) y lib/market-geo.ts (geocoding de las formas
+--   nuevas). Si el SQL corre ANTES del deploy, el geocoding viejo no reconoce
+--   los slugs nuevos y los dos tiers de Félix —"Estados Unidos - Varios (T1)"
+--   y "(T2)", USD 1,4M— colapsan en la MISMA burbuja sobre el centroide de
+--   EE.UU., y los mercados "<País> (País)" de Copa pierden el nivel país (azul
+--   → bordó). Nada se rompe ni se pierde, pero el mapa que ve el cliente en su
+--   portal queda mal hasta el deploy.
+--   Al revés no hay problema: deployar sin correr el SQL deja la app andando
+--   con los nombres viejos, y el form ya no deja crear duplicados nuevos.
 -- ════════════════════════════════════════════════════════════════════════════
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- BLOQUE 0 — FOTO ANTES (read-only). Correlo ANTES del bloque 2 y anotá los
+-- seis números: son contra lo que compara el control del bloque 3.
+--
+-- Los cinco de líneas y cierres TIENEN que quedar idénticos después — la
+-- migración reapunta, nunca crea ni borra una línea, y nunca deja una
+-- huérfana. "mercados" es el único que baja, por las fusiones.
+-- ════════════════════════════════════════════════════════════════════════════
+
+select 'mercados'              as control, count(*)::text                    as valor
+  from public.markets m join public.clients c on c.id = m.client_id
+ where c.slug in ('copa', 'felix')
+union all select 'líneas de plan',       count(*)::text                      from public.media_plan_placements
+union all select 'líneas SIN mercado',   count(*)::text                      from public.media_plan_placements where market_id is null
+union all select 'monto de las líneas',  coalesce(sum(amount_usd), 0)::text  from public.media_plan_placements
+union all select 'cierres',              count(*)::text                      from public.campaign_actual_snapshots
+union all select 'cierres SIN mercado',  count(*)::text                      from public.campaign_actual_snapshots where market_id is null;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- BLOQUE 1 — DRY RUN (read-only). El plan de cambios, ANTES de tocar nada.
@@ -200,6 +250,27 @@ do $$
 declare
   n_merge int; n_pl int; n_cas int; n_snap int; n_sim int; n_del int; n_ren int;
 begin
+  -- Cierra la ventana de carrera: entre el repunte y el delete, una línea que
+  -- alguien guarde contra un mercado condenado quedaría con market_id NULL en
+  -- silencio (el FK es ON DELETE SET NULL). Con el lock ese insert espera y
+  -- después falla con violación de FK — un error visible que se reintenta, en
+  -- vez de una línea sin mercado que nadie ve. NO bloquea las lecturas.
+  lock table public.markets,
+             public.media_plan_placements,
+             public.campaign_actual_snapshots,
+             public.media_plan_snapshots,
+             public.simulator_scenarios
+    in share row exclusive mode;
+
+  -- Por si el bloque se pega dos veces en el mismo Run del SQL Editor: sin
+  -- esto la segunda copia revienta con 'relation "_mkt_plan" already exists'.
+  -- El client_min_messages es para que el "does not exist, skipping" no tape
+  -- el resumen que importa, que es el raise notice del final.
+  set local client_min_messages = warning;
+  drop table if exists _mkt_plan;
+  drop table if exists _mkt_merge;
+  set local client_min_messages = notice;
+
   create temporary table _mkt_plan on commit drop as
   with
     market_plan(client_slug, market_slug, target_name, target_slug) as (values
@@ -380,10 +451,17 @@ begin
 end $$;
 
 -- ════════════════════════════════════════════════════════════════════════════
--- BLOQUE 3 — VERIFICACIÓN (correr aparte).
+-- BLOQUE 3 — CONTROL (correr después del bloque 2, en su propio Run).
 --
--- 3.a — El catálogo después. ESPERADO: todo "ok". Una fila "REVISAR" significa
---       que el rename no entró.
+-- Una fila por control. Los cinco primeros se juzgan solos: `ok` está bien,
+-- `REVISAR` hay que mirarlo antes de dar la migración por buena. Los cinco
+-- siguientes dicen `comparar`: se contrastan a ojo contra los números que
+-- anotaste del BLOQUE 0, y tienen que dar IDÉNTICOS.
+--
+-- Antes esto eran cinco queries comentadas, así que pegar el bloque corría
+-- sólo la primera — la única que NO ve ni una línea sin mercado ni un
+-- marketId muerto, que es justo lo que esta migración puede romper en
+-- silencio.
 -- ════════════════════════════════════════════════════════════════════════════
 
 with
@@ -488,53 +566,65 @@ with
       from plan p
      where p.target_name is not null
   )
-select w.client_slug as cliente,
-       w.name        as mercado,
-       w.slug,
-       case when w.name = w.target_name and w.slug = w.target_slug
-            then 'ok' else 'REVISAR' end as estado,
-       w.placements  as lineas
-  from winner w
-union all
-select p.client_slug, p.name, p.slug, 'queda (no estaba en el plan)', p.placements
-  from plan p where p.target_name is null
- order by 1, 2;
+select control, valor, estado from (
+  select 1 as ord,
+         'mercados que no quedaron canónicos'                as control,
+         count(*)::text                                      as valor,
+         case when count(*) = 0 then 'ok' else 'REVISAR' end as estado
+    from winner w
+   where w.name is distinct from w.target_name
+      or w.slug is distinct from w.target_slug
+  union all
+  select 2, 'mercados que no estaban en el plan', count(*)::text,
+         case when count(*) = 0 then 'ok' else 'REVISAR' end
+    from plan p where p.target_name is null
+  union all
+  select 3, 'nombres repetidos dentro de un cliente', count(*)::text,
+         case when count(*) = 0 then 'ok' else 'REVISAR' end
+    from (select 1 from public.markets m
+           group by m.client_id, m.name having count(*) > 1) d
+  union all
+  select 4, 'marketId muertos en snapshots de versión', count(*)::text,
+         case when count(*) = 0 then 'ok' else 'REVISAR' end
+    from public.media_plan_snapshots s,
+         lateral jsonb_array_elements(s.snapshot_json->'placements') e
+   where jsonb_typeof(s.snapshot_json->'placements') = 'array'
+     and jsonb_typeof(e) = 'object'
+     and e->>'marketId' is not null
+     and not exists (select 1 from public.markets m where m.id::text = e->>'marketId')
+  union all
+  select 5, 'marketId muertos en el simulador', count(*)::text,
+         case when count(*) = 0 then 'ok' else 'REVISAR' end
+    from public.simulator_scenarios sc,
+         lateral jsonb_array_elements(sc.rows_json->'rows') e
+   where jsonb_typeof(sc.rows_json->'rows') = 'array'
+     and jsonb_typeof(e) = 'object'
+     and e->>'marketId' is not null
+     and not exists (select 1 from public.markets m where m.id::text = e->>'marketId')
+  union all
+  select 6,  'líneas de plan',      count(*)::text,                     'comparar' from public.media_plan_placements
+  union all
+  select 7,  'líneas SIN mercado',  count(*)::text,                     'comparar' from public.media_plan_placements where market_id is null
+  union all
+  select 8,  'monto de las líneas', coalesce(sum(amount_usd), 0)::text, 'comparar' from public.media_plan_placements
+  union all
+  select 9,  'cierres',             count(*)::text,                     'comparar' from public.campaign_actual_snapshots
+  union all
+  select 10, 'cierres SIN mercado', count(*)::text,                     'comparar' from public.campaign_actual_snapshots where market_id is null
+  union all
+  select 11, 'mercados en el catálogo', count(*)::text, 'esperado 62'
+    from public.markets m join public.clients c on c.id = m.client_id
+   where c.slug in ('copa', 'felix')
+) x order by ord;
 
--- ── 3.b — Ningún duplicado. ESPERADO: 0 filas. ─────────────────────────────
--- select c.slug as cliente, m.name, count(*)
---   from public.markets m join public.clients c on c.id = m.client_id
---  group by 1, 2 having count(*) > 1;
-
--- ── 3.c — No se perdió plata. ESPERADO: mismo total de líneas y monto que
---         antes, y "(sin mercado)" con el MISMO número que tenía. ───────────
--- select coalesce(mk.name, '(sin mercado)') as mercado,
---        count(*) as lineas, sum(pl.amount_usd) as monto_usd
---   from public.media_plan_placements pl
---   join public.media_plan_publishers mpp on mpp.id = pl.media_plan_publisher_id
---   join public.media_plans mp on mp.id = mpp.media_plan_id and mp.deleted_at is null
---   join public.projects pr on pr.id = mp.project_id
---   join public.clients c on c.id = pr.client_id
---   left join public.markets mk on mk.id = pl.market_id
---  group by 1 order by 3 desc nulls last;
-
--- ── 3.d — Ningún marketId muerto en los JSONB. ESPERADO: 0 filas en las dos. ──
--- select s.id, e->>'marketId' as market_id_muerto
---   from public.media_plan_snapshots s,
---        lateral jsonb_array_elements(s.snapshot_json->'placements') e
---  where jsonb_typeof(s.snapshot_json->'placements') = 'array'
---    and e->>'marketId' is not null
---    and not exists (select 1 from public.markets m where m.id::text = e->>'marketId');
-
--- select sc.id, e->>'marketId' as market_id_muerto
---   from public.simulator_scenarios sc,
---        lateral jsonb_array_elements(sc.rows_json->'rows') e
---  where jsonb_typeof(sc.rows_json->'rows') = 'array'
---    and e->>'marketId' is not null
---    and not exists (select 1 from public.markets m where m.id::text = e->>'marketId');
-
--- ── 3.e — Nombres viejos tipeados a mano en texto libre. Ningún SQL de este
---         archivo los alcanza; se revisan a ojo. ───────────────────────────────
--- select pl.id, pl.placement_name, pl.audience
+-- ── Nombres viejos tipeados A MANO en texto libre. Ningún SQL de este archivo
+--    los alcanza: se revisan a ojo, reemplazando <nombre viejo>. ─────────────
+-- select 'placement' as donde, pl.id::text as id, pl.placement_name as texto
 --   from public.media_plan_placements pl
 --  where pl.placement_name ilike '%<nombre viejo>%'
---     or pl.audience ilike '%<nombre viejo>%';
+--     or pl.audience ilike '%<nombre viejo>%'
+--     or pl.notes_md ilike '%<nombre viejo>%'
+-- union all
+-- select 'hoja auxiliar', a.id::text, a.grid_json::text
+--   from public.media_plan_aux_sheets a
+--  where a.grid_json::text ilike '%<nombre viejo>%';

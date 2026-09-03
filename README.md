@@ -1015,7 +1015,12 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
 - La normalización de prod son **dos pasos**, los dos generados o probados
   contra el Postgres local: `db/copa-varios-desarmar.sql` (paso A, desarma el
   mercado "Varios" de Copa reasignando línea por línea) y
-  `db/markets-nomenclatura.sql` (paso B, renombra y fusiona el catálogo).
+  `db/markets-nomenclatura.sql` (paso B, renombra y fusiona el catálogo). El paso
+  B son cuatro bloques que van en Runs separados: **0** (la foto del antes),
+  **1** (dry-run), **2** (aplicar, un solo statement todo-o-nada) y **3** (el
+  control, que devuelve `ok`/`REVISAR` por control y los números a comparar
+  contra el bloque 0). **El código se deploya ANTES del SQL**: con el geocoding
+  viejo, los slugs nuevos de los tiers de Félix colapsan en una sola burbuja.
 - **El paso B es generado** (`npm run gen:markets-sql`) cruzando
   `db/markets-catalogo-2026-09-03.csv` —la foto de prod— con la taxonomía, así
   que la base no puede divergir de la app. Y lo que emite es un **plan
