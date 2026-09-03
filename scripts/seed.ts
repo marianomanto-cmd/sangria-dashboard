@@ -16,6 +16,11 @@
 // Uso: `npm run db:seed`
 
 import { eq } from "drizzle-orm";
+import {
+  buildMarketName,
+  canonicalMarketSlug,
+  type MarketFormValue,
+} from "@/lib/market-nomenclature";
 import { db } from "@/db";
 import * as s from "@/db/schema";
 
@@ -81,23 +86,36 @@ async function main() {
   // para demo. En prod cada cliente edita los suyos.
   // ════════════════════════════════════════════════════════════════════════
 
+  // Los nombres NO se escriben a mano: salen de `buildMarketName`, la misma
+  // función que usa el form del catálogo. Así lo que siembra el seed queda en
+  // la nomenclatura canónica ("Costa Rica (País)", "Panamá - Ciudad de
+  // Panamá") y no vuelve a nacer un catálogo con duplicados.
+  // Ver lib/market-nomenclature.ts.
   console.log("⏳ Markets per cliente (replicados)...");
-  const MARKETS_TEMPLATE = [
-    { slug: "costa-rica", name: "Costa Rica", sortOrder: 0 },
-    { slug: "panama", name: "Panama", sortOrder: 1 },
-    { slug: "guatemala", name: "Guatemala", sortOrder: 2 },
-    { slug: "honduras", name: "Honduras", sortOrder: 3 },
-    { slug: "el-salvador", name: "El Salvador", sortOrder: 4 },
-    { slug: "nicaragua", name: "Nicaragua", sortOrder: 5 },
-    { slug: "mexico", name: "México", sortOrder: 6 },
-    { slug: "argentina", name: "Argentina", sortOrder: 7 },
-    { slug: "brasil", name: "Brasil", sortOrder: 8 },
-    { slug: "chile", name: "Chile", sortOrder: 9 },
-    { slug: "colombia", name: "Colombia", sortOrder: 10 },
-    { slug: "peru", name: "Perú", sortOrder: 11 },
-    { slug: "centroamerica", name: "Centroamérica", sortOrder: 50 },
-    { slug: "latam", name: "LATAM", sortOrder: 51 },
-  ] as const;
+  const MARKETS_TEMPLATE = (
+    [
+      [{ level: "country", country: "Costa Rica" }, 0],
+      [{ level: "country", country: "Panamá" }, 1],
+      [{ level: "city", country: "Panamá", place: "Ciudad de Panamá" }, 2],
+      [{ level: "country", country: "Guatemala" }, 3],
+      [{ level: "country", country: "Honduras" }, 4],
+      [{ level: "country", country: "El Salvador" }, 5],
+      [{ level: "country", country: "Nicaragua" }, 6],
+      [{ level: "country", country: "México" }, 7],
+      [{ level: "city", country: "México", place: "Ciudad de México" }, 8],
+      [{ level: "country", country: "Argentina" }, 9],
+      [{ level: "country", country: "Brasil" }, 10],
+      [{ level: "country", country: "Chile" }, 11],
+      [{ level: "country", country: "Colombia" }, 12],
+      [{ level: "country", country: "Perú" }, 13],
+      [{ level: "multi", country: "Estados Unidos" }, 14],
+      [{ level: "region", region: "Centroamérica" }, 50],
+      [{ level: "region", region: "LATAM" }, 51],
+    ] as [MarketFormValue, number][]
+  ).map(([value, sortOrder]) => {
+    const name = buildMarketName(value);
+    return { slug: canonicalMarketSlug(name), name, sortOrder };
+  });
 
   const allClientsForCatalog = [copa, cra, bpac, tr];
   const mktRows = await db
@@ -111,8 +129,11 @@ async function main() {
   const mktByClientAndSlug = new Map(
     mktRows.map((m) => [`${m.clientId}|${m.slug}`, m]),
   );
+  // Las líneas de abajo referencian el mercado por su slug "de toda la vida"
+  // ("latam", "costa-rica", "panama"). Se canoniza acá para no tocar las ~40
+  // referencias: "costa-rica" → `costa-rica-pais`, "latam" → `latam`.
   const mkt = (clientId: string, slug: string) => {
-    const k = `${clientId}|${slug}`;
+    const k = `${clientId}|${canonicalMarketSlug(slug)}`;
     const m = mktByClientAndSlug.get(k);
     if (!m)
       throw new Error(`Market ${slug} no existe para cliente ${clientId}`);

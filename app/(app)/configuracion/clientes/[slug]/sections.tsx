@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/button";
 import { useToast } from "@/components/toast";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -11,6 +11,13 @@ import {
   deleteMarket,
   updateMarket,
 } from "@/app/actions/markets";
+import {
+  MarketPicker,
+  emptyPickerState,
+  pickerStateFromName,
+  pickerToFormValue,
+  type MarketPickerState,
+} from "@/components/market-picker";
 import {
   createMetric,
   deleteMetric,
@@ -715,35 +722,54 @@ function MarketsSection({
   const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
-  const [draft, setDraft] = useState({ name: "", slug: "" });
+  const [draft, setDraft] = useState<MarketPickerState>(emptyPickerState);
   const [error, setError] = useState<string | null>(null);
+  // Mercado que se está editando. La edición también pasa por el selector: el
+  // nombre ya no se tipea en ningún lado.
+  const [editing, setEditing] = useState<{ id: string; state: MarketPickerState } | null>(null);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const onCreate = () => {
-    if (!draft.name.trim()) {
-      setError("Nombre requerido");
+    const value = pickerToFormValue(draft);
+    if (!value) {
+      setError("Elegí el nivel y el país del mercado");
       return;
     }
     setError(null);
     startTransition(async () => {
-      const r = await createMarket({
-        clientId,
-        clientSlug,
-        name: draft.name.trim(),
-        slug: draft.slug.trim() || undefined,
-      });
+      const r = await createMarket({ clientId, clientSlug, value });
       if (!r.ok) {
         setError(r.error);
         return;
       }
-      setDraft({ name: "", slug: "" });
+      setDraft(emptyPickerState());
       setShowAdd(false);
       router.refresh();
     });
   };
 
-  const onUpdate = (id: string, partial: { name?: string; enabled?: boolean }) => {
+  const onSaveEdit = () => {
+    if (!editing) return;
+    const value = pickerToFormValue(editing.state);
+    if (!value) {
+      setEditError("Elegí el nivel y el país del mercado");
+      return;
+    }
+    setEditError(null);
     startTransition(async () => {
-      const r = await updateMarket({ id, clientSlug, ...partial });
+      const r = await updateMarket({ id: editing.id, clientSlug, value });
+      if (!r.ok) {
+        setEditError(r.error);
+        return;
+      }
+      setEditing(null);
+      router.refresh();
+    });
+  };
+
+  const onToggle = (id: string, enabled: boolean) => {
+    startTransition(async () => {
+      const r = await updateMarket({ id, clientSlug, enabled });
       if (!r.ok) toast.error(r.error);
       router.refresh();
     });
@@ -772,28 +798,19 @@ function MarketsSection({
         </button>
       </header>
       <p className="text-xs text-muted mb-3 max-w-2xl">
-        Puede incluir países individuales (Costa Rica, Argentina) o
-        agrupaciones (Centroamérica, LATAM). Cada cliente tiene su propia
-        lista — podés deshabilitar los que no usa o renombrar.
+        El nombre no se escribe: se elige. La taxonomía es la misma para todos
+        los clientes y siempre arranca por el país, así que el mismo lugar no
+        puede volver a entrar dos veces con dos nombres. Cada cliente tiene su
+        propia lista — podés deshabilitar los que no usa.
       </p>
       {showAdd && (
         <div className="rounded-lg border border-line bg-paper-2 p-4 mb-3 space-y-2">
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <input
-              type="text"
-              placeholder="Nombre (ej. Brasil)"
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5"
-            />
-            <input
-              type="text"
-              placeholder="slug (opcional, ej. brasil)"
-              value={draft.slug}
-              onChange={(e) => setDraft({ ...draft, slug: e.target.value })}
-              className="rounded-md border border-line bg-white dark:bg-paper-2 px-2 py-1.5 font-mono"
-            />
-          </div>
+          <MarketPicker
+            value={draft}
+            onChange={setDraft}
+            disabled={pending}
+            idPrefix="mkt-new"
+          />
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
             <Button size="sm" onClick={onCreate} disabled={pending}>
@@ -804,6 +821,35 @@ function MarketsSection({
               onClick={() => {
                 setShowAdd(false);
                 setError(null);
+              }}
+              className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-muted hover:text-ink"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+      {editing && (
+        <div className="rounded-lg border border-accent/40 bg-paper-2 p-4 mb-3 space-y-2">
+          <p className="text-[11px] uppercase tracking-[0.06em] text-muted">
+            Editando mercado
+          </p>
+          <MarketPicker
+            value={editing.state}
+            onChange={(state) => setEditing({ ...editing, state })}
+            disabled={pending}
+            idPrefix="mkt-edit"
+          />
+          {editError && <p role="alert" className="text-xs text-danger">{editError}</p>}
+          <div className="flex gap-2">
+            <Button size="sm" onClick={onSaveEdit} disabled={pending}>
+              Guardar
+            </Button>
+            <button
+              type="button"
+              onClick={() => {
+                setEditing(null);
+                setEditError(null);
               }}
               className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs text-muted hover:text-ink"
             >
@@ -827,7 +873,7 @@ function MarketsSection({
                     <th className="text-left font-medium px-5 py-2.5">Nombre</th>
                     <th className="text-left font-medium px-5 py-2.5">Slug</th>
                     <th className="text-left font-medium px-5 py-2.5">Habilitado</th>
-                    <th className="w-10" />
+                    <th className="w-20" />
                   </tr>
                 </thead>
                 <tbody>
@@ -836,37 +882,40 @@ function MarketsSection({
                       key={m.id}
                       className="border-t border-line-soft hover:bg-paper-2/50"
                     >
-                      <td className="px-5 py-2">
-                        <input
-                          type="text"
-                          defaultValue={m.name}
-                          disabled={pending}
-                          onBlur={(e) =>
-                            e.target.value !== m.name &&
-                            onUpdate(m.id, { name: e.target.value })
-                          }
-                          className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
-                        />
-                      </td>
+                      <td className="px-5 py-2 text-ink">{m.name}</td>
                       <td className="px-5 py-2 font-mono text-xs text-muted">{m.slug}</td>
                       <td className="px-5 py-2">
                         <input
                           type="checkbox"
                           checked={m.enabled}
                           disabled={pending}
-                          onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
+                          onChange={(e) => onToggle(m.id, e.target.checked)}
                         />
                       </td>
                       <td className="px-2 py-2">
-                        <button
-                          type="button"
-                          onClick={() => onDelete(m.id, m.name)}
-                          disabled={pending}
-                          className="text-muted hover:text-danger p-1"
-                          aria-label="Eliminar"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <div className="flex items-center gap-0.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditError(null);
+                              setEditing({ id: m.id, state: pickerStateFromName(m.name) });
+                            }}
+                            disabled={pending}
+                            className="text-muted hover:text-ink p-1"
+                            aria-label={`Editar ${m.name}`}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onDelete(m.id, m.name)}
+                            disabled={pending}
+                            className="text-muted hover:text-danger p-1"
+                            aria-label="Eliminar"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -882,16 +931,7 @@ function MarketsSection({
                   className="px-4 py-3 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0 flex-1">
-                    <input
-                      type="text"
-                      defaultValue={m.name}
-                      disabled={pending}
-                      onBlur={(e) =>
-                        e.target.value !== m.name &&
-                        onUpdate(m.id, { name: e.target.value })
-                      }
-                      className="w-full bg-transparent text-ink font-medium focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
-                    />
+                    <p className="text-ink font-medium px-1">{m.name}</p>
                     <p className="font-mono text-[11px] text-muted mt-0.5 px-1">
                       {m.slug}
                     </p>
@@ -901,10 +941,22 @@ function MarketsSection({
                       type="checkbox"
                       checked={m.enabled}
                       disabled={pending}
-                      onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
+                      onChange={(e) => onToggle(m.id, e.target.checked)}
                     />
                     {m.enabled ? "Sí" : "No"}
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditError(null);
+                      setEditing({ id: m.id, state: pickerStateFromName(m.name) });
+                    }}
+                    disabled={pending}
+                    className="text-muted hover:text-ink p-1 shrink-0"
+                    aria-label={`Editar ${m.name}`}
+                  >
+                    <Pencil size={14} />
+                  </button>
                   <button
                     type="button"
                     onClick={() => onDelete(m.id, m.name)}

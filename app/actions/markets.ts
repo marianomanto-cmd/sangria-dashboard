@@ -1,25 +1,21 @@
 "use server";
 
-import { eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { invalidate } from "@/lib/cache-invalidate";
 import { CATALOG_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { markets } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
+import {
+  buildMarketName,
+  canonicalMarketName,
+  type MarketFormValue,
+} from "@/lib/market-nomenclature";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
   | { ok: false; error: string };
-
-function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 function pathsToRevalidate(clientSlug?: string) {
   revalidatePath("/configuracion/markets");
@@ -27,16 +23,61 @@ function pathsToRevalidate(clientSlug?: string) {
   invalidate(CATALOG_TAG);
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// El nombre NO se tipea: lo arma `buildMarketName` con lo que eligió el form
+// (nivel + país + plaza). Así el catálogo no puede volver a llenarse de
+// variantes del mismo lugar ("Panama" / "Panamá" / "Panama City" /
+// "Ciudad de Panamá" eran cuatro mercados distintos). Ver
+// lib/market-nomenclature.ts para la taxonomía.
+//
+// El slug SIEMPRE se deriva del nombre canónico — también al renombrar, que
+// antes lo dejaba congelado. Importa porque el mapa de /analisis geocodifica
+// probando el slug ANTES que el nombre (lib/market-geo.ts): un slug viejo
+// contra un nombre nuevo ponía la burbuja en el lugar equivocado.
+// ────────────────────────────────────────────────────────────────────────────
+function resolveName(value: MarketFormValue): { name: string; slug: string } | null {
+  const name = buildMarketName(value).trim();
+  if (!name) return null;
+  const canon = canonicalMarketName(name);
+  // `buildMarketName` ya devuelve la forma canónica; canonizar de nuevo es la
+  // red de seguridad para la plaza escrita a mano en "Otra…".
+  return { name: canon.name || name, slug: canon.slug };
+}
+
+/** Nombre del mercado que ya ocupa ese slug, si hay alguno. */
+async function slugTakenBy(
+  clientId: string,
+  slug: string,
+  exceptId?: string,
+): Promise<string | null> {
+  const conds = [eq(markets.clientId, clientId), eq(markets.slug, slug)];
+  if (exceptId) conds.push(ne(markets.id, exceptId));
+  const [row] = await db
+    .select({ name: markets.name })
+    .from(markets)
+    .where(and(...conds))
+    .limit(1);
+  return row?.name ?? null;
+}
+
 export async function createMarket(input: {
   clientId: string;
   clientSlug?: string;
-  name: string;
-  slug?: string;
+  value: MarketFormValue;
 }): Promise<Result<{ id: string }>> {
   if (!input.clientId) return { ok: false, error: "Cliente requerido" };
-  if (!input.name.trim()) return { ok: false, error: "Nombre requerido" };
-  const slug = (input.slug?.trim() || slugify(input.name)).slice(0, 64);
-  if (!slug) return { ok: false, error: "No se pudo generar el slug" };
+
+  const resolved = resolveName(input.value);
+  if (!resolved) return { ok: false, error: "Elegí país y nivel del mercado" };
+  const { name, slug } = resolved;
+
+  const taken = await slugTakenBy(input.clientId, slug);
+  if (taken) {
+    return {
+      ok: false,
+      error: `Ese mercado ya existe en el catálogo como "${taken}"`,
+    };
+  }
 
   const [{ next }] = await db
     .select({
@@ -50,7 +91,7 @@ export async function createMarket(input: {
       .insert(markets)
       .values({
         clientId: input.clientId,
-        name: input.name.trim(),
+        name,
         slug,
         sortOrder: next,
         enabled: true,
@@ -69,10 +110,7 @@ export async function createMarket(input: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "error desconocido";
     if (msg.includes("unique") || msg.includes("duplicate")) {
-      return {
-        ok: false,
-        error: `Ya existe un mercado con slug "${slug}" para este cliente`,
-      };
+      return { ok: false, error: `Ese mercado ya existe en el catálogo` };
     }
     return { ok: false, error: msg };
   }
@@ -81,7 +119,8 @@ export async function createMarket(input: {
 export async function updateMarket(input: {
   id: string;
   clientSlug?: string;
-  name?: string;
+  /** Nueva definición del mercado. Omitir para tocar sólo `enabled`. */
+  value?: MarketFormValue;
   enabled?: boolean;
 }): Promise<Result> {
   const [before] = await db
@@ -92,7 +131,23 @@ export async function updateMarket(input: {
   if (!before) return { ok: false, error: "Mercado no encontrado" };
 
   const update: Record<string, unknown> = {};
-  if (input.name !== undefined) update.name = input.name.trim();
+
+  if (input.value !== undefined) {
+    const resolved = resolveName(input.value);
+    if (!resolved) return { ok: false, error: "Elegí país y nivel del mercado" };
+    if (resolved.slug !== before.slug) {
+      const taken = await slugTakenBy(before.clientId, resolved.slug, before.id);
+      if (taken) {
+        return {
+          ok: false,
+          error: `No se puede: "${taken}" ya ocupa ese lugar del catálogo. Pasá las líneas a ese mercado y borrá este.`,
+        };
+      }
+    }
+    update.name = resolved.name;
+    update.slug = resolved.slug;
+  }
+
   if (input.enabled !== undefined) update.enabled = input.enabled;
   if (Object.keys(update).length === 0) return { ok: true };
 

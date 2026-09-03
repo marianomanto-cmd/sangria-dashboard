@@ -14,6 +14,8 @@
     "db:check": "node --env-file=.env.local scripts/db-check.mjs",
     "test:db": "tsx scripts/db-connection-test.ts",
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "gen:markets-sql": "tsx scripts/gen-markets-sql.ts",
+    "check:markets": "tsx scripts/check-market-nomenclature.ts",
     "db:backfill-reports": "node --env-file=.env.local scripts/backfill-reports.mjs"
   },
   "dependencies": {

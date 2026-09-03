@@ -245,8 +245,11 @@ db/
   app-users.sql             # tabla app_users + enum de roles + seed de admins (Configuración → Usuarios y roles). Aplicado en prod el 02/sep/2026; idempotente
   drop-plan-traffic.sql     # BAJA de la sección Tráfico: dropea media_plan_traffic_ads/_adsets/_briefs y ad_types. ⚠️ borra datos; no toca planes, publishers, placements, fees ni billings
   plan-planning-qa.sql      # migración del QA DE PLANIFICACIÓN: enum planning_qa_item_kind + tablas media_plan_planning_qa_runs/_checks + RLS. Puramente aditiva: no toca el QA que ya existía ni traba ningún plan
-  felix-plan-markets-tiers.sql # mercado por línea del plan de Félix: crea los mercados-tier `estados-unidos-t1`/`-t2` y asigna las 18 líneas leyendo el T1/T2 del nombre del placement. No se puede taggear por estado: cada línea corre sobre todos los estados de su tier y market_id es una sola FK
-  felix-markets-usa.sql     # catálogo de mercados de Félix: los 13 estados de EE.UU. (California, New York, New Jersey, Texas, Florida, Arizona, Illinois, Colorado, North Carolina, Georgia, Washington, Pennsylvania, New Mexico). Idempotente; incluye la verificación y la lectura del plan por placement
+  felix-plan-markets-tiers.sql # mercado por línea del plan de Félix: crea los mercados-tier `estados-unidos-t1`/`-t2` (hoy `Estados Unidos - Varios (T1)`/`(T2)`, ver db/markets-nomenclatura.sql) y asigna las 18 líneas leyendo el T1/T2 del nombre del placement. No se puede taggear por estado: cada línea corre sobre todos los estados de su tier y market_id es una sola FK
+  felix-markets-usa.sql     # catálogo de mercados de Félix: los 13 estados de EE.UU. (hoy `Estados Unidos - <Estado>`, ver db/markets-nomenclatura.sql) (California, New York, New Jersey, Texas, Florida, Arizona, Illinois, Colorado, North Carolina, Georgia, Washington, Pennsylvania, New Mexico). Idempotente; incluye la verificación y la lectura del plan por placement
+  copa-varios-desarmar.sql  # PASO A de la normalización de mercados: desarma el mercado "Varios" de Copa (17 líneas, USD 820.275,98) reasignando LÍNEA POR LÍNEA — 5 a su país (creándolos), 10 multi-país a LATAM, 2 always-on a un mercado nuevo "Global". Repunta cierres y snapshots de versión; sólo borra "Varios" si quedó vacío. Idempotente
+  markets-catalogo-2026-09-03.csv # la foto del catálogo de mercados en prod (salida del bloque 0). Es el INPUT del generador: el plan de renombres sale de cruzarla con la taxonomía
+  markets-nomenclatura.sql  # ⚙️ GENERADO (`npm run gen:markets-sql`) — PASO B: normaliza el catálogo de TODOS los clientes y fusiona los duplicados, repuntando placements, cierres y los marketId embebidos en snapshot_json / rows_json. Es un PLAN EXPLÍCITO (una fila por mercado con su destino ya resuelto), no un diccionario que resuelve la base. 3 bloques: dry-run · aplicar · verificación. Idempotente
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
   queries/
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
@@ -262,6 +265,8 @@ db/
 scripts/
   seed.ts                   # datos de demo (4 clientes)
   db-check.mjs, db-reset.mjs
+  gen-markets-sql.ts        # genera db/markets-nomenclatura.sql desde lib/market-nomenclature.ts (`npm run gen:markets-sql`)
+  check-market-nomenclature.ts # control de la taxonomía (`npm run check:markets`): idempotencia, round-trip del form, colisiones de slug y geocoding
   db-connection-test.ts     # TEST del ciclo de vida de conexión de db/index.ts (`npm run test:db`). Contra un Postgres LOCAL, nunca prod (congela el server con SIGSTOP). Fija las tres fases del timeout, que el 57014 lo tire Postgres y no nuestro reloj, y que sólo un socket muerto cierre la conexión
 lib/
   format.ts                 # formatUsd, formatPct, formatUsdCompact + inputs US: formatIntInput / formatAmountInput / parseNumberInput / evalNumberInput (fórmulas tipo Excel)
@@ -290,7 +295,8 @@ lib/
   plan-export-version.ts    # parseVersionParam(?v=N) de los exports del plan: null = plan vigente, N = versión aprobada histórica, "invalid" = 400
   client-portal.ts          # portal público: password compartido, slugs reservados, helpers PUROS (edge-safe, los usa el proxy)
   client-portal.server.ts   # cookie de sesión del portal (set/clear/has) + canAccessClientExport
-  market-geo.ts             # geocoding de mercados → centroide (match exacto + por token); para el mapa de Análisis
+  market-nomenclature.ts    # FUENTE DE VERDAD de la nomenclatura de mercados: diccionarios (países / plazas / regiones) + canonicalMarketName / buildMarketName / parseMarketName. Lo usan el form del catálogo, el seed y el generador del SQL
+  market-geo.ts             # geocoding de mercados → centroide (match exacto + por token, gana el más específico: plaza > región > país); para el mapa de Análisis
   project-period.ts         # período del proyecto (min/max de placements) + aviso "termina pronto" (≤7 días)
   external-url.ts           # normalizeExternalUrl — normaliza links pegados a mano (agrega https:// si falta) y rechaza esquemas que no sean http/https. Lo usan las actions de proyecto (carpeta de Drive) y los forms
   supabase/
@@ -793,6 +799,9 @@ conviene no confundirlas:
   planes). Se deriva del nombre del proyecto vía slug, con sufijo `-N` si
   colisiona — ej. nombre "Costa Rica 2026" → `code` `costa-rica-2026`. No
   se pide en el alta ni se muestra en la UI.
+- Mercados: taxonomía cerrada, siempre país primero — `Argentina (País)` /
+  `México - Ciudad de México` / `Argentina - Varios` / `Centroamérica`. No se
+  tipea: se elige en el form. Ver "Mercados: nomenclatura única".
 - Planes: `<Project.code>.<PlanName>` — ej. `costa-rica-2026.Awareness`.
 
 ### Períodos derivados, no almacenados
@@ -954,11 +963,70 @@ conviene no confundirlas:
   "rate companions" tipo `cpm`/`cpc` que el editor sí guarda). Ver
   "Exports del plan".
 
-### Mercados como catálogo editable
-- `markets` puede tener países (`costa-rica`, `panama`), agrupaciones
-  (`centroamerica`, `latam`) o **subdivisiones** de un país: Félix planifica por
-  estado de EE.UU. (`california`, `new-york`, `texas`…, ver
-  `db/felix-markets-usa.sql`). Editable desde `/configuracion/markets`.
+### Mercados: nomenclatura única (taxonomía cerrada)
+
+El catálogo se había llenado de variantes del mismo lugar —"Panama", "Panamá",
+"Panama City" y "Ciudad de Panamá" eran **cuatro** mercados distintos, cada uno
+con sus líneas— porque el nombre se tipeaba libre. Hoy hay UNA taxonomía, la
+misma para todos los clientes, y el nombre **no se escribe: se elige**.
+
+| Qué es el mercado         | Forma              | Ejemplo                     |
+| ------------------------- | ------------------ | --------------------------- |
+| El país entero            | `<País> (País)`    | `Argentina (País)`          |
+| Una plaza (ciudad/estado) | `<País> - <Plaza>` | `México - Ciudad de México` |
+| Varias plazas de un país  | `<País> - Varios`  | `Argentina - Varios`        |
+| Una región supranacional  | `<Región>`         | `Centroamérica` · `LATAM`   |
+
+- **Siempre arranca por el país.** El separador es `" - "`. Si hay más de un
+  grupo multi-plaza en el mismo país se etiqueta —`Estados Unidos - Varios (T1)`
+  y `(T2)` son los dos tiers de Félix— porque dos "Varios" del mismo país
+  colisionarían en el slug.
+- **Las subdivisiones son plazas**: Félix planifica por estado de EE.UU., y un
+  estado es una plaza dentro del país igual que una ciudad →
+  `Estados Unidos - California`.
+- **Las regiones quedan afuera de la forma "País - …"** a propósito:
+  Centroamérica no tiene país que la anteceda. Sólo se unifica su ortografía.
+- **`lib/market-nomenclature.ts` es la fuente de verdad**: los diccionarios (37
+  países, ~180 plazas incluidos los 50 estados de EE.UU., 7 regiones) más
+  `canonicalMarketName` / `buildMarketName` / `parseMarketName`.
+  `npm run check:markets` chequea idempotencia, round-trip del form, colisiones
+  de slug, alias repetidos entre diccionarios y geocoding.
+- **Las siglas de dos letras quedaron afuera** de los alias: "ca" sería Canadá,
+  California y Centroamérica a la vez. Van las de tres (IATA/ISO-3): `pty`,
+  `cdmx`, `bog`, `mia`.
+- **El alta y la edición pasan por `components/market-picker.tsx`** (nivel →
+  país → plaza), no por un input de texto. `app/actions/markets.ts` arma el
+  nombre con `buildMarketName`, deriva el slug del nombre canónico **también al
+  renombrar** (antes lo dejaba congelado, y el mapa geocodifica por slug antes
+  que por nombre) y rechaza el alta si el slug canónico ya existe, nombrando al
+  mercado que lo ocupa.
+- **La taxonomía tiene DOS niveles, no tres**: país y plaza. Una plaza dentro
+  de otra no se anida — las cinco plazas del condado de San Diego que Copa
+  pauta por separado son `Estados Unidos - La Jolla`, `- Coronado`,
+  `- Encinitas`, `- Del Mar`, `- San Diego`, no `San Diego - La Jolla`.
+- **Las decisiones que el diccionario no puede tomar** —dos formas válidas de
+  la taxonomía que en el catálogo real se usaron para lo mismo— van en
+  `market_override` (lista en `scripts/gen-markets-sql.ts`, con su porqué).
+  Salen marcadas "decisión manual" en el dry-run y valen sólo para la
+  migración.
+- **Lo que no se puede mapear con certeza no se toca.** "Santiago" a secas es
+  Chile o República Dominicana: queda como está y se lista aparte para que lo
+  desambigüe una persona desde el form.
+- La normalización de prod son **dos pasos**, los dos generados o probados
+  contra el Postgres local: `db/copa-varios-desarmar.sql` (paso A, desarma el
+  mercado "Varios" de Copa reasignando línea por línea) y
+  `db/markets-nomenclatura.sql` (paso B, renombra y fusiona el catálogo). El paso
+  B son cuatro bloques que van en Runs separados: **0** (la foto del antes),
+  **1** (dry-run), **2** (aplicar, un solo statement todo-o-nada) y **3** (el
+  control, que devuelve `ok`/`REVISAR` por control y los números a comparar
+  contra el bloque 0). **El código se deploya ANTES del SQL**: con el geocoding
+  viejo, los slugs nuevos de los tiers de Félix colapsan en una sola burbuja.
+- **El paso B es generado** (`npm run gen:markets-sql`) cruzando
+  `db/markets-catalogo-2026-09-03.csv` —la foto de prod— con la taxonomía, así
+  que la base no puede divergir de la app. Y lo que emite es un **plan
+  explícito**: una fila por mercado con su nombre destino ya resuelto, para que
+  se lea entero antes de aplicarlo. Un mercado que esté en la base y no en el
+  plan (cargado después de la foto) no se toca y sale reportado.
 - `media_plan_placements.market_id` es FK con `ON DELETE SET NULL`.
 - El catálogo se lee **sin caché** (`listMarketsForClient` en
   `app/actions/plans.ts` y la página de configuración van directo a la DB), así
@@ -1274,7 +1342,7 @@ conviene no confundirlas:
 
 ### Portal de cliente (público, read-only salvo "Marcar pagado")
 - **Qué es**: una vista para compartir con cada cliente en
-  `/<slug>` (el mismo slug interno del cliente, ej. `/copa-airlines`).
+  `/<slug>` (el mismo slug interno del cliente, ej. `/copa`).
   Read-only con **una sola excepción**: el botón "Marcar pagado", que está en
   las dos tablas de facturas del portal — Billing Tracker (`plan_billings`) y
   Creative (`creative_billings`) — ver más abajo. Tabs:
@@ -1492,18 +1560,26 @@ conviene no confundirlas:
 - **Color por nivel del mercado**: las burbujas de **nivel país** (un país
   entero) se pintan **azul** (`.mkt-bubble--country`) para diferenciarlas de las
   de **ciudad/región** (bordó, default). El nivel lo infiere `resolveMarketGeo`
-  por CÓMO matcheó: match **exacto** a una key país → `country`; match por
-  **token** dentro de un país (ej. "Ciudad de Panamá" → `panama`) → `city`;
-  agrupaciones (LATAM/…) → `region`. Leyenda debajo del mapa (País · Ciudad/región).
+  por CÓMO matcheó: match **exacto** a una key país → `country` (tolerando el
+  sufijo de la nomenclatura: `Argentina (País)` → `argentina-pais` → `argentina`
+  — sin eso, el país entero salía pintado como ciudad); key de plaza →
+  `city`; match por **token** dentro de un país (ej. "México - Cancún") →
+  `city`; agrupaciones (LATAM/…) → `region`. Leyenda debajo del mapa
+  (País · Ciudad/región).
 - **Geocoding de mercados (todo en la UI, sin tocar la DB)**: los `markets` son
   nombres/slugs libres sin coordenadas. `lib/market-geo.ts` (`resolveMarketGeo`)
   resuelve por (1) match exacto normalizado y (2) match por **token** — una
   clave conocida que aparece como palabra dentro del nombre, así
-  "Estados Unidos - Varios" → `estados-unidos`. Cubre países LATAM + agrupaciones
-  (`centroamerica`/`latam`/…) + los **estados de EE.UU.** de Félix (California,
-  New York, Texas…), que van como `region` porque world-atlas no tiene siluetas
-  sub-nacionales a las que fitear el zoom. Devuelve además `level` (país/ciudad/región, ver
-  arriba). Los no reconocidos se listan aparte ("Sin ubicación en el mapa").
+  "Estados Unidos - Varios" → `estados-unidos`. Entre varios tokens que
+  matchean **gana el más específico** (plaza > región > país, y a igualdad el
+  más largo): sin eso `Estados Unidos - California` caía en el centroide de
+  EE.UU. en vez del de California. Cubre países LATAM + agrupaciones
+  (`centroamerica`/`latam`/…) + las **plazas** del diccionario de
+  `lib/market-nomenclature.ts` — ciudades (Ciudad de México, Bogotá, Miami…) y
+  los 50 **estados de EE.UU.**, todas con `kind: "city"` porque world-atlas no
+  tiene siluetas sub-nacionales a las que fitear el zoom. Cada plaza tiene su
+  propio centroide, así que dos plazas del mismo país ya no apilan sus burbujas
+  en el mismo punto. Devuelve además `level` (país/ciudad/región, ver arriba). Los no reconocidos se listan aparte ("Sin ubicación en el mapa").
   **Para sumar/ajustar un mercado, editá `GEO` en `lib/market-geo.ts`**
   (centroide + `feature` = nombre del país en world-atlas).
 - Sin cambios de schema. Deps nuevas: `d3-geo`, `d3-scale`, `topojson-client`,
@@ -2246,6 +2322,21 @@ Idempotente: limpia las tablas antes de insertar.
   catálogos per-cliente (tabla con `client_id`, unique `(client_id, slug)`) y
   se administran desde `/configuracion/clientes/[slug]`. Ya no hay catálogo
   global de publishers ni tabla puente `client_publishers`.
+- **Nomenclatura de mercados**: resuelto. Taxonomía única para todos los
+  clientes (`<País> (País)` / `<País> - <Plaza>` / `<País> - Varios` /
+  `<Región>`), el alta y la edición son un selector y no un input de texto, y
+  `db/markets-nomenclatura.sql` normalizó y fusionó lo que ya había. Lo que
+  **queda abierto**: los mercados que la migración no pudo mapear con certeza
+  (nombres ambiguos como "Santiago" —Chile o RD— y los que no son un lugar,
+  tipo "Q3 Boosting") siguen como estaban y hay que resolverlos a mano desde
+  `/configuracion/clientes/[slug]#mercados`; el bloque 1 del SQL los lista con
+  la etiqueta `SIN MAPEAR`.
+- **Nombres de mercado tipeados dentro de texto libre**: ningún rename los
+  alcanza. `media_plan_placements.placement_name` / `.audience` / `.notes_md` y
+  `media_plan_aux_sheets.grid_json` pueden decir el nombre viejo de un mercado
+  renombrado (hay precedente: las líneas de Félix llevan el tier en el nombre
+  del placement). Se revisan a ojo — el bloque 3.e de
+  `db/markets-nomenclatura.sql` deja la query.
 - **Exports (PDF / Excel)**: resueltos y documentados en detalle en la sección
   "Exports del plan (PDF / Excel)" arriba. Resumen: logo de marca, todas las
   métricas (incl. calculated recomputadas) por placement, firma + disclaimer

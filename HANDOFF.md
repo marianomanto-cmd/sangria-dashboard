@@ -2,6 +2,197 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 03/sep/2026 (6) — nomenclatura única de mercados: se elige, no se escribe
+
+**El problema.** El catálogo de `markets` es per-cliente y el nombre se tipeaba
+libre, así que el mismo lugar entró varias veces con distinta escritura. En Copa
+convivían "Panama", "Panamá", "Panama City" y "Ciudad de Panamá" como **cuatro
+mercados distintos**, cada uno con sus líneas: el Análisis los contaba separados,
+el dropdown del editor mostraba repetidos y los benchmarks del simulador
+quedaban partidos por la mitad. Félix tenía la otra mitad del problema: sus 13
+estados entraban pelados ("California"), sin el país delante.
+
+De paso salieron a la luz las siglas de dos letras: "ca" era alias de Canadá,
+de California y de Centroamérica al mismo tiempo. Se sacaron todas; quedan las
+de tres (`pty`, `cdmx`, `bog`, `mia`) y `npm run check:markets` ahora falla si
+un alias aparece en dos diccionarios.
+
+**La regla, ahora una sola para toda la app** (`lib/market-nomenclature.ts`):
+
+| Qué es el mercado         | Forma              | Ejemplo                     |
+| ------------------------- | ------------------ | --------------------------- |
+| El país entero            | `<País> (País)`    | `Argentina (País)`          |
+| Una plaza (ciudad/estado) | `<País> - <Plaza>` | `México - Ciudad de México` |
+| Varias plazas de un país  | `<País> - Varios`  | `Argentina - Varios`        |
+| Una región supranacional  | `<Región>`         | `Centroamérica` · `LATAM`   |
+
+Siempre arranca por el país. Las regiones quedan afuera de esa forma a propósito
+(Centroamérica no tiene país que la anteceda); sólo se les unifica la ortografía.
+Cuando hay más de un grupo multi-plaza en el mismo país lleva etiqueta —los dos
+tiers de Félix pasan a `Estados Unidos - Varios (T1)` / `(T2)`— porque dos
+"Varios" del mismo país colisionarían en el slug.
+
+**Cargar un mercado dejó de ser un input de texto.** `components/market-picker.tsx`
+hace elegir **nivel → país → plaza** y muestra en vivo el nombre que va a quedar;
+`app/actions/markets.ts` lo arma con `buildMarketName` y rechaza el alta si el
+slug canónico ya existe, nombrando al mercado que lo ocupa. La edición pasa por
+el mismo selector (antes era un input inline). Lo único que se escribe a mano es
+una plaza que no esté en el diccionario ("Otra…") y la etiqueta de un grupo, y
+ni ahí se puede romper la forma: el país sale del select.
+
+**Dos bugs que aparecieron en el camino:**
+
+- `updateMarket` **nunca regeneraba el slug**. Como el mapa de /analisis
+  geocodifica probando el **slug antes que el nombre**, un mercado renombrado
+  desde la UI seguía geocodificando por el slug viejo: mismo nombre en pantalla,
+  distinto comportamiento según la historia de la fila. Ahora el slug se deriva
+  siempre del nombre canónico.
+- `Argentina (País)` normalizaba a `argentina-pais`, que **no** matchea exacto,
+  caía en la rama por token y volvía como `city` — el país entero pintado de
+  bordó en vez de azul. `resolveMarketGeo` ahora tolera el sufijo calificador.
+
+**Y una mejora del mapa que salió de arrastre**: en el match por token ahora
+**gana el más específico** (plaza > región > país). Sin eso,
+`Estados Unidos - California` caía en el centroide de EE.UU. Se sumaron los
+centroides de las plazas del diccionario (ciudades de la red de Copa + los 50
+estados), así que dos plazas del mismo país ya no apilan sus burbujas en el
+mismo punto.
+
+**El SQL es generado, no escrito**, y son DOS pasos:
+`db/copa-varios-desarmar.sql` (paso A, el mercado "Varios") y
+`db/markets-nomenclatura.sql` (paso B, el resto del catálogo). El paso B sale de
+`npm run gen:markets-sql`, que cruza `db/markets-catalogo-2026-09-03.csv` —la
+foto de prod, salida del bloque 0— con la taxonomía de
+`lib/market-nomenclature.ts`. Lo que emite es un **plan explícito**: una fila por
+mercado con su destino ya resuelto, que se puede leer entero. La primera versión
+mandaba los diccionarios a la base para que resolviera ella y daba 900 líneas en
+las que no se veía qué iba a pasar con cada mercado.
+
+**Antes de correr el paso B se le pasó una revisión adversarial** (cuatro lentes
+independientes —pérdida silenciosa, corrección del SQL, efectos en la app,
+operación— más una pasada que intenta refutar cada hallazgo, todas levantando el
+Postgres local y corriendo el bloque de verdad). El SQL estaba bien; salieron
+cinco cosas de alrededor, todas arregladas:
+
+  · **La verificación no verificaba.** De los cinco controles, cuatro venían
+    comentados, así que pegar el "bloque 3" corría sólo el primero — el único
+    que NO ve una línea en NULL ni un `marketId` muerto, que es justo lo que la
+    migración puede romper en silencio. Ahora hay un **BLOQUE 0** que mide el
+    antes y un **BLOQUE 3** que devuelve una fila por control con `ok` /
+    `REVISAR` / `comparar`.
+  · **La cabecera mentía el número de renombres** (decía 49, el bloque imprime
+    47): el generador contaba a los dos perdedores de las fusiones como
+    renombres, y esos no se renombran, se borran. Ese notice es el único
+    criterio de aceptación que tiene quien lo corre.
+  · **Ventana de carrera**: entre el repunte y el `delete`, una línea guardada
+    contra un mercado condenado quedaba en `market_id` NULL sin error (FK
+    `ON DELETE SET NULL`). Se cierra con un `lock table … in share row
+    exclusive mode` como primer statement: el insert espera y después falla con
+    violación de FK — visible y reintentable. No bloquea lecturas.
+  · **Pegar el bloque 2 dos veces en el mismo Run** reventaba con
+    `relation "_mkt_plan" already exists`. Ahora hay `drop table if exists`.
+  · **El orden deploy↔SQL NO es indistinto**, como decía la cabecera. Si el SQL
+    corre primero, el geocoding viejo no reconoce los slugs nuevos y los dos
+    tiers de Félix (USD 1,4M) colapsan en la misma burbuja. **Deploy primero.**
+
+  Verificado de primera mano: cortando el bloque con `statement_timeout = 3ms`
+  el rollback es total (64 mercados intactos, las 9 líneas del perdedor en su
+  lugar, 0 huérfanas). Y una nota para el que lo corra: **no hay pre-imagen**;
+  si se quiere red, la copia va en un schema `bkp`, NUNCA en `public`, que
+  Supabase expone entero por PostgREST (ver db/rls.sql).
+
+Dos detalles del plan que costaron una vuelta: el join tiene que emparejar por
+el slug ACTUAL **o** por el slug DESTINO (`order by (market_slug = m.slug) desc
+limit 1`), porque después del rename los slugs cambian y si no la verificación
+reporta todo como "no estaba en el plan" y la segunda corrida no reconoce nada.
+Y el generador tira error si el slug actual de un mercado es el slug destino de
+OTRA fila que apunta a otro lado: después del rename ese join quedaría ambiguo. El dry-run es la parte importante — muestra
+`renombrar` / `FUSIONAR EN →` / `SIN MAPEAR` fila por fila **antes** de tocar
+nada.
+
+**Lo que la fusión tiene que repuntar** (si se olvida uno, se pierde data en
+silencio): `media_plan_placements.market_id` y `campaign_actual_snapshots.market_id`
+son FK con `ON DELETE SET NULL`, y hay dos ids **embebidos en JSONB sin FK** —
+`media_plan_snapshots.snapshot_json → placements[].marketId` y
+`simulator_scenarios.rows_json → rows[].marketId`. El del snapshot es el que más
+duele: si queda un id muerto, "descartar borrador"
+(`revertPlanToApprovedSnapshot`) lo sanea a NULL y **borra el mercado de las
+líneas vivas**. Los perdedores se borran recién después de repuntar todo, y
+antes del rename (un perdedor puede estar ocupando el slug que el ganador
+necesita). El ganador de cada grupo es el que más líneas tiene; a igualdad, el
+que ya está bien escrito.
+
+**Las decisiones que el diccionario no puede tomar van en `market_override`**
+(la lista vive en `scripts/gen-markets-sql.ts` con su porqué; salen marcadas
+"decisión manual" en el dry-run). Hacen falta porque hay pares que son dos
+formas VÁLIDAS y distintas de la taxonomía pero que en el catálogo real se
+usaron para lo mismo. Hoy hay una sola: Copa tenía `Estados Unidos` (23 líneas,
+USD 755.800) y `Estados Unidos - Varios` (9 líneas, USD 409.545) para lo mismo
+→ se funden en `Estados Unidos (País)`, 32 líneas y USD 1.165.345. Valen UNA
+vez; después el form puede volver a crear cualquiera de esas formas.
+
+**Qué dio el catálogo real** (44 mercados de Copa + 15 de Félix, leídos con el
+bloque 0): mapean los 59 salvo `Varios` (17 líneas, USD 820.276), que no dice
+de qué país es y queda SIN MAPEAR hasta resolverlo a mano. Dos fusiones: la de
+EE.UU. de arriba y `Colombia - Bogota` + `CO - Bogota` → `Colombia - Bogotá`
+(4 líneas, USD 32.658). Decisiones confirmadas con el dueño del catálogo:
+Panamá queda partido en `Panamá (País)` (15 líneas) y `Panamá - Ciudad de
+Panamá` (10 líneas) porque son cosas distintas; y las cinco plazas del condado
+de San Diego se mantienen separadas como plazas de EE.UU.
+(`Estados Unidos - La Jolla`, `- Coronado`, `- Encinitas`, `- Del Mar`,
+`- San Diego`), sin anidar bajo San Diego: la taxonomía tiene DOS niveles
+(país y plaza), no tres.
+
+**El caso "Varios" de Copa** (17 líneas, USD 820.275,98 — el 3º por inversión)
+salió leyendo las líneas una por una, y merece su propio archivo
+(`db/copa-varios-desarmar.sql`, PASO A, va ANTES de la normalización): no era
+un mercado, eran tres cosas en la misma bolsa.
+
+  · 5 líneas que son de UN país y nunca se les asignó (USD 4.000): Puerto Rico,
+    Paraguay, Trinidad y Tobago, Uruguay y República Dominicana. Los cinco
+    países había que crearlos, ninguno estaba en el catálogo de Copa.
+  · 10 líneas multi-país (USD 601.809,55) que corren sobre varios países a la
+    vez con budget compartido — la audiencia lo dice: "Single placement que
+    comparte budget entre 3 mercados", `AR-UY`, `EZE, COR, CLO, GDL, GUA, MEX,
+    MTY, PTY, SAL, GRU, SSA`. No se pueden expresar como país-ciudad
+    (`market_id` es UNA sola FK, mismo caso que los tiers de Félix): van al
+    LATAM que ya existía, que queda en 27 líneas y USD 869.210,75. El detalle
+    de ciudades sigue en `audience`, que es donde ya estaba.
+  · 2 líneas always-on globales (USD 214.466,43): BoostingIGGlobal
+    ("Geo-targeted by post") y Tiktok2026, sin mercado por diseño → mercado
+    nuevo **Global**, que se sumó a las regiones de `lib/market-nomenclature.ts`
+    para que se pueda volver a elegir desde el form.
+
+  Es reasignación por PLACEMENT, no por mercado, así que las 17 van enumeradas
+  una por una por nombre de línea. Una línea que NO esté en la lista no se toca
+  y "Varios" no se borra — probado. Los 528 cierres se repuntan por
+  `placement_id` (siguen a su línea), y el marketId congelado en el snapshot de
+  versión se resuelve por el `id` del placement que el propio snapshot guarda.
+
+**Lo que NO se toca a propósito**: los nombres ambiguos ("Santiago" es Chile o
+República Dominicana) y los que no son un lugar ("Q3 Boosting") salen listados
+como `SIN MAPEAR` y quedan igual, para que los resuelva una persona desde el
+form. La fusión nunca cruza clientes (`markets` es per-cliente y **nada** valida
+que el mercado de una línea sea del cliente del plan).
+
+**Probado** contra el Postgres 16 local con un fixture que reproduce el
+problema (3 clientes, 38 mercados, 24 líneas, snapshots de versión + escenario
+del simulador + un snapshot legacy sin la clave `placements`): fusiona 6, repunta
+6 líneas / 6 cierres / 1 snapshot / 1 escenario, borra 6 mercados y renombra 27,
+sin perder una línea ni un dólar (24 líneas y 22.500 USD antes y después, 0
+huérfanas) y sin cruzar Andina con Copa. Segunda y tercera corrida: todo en
+cero. `npm run check:markets` cubre idempotencia sobre 619 entradas, round-trip
+de 289 combinaciones del form, colisiones de slug, 38 casos reales y 19 de
+geocoding. `tsc`, `eslint` y `next build` en verde.
+
+**Acción en prod: sí — hay que correr el SQL** (`db/markets-nomenclatura.sql`,
+bloques 0 y 1 primero, que son read-only). Deploy y SQL son **independientes** y
+van en cualquier orden: con el código deployado y sin correr el SQL la app anda
+igual, sigue mostrando los duplicados viejos y el form ya no deja crear nuevos;
+con el SQL corrido y sin deployar el catálogo queda limpio pero
+`Argentina (País)` cae en el mapa como ciudad hasta el deploy. Correr por SQL
+**no** deja rastro en `audit_log` (lo escriben las server actions).
+
 ### Cambios de la sesión 03/sep/2026 (5) — las facturas de creative se cargan desde la app, y el cliente las ve
 
 Dos cosas que faltaban en Creative, pedidas en la misma sesión:
@@ -112,7 +303,9 @@ las 18 líneas del plan "Félix Pago | Back to School" (live v1) corren cada una
 sobre TODOS los estados de su tier a la vez, con el presupuesto distribuido
 entre ellos, y `media_plan_placements.market_id` es UNA sola FK. Así que lo que
 va en la línea es el **tier**, igual que "Centroamérica" o "LATAM" en el
-catálogo: se crean `estados-unidos-t1` / `estados-unidos-t2` y se asigna leyendo
+catálogo: se crean `estados-unidos-t1` / `estados-unidos-t2` (renombrados a
+`Estados Unidos - Varios (T1)` / `(T2)` por la nomenclatura única, ver la entrada
+03/sep (6)) y se asigna leyendo
 el T1/T2 del NOMBRE del placement (`… | T1`, `… | T1 | Félix Pago`). Sólo toca
 líneas con `market_id is null`. Da 9 líneas T1 (992.172,20) + 9 T2 (417.828,00)
 = 1.410.000, que cuadra con los tres bloques (960k CTV + 350k + 100k).
@@ -3264,7 +3457,7 @@ Ajustes pedidos sobre el portal recién mergeado:
 
 ### Cambios de la sesión 04/jun/2026 — Portal de cliente público (read-only) + favicon
 
-- **Nuevo portal de cliente** en `/<slug>` (ej. `/copa-airlines`, reusa el slug
+- **Nuevo portal de cliente** en `/<slug>` (ej. `/copa`, reusa el slug
   interno): vista **solo lectura** para compartir con el cliente, con tabs
   Resumen (KPIs + chart) · Billing Tracker · Estimación · Proyectos · Reportes ·
   Benchmarks. Todo scopeado al cliente reusando las queries internas (dashboard,
@@ -5491,6 +5684,8 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Entender/tocar el timeout de queries o el pool | `db/index.ts` — **tres fases** (`cola` / `pipeline` / `ejecucion`), decididas por `query.state` + `query.active` de postgres.js. Regla dura: `EXEC_TIMEOUT_MS` > `STATEMENT_TIMEOUT_MS`, para que las queries lentas las corte Postgres (57014, conexión reusable) y no nuestro reloj (que obliga a cerrar el socket). Test: `npm run test:db` contra un Postgres LOCAL — 16 aserciones; con el código anterior al 03/sep fallan 10. |
 | Tocar lo que ve el CLIENTE cuando el portal falla | `app/(portal)/error.tsx` (boundary bilingüe, 2 reintentos, contador en scope de módulo) y `app/(portal)/loading.tsx` (skeleton). **Ojo: `app/(app)/error.tsx` NO cubre el portal** — son segmentos distintos, y `error.js` tampoco cubre el layout de su propio segmento. Tampoco existe `app/global-error.tsx` todavía: una falla en `app/(app)/layout.tsx` (topbar, getCurrentUser) sigue sin red. |
 | Ver la estructura REAL de la base (o medir por qué se cae) | `db/estructura-actual.sql` — read-only, 8 bloques, **uno por vez** en el SQL Editor. Bloques 1-5 = estructura y volumen; 6-8 = medición **con la app caída** (salud en vivo, `pg_stat_statements`, `EXPLAIN` de la query del dashboard). El bloque 4 (FK sin índice) trae el DDL sugerido en una columna. |
+| Agregar / renombrar / fusionar un MERCADO | `lib/market-nomenclature.ts` es la fuente de verdad (diccionarios de países, plazas y regiones + `canonicalMarketName`/`buildMarketName`/`parseMarketName`). El alta y la edición son `components/market-picker.tsx` (nivel → país → plaza), nunca texto libre. Para tocar la base: `db/markets-nomenclatura.sql`, que **es generado** — se edita el diccionario y se corre `npm run gen:markets-sql`, no se edita el .sql. Control: `npm run check:markets`. Para el mapa, el centroide va en `GEO` de `lib/market-geo.ts`. |
+| Saber dónde queda guardado un `market_id` (antes de fusionar o borrar un mercado) | Dos FK `ON DELETE SET NULL` (`media_plan_placements.market_id`, `campaign_actual_snapshots.market_id`) **y dos ids embebidos en JSONB sin FK**: `media_plan_snapshots.snapshot_json → placements[].marketId` y `simulator_scenarios.rows_json → rows[].marketId`. Los JSONB son los que se olvidan: un id muerto en el snapshot hace que "descartar borrador" sanee a NULL y **borre el mercado de las líneas vivas** (`revertPlanToApprovedSnapshot`, `app/actions/plans.ts`). El nombre NO está desnormalizado en ningún lado: se resuelve por join vivo. |
 | Agregar una query                      | `db/queries/<dominio>.ts`                                 |
 | Agregar una server action              | `app/actions/<dominio>.ts`                                |
 | Cambiar la navegación (desktop ≥lg)    | `components/top-nav.tsx` (tira horizontal en el header). Entradas compartidas en `lib/nav.ts` (`PRIMARY_NAV`/`FOOTER_NAV`/`isNavActive`). |
