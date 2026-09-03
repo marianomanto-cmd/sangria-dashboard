@@ -130,16 +130,50 @@ select coalesce(
 )
 $fn$;`;
 
+// ── Overrides: las decisiones que el diccionario NO puede tomar ────────────
+// Hay pares de mercados que son dos formas VÁLIDAS y distintas de la taxonomía
+// —"Estados Unidos (País)" y "Estados Unidos - Varios" no son lo mismo— pero
+// que en el catálogo real se usaron para lo mismo. Eso no lo decide un
+// diccionario: lo decide quien conoce los planes.
+//
+// Valen UNA vez, en la migración. Después el form puede volver a crear
+// cualquiera de esas formas si de verdad hacen falta.
+//
+// `slug` es el slug ACTUAL de la fila en `markets` (el que sale del bloque 0).
+const OVERRIDES: { client: string; slug: string; target: string; why: string }[] = [
+  {
+    client: "copa",
+    slug: "estados-unidos-varios",
+    target: "Estados Unidos (País)",
+    why:
+      "Confirmado con el dueño del catálogo: 'Estados Unidos' (23 líneas) y " +
+      "'Estados Unidos - Varios' (9 líneas) se usaban para lo mismo. Se funden " +
+      "en el país entero: 32 líneas, USD 1.165.345.",
+  },
+];
+
+const overrideRows = OVERRIDES.map((o) => [q(o.client), q(o.slug), q(o.target)]);
+// Una fila imposible mantiene la tabla bien tipada cuando no hay overrides.
+const OVERRIDE_CTE = `market_override(client_slug, market_slug, target_name) as (values
+${values(overrideRows.length ? overrideRows : [["''", "''", "''"]])}
+  )`;
+
 // ── El plan de cambios. Corto, porque el diccionario vive en la función ─────
 // Ganador de cada grupo (client_id, slug destino): el que más líneas tiene; a
 // igualdad, el que ya está bien escrito, y después el de menor sort_order.
-const PLAN_CTE = `plan as (
+const PLAN_CTE = `${OVERRIDE_CTE},
+  plan as (
     select m.id, m.client_id, m.name, m.slug, m.sort_order,
            c.slug as client_slug,
-           public.market_canonical_name(m.name) as target_name,
+           -- El override gana sobre el diccionario: es la única forma de fundir
+           -- dos formas que la taxonomía considera distintas.
+           coalesce(ov.target_name, public.market_canonical_name(m.name)) as target_name,
+           (ov.target_name is not null) as forzado,
            (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
       from public.markets m
       join public.clients c on c.id = m.client_id
+      left join market_override ov
+        on ov.client_slug = c.slug and ov.market_slug = m.slug
   ),
   winner as (
     select p.*,
@@ -190,6 +224,11 @@ const header = `-- ════════════════════�
 --
 --   Es IDEMPOTENTE: en la segunda corrida no hay grupos con más de uno y los
 --   renames son no-ops.
+--
+--   Las decisiones que el diccionario NO puede tomar (dos formas válidas de la
+--   taxonomía que en la práctica se usaban para lo mismo) van en la tabla
+--   \`market_override\` del bloque 1/2, con su porqué en
+--   scripts/gen-markets-sql.ts. Salen marcadas "decisión manual" en el dry-run.
 --
 --   Lo que NO puede mapear con certeza NO SE TOCA y sale listado en el bloque
 --   1 como "SIN MAPEAR" (ej. "Santiago" a secas: puede ser Chile o República
@@ -287,6 +326,7 @@ select w.client_slug                                       as cliente,
          when w.name = w.target_name and w.slug = w.target_slug then 'sin cambio'
          else 'renombrar'
        end                                                 as accion,
+       case when w.forzado then 'decisión manual' else '' end as origen,
        w.placements                                        as lineas,
        (select count(*) from public.campaign_actual_snapshots s where s.market_id = w.id) as cierres,
        (select count(*) from public.media_plan_snapshots s
@@ -299,7 +339,7 @@ select w.client_slug                                       as cliente,
                         where e->>'marketId' = w.id::text))                               as simulador
   from winner w
 union all
-select p.client_slug, p.name, p.slug, null, 'SIN MAPEAR', p.placements, 0, 0, 0
+select p.client_slug, p.name, p.slug, null, 'SIN MAPEAR', '', p.placements, 0, 0, 0
   from plan p where p.target_name is null
  order by 1, 5 desc, 2;
 `;

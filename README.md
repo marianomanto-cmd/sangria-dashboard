@@ -998,6 +998,15 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
   renombrar** (antes lo dejaba congelado, y el mapa geocodifica por slug antes
   que por nombre) y rechaza el alta si el slug canónico ya existe, nombrando al
   mercado que lo ocupa.
+- **La taxonomía tiene DOS niveles, no tres**: país y plaza. Una plaza dentro
+  de otra no se anida — las cinco plazas del condado de San Diego que Copa
+  pauta por separado son `Estados Unidos - La Jolla`, `- Coronado`,
+  `- Encinitas`, `- Del Mar`, `- San Diego`, no `San Diego - La Jolla`.
+- **Las decisiones que el diccionario no puede tomar** —dos formas válidas de
+  la taxonomía que en el catálogo real se usaron para lo mismo— van en
+  `market_override` (lista en `scripts/gen-markets-sql.ts`, con su porqué).
+  Salen marcadas "decisión manual" en el dry-run y valen sólo para la
+  migración.
 - **Lo que no se puede mapear con certeza no se toca.** "Santiago" a secas es
   Chile o República Dominicana: queda como está y se lista aparte para que lo
   desambigüe una persona desde el form.

@@ -35,6 +35,11 @@
 --   Es IDEMPOTENTE: en la segunda corrida no hay grupos con más de uno y los
 --   renames son no-ops.
 --
+--   Las decisiones que el diccionario NO puede tomar (dos formas válidas de la
+--   taxonomía que en la práctica se usaban para lo mismo) van en la tabla
+--   `market_override` del bloque 1/2, con su porqué en
+--   scripts/gen-markets-sql.ts. Salen marcadas "decisión manual" en el dry-run.
+--
 --   Lo que NO puede mapear con certeza NO SE TOCA y sale listado en el bloque
 --   1 como "SIN MAPEAR" (ej. "Santiago" a secas: puede ser Chile o República
 --   Dominicana; lo desambigua una persona desde el form).
@@ -658,13 +663,21 @@ $fn$;
 -- ════════════════════════════════════════════════════════════════════════════
 
 with
+  market_override(client_slug, market_slug, target_name) as (values
+    ('copa', 'estados-unidos-varios', 'Estados Unidos (País)')
+  ),
   plan as (
     select m.id, m.client_id, m.name, m.slug, m.sort_order,
            c.slug as client_slug,
-           public.market_canonical_name(m.name) as target_name,
+           -- El override gana sobre el diccionario: es la única forma de fundir
+           -- dos formas que la taxonomía considera distintas.
+           coalesce(ov.target_name, public.market_canonical_name(m.name)) as target_name,
+           (ov.target_name is not null) as forzado,
            (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
       from public.markets m
       join public.clients c on c.id = m.client_id
+      left join market_override ov
+        on ov.client_slug = c.slug and ov.market_slug = m.slug
   ),
   winner as (
     select p.*,
@@ -688,6 +701,7 @@ select w.client_slug                                       as cliente,
          when w.name = w.target_name and w.slug = w.target_slug then 'sin cambio'
          else 'renombrar'
        end                                                 as accion,
+       case when w.forzado then 'decisión manual' else '' end as origen,
        w.placements                                        as lineas,
        (select count(*) from public.campaign_actual_snapshots s where s.market_id = w.id) as cierres,
        (select count(*) from public.media_plan_snapshots s
@@ -700,7 +714,7 @@ select w.client_slug                                       as cliente,
                         where e->>'marketId' = w.id::text))                               as simulador
   from winner w
 union all
-select p.client_slug, p.name, p.slug, null, 'SIN MAPEAR', p.placements, 0, 0, 0
+select p.client_slug, p.name, p.slug, null, 'SIN MAPEAR', '', p.placements, 0, 0, 0
   from plan p where p.target_name is null
  order by 1, 5 desc, 2;
 
@@ -716,13 +730,21 @@ begin
   -- Plan de trabajo, materializado para no recalcularlo en cada update.
   create temporary table _mkt_plan on commit drop as
   with
+    market_override(client_slug, market_slug, target_name) as (values
+      ('copa', 'estados-unidos-varios', 'Estados Unidos (País)')
+    ),
     plan as (
       select m.id, m.client_id, m.name, m.slug, m.sort_order,
              c.slug as client_slug,
-             public.market_canonical_name(m.name) as target_name,
+             -- El override gana sobre el diccionario: es la única forma de fundir
+             -- dos formas que la taxonomía considera distintas.
+             coalesce(ov.target_name, public.market_canonical_name(m.name)) as target_name,
+             (ov.target_name is not null) as forzado,
              (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
         from public.markets m
         join public.clients c on c.id = m.client_id
+        left join market_override ov
+          on ov.client_slug = c.slug and ov.market_slug = m.slug
     ),
     winner as (
       select p.*,
@@ -828,13 +850,21 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════════════
 
 with
+  market_override(client_slug, market_slug, target_name) as (values
+    ('copa', 'estados-unidos-varios', 'Estados Unidos (País)')
+  ),
   plan as (
     select m.id, m.client_id, m.name, m.slug, m.sort_order,
            c.slug as client_slug,
-           public.market_canonical_name(m.name) as target_name,
+           -- El override gana sobre el diccionario: es la única forma de fundir
+           -- dos formas que la taxonomía considera distintas.
+           coalesce(ov.target_name, public.market_canonical_name(m.name)) as target_name,
+           (ov.target_name is not null) as forzado,
            (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
       from public.markets m
       join public.clients c on c.id = m.client_id
+      left join market_override ov
+        on ov.client_slug = c.slug and ov.market_slug = m.slug
   ),
   winner as (
     select p.*,

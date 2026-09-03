@@ -79,6 +79,27 @@ antes del rename (un perdedor puede estar ocupando el slug que el ganador
 necesita). El ganador de cada grupo es el que más líneas tiene; a igualdad, el
 que ya está bien escrito.
 
+**Las decisiones que el diccionario no puede tomar van en `market_override`**
+(la lista vive en `scripts/gen-markets-sql.ts` con su porqué; salen marcadas
+"decisión manual" en el dry-run). Hacen falta porque hay pares que son dos
+formas VÁLIDAS y distintas de la taxonomía pero que en el catálogo real se
+usaron para lo mismo. Hoy hay una sola: Copa tenía `Estados Unidos` (23 líneas,
+USD 755.800) y `Estados Unidos - Varios` (9 líneas, USD 409.545) para lo mismo
+→ se funden en `Estados Unidos (País)`, 32 líneas y USD 1.165.345. Valen UNA
+vez; después el form puede volver a crear cualquiera de esas formas.
+
+**Qué dio el catálogo real** (44 mercados de Copa + 15 de Félix, leídos con el
+bloque 0): mapean los 59 salvo `Varios` (17 líneas, USD 820.276), que no dice
+de qué país es y queda SIN MAPEAR hasta resolverlo a mano. Dos fusiones: la de
+EE.UU. de arriba y `Colombia - Bogota` + `CO - Bogota` → `Colombia - Bogotá`
+(4 líneas, USD 32.658). Decisiones confirmadas con el dueño del catálogo:
+Panamá queda partido en `Panamá (País)` (15 líneas) y `Panamá - Ciudad de
+Panamá` (10 líneas) porque son cosas distintas; y las cinco plazas del condado
+de San Diego se mantienen separadas como plazas de EE.UU.
+(`Estados Unidos - La Jolla`, `- Coronado`, `- Encinitas`, `- Del Mar`,
+`- San Diego`), sin anidar bajo San Diego: la taxonomía tiene DOS niveles
+(país y plaza), no tres.
+
 **Lo que NO se toca a propósito**: los nombres ambiguos ("Santiago" es Chile o
 República Dominicana) y los que no son un lugar ("Q3 Boosting") salen listados
 como `SIN MAPEAR` y quedan igual, para que los resuelva una persona desde el
