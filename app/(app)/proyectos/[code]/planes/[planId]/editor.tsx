@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useMemo, useState, useTransition } from "react";
+import { Fragment, useMemo, useRef, useState, useTransition } from "react";
 import {
   CalendarRange,
   CheckCheck,
@@ -1674,6 +1674,16 @@ function PlacementInspector({
 // amount × multiplier; se guardan AMBOS en metrics_json.
 // ════════════════════════════════════════════════════════════════════════════
 
+// El delivery se guarda EXACTO (fraccionario) y se muestra redondeado. Guardar
+// Math.round(9,1133) = 9 rompía dos cosas: la tarifa se re-derivaba mal (el
+// monto sobre 9 ya no da la tarifa cargada — de ahí el "CPA 450 que se vuelve
+// 455,67") y la suma de goals no cerraba contra el PPT. Se acota a 6 decimales,
+// el mismo criterio que ya se usa para las tarifas, para no meter ruido de
+// float en el jsonb, en el audit log ni en el diff de versiones.
+function exactDelivery(v: number): number {
+  return Number(v.toFixed(6));
+}
+
 function effectivePair(
   metricsJson: Record<string, number>,
   costMethod: string,
@@ -1714,18 +1724,22 @@ function applyPrimaryPairChange(
     return next;
   }
   if (field === "rate") {
-    const newDelivery = amountUsd > 0 ? (amountUsd * pair.multiplier) / newValue : 0;
+    const rate = Number(newValue.toFixed(6));
+    const newDelivery =
+      amountUsd > 0 && rate > 0 ? (amountUsd * pair.multiplier) / rate : 0;
     return {
       ...metricsJson,
-      [pair.rate]: Number(newValue.toFixed(6)),
-      [pair.delivery]: Math.round(newDelivery),
+      [pair.rate]: rate,
+      [pair.delivery]: exactDelivery(newDelivery),
     };
   }
-  const newRate = amountUsd > 0 ? (amountUsd * pair.multiplier) / newValue : 0;
+  const delivery = exactDelivery(newValue);
+  const newRate =
+    amountUsd > 0 && delivery > 0 ? (amountUsd * pair.multiplier) / delivery : 0;
   return {
     ...metricsJson,
     [pair.rate]: Number(newRate.toFixed(6)),
-    [pair.delivery]: Math.round(newValue),
+    [pair.delivery]: delivery,
   };
 }
 
@@ -1748,7 +1762,7 @@ function recomputeMetricsForAmount(
     if (!pair.rate) continue;
     const rateVal = next[pair.rate];
     if (typeof rateVal === "number" && rateVal > 0) {
-      next[deliverySlug] = Math.round((newAmount * pair.multiplier) / rateVal);
+      next[deliverySlug] = exactDelivery((newAmount * pair.multiplier) / rateVal);
     }
   }
   return next;
@@ -1860,7 +1874,14 @@ function RateInput({
   className?: string;
 }) {
   const display = value != null ? formatRateDisplay(value) : "";
+  // Sólo commiteamos si el planner efectivamente escribió. El input pinta con
+  // MENOS precisión de la que guarda (toFixed(2) sobre una tarifa 455,722222),
+  // así que reparsear al blur el texto que el propio input pintó reescribía el
+  // dato con sólo tabular por la grilla — sin que nadie editara nada. Ahora que
+  // el delivery es exacto eso movería también el delivery en cada pasada.
+  const dirty = useRef(false);
   const commit = (el: HTMLInputElement) => {
+    if (!dirty.current) return;
     const raw = el.value.trim();
     let v: number;
     if (raw === "") {
@@ -1874,7 +1895,8 @@ function RateInput({
       v = parsed;
     }
     el.value = formatRateDisplay(v);
-    if (value == null || Math.abs(v - value) >= 0.000001) onCommit(v);
+    dirty.current = false;
+    onCommit(v);
   };
   return (
     <input
@@ -1885,6 +1907,9 @@ function RateInput({
       disabled={disabled}
       placeholder="0.0000"
       onClick={(e) => e.stopPropagation()}
+      onInput={() => {
+        dirty.current = true;
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -1909,7 +1934,13 @@ function DeliveryInput({
   className?: string;
 }) {
   const display = value != null ? formatIntInput(value) : "";
+  // Mismo criterio que RateInput. Acá el umbral viejo (>= 1) además IMPEDÍA
+  // corregir a mano: con 9,113333 guardado el campo muestra "9", y tipear "9"
+  // para forzar el entero nunca llegaba a commitear. Con el flag, escribirlo
+  // guarda 9 exacto y la tarifa se re-deriva sola desde el monto.
+  const dirty = useRef(false);
   const commit = (el: HTMLInputElement) => {
+    if (!dirty.current) return;
     const raw = el.value.trim();
     let v: number;
     if (raw === "") {
@@ -1923,7 +1954,8 @@ function DeliveryInput({
       v = parsed;
     }
     el.value = v !== 0 ? formatIntInput(v) : "";
-    if (value == null || Math.abs(v - value) >= 1) onCommit(v);
+    dirty.current = false;
+    onCommit(v);
   };
   return (
     <input
@@ -1933,7 +1965,17 @@ function DeliveryInput({
       defaultValue={display}
       disabled={disabled}
       placeholder="0"
+      // El delivery se guarda exacto y se muestra redondeado: el title deja ver
+      // el valor real sin ensuciar la grilla.
+      title={
+        value != null && !Number.isInteger(value)
+          ? `Valor exacto: ${value}`
+          : undefined
+      }
       onClick={(e) => e.stopPropagation()}
+      onInput={() => {
+        dirty.current = true;
+      }}
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -2076,12 +2118,15 @@ function MetricsEditor({
     const next = draft.map((r, i) => {
       if (i !== idx) return r;
       if (newRate <= 0) return { ...r, rate: "", delivery: "" };
+      const rate = Number(newRate.toFixed(6));
       const newDelivery =
-        pair && amountUsd > 0 ? (amountUsd * pair.multiplier) / newRate : 0;
+        pair && amountUsd > 0 && rate > 0
+          ? (amountUsd * pair.multiplier) / rate
+          : 0;
       return {
         ...r,
-        rate: String(Number(newRate.toFixed(6))),
-        delivery: pair ? String(Math.round(newDelivery)) : r.delivery,
+        rate: String(rate),
+        delivery: pair ? String(exactDelivery(newDelivery)) : r.delivery,
       };
     });
     setDraft(next);
@@ -2094,11 +2139,14 @@ function MetricsEditor({
     const next = draft.map((r, i) => {
       if (i !== idx) return r;
       if (newDelivery <= 0) return { ...r, rate: "", delivery: "" };
+      const delivery = exactDelivery(newDelivery);
       const newRate =
-        pair && amountUsd > 0 ? (amountUsd * pair.multiplier) / newDelivery : 0;
+        pair && amountUsd > 0 && delivery > 0
+          ? (amountUsd * pair.multiplier) / delivery
+          : 0;
       return {
         ...r,
-        delivery: String(Math.round(newDelivery)),
+        delivery: String(delivery),
         rate: pair ? String(Number(newRate.toFixed(6))) : r.rate,
       };
     });
