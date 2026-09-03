@@ -4,11 +4,14 @@ import {
   getBillingEstimate,
   getClientBillingProjections,
   getClientBillingReconciliation,
-  getDashboardKpis,
   getDashboardProjects,
-  getMonthlyTotals,
 } from "@/db/queries/dashboard";
 import { getBillingTracker } from "@/db/queries/billing-tracker";
+import {
+  cachedKpis,
+  cachedMonthly,
+  cachedPortalSpendByPublisher,
+} from "@/db/queries/cached";
 import { getReportingCalendar, getSentReports } from "@/db/queries/reports";
 import { getCampaignTrackerPlan } from "@/db/queries/campaign-tracker";
 import { getBenchmarks, getSimulatorCatalogs } from "@/db/queries/simulator";
@@ -16,7 +19,6 @@ import {
   getAnalysisFilterOptions,
   getMarketActivations,
 } from "@/db/queries/analysis";
-import { getClientSpendByPublisher } from "@/db/queries/client-portal";
 import { MarketAnalysis } from "@/components/market-analysis";
 import { FacturacionChart } from "@/components/facturacion-chart";
 import {
@@ -156,10 +158,13 @@ export async function ResumenSection({
   clientId: string;
   lang: Language;
 }) {
+  // Cacheadas: es el tab donde cae el cliente al abrir el link, y las tres
+  // están keyadas sólo por clientId, así que el hit rate es real. Ver el
+  // bloque "PORTAL DEL CLIENTE" en db/queries/cached.ts.
   const [kpis, monthly, byPublisher] = await Promise.all([
-    getDashboardKpis({ clientId }),
-    getMonthlyTotals({ clientId }),
-    getClientSpendByPublisher(clientId),
+    cachedKpis(clientId),
+    cachedMonthly(clientId),
+    cachedPortalSpendByPublisher(clientId),
   ]);
 
   // Acumulado YTD; si no hay data del año en curso (ej. demo en otros años),

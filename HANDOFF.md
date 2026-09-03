@@ -220,6 +220,81 @@ recuperar — nunca salió del browser, así que no está ni en `audit_log`.
 sus columnas con las calculadas que resuelven, así que un plan con
 `cc_los_cabos` cargado va a **ganar una columna** "CPA CC Los Cabos" en el Excel
 y el PDF, con el valor derivado. No cambia ningún número existente.
+### Cambios de la sesión 03/sep/2026 (2) — blindar el portal del cliente
+
+Contexto: hay que mandarle el link de `/felix` al cliente y no puede fallar en
+su primera prueba. Cambios **aditivos y de bajo riesgo** a propósito: antes de
+una demo con cliente no se rediseña el pool.
+
+**Lo que se midió primero** (queries en el chat, las corrió el dueño del repo):
+
+| cliente | proyectos | planes | pubs | placements | billings |
+|---------|-----------|--------|------|------------|----------|
+| copa    | 139       | 172    | 189  | 642        | 470      |
+| felix   | 1         | 1      | 3    | 18         | **0**    |
+
+O sea: **felix es el cliente más chico de la base** y su portal es la página más
+barata de la app. Se cayó el 03/sep 14:39 con tres queries muertas
+(`CONNECTION_DESTROYED`) mientras el editor de su único plan recibía **49
+requests**. No se cayó por su costo: se cayó por el de al lado.
+
+**Qué se cambió:**
+
+1. **`app/(portal)/error.tsx`** — el portal no tenía NINGÚN boundary. Confirmado
+   en la doc de Next 16 del repo: `error.js` "does **not** wrap the `layout.js`
+   or `template.js` above it in the same segment"
+   (`node_modules/next/dist/docs/.../error.md:96`), y `app/(app)/error.tsx` es
+   otro segmento. El cliente veía la pantalla cruda de Next. Ahora ve una
+   pantalla con marca, bilingüe, con DOS reintentos automáticos (el portal es
+   read-only: reintentar no puede duplicar nada). Contador en scope de MÓDULO,
+   no en `useRef` — el bucle infinito del 02/sep fue exactamente eso.
+2. **`app/(portal)/loading.tsx`** — skeleton en vez de página en blanco.
+3. **`getPortalFilterOptions`: 5 olas → 1.** Eran cinco `await` sueltos
+   (orígenes, proyectos, campañas, rango de billings, rango de placements) y
+   las cinco dependen sólo de `clientId`. Es lo PRIMERO que corre en el portal.
+4. **Caché del portal** (`db/queries/cached.ts`): cliente por slug, opciones de
+   filtro, y el tab Resumen —que es donde CAE el cliente al abrir el link—.
+   Reusa los tags que las actions **ya** invalidan (`CATALOG_TAG`, `PLANS_TAG`,
+   `BILLING_TAG`), así que no hay plomería nueva que olvidarse. Todo keyado por
+   `clientId`: **ningún cliente puede ver data de otro**.
+
+**Probado** contra el Postgres 16 local con el schema real (`drizzle-kit push`) y
+un fixture con la forma exacta de prod, incluidos los dos bordes: felix (0
+billings → los meses salen de los placements) y copa (0 placements → salen de
+los billings). Las dos ramas dan bien, sin un solo campo `undefined`.
+`getPortalFilterOptions` = 5 queries en UNA tanda, 0,22 ms de DB. `tsc`,
+`eslint` y `next build` limpios.
+
+**Lo que NO se tocó, a propósito:** el rediseño de `db/index.ts` (que el
+descarte de conexión no destruya a las hermanas encoladas, y subir el
+`statement_timeout` que yo bajé de más — ver abajo). Es el arreglo de fondo de
+lo que rompió `/felix`, pero es riesgoso justo antes de una demo. Va en su
+propio PR con test.
+
+#### Corrección: bajar `statement_timeout` a 10s fue un error mío
+
+En el PR #269 lo bajé de 12s a 10s con el argumento de que "así el que corta las
+queries lentas es siempre Postgres y la conexión sobrevive". La primera mitad es
+cierta. La segunda no la pensé.
+
+El `EXPLAIN ANALYZE` de la query que se comió los 10s en prod:
+
+```
+Index Scan using idx_plan_billings_plan  (actual time=0.005..0.005 rows=0)
+Execution Time: 0.193 ms
+```
+
+**0,193 ms.** Un `statement_timeout` que dispara sobre eso significa que los 10
+segundos **no fueron ejecución**: el reloj corrió mientras la query esperaba su
+turno en el pipeline. Al bajarlo, hice que se cancelen ANTES queries que sólo
+estaban esperando — en rutas con mucho fan-out, más probable, no menos.
+
+Se sigue de esto, y vale más que el fix: **`statement_timeout` no sirve para
+medir contención**, porque no distingue "ejecutando" de "esperando". Y
+**reinterpreta todo el historial**: cada `57014` sobre una query trivial de esta
+app —incluidos los del incidente del 02/sep, leídos como "la base está lenta"—
+era casi seguro una statement **encolada**. La base nunca estuvo lenta.
+
 ### Cambios de la sesión 03/sep/2026 — medir antes de tocar
 
 Reporte: dashboard, billing tracker y calendario de reportes tiran "No se pudo
@@ -5272,6 +5347,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 |----------------------------------------|-----------------------------------------------------------|
 | Cambiar el schema                      | `db/schema.ts`                                            |
 | Entender/tocar el timeout de queries o el pool | `db/index.ts` — **tres fases** (`cola` / `pipeline` / `ejecucion`), decididas por `query.state` + `query.active` de postgres.js. Regla dura: `EXEC_TIMEOUT_MS` > `STATEMENT_TIMEOUT_MS`, para que las queries lentas las corte Postgres (57014, conexión reusable) y no nuestro reloj (que obliga a cerrar el socket). Test: `npm run test:db` contra un Postgres LOCAL — 16 aserciones; con el código anterior al 03/sep fallan 10. |
+| Tocar lo que ve el CLIENTE cuando el portal falla | `app/(portal)/error.tsx` (boundary bilingüe, 2 reintentos, contador en scope de módulo) y `app/(portal)/loading.tsx` (skeleton). **Ojo: `app/(app)/error.tsx` NO cubre el portal** — son segmentos distintos, y `error.js` tampoco cubre el layout de su propio segmento. Tampoco existe `app/global-error.tsx` todavía: una falla en `app/(app)/layout.tsx` (topbar, getCurrentUser) sigue sin red. |
 | Ver la estructura REAL de la base (o medir por qué se cae) | `db/estructura-actual.sql` — read-only, 8 bloques, **uno por vez** en el SQL Editor. Bloques 1-5 = estructura y volumen; 6-8 = medición **con la app caída** (salud en vivo, `pg_stat_statements`, `EXPLAIN` de la query del dashboard). El bloque 4 (FK sin índice) trae el DDL sugerido en una columna. |
 | Agregar una query                      | `db/queries/<dominio>.ts`                                 |
 | Agregar una server action              | `app/actions/<dominio>.ts`                                |

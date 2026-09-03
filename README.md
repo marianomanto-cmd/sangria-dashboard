@@ -164,6 +164,8 @@ app/
       generador/            # Generador de reportes históricos (Excel) con preview en vivo + column picker
     analisis/               # Análisis publisher × mercado con mapa de América (filtro global de cliente)
   (portal)/                 # Portal de cliente PÚBLICO (fuera del gate de Supabase). Read-only salvo "Marcar pagado" del Billing Tracker
+    error.tsx               # boundary del PORTAL — lo ve el CLIENTE. Bilingüe, con marca, DOS reintentos automáticos (el portal es read-only, reintentar no duplica nada). Hasta el 03/sep/2026 no existía y una falla transitoria le mostraba al cliente la pantalla cruda de Next: `app/(app)/error.tsx` NO cubre este segmento
+    loading.tsx             # skeleton del portal (header + 7 tabs + tarjetas). Antes el cliente veía la página en blanco mientras el server renderizaba
     [clientSlug]/           # /<slug> — tabs Resumen/Billing/Estimación/Proyectos/Análisis/Reportes/Benchmarks
       page.tsx              # gate por cookie → login o tabs; lookup por slug (404 si no existe/reservado)
       portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
@@ -324,6 +326,19 @@ Por eso las lecturas caras se cachean, y la caché se invalida a mano:
    (`lib/cache-invalidate.ts`) al lado de su `revalidatePath`. Esto **no es
    opcional**: el TTL es de 600s, así que una action que no invalida deja la
    vista hasta 10 minutos desfasada.
+
+4. **El portal del cliente se cachea con criterio propio** (`cachedPortalClient`,
+   `cachedPortalFilterOptions`, `cachedPortalSpendByPublisher`, más
+   `cachedKpis`/`cachedMonthly` que ya existían). Es el caso donde la caché vale
+   MÁS que adentro, por dos razones que no aplican a la app interna: (a) el
+   portal es **read-only**, así que no hay read-your-own-writes que proteger; y
+   (b) el portal **comparte el pooler con la app interna y no al revés** — el
+   03/sep/2026 `/felix` se cayó con tres queries muertas por contención mientras
+   el equipo tenía 49 renders del editor de un plan en vuelo, y el portal de ese
+   cliente es la página más BARATA de la app (1 proyecto, 1 plan, 0 billings).
+   No se cayó por su costo: se cayó por el de al lado. Cacheado, la visita del
+   cliente hace **cero queries**. Todas las entradas van keyadas por `clientId`
+   (o por slug), así que **no hay forma de que un cliente vea data de otro**.
 
 El TTL largo es deliberado: **el TTL no es el mecanismo de frescura, es la red
 de seguridad**. Con TTL corto, cada expiración manda a un usuario por el camino
