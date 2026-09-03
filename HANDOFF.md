@@ -4702,6 +4702,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+f2e3c13  feat(plan): la composición de T1/T2 en las notas del plan + paridad en el Excel
 e725a0b  feat(markets): el plan de Félix se taggea por tier, no por estado
 ab69edb  feat(markets): los 13 estados de EE.UU. de Félix + su geocoding
 4ecaf8b  fix(db): el tiempo se iba en la FILA, no en la base — max 1→3, tres fases y el reintento roto (#269)
