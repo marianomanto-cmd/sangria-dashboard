@@ -100,6 +100,32 @@ de San Diego se mantienen separadas como plazas de EE.UU.
 `- San Diego`), sin anidar bajo San Diego: la taxonomía tiene DOS niveles
 (país y plaza), no tres.
 
+**El caso "Varios" de Copa** (17 líneas, USD 820.275,98 — el 3º por inversión)
+salió leyendo las líneas una por una, y merece su propio archivo
+(`db/copa-varios-desarmar.sql`, PASO A, va ANTES de la normalización): no era
+un mercado, eran tres cosas en la misma bolsa.
+
+  · 5 líneas que son de UN país y nunca se les asignó (USD 4.000): Puerto Rico,
+    Paraguay, Trinidad y Tobago, Uruguay y República Dominicana. Los cinco
+    países había que crearlos, ninguno estaba en el catálogo de Copa.
+  · 10 líneas multi-país (USD 601.809,55) que corren sobre varios países a la
+    vez con budget compartido — la audiencia lo dice: "Single placement que
+    comparte budget entre 3 mercados", `AR-UY`, `EZE, COR, CLO, GDL, GUA, MEX,
+    MTY, PTY, SAL, GRU, SSA`. No se pueden expresar como país-ciudad
+    (`market_id` es UNA sola FK, mismo caso que los tiers de Félix): van al
+    LATAM que ya existía, que queda en 27 líneas y USD 869.210,75. El detalle
+    de ciudades sigue en `audience`, que es donde ya estaba.
+  · 2 líneas always-on globales (USD 214.466,43): BoostingIGGlobal
+    ("Geo-targeted by post") y Tiktok2026, sin mercado por diseño → mercado
+    nuevo **Global**, que se sumó a las regiones de `lib/market-nomenclature.ts`
+    para que se pueda volver a elegir desde el form.
+
+  Es reasignación por PLACEMENT, no por mercado, así que las 17 van enumeradas
+  una por una por nombre de línea. Una línea que NO esté en la lista no se toca
+  y "Varios" no se borra — probado. Los 528 cierres se repuntan por
+  `placement_id` (siguen a su línea), y el marketId congelado en el snapshot de
+  versión se resuelve por el `id` del placement que el propio snapshot guarda.
+
 **Lo que NO se toca a propósito**: los nombres ambiguos ("Santiago" es Chile o
 República Dominicana) y los que no son un lugar ("Q3 Boosting") salen listados
 como `SIN MAPEAR` y quedan igual, para que los resuelva una persona desde el

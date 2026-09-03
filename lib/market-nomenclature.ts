@@ -338,6 +338,11 @@ export const REGIONS: RegionDef[] = [
   { name: "Caribe", aliases: ["caribbean", "el caribe"] },
   { name: "Región Andina", aliases: ["region andina", "andina", "paises andinos", "países andinos"] },
   { name: "Cono Sur", aliases: ["cono sur"] },
+  // Pauta always-on sin mercado definido: el geo lo decide cada post
+  // (BoostingIGGlobal, Tiktok2026 de Copa). No es una agrupación geográfica —
+  // es la ausencia de una—, pero entra acá porque es lo único que NO arranca
+  // por un país.
+  { name: "Global", aliases: ["global", "worldwide", "ww", "sin mercado definido"] },
 ];
 
 // ── Marcadores ──────────────────────────────────────────────────────────────

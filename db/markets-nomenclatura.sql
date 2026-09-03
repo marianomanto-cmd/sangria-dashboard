@@ -571,6 +571,7 @@ with
     ('centroamerica', 'Centroamérica'),
     ('cono-sur', 'Cono Sur'),
     ('el-caribe', 'Caribe'),
+    ('global', 'Global'),
     ('latam', 'LATAM'),
     ('latin-america', 'LATAM'),
     ('latino-america', 'LATAM'),
@@ -580,9 +581,12 @@ with
     ('north-america', 'Norteamérica'),
     ('paises-andinos', 'Región Andina'),
     ('region-andina', 'Región Andina'),
+    ('sin-mercado-definido', 'Global'),
     ('south-america', 'Sudamérica'),
     ('sud-america', 'Sudamérica'),
-    ('sudamerica', 'Sudamérica')
+    ('sudamerica', 'Sudamérica'),
+    ('worldwide', 'Global'),
+    ('ww', 'Global')
   ),
   country_marker(marker) as (values
     ('all'),
