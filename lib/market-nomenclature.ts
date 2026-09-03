@@ -50,51 +50,75 @@ export function norm(s: string): string {
 // ── Diccionario de países ───────────────────────────────────────────────────
 // `name` es la forma canónica (español, con tildes: es el idioma de Copa).
 // `aliases` son las escrituras que se vieron o se pueden ver en el catálogo:
-// inglés, sin tilde, siglas IATA/ISO de TRES letras. Las de DOS letras quedaron
-// afuera a propósito: "ca" sería Canadá, California y Centroamérica a la vez, y
-// nadie nombra un mercado "PA". `npm run check:markets` falla si un alias se
-// repite entre diccionarios. El `name` se indexa solo, no hace falta repetirlo.
+// inglés, sin tilde, siglas ISO/IATA. Las siglas de DOS letras son de PAÍS y de
+// nadie más — el catálogo real las usa así ("US - La Jolla", "CO - Bogota")—,
+// así que los estados de EE.UU. NO llevan las suyas: si no, "ca" sería Canadá y
+// California al mismo tiempo, "co" Colombia y Colorado, "pa" Panamá y
+// Pennsylvania. Félix escribe el estado completo, así que no se pierde nada.
+// `npm run check:markets` falla si un alias se repite entre diccionarios.
 type CountryDef = { name: string; aliases: string[] };
 
 export const COUNTRIES: CountryDef[] = [
-  { name: "Argentina", aliases: ["arg"] },
-  { name: "Aruba", aliases: ["abw"] },
-  { name: "Bahamas", aliases: ["the bahamas", "bhs"] },
-  { name: "Barbados", aliases: ["brb"] },
-  { name: "Belice", aliases: ["belize", "blz"] },
-  { name: "Bolivia", aliases: ["bol"] },
-  { name: "Brasil", aliases: ["brazil", "bra"] },
-  { name: "Canadá", aliases: ["canada", "can"] },
-  { name: "Chile", aliases: ["chl"] },
-  { name: "Colombia", aliases: ["col"] },
-  { name: "Costa Rica", aliases: ["cri"] },
-  { name: "Cuba", aliases: ["cub"] },
-  { name: "Curazao", aliases: ["curacao", "curaçao", "cuw"] },
-  { name: "Ecuador", aliases: ["ecu"] },
-  { name: "El Salvador", aliases: ["salvador", "slv"] },
+  { name: "Argentina", aliases: ["arg", "ar"] },
+  { name: "Aruba", aliases: ["abw", "aw"] },
+  { name: "Bahamas", aliases: ["the bahamas", "bhs", "bs"] },
+  { name: "Barbados", aliases: ["brb", "bb"] },
+  { name: "Belice", aliases: ["belize", "blz", "bz"] },
+  { name: "Bolivia", aliases: ["bol", "bo"] },
+  { name: "Brasil", aliases: ["brazil", "bra", "br"] },
+  { name: "Canadá", aliases: ["canada", "can", "ca"] },
+  { name: "Chile", aliases: ["chl", "cl"] },
+  { name: "Colombia", aliases: ["col", "co"] },
+  { name: "Costa Rica", aliases: ["cri", "cr"] },
+  { name: "Cuba", aliases: ["cub", "cu"] },
+  { name: "Curazao", aliases: ["curacao", "curaçao", "cuw", "cw"] },
+  { name: "Ecuador", aliases: ["ecu", "ec"] },
+  { name: "El Salvador", aliases: ["salvador", "slv", "sv"] },
   {
     name: "Estados Unidos",
-    aliases: ["estados unidos de america", "eeuu", "ee uu", "ee.uu.", "ee. uu.", "usa", "u.s.a.", "united states", "united states of america", "norteamerica usa"],
+    aliases: [
+      "estados unidos de america",
+      "eeuu",
+      "ee uu",
+      "ee.uu.",
+      "ee. uu.",
+      "usa",
+      "u.s.a.",
+      "us",
+      "u.s.",
+      "united states",
+      "united states of america",
+      "norteamerica usa",
+    ],
   },
-  { name: "Guatemala", aliases: ["gtm"] },
-  { name: "Guyana", aliases: ["guy"] },
-  { name: "Haití", aliases: ["haiti", "hti"] },
-  { name: "Honduras", aliases: ["hnd"] },
-  { name: "Jamaica", aliases: ["jam"] },
-  { name: "México", aliases: ["mexico", "mejico", "mex"] },
-  { name: "Nicaragua", aliases: ["nic"] },
-  { name: "Panamá", aliases: ["panama", "pan"] },
-  { name: "Paraguay", aliases: ["pry"] },
-  { name: "Perú", aliases: ["peru", "per"] },
-  { name: "Puerto Rico", aliases: ["pri"] },
+  { name: "Guatemala", aliases: ["gtm", "gt"] },
+  { name: "Guyana", aliases: ["guy", "gy"] },
+  { name: "Haití", aliases: ["haiti", "hti", "ht"] },
+  { name: "Honduras", aliases: ["hnd", "hn"] },
+  { name: "Jamaica", aliases: ["jam", "jm"] },
+  { name: "México", aliases: ["mexico", "mejico", "mex", "mx"] },
+  { name: "Nicaragua", aliases: ["nic", "ni"] },
+  { name: "Panamá", aliases: ["panama", "pan", "pa"] },
+  { name: "Paraguay", aliases: ["pry", "py"] },
+  { name: "Perú", aliases: ["peru", "per", "pe"] },
+  { name: "Puerto Rico", aliases: ["pri", "pr"] },
   {
     name: "República Dominicana",
-    aliases: ["republica dominicana", "dominicana", "rep dominicana", "rep. dominicana", "dominican republic", "dom"],
+    aliases: [
+      "republica dominicana",
+      "dominicana",
+      "rep dominicana",
+      "rep. dominicana",
+      "dominican republic",
+      "dom",
+      "do",
+      "rd",
+    ],
   },
-  { name: "Surinam", aliases: ["suriname", "sur"] },
-  { name: "Trinidad y Tobago", aliases: ["trinidad and tobago", "trinidad & tobago", "trinidad", "tto"] },
-  { name: "Uruguay", aliases: ["ury"] },
-  { name: "Venezuela", aliases: ["ven"] },
+  { name: "Surinam", aliases: ["suriname", "sur", "sr"] },
+  { name: "Trinidad y Tobago", aliases: ["trinidad and tobago", "trinidad & tobago", "trinidad", "tto", "tt"] },
+  { name: "Uruguay", aliases: ["ury", "uy"] },
+  { name: "Venezuela", aliases: ["ven", "ve"] },
 ];
 
 // ── Diccionario de plazas ───────────────────────────────────────────────────
@@ -129,7 +153,7 @@ export const CITIES: PlaceDef[] = [
   { name: "Colón", country: "Panamá", aliases: ["colon"], ambiguous: true },
   { name: "Bocas del Toro", country: "Panamá", aliases: ["bocas del toro", "boc"] },
   // ── México ────────────────────────────────────────────────────────────────
-  { name: "Ciudad de México", country: "México", aliases: ["ciudad de mexico", "cdmx", "mexico df", "méxico df", "mexico city", "distrito federal", "mex city"] },
+  { name: "Ciudad de México", country: "México", aliases: ["ciudad de mexico", "cdmx", "mexico df", "méxico df", "df", "mexico city", "distrito federal", "mex city"] },
   { name: "Guadalajara", country: "México", aliases: ["gdl"] },
   { name: "Monterrey", country: "México", aliases: ["mty"] },
   { name: "Cancún", country: "México", aliases: ["cancun", "cun"] },
@@ -231,6 +255,11 @@ export const CITIES: PlaceDef[] = [
   { name: "Atlanta", country: "Estados Unidos", aliases: ["atl"] },
   { name: "Raleigh", country: "Estados Unidos", aliases: ["raleigh durham", "rdu"] },
   { name: "San Diego", country: "Estados Unidos", aliases: ["san"] },
+  // El plan de San Diego de Copa se abre por plaza del condado, no por ciudad.
+  { name: "La Jolla", country: "Estados Unidos", aliases: ["la joya"] },
+  { name: "Coronado", country: "Estados Unidos", aliases: [] },
+  { name: "Encinitas", country: "Estados Unidos", aliases: [] },
+  { name: "Del Mar", country: "Estados Unidos", aliases: [] },
   { name: "Austin", country: "Estados Unidos", aliases: ["aus"] },
   { name: "Nueva Orleans", country: "Estados Unidos", aliases: ["nueva orleans", "new orleans", "msy"] },
   { name: "Baltimore", country: "Estados Unidos", aliases: ["bwi"] },
@@ -501,8 +530,27 @@ export function canonicalMarketName(raw: string): CanonicalMarket {
     }
   }
 
+  // 3.b) Todavía sin país, y sin separador que ayude: buscar el país como
+  //       PREFIJO de la clave normalizada. Es lo que destapa "Panama Country"
+  //       (= Panamá entera), que no tiene guión y por eso no entraba por el
+  //       split. El SQL generado siempre hizo esto; sin este paso, el TS y la
+  //       base daban resultados distintos para el mismo nombre.
+  let restIsKey = false;
+  if (!country) {
+    const key = norm(base);
+    let best = "";
+    for (const alias of COUNTRY_BY_KEY.keys()) {
+      if (key.startsWith(`${alias}-`) && alias.length > best.length) best = alias;
+    }
+    if (best) {
+      country = COUNTRY_BY_KEY.get(best)!;
+      rest = key.slice(best.length + 1);
+      restIsKey = true;
+    }
+  }
+
   // 4) Sin país reconocido → no se toca. Es la red de seguridad: mercados como
-  //    "California" o "Estados Unidos - T1" de otros clientes salen intactos.
+  //    "Santiago" o "Q3 Boosting" salen intactos y se listan aparte.
   if (!country) return done(original, "unknown", null, null);
 
   // 5) Resolver la plaza.
@@ -518,6 +566,10 @@ export function canonicalMarketName(raw: string): CanonicalMarket {
     return done(multiName(country, multi.label), "multi", country, null, multi.label);
   }
   const city = CITY_BY_KEY.get(restKey);
+  // Si el país salió del prefijo, el resto es un slug ("la-jolla"), no texto
+  // que se pueda presentar. Sin plaza conocida se deja sin mapear, igual que
+  // hace el SQL: una migración no inventa nombres.
+  if (!city && restIsKey) return done(original, "unknown", null, null);
   const place = city ? city.name : titleIfLower(rest);
   return done(`${country}${SEPARATOR}${place}`, "city", country, place, null);
 }
