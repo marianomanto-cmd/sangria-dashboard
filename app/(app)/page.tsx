@@ -1,124 +1,19 @@
-import { DashboardView } from "@/components/dashboard/dashboard-view";
-import { normalizeDashView } from "@/components/dashboard/types";
-import {
-  type DashboardKpis,
-  type DashboardProjects,
-  type MonthlyTotal,
-} from "@/db/queries/dashboard";
-import { type DashboardPendings } from "@/db/queries/pendings";
-import {
-  cachedKpis,
-  cachedMonthly,
-  cachedPendings,
-  cachedProjects,
-} from "@/db/queries/cached";
-import {
-  resolveClientFromSearchParams,
-  type ResolvedClientFilter,
-} from "@/lib/client-filter.server";
-import { getCurrentUser } from "@/lib/auth";
-import { DEFAULT_LANGUAGE } from "@/lib/i18n";
+import { redirect } from "next/navigation";
 
 type Props = {
   searchParams: Promise<{ client?: string; view?: string }>;
 };
 
-// Timeout de la función. La PRIMERA carga en frío (cache miss) dispara las ~15
-// queries pesadas y, sobre la conexión fría a la DB, puede tardar; le damos
-// 60s de aire para que complete y deje el Data Cache poblado. Las cargas
-// siguientes salen del cache (instantáneas), así que este tope solo aplica al
-// arranque en frío.
-export const maxDuration = 60;
-
-// Los envoltorios cacheados viven en `db/queries/cached.ts`: los comparte
-// `/proyectos`, que usa la MISMA `getDashboardProjects` (12 round-trips). Ver
-// ese módulo para el porqué y la política de invalidación.
-
-// Fallbacks vacíos por sección. Si una query falla, degradamos esa parte (la UI
-// muestra ceros / vacío) en vez de tumbar toda la vista con el error boundary.
-const EMPTY_KPIS: DashboardKpis = {
-  pipelineActiveUsd: 0,
-  activeClients: 0,
-  invoicedYtdUsd: 0,
-  consumptionPct: 0,
-};
-const EMPTY_PROJECTS: DashboardProjects = { rows: [], monthLabels: [] };
-const EMPTY_PENDINGS: DashboardPendings = {
-  billings: [],
-  tracking: [],
-  reportsUpcoming: [],
-  reportsOverdue: [],
-  invoices: [],
-};
-
-// Nombres para el aviso de la UI: el usuario no sabe qué es "pendings".
-const SECTION_LABELS: Record<string, string> = {
-  kpis: "los KPIs",
-  projects: "los proyectos",
-  monthly: "la facturación mensual",
-  pendings: "los pendientes",
-};
-
-function unwrap<T>(
-  r: PromiseSettledResult<T>,
-  fallback: T,
-  label: string,
-  failed: string[],
-): T {
-  if (r.status === "fulfilled") return r.value;
-  const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
-  console.error(`DASHQ[${label}]:${msg.slice(0, 80)}`, r.reason);
-  failed.push(SECTION_LABELS[label] ?? label);
-  return fallback;
-}
-
-export default async function DashboardPage({ searchParams }: Props) {
+// La home redirige al dashboard nuevo (`/dashboard`, db/queries/dashboard-v2.ts).
+//
+// El dashboard viejo NO se borró: vive en `/dashboard-legacy`, fuera de la
+// navegación, por si hace falta comparar un número contra el nuevo. Se puede
+// eliminar —junto con db/queries/dashboard.ts, db/queries/pendings.ts y
+// components/dashboard/— cuando ya no se consulte.
+//
+// Se preserva `?client=` para no perder el filtro global al redirigir.
+export default async function HomePage({ searchParams }: Props) {
   const sp = await searchParams;
-  const view = normalizeDashView(sp.view);
-
-  // Resolver el cliente del filtro NO debe tumbar la página: si la DB falla
-  // transitoriamente, seguimos sin filtro (cliente = "todos") en vez de tirar
-  // el error boundary de ruta ("Reintentar").
-  let client: ResolvedClientFilter = null;
-  try {
-    client = await resolveClientFromSearchParams(sp);
-  } catch (e) {
-    console.error("DASHQ[client]:", e instanceof Error ? e.message : e);
-  }
-  const clientId = client?.id ?? null;
-  const lang = client?.language ?? DEFAULT_LANGUAGE;
-
-  // El user (saludo de la vista Ejecutivo) en paralelo; si falla, greeting genérico.
-  const userP = getCurrentUser().catch(() => null);
-  const [kpisR, projectsR, monthlyR, pendingsR] = await Promise.allSettled([
-    cachedKpis(clientId),
-    cachedProjects(clientId),
-    cachedMonthly(clientId),
-    cachedPendings(clientId),
-  ]);
-  const user = await userP;
-
-  // Degradamos por sección para no tumbar la vista, pero hay que DECIRLO: un
-  // dashboard en $0 sin aviso se lee como "la agencia no facturó nada", no como
-  // "la DB no respondió".
-  const failedSections: string[] = [];
-  const kpis = unwrap(kpisR, EMPTY_KPIS, "kpis", failedSections);
-  const projects = unwrap(projectsR, EMPTY_PROJECTS, "projects", failedSections);
-  const monthly = unwrap<MonthlyTotal[]>(monthlyR, [], "monthly", failedSections);
-  const pendings = unwrap(pendingsR, EMPTY_PENDINGS, "pendings", failedSections);
-
-  return (
-    <DashboardView
-      initialView={view}
-      kpis={kpis}
-      projects={projects}
-      monthly={monthly}
-      pendings={pendings}
-      clientName={client?.name ?? null}
-      clientSlug={client?.slug ?? null}
-      userName={user?.name ?? null}
-      lang={lang}
-      failedSections={failedSections}
-    />
-  );
+  const qs = sp.client ? `?client=${encodeURIComponent(sp.client)}` : "";
+  redirect(`/dashboard${qs}`);
 }

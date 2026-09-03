@@ -55,14 +55,14 @@ export function DashboardCuentas({
         </h1>
         <div className="flex flex-wrap gap-2 pt-1">
           <ClientChip
-            href={buildHrefWithClient("/", null)}
+            href={buildHrefWithClient("/dashboard-legacy", null)}
             label={es ? "Todos" : "All"}
             active={!clientSlug}
           />
           {clients.map((c) => (
             <ClientChip
               key={c.slug}
-              href={buildHrefWithClient("/", c.slug)}
+              href={buildHrefWithClient("/dashboard-legacy", c.slug)}
               label={c.name}
               active={clientSlug === c.slug}
             />
