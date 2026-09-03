@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, creativeBillings } from "@/db/schema";
 
@@ -19,7 +19,12 @@ export type CreativeInvoice = {
   invoiceDate: string | null;
   amountUsd: number;
   status: string;
-  paidAt: Date | null;
+  // ISO string, NO Date: así el payload es JSON-safe y `CreativeSummary` se
+  // puede envolver en `unstable_cache` sin la mina de siempre — serializa a
+  // JSON, y un Date entra como objeto y vuelve como STRING en el cache hit,
+  // con el tipo mintiendo justo cuando la caché acierta. Ver el bloque de
+  // `getProjectWithPlans` en db/queries/cached.ts.
+  paidAt: string | null;
   clientName: string;
 };
 
@@ -38,14 +43,25 @@ export type CreativeSummary = {
   pendingUsd: number;
 };
 
+// Estados de una factura EMITIDA. El portal del cliente nunca muestra otra
+// cosa: `creative_billings.status` reusa el enum `billing_status`, así que una
+// fila en 'draft' (o cualquier estado futuro) es trabajo interno que el cliente
+// no tiene por qué ver. Mismo criterio que el Billing Tracker, que sólo lista
+// facturas con número.
+const EMITTED_STATUSES = ["invoiced", "paid"] as const;
+
 export async function getCreativeBillings(filters: {
   clientId?: string | null;
   status?: string | null;
+  // Sólo facturas emitidas (portal del cliente). En la app interna se ve todo.
+  emittedOnly?: boolean;
 } = {}): Promise<CreativeSummary> {
   const conds: SQL[] = [ne(clients.status, "archived")];
   if (filters.clientId) conds.push(eq(creativeBillings.clientId, filters.clientId));
   if (filters.status === "paid" || filters.status === "invoiced") {
     conds.push(eq(creativeBillings.status, filters.status));
+  } else if (filters.emittedOnly) {
+    conds.push(inArray(creativeBillings.status, [...EMITTED_STATUSES]));
   }
 
   const rows = await db
@@ -69,6 +85,7 @@ export async function getCreativeBillings(filters: {
   const invoices: CreativeInvoice[] = rows.map((r) => ({
     ...r,
     amountUsd: Number.parseFloat(r.amountUsd),
+    paidAt: r.paidAt ? r.paidAt.toISOString() : null,
   }));
 
   // Totales por mes para el chart. Se agrupan acá (no en SQL) porque la lista

@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { EmptyState, PageShell } from "@/components/page-shell";
 import { CreativeChart } from "@/components/creative-chart";
+import { CreativeInvoiceForm } from "@/components/creative-invoice-form";
 import { CreativeTable } from "@/components/creative-table";
 import {
   getCreativeBillings,
   type CreativeSummary,
 } from "@/db/queries/creative";
+import { cachedClientOptions } from "@/db/queries/cached";
 import { resolveClientFromSearchParams } from "@/lib/client-filter.server";
 import { formatUsd } from "@/lib/format";
 import { DEFAULT_LANGUAGE, type Language } from "@/lib/i18n";
@@ -31,10 +33,13 @@ export default async function CreativePage({
   const status =
     sp.status === "paid" || sp.status === "invoiced" ? sp.status : null;
 
-  const data = await getCreativeBillings({
-    clientId: client?.id ?? null,
-    status,
-  });
+  const [data, clientOptions] = await Promise.all([
+    getCreativeBillings({ clientId: client?.id ?? null, status }),
+    // Para el select del alta: todos los clientes vivos, no sólo los que ya
+    // tienen facturas de creative (si no, el primero de un cliente nuevo no se
+    // podría cargar). Cacheado, así no agrega un round-trip por carga.
+    cachedClientOptions(),
+  ]);
 
   const title = client ? `Creative · ${client.name}` : "Creative";
   const n = data.invoices.length;
@@ -45,6 +50,12 @@ export default async function CreativePage({
 
   return (
     <PageShell eyebrow="Creative" title={title} subtitle={subtitle}>
+      <CreativeInvoiceForm
+        clients={clientOptions}
+        defaultClientId={client?.id ?? null}
+        lang={lang}
+      />
+
       <StatusFilter current={status} lang={lang} search={sp} />
 
       {n === 0 ? (
@@ -56,8 +67,8 @@ export default async function CreativePage({
           }
           hint={
             lang === "es"
-              ? "Se cargan en la tabla creative_billings. Al sumar facturas nuevas aparecen acá."
-              : "They live in the creative_billings table. New invoices show up here."
+              ? "Cargá la primera con el botón “Cargar factura” de arriba."
+              : "Add the first one with the “Add invoice” button above."
           }
         />
       ) : (

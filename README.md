@@ -148,7 +148,7 @@ app/
     planes/                 # /planes — vista cross-proyectos
     billing/                # /billing — lista de facturas con filtros (origin/project/range) + buscador en vivo por N°/plan + click-to-edit
     billing-tracker/        # /billing-tracker — tabs "Tracker" (proyecto→plan→facturas emitidas) + "Estimates" (estimación de facturación)
-    creative/               # /creative — facturación de trabajo creativo (tabla creative_billings, SIN media plan detrás): KPIs + chart mensual cobrado/pendiente + tabla con botón de cobro
+    creative/               # /creative — facturación de trabajo creativo (tabla creative_billings, SIN media plan detrás): panel para CARGAR una factura + KPIs + chart mensual cobrado/pendiente + tabla con botón de cobro
     campaign-tracker/       # /campaign-tracker — hub con filtro vigentes/concluidos/todos + vista de carga de consumo real vs goal
       [planId]/             # vista de carga: tabla editable (autosave) + chart de progreso
     auditoria/              # /auditoria — log legible + papelera (/auditoria/papelera)
@@ -163,13 +163,13 @@ app/
       simulador/            # Simulador de escenarios con benchmarks históricos
       generador/            # Generador de reportes históricos (Excel) con preview en vivo + column picker
     analisis/               # Análisis publisher × mercado con mapa de América (filtro global de cliente)
-  (portal)/                 # Portal de cliente PÚBLICO (fuera del gate de Supabase). Read-only salvo "Marcar pagado" del Billing Tracker
+  (portal)/                 # Portal de cliente PÚBLICO (fuera del gate de Supabase). Read-only salvo "Marcar pagado" (Billing Tracker y Creative)
     error.tsx               # boundary del PORTAL — lo ve el CLIENTE. Bilingüe, con marca, DOS reintentos automáticos (el portal es read-only, reintentar no duplica nada). Hasta el 03/sep/2026 no existía y una falla transitoria le mostraba al cliente la pantalla cruda de Next: `app/(app)/error.tsx` NO cubre este segmento
-    loading.tsx             # skeleton del portal (header + 7 tabs + tarjetas). Antes el cliente veía la página en blanco mientras el server renderizaba
-    [clientSlug]/           # /<slug> — tabs Resumen/Billing/Estimación/Proyectos/Análisis/Reportes/Benchmarks
+    loading.tsx             # skeleton del portal (header + 8 tabs + tarjetas). Antes el cliente veía la página en blanco mientras el server renderizaba
+    [clientSlug]/           # /<slug> — tabs Resumen/Billing/Creative/Estimación/Proyectos/Análisis/Reportes/Benchmarks
       page.tsx              # gate por cookie → login o tabs; lookup por slug (404 si no existe/reservado)
       portal-content.tsx    # secciones (server) reusando las queries internas scopeadas al cliente
-      portal-mark-paid.tsx  # botón "Marcar pagado" del Billing Tracker (client): 1 click invoiced → paid vía /api/portal/billing/mark-paid. ÚNICA escritura del portal
+      portal-mark-paid.tsx  # botón "Marcar pagado" (client): 1 click invoiced → paid vía /api/portal/{billing,creative}/mark-paid — el prop `kind` elige el endpoint (plan_billings o creative_billings). ÚNICA escritura del portal
       portal-login.tsx, portal-logout.tsx, portal-benchmarks-filters.tsx
       portal-filters.tsx      # filtros URL-based del portal: multi-select genérico (MultiSelect, búsqueda opcional) para Budget Origin (?bo) / Proyecto (?proj) / Mes (?month) / Campañas (?camp) — todos listas separadas por coma — + rango de fechas Desde/Hasta (Proyectos, ?pfrom/?pto) + orden de Proyectos (?psort=: fecha/monto/nombre en las dos direcciones, default nombre A→Z)
   api/
@@ -180,6 +180,7 @@ app/
     portal/
       login/route.ts        # POST login del portal (autovalidante, público); logout/route.ts
       billing/mark-paid/route.ts # POST invoiced → paid de una factura del portal. Público + canWriteAsClientPortal + ownership (plan vivo del cliente) + sólo esa transición
+      creative/mark-paid/route.ts # gemelo del anterior para creative_billings (tab Creative del portal). Mismas tres barreras; ownership = la factura es de ESE cliente
       pacing.xlsx/route.ts  # XLSX CONSOLIDADO del pacing de varias campañas (Resumen/Detalle/Por mercado). Público + canAccessClientExport + ownership
       estimate.xlsx/route.ts # XLSX de la tab Estimación con los mismos meses/filtros que la ventana: hojas Resumen + Detalle + Proyección (thin handler → lib/portal-estimate-xlsx.ts). Público + canAccessClientExport
       analysis.xlsx/route.ts # XLSX de la sección Análisis (mapa) con los mismos filtros que la vista: detalle línea por línea (campaña/mercado/budget origin/inversión) + hoja Por mercado (thin handler → lib/portal-analysis-xlsx.ts). Público + canAccessClientExport
@@ -209,6 +210,7 @@ components/                 # UI compartida
   top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; mide el ancho y mete lo que no entra en un menú "Más ▾" (nunca scrollea, ResizeObserver). Reemplaza al sidebar vertical para liberar el ancho al contenido
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates y en el portal. Con `projectionsById` (portal) cada fila de proyecto se DESPLIEGA in situ → billing de cada plan + facturas emitidas (histórico: número + mes + valor) + cronograma de lo que falta facturar por mes restante (getClientBillingProjections)
   billing-filters.tsx       # /billing: dropdowns budget origin/proyecto/estado + slider de meses, URL-based
+  creative-invoice-form.tsx # /creative: panel para CARGAR una factura de creative (client). Cliente/N°/mes/monto + código de campaña/proyecto/fecha/estado/notas. Queda abierto para cargar varias seguidas (conserva cliente + mes + estado)
   billing-table.tsx         # /billing: tabla (desktop) + cards (mobile) con buscador en vivo por N° de factura o nombre de plan (client-side, sobre las filas ya cargadas; case-insensitive, no recarga)
   plan-billing-progress.tsx # billing del plan: card "Avance de facturación" (client, recharts). KPIs + hero % + barra segmentada medios/fee + burn-up acumulado por mes con línea de referencia del total del plan. Datos: getPlanBillingProgress (db/queries/billing.ts). Medios=accent, fee=accent-2 (par CVD-válido)
   billing-tracker-filters.tsx    # filtros del tracker (project + month range), URL-based
@@ -1273,11 +1275,13 @@ conviene no confundirlas:
 ### Portal de cliente (público, read-only salvo "Marcar pagado")
 - **Qué es**: una vista para compartir con cada cliente en
   `/<slug>` (el mismo slug interno del cliente, ej. `/copa-airlines`).
-  Read-only con **una sola excepción**: el botón "Marcar pagado" del Billing
-  Tracker (ver más abajo). Tabs:
+  Read-only con **una sola excepción**: el botón "Marcar pagado", que está en
+  las dos tablas de facturas del portal — Billing Tracker (`plan_billings`) y
+  Creative (`creative_billings`) — ver más abajo. Tabs:
   **Resumen** (KPIs + chart de inversión mensual + **inversión por publisher
   planeado vs real** + **facturado acumulado vs estimado YTD**), **Billing
-  Tracker**, **Estimación**, **Proyectos**
+  Tracker**, **Creative** (facturación del trabajo creativo — ver más abajo),
+  **Estimación**, **Proyectos**
   (filtros: estado **Abiertos/Cerrados/Todos** (default abiertos) + **multi-select de
   campañas con buscador** + budget origin + **rango de fechas Desde/Hasta**
   (`?pfrom=`/`?pto=`, YYYY-MM-DD: deja los planes cuyo período **intersecta** el
@@ -1328,22 +1332,30 @@ conviene no confundirlas:
     `canWriteAsClientPortal(slug)` (mismo chequeo, nombre propio) es la barrera
     de las escrituras del portal — quien la use tiene que validar **además** que
     la entidad tocada sea de ese cliente.
-- **"Marcar pagado" (Billing Tracker del portal)**: al lado del badge de estado,
-  cada factura en estado **facturado** muestra un botón que con **un click** la
-  pasa a **pagado** en la DB (`plan_billings.status` + `paid_at`). Sin
+- **"Marcar pagado" (Billing Tracker y Creative del portal)**: al lado del badge
+  de estado, cada factura en estado **facturado** muestra un botón que con **un
+  click** la pasa a **pagado** en la DB (`plan_billings.status` + `paid_at`, o
+  `creative_billings.status` + `paid_at` en el tab Creative). Sin
   confirmación: es de un solo click a propósito, y se revierte desde la app
-  interna ("Revertir a facturado" en el editor de billing del plan).
+  interna ("Revertir a facturado" en el editor de billing del plan; "Revertir
+  cobro" en `/creative`).
   - **UI**: `app/(portal)/[clientSlug]/portal-mark-paid.tsx` (client). Pega por
-    `fetch` a `POST /api/portal/billing/mark-paid` con `{clientSlug, billingId}`
-    y hace `router.refresh()` (el portal es `force-dynamic`, así que el badge
-    pasa a "pagado" solo). Está en la tabla desktop **y** en las tarjetas mobile.
-  - **Backend**: `app/api/portal/billing/mark-paid/route.ts`. Tres barreras:
-    (1) `canWriteAsClientPortal(slug)`; (2) la factura tiene que colgar de un
-    plan **vivo** de un proyecto de **ese** cliente (si no, 404 — no filtra si el
-    id existe); (3) **sólo** `invoiced → paid` (cualquier otro estado → 409; si
-    ya está `paid`, responde ok — es idempotente para el doble click). El
-    lifecycle sigue en `transitionBillingStatus` (fuente única: validación,
-    `paidAt`, auditoría y `revalidatePath` de las vistas internas).
+    `fetch` a `POST /api/portal/{billing,creative}/mark-paid` con
+    `{clientSlug, billingId}` y hace `router.refresh()` (el portal es
+    `force-dynamic`, así que el badge pasa a "pagado" solo). El prop `kind`
+    (`billing` | `creative`) elige el endpoint; el resto es idéntico. Está en la
+    tabla desktop **y** en las tarjetas mobile de los dos tabs.
+  - **Backend**: `app/api/portal/billing/mark-paid/route.ts` y su gemelo
+    `app/api/portal/creative/mark-paid/route.ts`. Tres barreras cada uno:
+    (1) `canWriteAsClientPortal(slug)`; (2) ownership — la factura tiene que
+    colgar de un plan **vivo** de un proyecto de **ese** cliente (creative: la
+    factura tiene que ser de **ese** cliente, no archivado); si no, 404 — no
+    filtra si el id existe; (3) **sólo** `invoiced → paid` (cualquier otro
+    estado → 409; si ya está `paid`, responde ok — es idempotente para el doble
+    click). El lifecycle sigue en la action (fuente única: validación,
+    `paidAt`, auditoría y `revalidatePath` de las vistas internas):
+    `transitionBillingStatus` para los planes, `setCreativeBillingPaid` para
+    creative.
   - **Auditoría**: `recordAudit` acepta `actorEmail` como **fallback** cuando no
     hay sesión de Supabase (si hay user logueado, gana el user → no es
     spoofeable desde la app interna). El portal manda
@@ -1354,8 +1366,14 @@ conviene no confundirlas:
     así que cualquiera con el link y el password de ese cliente puede marcar sus
     facturas como pagadas. Se acotó al mínimo: una sola transición, sólo hacia
     adelante, scopeada al cliente, auditada y reversible desde la app interna.
-  - **Sin cambios de schema**: reusa `plan_billings.status`/`paid_at`. No
-    requiere acción en prod.
+  - **Sin cambios de schema**: reusa `plan_billings.status`/`paid_at` y
+    `creative_billings.status`/`paid_at`. No requiere acción en prod.
+  - **Ojo con la caché**: `BillingSection` y `CreativeSection` leen **directo**,
+    sin `unstable_cache`, justamente porque tienen esta escritura. La
+    invalidación desde un route handler no puede usar `updateTag` (sólo corre en
+    Server Actions) y cae a `revalidateTag(tag, "max")`, que es
+    stale-while-revalidate: cacheadas, el `router.refresh()` del click podría
+    devolver la factura todavía "facturada", como si no se hubiera guardado.
 - **Pacing del portal (Proyectos)**: cada campaña tiene un toggle "Ver pacing"
   (URL-based vía `?plan=<ids>` separados por coma → **varios expandidos a la
   vez**). El filtro **multi-select de campañas** (`?camp=<ids>`,
@@ -1403,12 +1421,40 @@ conviene no confundirlas:
   viene del Excel, ej. `COPA.c1055.MejoresTarifasCreative`), `project_name`
   (nombre legible, nullable), `month`, `invoice_date`, `amount_usd`, `status`,
   `paid_at`.
-- **La vista**: 3 KPIs (total facturado / cobrado / pendiente), chart de barras
-  apiladas por mes (cobrado vs pendiente, `components/creative-chart.tsx`) y la
-  tabla con **botón de cobro inline** que hace `invoiced ↔ paid`
+- **La vista**: panel para **cargar una factura** (arriba de todo), 3 KPIs
+  (total facturado / cobrado / pendiente), chart de barras apiladas por mes
+  (cobrado vs pendiente, `components/creative-chart.tsx`) y la tabla con
+  **botón de cobro inline** que hace `invoiced ↔ paid`
   (`components/creative-table.tsx` + `app/actions/creative-billing.ts`).
   Filtro de estado URL-based (`?status=invoiced|paid`) y respeta el filtro
   global de cliente (`?client=`).
+- **Cargar una factura** (`components/creative-invoice-form.tsx` +
+  `createCreativeBilling` en `app/actions/creative-billing.ts`): hasta acá las
+  facturas entraban **sólo por SQL a mano** (`db/creative-billings.sql`). El
+  panel pide cliente · N° de factura · mes · monto (obligatorios) y proyecto ·
+  código de campaña · fecha · estado · notas (opcionales). El cliente arranca en
+  el del filtro global si hay uno activo, y el select lista **todos** los
+  clientes vivos (no sólo los que ya tienen creative), así el primero de un
+  cliente nuevo se puede cargar. Después de guardar el panel **queda abierto** y
+  conserva cliente + mes + estado: así llegan, por tanda mensual.
+  - **Qué valida la action** (la UI sólo muestra el error): `invoice_number`
+    único —pre-chequeo para el mensaje en castellano **y** captura del 23505,
+    porque entre el select y el insert se puede colar otra carga—, `month` con
+    formato `YYYY-MM` (la columna es `varchar(7)` sin constraint: un "2025-13"
+    rompería el chart y el orden en silencio), monto > 0, fecha `YYYY-MM-DD` y
+    cliente vivo. Alta como **cobrada** setea `paid_at`. Queda auditada
+    (`entity_type = creative_billing`, `action = create`).
+  - **Editar o borrar una factura sigue siendo SQL a mano.** Desde la UI sólo se
+    carga y se cobra/revierte el cobro.
+  - **Sin cambios de schema**: escribe en las columnas que ya existen. **No
+    requiere acción en prod.**
+- **En el portal del cliente**: tab **Creative** (`CreativeSection` en
+  `app/(portal)/[clientSlug]/portal-content.tsx`), con los mismos 3 KPIs, el
+  mismo chart y la tabla de facturas. Es **genérico para cualquier cliente** —
+  el tab está siempre y muestra lo que ese cliente tenga cargado; sin facturas,
+  muestra su vacío. El cliente ve **sólo facturas emitidas** (`emittedOnly` en
+  `getCreativeBillings`: un `draft` es trabajo interno) y puede marcarlas
+  pagadas con el mismo botón del Billing Tracker (`kind="creative"`).
 - **Ojo**: `/creative` es ruta top-level, así que está sumada a
   `RESERVED_TOP_LEVEL_SLUGS` (`lib/client-portal.ts`). Sin eso el proxy la
   trataría como portal de cliente y quedaría accesible sin login.

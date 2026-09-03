@@ -228,3 +228,14 @@ export const cachedPortalSpendByPublisher = unstable_cache(
   ["portal-spend-by-publisher-v1"],
   { revalidate: REVALIDATE, tags: [DASHBOARD_TAG, BILLING_TAG] },
 );
+
+// ⚠️ El tab **Creative** del portal NO se cachea, y tampoco es un olvido.
+//
+// Es el otro tab con una ESCRITURA ("Marcar pagado", igual que el Billing
+// Tracker). Esa escritura entra por un route handler (`/api/portal/*`), y desde
+// ahí `invalidate()` no puede usar `updateTag` — cae a
+// `revalidateTag(tag, "max")`, que es stale-while-revalidate. O sea: el
+// `router.refresh()` inmediato al click podría servir la entrada VIEJA y
+// mostrarle al cliente su factura todavía "facturada", como si no se hubiera
+// guardado. Por eso `CreativeSection` lee directo, igual que `BillingSection`.
+// Son pocas filas (una tabla chica, sin joins pesados).

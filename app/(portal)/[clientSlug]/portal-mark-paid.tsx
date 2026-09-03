@@ -5,24 +5,36 @@ import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import type { Language } from "@/lib/i18n";
 
-// Botón "Marcar pagado" del Billing Tracker del portal: un click pasa la
-// factura de facturado (invoiced) a pagado (paid) en la DB. Sólo se rendea
-// cuando el estado es 'invoiced' — si ya está pagada, el badge alcanza.
+// Botón "Marcar pagado" del portal: un click pasa la factura de facturado
+// (invoiced) a pagado (paid) en la DB. Sólo se rendea cuando el estado es
+// 'invoiced' — si ya está pagada, el badge alcanza.
 //
 // No es un Server Action (el proxy sólo abre GET para el portal): pega contra
-// `/api/portal/billing/mark-paid`, que valida cookie de portal + ownership de
-// la factura. El refresh vuelve a pedir la página (force-dynamic) y el badge
-// pasa a "pagado".
+// un endpoint dedicado de `/api/portal/*`, que valida cookie de portal +
+// ownership de la factura. El refresh vuelve a pedir la página
+// (force-dynamic) y el badge pasa a "pagado".
+//
+// Sirve para las DOS tablas de facturas del portal, que son tablas distintas
+// con endpoints distintos: `billing` = `plan_billings` (Billing Tracker) y
+// `creative` = `creative_billings` (tab Creative). El `kind` elige el endpoint;
+// el resto del comportamiento es idéntico.
+const ENDPOINTS = {
+  billing: "/api/portal/billing/mark-paid",
+  creative: "/api/portal/creative/mark-paid",
+} as const;
+
 export function PortalMarkPaidButton({
   billingId,
   clientSlug,
   invoiceNumber,
   lang,
+  kind = "billing",
 }: {
   billingId: string;
   clientSlug: string;
   invoiceNumber: string;
   lang: Language;
+  kind?: keyof typeof ENDPOINTS;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -45,7 +57,7 @@ export function PortalMarkPaidButton({
           setError(null);
           startTransition(async () => {
             try {
-              const res = await fetch("/api/portal/billing/mark-paid", {
+              const res = await fetch(ENDPOINTS[kind], {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ billingId, clientSlug }),
