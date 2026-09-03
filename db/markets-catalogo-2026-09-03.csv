@@ -1,0 +1,60 @@
+cliente,mercado,slug,enabled,sort_order,lineas,monto_usd,cierres
+copa,Costa Rica,costa-rica,true,0,3,55502.25,155
+copa,Panama Country,panama,true,1,15,215260.00,308
+copa,Guatemala,guatemala,true,2,1,2000.00,67
+copa,Honduras,honduras,true,3,0,0,0
+copa,El Salvador,el-salvador,true,4,2,31034.00,158
+copa,Nicaragua,nicaragua,true,5,1,300.00,70
+copa,México,mexico,true,6,1,900.00,70
+copa,Argentina,argentina,true,7,2,7474.25,51
+copa,Brasil,brasil,true,8,8,17080.00,297
+copa,Chile,chile,true,9,3,9060.00,84
+copa,Colombia,colombia,true,10,5,82509.75,155
+copa,Perú,peru,true,11,1,3700.00,67
+copa,Centroamérica,centroamerica,true,50,0,0,0
+copa,LATAM,latam,true,51,17,267401.20,260
+copa,Canada - Toronto,canada-toronto,true,52,3,31312.60,72
+copa,Panamá - Panamá City,panama-panama,true,53,10,130535.00,153
+copa,Estados Unidos,estados-unidos,true,54,23,755800.00,95
+copa,Varios,varios,true,55,17,820275.98,528
+copa,Colombia - Bogota,colombia-bogota,true,56,2,16909.50,9
+copa,Peru - Lima,peru-lima,true,57,5,63684.68,9
+copa,Brasil - Sao Paulo,brasil-sao-paulo,true,58,13,551736.98,198
+copa,Estados Unidos - Varios,estados-unidos-varios,true,60,9,409545.00,194
+copa,Colombia - Varios,colombia-varios,true,61,6,269975.17,154
+copa,Argentina - Varios,argentina-varios,true,62,12,483636.93,321
+copa,Mexico - Guadalajara,mexico-guadalajara,true,63,1,1000.00,24
+copa,Mexico - DF,mexico-df,true,64,1,2000.00,28
+copa,Mexico - Monterrey,mexico-monterrey,true,65,2,7085.75,36
+copa,Mexico - Los Cabos,mexico-los-cabos,true,66,1,600.00,20
+copa,Ecuador - Quito,ecuador-quito,true,67,4,73992.36,67
+copa,Argentina - Salta,argentina-salta,true,68,1,2328.68,0
+copa,Argentina - Cordoba,argentina-cordoba,true,69,2,6432.47,0
+copa,Argentina - Mendoza,argentina-mendoza,true,70,1,2325.74,0
+copa,Argentina - Buenos Aires,argentina-buenos-aires,true,71,3,21614.50,0
+copa,Argentina - Rosario,argentina-rosario,true,72,1,2328.95,0
+copa,Venezuela,venezuela,true,73,3,21140.00,3
+copa,US - La Jolla,us-la-joya,true,74,2,13191.00,0
+copa,US - Coronado,us-coronado,true,75,2,13191.00,0
+copa,US- Encinitas,us-encinitas,true,76,2,13191.00,0
+copa,US- Del Mar,us-del-mar,true,77,2,13191.00,0
+copa,US- San Diego,us-san-diego,true,78,2,13191.00,0
+copa,CO - Bogota,co-bogota,true,79,2,15748.50,0
+copa,CO - Medellin,co-medellin,true,80,1,11647.00,0
+copa,Costa Rica - San Jose,costa-rica-san-jose,true,81,3,38356.25,0
+copa,Guatemala - Guatemala City,guatemala-guatemala-city,true,82,1,4101.25,0
+felix,California,california,true,0,0,0,0
+felix,New York,new-york,true,1,0,0,0
+felix,New Jersey,new-jersey,true,2,0,0,0
+felix,Texas,texas,true,3,0,0,0
+felix,Florida,florida,true,4,0,0,0
+felix,Arizona,arizona,true,5,0,0,0
+felix,Illinois,illinois,true,6,0,0,0
+felix,Colorado,colorado,true,7,0,0,0
+felix,North Carolina,north-carolina,true,8,0,0,0
+felix,Georgia,georgia,true,9,0,0,0
+felix,Washington,washington,true,10,0,0,0
+felix,Pennsylvania,pennsylvania,true,11,0,0,0
+felix,New Mexico,new-mexico,true,12,0,0,0
+felix,Estados Unidos - T1,estados-unidos-t1,true,13,9,992172.20,0
+felix,Estados Unidos - T2,estados-unidos-t2,true,14,9,417828.00,0
