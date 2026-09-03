@@ -12,6 +12,11 @@ el dropdown del editor mostraba repetidos y los benchmarks del simulador
 quedaban partidos por la mitad. Félix tenía la otra mitad del problema: sus 13
 estados entraban pelados ("California"), sin el país delante.
 
+De paso salieron a la luz las siglas de dos letras: "ca" era alias de Canadá,
+de California y de Centroamérica al mismo tiempo. Se sacaron todas; quedan las
+de tres (`pty`, `cdmx`, `bog`, `mia`) y `npm run check:markets` ahora falla si
+un alias aparece en dos diccionarios.
+
 **La regla, ahora una sola para toda la app** (`lib/market-nomenclature.ts`):
 
 | Qué es el mercado         | Forma              | Ejemplo                     |
@@ -55,8 +60,10 @@ mismo punto.
 
 **El SQL es generado, no escrito**: `npm run gen:markets-sql` vuelca los
 diccionarios de `lib/market-nomenclature.ts` a `db/markets-nomenclatura.sql`, así
-la base normaliza exactamente igual que la app. Cuatro bloques: diagnóstico ·
-dry-run · aplicar · verificación. El dry-run es la parte importante — muestra
+la base normaliza exactamente igual que la app. El diccionario entra UNA sola vez,
+dentro de la función `public.market_canonical_name(text)` (que se puede dropear
+al final), y los cuatro bloques la llaman: diagnóstico · dry-run · aplicar ·
+verificación. El dry-run es la parte importante — muestra
 `renombrar` / `FUSIONAR EN →` / `SIN MAPEAR` fila por fila **antes** de tocar
 nada.
 

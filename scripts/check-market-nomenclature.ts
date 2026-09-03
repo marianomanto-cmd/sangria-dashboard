@@ -9,6 +9,11 @@
 //   3. CASOS REALES — el corpus de escrituras sucias que había en el catálogo.
 import { resolveMarketGeo } from "../lib/market-geo";
 import {
+  CITY_BY_KEY,
+  COUNTRY_BY_KEY,
+  COUNTRY_MARKERS,
+  MULTI_MARKERS,
+  REGION_BY_KEY,
   COUNTRIES,
   CITIES,
   REGIONS,
@@ -147,6 +152,29 @@ for (const raw of ["Santiago", "San José", "Q3 Boosting", "Arizona Norte"]) {
   if (raw === "Arizona Norte" ? c.shape !== "unknown" : c.shape !== "unknown") {
     bad(`"${raw}" debería quedar sin mapear, quedó ${c.shape} → "${c.name}"`);
   }
+}
+
+// ── 3.b Ningún alias puede estar en dos diccionarios ────────────────────────
+// Un alias compartido significa que el mismo texto resuelve a dos cosas según
+// el orden en que se pregunte. Pasó con las siglas de dos letras: "ca" era
+// Canadá, California y Centroamérica.
+{
+  const maps: [string, Iterable<string>][] = [
+    ["país", COUNTRY_BY_KEY.keys()],
+    ["plaza", CITY_BY_KEY.keys()],
+    ["región", REGION_BY_KEY.keys()],
+    ["marcador de país", COUNTRY_MARKERS],
+    ["marcador de varios", MULTI_MARKERS],
+  ];
+  const seen = new Map<string, string>();
+  for (const [dict, keys] of maps) {
+    for (const k of keys) {
+      const prev = seen.get(k);
+      if (prev) bad(`alias "${k}" está en dos diccionarios: ${prev} y ${dict}`);
+      else seen.set(k, dict);
+    }
+  }
+  console.log(`Alias únicos: ${seen.size}…`);
 }
 
 // ── 4. Geocoding de las formas nuevas ───────────────────────────────────────

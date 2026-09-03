@@ -63,96 +63,95 @@ const regionRows = [...REGION_BY_KEY.entries()]
 const countryMarkerRows = [...COUNTRY_MARKERS].sort().map((m) => [q(m)]);
 const multiMarkerRows = [...MULTI_MARKERS].sort().map((m) => [q(m)]);
 
-// ── El CTE de mapeo, que se repite en el dry-run y en el apply ──────────────
+// ── La función que canoniza un nombre ───────────────────────────────────────
+// Se define UNA vez y los tres bloques la llaman. Antes el diccionario se
+// repetía inline en cada uno y el archivo daba 2.100 líneas.
+//
 // Orden de resolución, el mismo que `canonicalMarketName`:
-//   1. el nombre entero es una región      → se canoniza la ortografía
-//   2. el nombre entero es un país         → "<País> (País)"
+//   1. el nombre entero es una región           → se canoniza la ortografía
+//   2. el nombre entero es un país              → "<País> (País)"
 //   3. el nombre entero es una plaza NO ambigua → "<País> - <Plaza>"
-//   4. el nombre arranca con un país       → se mira el resto
-//   5. nada de lo anterior                 → SIN MAPEAR (no se toca)
-const MAPPING_CTE = `mkt as (
-    select m.id, m.client_id, m.name, m.slug, m.enabled, m.sort_order,
-           c.slug as client_slug, c.name as client_name,
-           norm(m.name) as key
+//   4. el nombre arranca con un país            → se mira el resto
+//   5. nada de lo anterior                      → null (SIN MAPEAR, no se toca)
+const CANON_FN = `create or replace function public.market_canonical_name(v text)
+  returns text language sql immutable parallel safe
+as $fn$
+with
+  k(key) as (select public.norm(v)),
+  country_alias(alias, country) as (values
+${values(countryRows)}
+  ),
+  place_alias(alias, place, country, ambiguous) as (values
+${values(placeRows)}
+  ),
+  region_alias(alias, region) as (values
+${values(regionRows)}
+  ),
+  country_marker(marker) as (values
+${values(countryMarkerRows)}
+  ),
+  multi_marker(marker) as (values
+${values(multiMarkerRows)}
+  ),
+  -- El país más largo que prefija la clave. El "-" del patrón evita que "usa"
+  -- se coma "usa-miami" mal partido, y el orden por longitud evita que un alias
+  -- corto le gane a uno largo.
+  pref as (
+    select ca.country, substring(k.key from length(ca.alias) + 2) as rest
+      from k join country_alias ca on k.key like ca.alias || '-%'
+     order by length(ca.alias) desc
+     limit 1
+  )
+select coalesce(
+  -- 1) región supranacional
+  (select rg.region from region_alias rg, k where rg.alias = k.key limit 1),
+  -- 2) el país entero
+  (select cn.country || ${q(" " + COUNTRY_SUFFIX)} from country_alias cn, k where cn.alias = k.key limit 1),
+  -- 3) una plaza inequívoca, sin país delante ("California", "Panama City")
+  (select pl.country || ${q(SEPARATOR)} || pl.place
+     from place_alias pl, k where pl.alias = k.key and pl.ambiguous = false limit 1),
+  -- 4) "<País> - <resto>"
+  (select case
+     -- 4a) "<País> - País/Total/Nacional" → el país entero
+     when p.rest = '' or p.rest in (select marker from country_marker)
+       then p.country || ${q(" " + COUNTRY_SUFFIX)}
+     -- 4b) "<País> - Varios"
+     when p.rest in (select marker from multi_marker)
+       then p.country || ${q(SEPARATOR + MULTI_SUFFIX)}
+     -- 4c) "<País> - T1" / "<País> - Tier 2" / "<País> - Varios (T1)" → grupo etiquetado
+     when p.rest ~ '^(varios-|varias-)?(t|tier)-?[0-9]{1,2}$'
+       then p.country || ${q(SEPARATOR + MULTI_SUFFIX)} || ' (T'
+            || substring(p.rest from '([0-9]{1,2})$') || ')'
+     -- 4d) "<País> - <Plaza>" del diccionario
+     else (select p.country || ${q(SEPARATOR)} || pa.place
+             from place_alias pa where pa.alias = p.rest limit 1)
+   end
+   from pref p)
+)
+$fn$;`;
+
+// ── El plan de cambios. Corto, porque el diccionario vive en la función ─────
+// Ganador de cada grupo (client_id, slug destino): el que más líneas tiene; a
+// igualdad, el que ya está bien escrito, y después el de menor sort_order.
+const PLAN_CTE = `plan as (
+    select m.id, m.client_id, m.name, m.slug, m.sort_order,
+           c.slug as client_slug,
+           public.market_canonical_name(m.name) as target_name,
+           (select count(*) from public.media_plan_placements pl where pl.market_id = m.id) as placements
       from public.markets m
       join public.clients c on c.id = m.client_id
   ),
-  -- El país más largo que prefija la clave. El "-" del patrón evita que "us"
-  -- se coma "usa-miami"; el orden por longitud, que "costa-rica" pierda con "co".
-  pref as (
-    select mkt.id,
-           ca.country,
-           substring(mkt.key from length(ca.alias) + 2) as rest,
-           row_number() over (partition by mkt.id order by length(ca.alias) desc) as rn
-      from mkt
-      join country_alias ca
-        on mkt.key like ca.alias || '-%'
-  ),
-  resolved as (
-    select mkt.*,
-           p.country as pref_country,
-           p.rest    as pref_rest,
-           rg.region as whole_region,
-           cn.country as whole_country,
-           pl.place  as whole_place,
-           pl.country as whole_place_country
-      from mkt
-      left join pref p            on p.id = mkt.id and p.rn = 1
-      left join region_alias rg   on rg.alias = mkt.key
-      left join country_alias cn  on cn.alias = mkt.key
-      left join place_alias pl    on pl.alias = mkt.key and pl.ambiguous = false
-  ),
-  planned as (
-    select r.*,
-           case
-             -- 1) región supranacional
-             when r.whole_region is not null then r.whole_region
-             -- 2) el país entero
-             when r.whole_country is not null then r.whole_country || ${q(" " + COUNTRY_SUFFIX)}
-             -- 3) una plaza inequívoca, sin país delante
-             when r.whole_place is not null
-               then r.whole_place_country || ${q(SEPARATOR)} || r.whole_place
-             when r.pref_country is not null then
-               case
-                 -- 4a) "<País> - País/Total/Nacional" → el país entero
-                 when r.pref_rest = '' or r.pref_rest in (select marker from country_marker)
-                   then r.pref_country || ${q(" " + COUNTRY_SUFFIX)}
-                 -- 4b) "<País> - Varios"
-                 when r.pref_rest in (select marker from multi_marker)
-                   then r.pref_country || ${q(SEPARATOR + MULTI_SUFFIX)}
-                 -- 4c) "<País> - T1" / "<País> - Varios (T1)" → grupo etiquetado
-                 when r.pref_rest ~ '^(varios-|varias-)?t-?[0-9]{1,2}$'
-                   then r.pref_country || ${q(SEPARATOR + MULTI_SUFFIX)} || ' (T'
-                        || substring(r.pref_rest from '([0-9]{1,2})$') || ')'
-                 when r.pref_rest ~ '^(varios-|varias-)?tier-?[0-9]{1,2}$'
-                   then r.pref_country || ${q(SEPARATOR + MULTI_SUFFIX)} || ' (T'
-                        || substring(r.pref_rest from '([0-9]{1,2})$') || ')'
-                 -- 4d) "<País> - <Plaza>" del diccionario
-                 else (select r.pref_country || ${q(SEPARATOR)} || pa.place
-                         from place_alias pa where pa.alias = r.pref_rest limit 1)
-               end
-             else null
-           end as target_name
-      from resolved r
-  ),
-  -- Ganador de cada grupo (client_id, slug destino): el que más líneas tiene;
-  -- a igualdad, el que ya está bien escrito, y después el de menor sort_order.
-  target as (
-    select p.*,
-           norm(p.target_name) as target_slug,
-           (select count(*) from public.media_plan_placements pl2 where pl2.market_id = p.id) as placements
-      from planned p
-     where p.target_name is not null
-  ),
   winner as (
-    select t.*,
-           first_value(t.id) over (
-             partition by t.client_id, t.target_slug
-             order by t.placements desc,
-                      (case when t.name = t.target_name then 0 else 1 end),
-                      t.sort_order, t.id
+    select p.*,
+           public.norm(p.target_name) as target_slug,
+           first_value(p.id) over (
+             partition by p.client_id, public.norm(p.target_name)
+             order by p.placements desc,
+                      (case when p.name = p.target_name then 0 else 1 end),
+                      p.sort_order, p.id
            ) as winner_id
-      from target t
+      from plan p
+     where p.target_name is not null
   )`;
 
 const header = `-- ════════════════════════════════════════════════════════════════════════════
@@ -244,24 +243,8 @@ select c.slug                                                as cliente,
  order by c.slug, m.sort_order, m.name;
 `;
 
-// ── Los cuatro bloques ──────────────────────────────────────────────────────
 const dict = `with
-  country_alias(alias, country) as (values
-${values(countryRows)}
-  ),
-  place_alias(alias, place, country, ambiguous) as (values
-${values(placeRows)}
-  ),
-  region_alias(alias, region) as (values
-${values(regionRows)}
-  ),
-  country_marker(marker) as (values
-${values(countryMarkerRows)}
-  ),
-  multi_marker(marker) as (values
-${values(multiMarkerRows)}
-  ),
-  ${MAPPING_CTE}`;
+  ${PLAN_CTE}`;
 
 const normFn = `-- ────────────────────────────────────────────────────────────────────────────
 -- norm(): la MISMA normalización que \`slugify\` en app/actions/markets.ts y
@@ -316,9 +299,8 @@ select w.client_slug                                       as cliente,
                         where e->>'marketId' = w.id::text))                               as simulador
   from winner w
 union all
-select p.client_slug, p.name, p.slug, null, 'SIN MAPEAR', p.placements_count, 0, 0, 0
-  from (select pl.*, (select count(*) from public.media_plan_placements x where x.market_id = pl.id) as placements_count
-          from planned pl where pl.target_name is null) p
+select p.client_slug, p.name, p.slug, null, 'SIN MAPEAR', p.placements, 0, 0, 0
+  from plan p where p.target_name is null
  order by 1, 5 desc, 2;
 `;
 
@@ -435,9 +417,8 @@ select w.client_slug as cliente,
        w.placements as lineas
   from winner w
 union all
-select p.client_slug, p.name, p.slug, 'queda (sin mapear)',
-       (select count(*) from public.media_plan_placements x where x.market_id = p.id)
-  from planned p where p.target_name is null
+select p.client_slug, p.name, p.slug, 'queda (sin mapear)', p.placements
+  from plan p where p.target_name is null
  order by 1, 2;
 
 -- ── 3.b — Que no haya quedado NINGÚN duplicado. ESPERADO: 0 filas. ──────────
@@ -483,7 +464,25 @@ select p.client_slug, p.name, p.slug, 'queda (sin mapear)',
 --     or pl.audience ilike '%<nombre viejo>%';
 `;
 
-const out = [header, normFn, dryRun, apply, verify].join("\n");
+const canonFn = `-- ────────────────────────────────────────────────────────────────────────────
+-- market_canonical_name(): el nombre canónico de un mercado, o NULL si no se
+-- puede mapear con certeza. Es la MISMA lógica que \`canonicalMarketName\` en
+-- lib/market-nomenclature.ts, con los mismos diccionarios — este archivo se
+-- genera desde ahí justamente para que no puedan divergir.
+--
+-- Diferencia deliberada: cuando el país se reconoce pero la plaza no está en el
+-- diccionario, el TS igual arma "País - Plaza"; acá devuelve NULL. Una
+-- migración no inventa nombres: los deja quietos y los lista.
+--
+-- Es \`immutable\` y no toca datos. Se puede dejar creada, o borrarla al final:
+--   drop function public.market_canonical_name(text);
+--   drop function public.norm(text);
+-- ────────────────────────────────────────────────────────────────────────────
+
+${CANON_FN}
+`;
+
+const out = [header, normFn, canonFn, dryRun, apply, verify].join("\n");
 writeFileSync(new URL("../db/markets-nomenclatura.sql", import.meta.url), out);
 console.log(
   `✓ db/markets-nomenclatura.sql — ${countryRows.length} alias de país, ` +

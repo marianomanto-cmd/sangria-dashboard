@@ -988,7 +988,10 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
   países, ~180 plazas incluidos los 50 estados de EE.UU., 7 regiones) más
   `canonicalMarketName` / `buildMarketName` / `parseMarketName`.
   `npm run check:markets` chequea idempotencia, round-trip del form, colisiones
-  de slug y geocoding.
+  de slug, alias repetidos entre diccionarios y geocoding.
+- **Las siglas de dos letras quedaron afuera** de los alias: "ca" sería Canadá,
+  California y Centroamérica a la vez. Van las de tres (IATA/ISO-3): `pty`,
+  `cdmx`, `bog`, `mia`.
 - **El alta y la edición pasan por `components/market-picker.tsx`** (nivel →
   país → plaza), no por un input de texto. `app/actions/markets.ts` arma el
   nombre con `buildMarketName`, deriva el slug del nombre canónico **también al
@@ -1000,7 +1003,8 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
   desambigüe una persona desde el form.
 - La normalización de prod está en `db/markets-nomenclatura.sql`, que **es
   generado** (`npm run gen:markets-sql`) desde esos mismos diccionarios: la base
-  y la app no pueden divergir.
+  y la app no pueden divergir. El diccionario aparece UNA vez, dentro de la
+  función `public.market_canonical_name(text)`, y los cuatro bloques la llaman.
 - `media_plan_placements.market_id` es FK con `ON DELETE SET NULL`.
 - El catálogo se lee **sin caché** (`listMarketsForClient` en
   `app/actions/plans.ts` y la página de configuración van directo a la DB), así
