@@ -241,6 +241,7 @@ db/
   migrations-check.sql      # CONTROL read-only: qué migraciones de db/ ya están aplicadas (una fila por objeto, aplicada true/false). Correrlo antes de decidir si falta algo
   estructura-actual.sql     # CONTROL read-only en 8 bloques: la estructura completa de la base HOY (tablas+columnas, constraints+índices+RLS+tamaño, enums/vistas/triggers/funciones, FK SIN índice, conteo real de filas) + medición en vivo (pg_stat_activity, pg_stat_statements, EXPLAIN de la query del dashboard). Se corre UN BLOQUE POR VEZ; los 5-8 con la app caída
   rls-creative-billings.sql # habilita RLS en creative_billings (la única tabla que quedó abierta; su migración no lo hacía). Idempotente
+  felix-creative-1462.sql   # carga de UNA factura de creative de Félix (QuickBooks 1462, 02/sep/2026, FEL.c1003 Creative Fee 2026 Holiday, USD 21.150). Idempotente, con guard por slug y por N° ya tomado. Registro de una carga hecha a mano; el camino normal hoy es el panel "Cargar factura" de /creative
   reports-fk-index.sql      # índice en project_reports.project_id — la FK que fk-indexes.sql se había salteado, y la que joinean las dos queries del calendario. Aplicado en prod el 02/sep/2026; idempotente
   app-users.sql             # tabla app_users + enum de roles + seed de admins (Configuración → Usuarios y roles). Aplicado en prod el 02/sep/2026; idempotente
   drop-plan-traffic.sql     # BAJA de la sección Tráfico: dropea media_plan_traffic_ads/_adsets/_briefs y ad_types. ⚠️ borra datos; no toca planes, publishers, placements, fees ni billings
