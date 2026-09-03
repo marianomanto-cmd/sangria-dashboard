@@ -4,11 +4,11 @@ import { FolderOpen, Plus } from "lucide-react";
 import { ProjectStatusChanger } from "@/components/project-status-changer";
 import { StatusBadge } from "@/components/status-badge";
 import { PlanStatusBadge } from "@/components/plan-status-badge";
-import { type ProjectPlanSummary } from "@/db/queries/project-detail";
 import {
-  cachedClientBudgetOrigins,
-  cachedProjectDetail,
-} from "@/db/queries/cached";
+  getProjectWithPlans,
+  type ProjectPlanSummary,
+} from "@/db/queries/project-detail";
+import { cachedClientBudgetOrigins } from "@/db/queries/cached";
 import { ProjectEditPanel } from "./edit-panel";
 import { DeletePlanButton } from "@/components/delete-plan-button";
 import { buttonVariants } from "@/components/button";
@@ -24,7 +24,7 @@ type Props = { params: Promise<{ code: string }> };
 
 export default async function ProjectDetailPage({ params }: Props) {
   const { code } = await params;
-  const detail = await cachedProjectDetail(code);
+  const detail = await getProjectWithPlans(code);
   if (!detail) notFound();
 
   const { project, client, budgetOrigin, plans } = detail;

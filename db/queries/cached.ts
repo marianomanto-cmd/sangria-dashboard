@@ -37,7 +37,6 @@ import { getDashboardPendings } from "@/db/queries/pendings";
 import { listAllBudgetOrigins } from "@/db/queries/budget-origins";
 import { getReportingCalendar, getSentReports } from "@/db/queries/reports";
 import { getClientOptions } from "@/db/queries/clients";
-import { getProjectWithPlans } from "@/db/queries/project-detail";
 import { getCampaignTrackerHub, type CampaignHubFilter } from "@/db/queries/campaign-tracker";
 import { listBudgetOriginsForClient } from "@/db/queries/budget-origins";
 import { getBillingFilterOptions } from "@/db/queries/billing";
@@ -56,7 +55,6 @@ import {
   BILLING_TAG,
   CATALOG_TAG,
   DASHBOARD_TAG,
-  PLANS_TAG,
   REPORTS_TAG,
   TRACKER_TAG,
 } from "@/lib/cache-tags";
@@ -140,11 +138,17 @@ export const cachedClientOptions = unstable_cache(
 // PLANS_TAG desde la action, así que no se ve data vieja.
 // ════════════════════════════════════════════════════════════════════════════
 
-export const cachedProjectDetail = unstable_cache(
-  (code: string) => getProjectWithPlans(code),
-  ["project-detail-v1"],
-  { revalidate: REVALIDATE, tags: [PLANS_TAG] },
-);
+// ⚠️ `getProjectWithPlans` NO se cachea, y no es un olvido.
+//
+// Su payload incluye la fila cruda de la tabla (`typeof projects.$inferSelect`)
+// y un `lastSnapshotAt: Date`. `unstable_cache` serializa a JSON: los Date
+// entran como objeto y vuelven como STRING en el cache hit, así que
+// `plan.lastSnapshotAt.toISOString()` en la página explota — con un
+// TypeError que TypeScript no puede ver, porque el tipo sigue diciendo `Date`.
+//
+// Hacerlo cacheable exige reescribir su tipo público para que sea JSON-safe.
+// Hasta entonces, sus ~6 round-trips son un precio más barato que una mina
+// que estalla sólo cuando la caché acierta. Ver README → "Caché de lecturas".
 
 export const cachedClientBudgetOrigins = unstable_cache(
   (clientId: string) => listBudgetOriginsForClient(clientId),

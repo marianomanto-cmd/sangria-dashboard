@@ -68,7 +68,10 @@ export type CampaignHubPlan = {
   progressPct: number;
   pacePct: number;
   paceStatus: PaceStatus;
-  lastUpdateAt: Date | null;
+  // ISO string, NO Date: este payload se cachea con unstable_cache, que
+  // serializa a JSON. Un Date entra como objeto y vuelve como string en el
+  // cache hit, y ahí `.getTime()` explota. Pasó en prod (ref 93164016).
+  lastUpdateAt: string | null;
   isStale: boolean;
   status: CampaignHubPlanStatus;
   lag: number; // pacePct - progressPct (rezago); usado para ordenar
@@ -213,7 +216,7 @@ export async function getCampaignTrackerHub(
       r.planId,
       {
         actualInvestment: Number.parseFloat(r.actualInvestment),
-        lastUpdateAt: r.lastUpdateAt ? new Date(r.lastUpdateAt) : null,
+        lastUpdateAt: r.lastUpdateAt ?? null,
       },
     ]),
   );
@@ -239,7 +242,7 @@ export async function getCampaignTrackerHub(
     const isStale =
       status === "vigente" &&
       (lastUpdateAt == null ||
-        todayMs - lastUpdateAt.getTime() >= STALE_THRESHOLD_MS);
+        todayMs - new Date(lastUpdateAt).getTime() >= STALE_THRESHOLD_MS);
 
     goalSum += goalInvestmentUsd;
     actualSum += actualInvestmentUsd;
@@ -361,7 +364,10 @@ export type CampaignTrackerPlan = {
   publishers: TrackerPublisherGroup[];
   goalInvestmentUsd: number;
   actualInvestmentUsd: number;
-  lastUpdateAt: Date | null;
+  // ISO string, NO Date: este payload se cachea con unstable_cache, que
+  // serializa a JSON. Un Date entra como objeto y vuelve como string en el
+  // cache hit, y ahí `.getTime()` explota. Pasó en prod (ref 93164016).
+  lastUpdateAt: string | null;
   // Fecha (YYYY-MM-DD) de la última vez que se cerró la carga del plan, o
   // null si nunca se cerró.
   lastCloseDate: string | null;
@@ -653,7 +659,9 @@ export async function getCampaignTrackerPlan(
     publishers: publisherGroups,
     goalInvestmentUsd,
     actualInvestmentUsd,
-    lastUpdateAt,
+    // ISO string por el mismo motivo que en el hub: lo que se cachea o viaja
+    // por el límite server/cliente tiene que ser JSON-safe.
+    lastUpdateAt: lastUpdateAt ? lastUpdateAt.toISOString() : null,
     lastCloseDate,
     hasGoals,
     calcDefs,

@@ -1042,7 +1042,7 @@ async function PlanPacing({
         <p className="text-[11px] text-info">
           {lang === "es" ? "Pacing actualizado: " : "Pacing updated: "}
           {lastUpdate
-            ? formatDate(lastUpdate.toISOString().slice(0, 10), lang)
+            ? formatDate(new Date(lastUpdate).toISOString().slice(0, 10), lang)
             : lang === "es"
               ? "sin cargas aún"
               : "no loads yet"}
