@@ -2,6 +2,47 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 03/sep/2026 (6) — primera factura de creative de Félix, cargada a mano
+
+`db/felix-creative-1462.sql` — **ya aplicada en prod** (03/sep/2026, verificación
+`chequeo = OK`). Es la factura de QuickBooks **1462** de Felix Technologies
+(02/sep/2026, `FEL.c1003 Creative Fee 2026 Holiday`, USD 21.150,00), la primera
+fila de `creative_billings` que no es de Copa. Félix pasa de 0 a 1 factura de
+creative y su portal (`/felix`) ya muestra el tab Creative con datos.
+
+Los datos salieron del PDF, que trae las fuentes **CID** (el texto va como glyph
+ids, no ASCII): se decodificó por tres caminos independientes —offset derivado de
+una palabra ancla, las `/ToUnicode` CMaps embebidas, y una auditoría de
+consistencia—, y los tres coinciden. La fecha `09/02/2026` es **MM/DD**, no
+DD/MM: lo desempata el `/CreationDate` del propio PDF (`D:20260902132246`), que
+bajo la otra lectura sería siete meses posterior a la factura que contiene.
+
+**Los dos guards del SQL salieron de intentar romperlo, y valen para la próxima
+carga a mano:**
+
+- Sin cliente vivo con slug `felix` aborta con un mensaje que dice qué correr.
+  El slug está documentado (`db/felix-markets-usa.sql`) pero ningún dump de prod
+  lo prueba, y un `where slug = '...'` que no matchea devuelve 0 filas **sin
+  error**: el SQL Editor lo muestra como éxito.
+- Si el N° ya existe y **no** es del cliente que se está cargando, aborta en vez
+  de hacer un no-op. Copa y Félix comparten la serie de facturas de QuickBooks de
+  Sangria LLC e `invoice_number` es UNIQUE **global**: sin ese guard, un
+  `not exists` + `on conflict do nothing` dejaba la carga sin hacer *y* la
+  verificación devolvía una fila "correcta" que era la de otro cliente.
+
+Y el bloque termina en un `select`: `INSERT 0 1` / `INSERT 0 0` son salida de
+psql, el SQL Editor no los muestra.
+
+**Ojo con `month`**: se cargó `2026-09`, el mes de EMISIÓN. En las filas de Copa
+el criterio no es uniforme (la 1100 está en `2025-05` y las 1108/1109, con número
+mayor, en `2025-04`), y esta campaña es "2026 Holiday" (temporada nov-dic). Si
+alguna vez se define que `month` es el mes de campaña, esta fila hay que
+revisarla.
+
+**Desde ahora el camino normal es el panel "Cargar factura" de `/creative`**
+(sesión (5)), que valida el N° duplicado, el formato del mes y la fecha, y deja
+registro en `audit_log` — cosas que una carga por SQL se saltea.
+
 ### Cambios de la sesión 03/sep/2026 (5) — las facturas de creative se cargan desde la app, y el cliente las ve
 
 Dos cosas que faltaban en Creative, pedidas en la misma sesión:
@@ -5536,6 +5577,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el filtro de Año/Mes del Billing Tracker del PORTAL | Params `?byr=` (años) y `?bmo=` (meses 01..12), propios de esa tab — **no** son `year`/`month`, que pertenecen a Estimación y Reportes. Vacío = año/mes EN CURSO, `all` = todos, o lista con coma. La ventana la arma `billingMonthWindow` en `app/(portal)/[clientSlug]/portal-content.tsx` (producto cartesiano año × mes). Los campos `years` / `monthnum` del multi-select viven en `portal-filters.tsx`. |
 | Tocar el chart de facturación de /billing | `components/billing-media-fee-chart.tsx` (barras apiladas medios+fees, LabelList por segmento + total arriba, subtotales abajo a la derecha). Los datos los agrupa `mediaFeeByMonth` en `app/(app)/billing/page.tsx` a partir de las MISMAS filas que muestra la tabla — si cambiás el filtrado, el chart lo sigue solo. Con >14 meses las etiquetas se apagan a propósito. |
 | Tocar la facturación de CREATIVE | Tabla propia `creative_billings` (`db/schema.ts`) — **no** cuelga de `media_plans`. Query: `db/queries/creative.ts` (`getCreativeBillings` devuelve lista + totales por mes + KPIs; el flag `emittedOnly` es el que usa el portal para no mostrar borradores). UI: `app/(app)/creative/page.tsx`, `components/creative-chart.tsx` (barras apiladas cobrado/pendiente), `components/creative-table.tsx` (tabla + botón de cobro). Actions: `app/actions/creative-billing.ts` — `createCreativeBilling` (alta, con toda la validación: N° único + 23505, `month` YYYY-MM, monto > 0, cliente vivo) y `setCreativeBillingPaid` (`invoiced ↔ paid`), las dos con audit. Los códigos `c####` del Excel de facturación tienen numeración PROPIA: no se matchean por número contra los `m####` de `media_plans`. |
+| Cargar una factura de creative POR SQL (excepción; el camino normal es la UI) | `db/felix-creative-1462.sql` es el molde: guard por slug + guard por N° ya tomado de otro cliente + `select` final (lo único que muestra el SQL Editor). Los dos guards existen porque un `where slug` que no matchea devuelve 0 filas sin error, y porque `invoice_number` es UNIQUE **global** y los clientes comparten la serie de QuickBooks. Probar siempre contra el Postgres 16 local con la forma de `db/creative-billings.sql` (que difiere de `db/schema.ts` en el default de `status`). |
 | Cargar una factura de creative (o cambiar qué pide el formulario) | `components/creative-invoice-form.tsx` (panel client, arriba de `/creative`) + `createCreativeBilling` en `app/actions/creative-billing.ts`. El select de cliente sale de `cachedClientOptions()` (TODOS los clientes vivos, no sólo los que ya tienen creative). Después de guardar el panel queda abierto y conserva cliente + mes + estado — se cargan por tanda mensual. **Editar y borrar siguen siendo SQL a mano.** |
 | Tocar el tab CREATIVE del portal del cliente | `CreativeSection` en `app/(portal)/[clientSlug]/portal-content.tsx` + la entrada `creative` de `TABS` en `app/(portal)/[clientSlug]/page.tsx` (y el ancho de tab de más en `app/(portal)/loading.tsx`). Está para TODOS los clientes; sin facturas muestra su vacío. Lee `getCreativeBillings({ emittedOnly: true })` **directo, sin caché** — tiene escritura, y desde un route handler la invalidación es stale-while-revalidate (ver la nota del PORTAL en `db/queries/cached.ts`). |
 | Tocar el Billing Tracker | `app/(app)/billing-tracker/page.tsx` (UI), `components/billing-tracker-filters.tsx` (filtros), `db/queries/billing-tracker.ts` (`getBillingTracker`, `getBillingTrackerFilterOptions`). Solo lista billings con `invoice_number` no-null (status `invoiced` o `paid`). |
