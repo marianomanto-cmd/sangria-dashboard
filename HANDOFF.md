@@ -185,7 +185,35 @@ cero. `npm run check:markets` cubre idempotencia sobre 619 entradas, round-trip
 de 289 combinaciones del form, colisiones de slug, 38 casos reales y 19 de
 geocoding. `tsc`, `eslint` y `next build` en verde.
 
-**Acción en prod: sí — hay que correr el SQL** (`db/markets-nomenclatura.sql`,
+**APLICADO EN PROD (03/sep/2026).** Los dos pasos corridos por el dueño del
+repo y verificados:
+
+  · **Paso A** (`db/copa-varios-desarmar.sql`) — verificado fila por fila:
+    Global 2 líneas / USD 214.466,43 · LATAM 27 / 869.210,75 · Paraguay,
+    Puerto Rico, Trinidad y Tobago, Uruguay y República Dominicana con 1 línea
+    cada uno. Sin ninguna fila "Varios".
+  · **Paso B** (`db/markets-nomenclatura.sql`) — el dry-run dio 64 filas
+    (47 renombres, 15 sin cambio, 2 fusiones, **0 sin mapear**), y el control
+    posterior dio los cinco primeros en `ok` salvo uno (ver abajo) y las cinco
+    magnitudes IDÉNTICAS a la foto del antes: 674 líneas de plan · 460 sin
+    mercado · USD 9.965.655,47 · 3.824 cierres · 171 sin mercado. Catálogo en
+    62 mercados. **No se perdió ni una línea ni un dólar.**
+  · **Deploy**: PR #276 mergeado a `main` (d521cd9) DESPUÉS del SQL. Mientras
+    tanto el mapa mostró los tiers de Félix apilados en una burbuja — es
+    justamente lo que avisa la cabecera del archivo sobre el orden.
+
+**Pendiente de mirar**: el control devolvió **1 `marketId` muerto en un
+snapshot de versión**. No puede ser de esta migración: el paso 3 reescribe
+TODOS los snapshots array-shaped que contengan un id perdedor, así que un id
+muerto que sobrevive es uno que ya no existía antes de empezar — el caso que
+este mismo HANDOFF documenta más abajo ("un `market_id` del snapshot puede
+apuntar a un mercado ya borrado"), producto de un `deleteMarket` viejo desde la
+UI. Importa igual porque `revertPlanToApprovedSnapshot` lo sanea a NULL y
+BORRARÍA el mercado de las líneas vivas de ese plan si alguien descarta el
+borrador. Queda la query de diagnóstico en el chat de la sesión; hay que
+identificar el plan y decidir si se limpia.
+
+**Acción en prod: hecha — el SQL ya se corrió** (`db/markets-nomenclatura.sql`,
 bloques 0 y 1 primero, que son read-only). Deploy y SQL son **independientes** y
 van en cualquier orden: con el código deployado y sin correr el SQL la app anda
 igual, sigue mostrando los duplicados viejos y el form ya no deja crear nuevos;
@@ -4967,6 +4995,16 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+d521cd9  Merge PR #276: nomenclatura única de mercados — el mercado se elige, no se escribe
+39543f5  fix(markets): lo que encontró la revisión adversarial del paso B
+a9ed1b3  refactor(markets): el paso B ya no necesita crear una función antes
+f53c968  refactor(markets): el paso B pasa a ser un plan explícito, no un diccionario
+199ee0a  feat(markets): desarmar el mercado "Varios" de Copa + región "Global"
+6221421  docs(db): foto del catálogo de mercados en prod al 03/sep/2026
+8f54b6a  feat(markets): overrides explícitos para lo que el diccionario no puede decidir
+34d727c  fix(markets): tres bugs del diccionario que destapó el catálogo real de Copa
+349b717  refactor(markets): el diccionario del SQL, una sola vez + sacar alias de 2 letras
+e16a6c2  feat(markets): nomenclatura única — el mercado se elige, no se escribe
 0bfd572  feat(creative): cargar facturas desde la app + tab Creative en el portal
 f2e3c13  feat(plan): la composición de T1/T2 en las notas del plan + paridad en el Excel
 e725a0b  feat(markets): el plan de Félix se taggea por tier, no por estado
