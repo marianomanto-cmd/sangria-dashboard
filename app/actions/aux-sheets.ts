@@ -6,6 +6,7 @@ import { invalidate } from "@/lib/cache-invalidate";
 import { PLANS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
+import { assertCanWrite } from "@/lib/read-only";
 import {
   AUX_SHEET_DEFAULT_COLS,
   AUX_SHEET_DEFAULT_NAME,
@@ -41,6 +42,11 @@ async function revalidatePlanPaths(planId: string) {
 export async function createAuxSheet(input: {
   planId: string;
 }): Promise<Result<{ sheetId: string }>> {
+  // Barrera de escritura: en modo solo lectura (auditoría externa o rol
+  // Viewer) la action corta acá y no toca la base — ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const [plan] = await db
@@ -102,6 +108,9 @@ export async function updateAuxSheet(input: {
   grid?: string[][];
   merges?: AuxMerge[];
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.sheetId) return { ok: false, error: "Falta sheet_id" };
 
   const [before] = await db
@@ -156,6 +165,9 @@ export async function updateAuxSheet(input: {
 export async function deleteAuxSheet(input: {
   sheetId: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.sheetId) return { ok: false, error: "Falta sheet_id" };
 
   const [before] = await db

@@ -13,7 +13,15 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { MobileNavToggle } from "@/components/mobile-nav";
 import { SangriaMark } from "@/components/sangria-mark";
 
-export async function Topbar({ user }: { user: AppUser | null }) {
+export async function Topbar({
+  user,
+  // A dónde postea "Cerrar sesión". Undefined = /auth/signout (Google). La
+  // sesión de auditoría pasa el suyo porque no hay sesión de Supabase.
+  signOutAction,
+}: {
+  user: AppUser | null;
+  signOutAction?: string;
+}) {
   const year = new Date().getFullYear();
   return (
     <header className="sticky top-0 z-10 border-b border-line bg-surface">
@@ -66,6 +74,7 @@ export async function Topbar({ user }: { user: AppUser | null }) {
               email={user.email}
               name={user.name}
               avatarUrl={user.avatarUrl}
+              signOutAction={signOutAction}
             />
           ) : (
             <div

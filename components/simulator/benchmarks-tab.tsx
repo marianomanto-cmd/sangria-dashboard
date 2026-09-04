@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { AlertTriangle } from "lucide-react";
-import { fetchBenchmarks } from "@/app/actions/simulator";
+import { fetchBenchmarks } from "@/lib/simulator-read";
 import type { SimulatorCatalogs } from "@/db/queries/simulator";
 import { formatUsd } from "@/lib/format";
 import type { BenchmarkFilters, BenchmarkRow } from "@/lib/simulator-types";

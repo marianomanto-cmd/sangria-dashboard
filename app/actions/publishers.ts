@@ -7,6 +7,7 @@ import { CATALOG_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { publishers } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
+import { assertCanWrite } from "@/lib/read-only";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -39,6 +40,11 @@ export async function createPublisher(input: {
   slug?: string;
   agencyPays?: boolean;
 }): Promise<Result<{ id: string }>> {
+  // Barrera de escritura: en modo solo lectura (sesión de auditoría o rol
+  // viewer) la action corta acá y no toca la base. Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.clientId) return { ok: false, error: "Cliente requerido" };
   if (!input.name.trim()) return { ok: false, error: "Nombre requerido" };
   const slug = (input.slug?.trim() || slugify(input.name)).slice(0, 64);
@@ -92,6 +98,9 @@ export async function updatePublisher(input: {
   agencyPays?: boolean;
   enabled?: boolean;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(publishers)
@@ -127,6 +136,9 @@ export async function deletePublisher(input: {
   id: string;
   clientSlug?: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(publishers)

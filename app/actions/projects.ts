@@ -7,6 +7,7 @@ import { DASHBOARD_TAG, PLANS_TAG, REPORTS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { normalizeExternalUrl } from "@/lib/external-url";
+import { assertCanWrite } from "@/lib/read-only";
 import {
   budgetOrigins,
   clients,
@@ -55,6 +56,11 @@ export async function createProject(input: {
   driveFolderUrl?: string | null;
   notesMd?: string | null;
 }): Promise<Result<{ projectId: string; code: string }>> {
+  // Barrera de escritura: si el request es de solo lectura (sesión de
+  // auditoría o rol Viewer) corta acá, antes de tocar nada. Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.name.trim()) return { ok: false, error: "Nombre requerido" };
   if (!input.clientId) return { ok: false, error: "Falta cliente" };
   if (!input.budgetOriginId) return { ok: false, error: "Falta budget origin" };
@@ -121,6 +127,9 @@ export async function updateProject(input: {
   driveFolderUrl?: string | null;
   notesMd?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(projects)
@@ -199,6 +208,9 @@ export async function updateProject(input: {
 export async function deleteProject(input: {
   projectId: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(projects)

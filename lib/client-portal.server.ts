@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { PORTAL_COOKIE_NAME } from "@/lib/client-portal";
 import { getCurrentUser } from "@/lib/auth";
+import { hasAuditSession } from "@/lib/audit-session.server";
 
 // Helpers server-only para la sesión del portal de cliente. El cookie guarda
 // el slug del cliente que el visitante desbloqueó (un portal por browser, que
@@ -44,6 +45,10 @@ export async function canAccessClientExport(
 ): Promise<boolean> {
   const user = await getCurrentUser();
   if (user) return true;
+  // La sesión de auditoría ve la app completa, y en este proyecto los exports
+  // son un espejo descargable de la pantalla: si puede ver el plan, puede
+  // bajarlo. Es GET y no muta nada.
+  if (await hasAuditSession()) return true;
   return hasPortalAccess(clientSlug);
 }
 
@@ -58,5 +63,10 @@ export async function canAccessClientExport(
 export async function canWriteAsClientPortal(
   clientSlug: string,
 ): Promise<boolean> {
-  return canAccessClientExport(clientSlug);
+  // OJO: NO es `canAccessClientExport`. Ese habilita también a la sesión de
+  // auditoría, que puede leer todo pero no escribir nada. Acá se escribe, así
+  // que la auditoría queda afuera por construcción.
+  const user = await getCurrentUser();
+  if (user) return true;
+  return hasPortalAccess(clientSlug);
 }

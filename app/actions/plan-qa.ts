@@ -7,6 +7,7 @@ import { PLANS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
+import { assertCanWrite } from "@/lib/read-only";
 import {
   mediaPlanPlacements,
   mediaPlanPublishers,
@@ -119,6 +120,11 @@ export async function setPlanQaCheck(input: {
   placementId: string;
   checked: boolean;
 }): Promise<Result<{ checkedCount: number; totalCount: number }>> {
+  // Barrera de escritura: en modo solo lectura (auditoría externa o rol
+  // Viewer) la action corta acá y no toca la base. Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
   if (!input.placementId) return { ok: false, error: "Falta placement_id" };
 
@@ -200,6 +206,9 @@ export async function completePlanQa(input: {
   planId: string;
   notes?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const [plan] = await db
@@ -288,6 +297,9 @@ export async function completePlanQa(input: {
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function reopenPlanQa(input: { planId: string }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const [plan] = await db

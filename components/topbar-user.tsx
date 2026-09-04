@@ -7,12 +7,21 @@ type Props = {
   email: string;
   name: string | null;
   avatarUrl: string | null;
+  // A dónde postea "Cerrar sesión". Default /auth/signout (Supabase). La
+  // sesión de auditoría no pasa por Supabase, así que manda la suya
+  // (/api/audit/logout, ver lib/audit-session.ts).
+  signOutAction?: string;
 };
 
 // Avatar + menú con "Cerrar sesión". Client-only para manejar el toggle del
 // menú. El sign-out es un POST a /auth/signout — el route ahí limpia la
 // sesión y redirige a /login.
-export function TopbarUser({ email, name, avatarUrl }: Props) {
+export function TopbarUser({
+  email,
+  name,
+  avatarUrl,
+  signOutAction = "/auth/signout",
+}: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -69,7 +78,7 @@ export function TopbarUser({ email, name, avatarUrl }: Props) {
             <p className="text-sm font-medium text-ink truncate">{displayName}</p>
             <p className="text-xs text-muted truncate font-mono">{email}</p>
           </div>
-          <form action="/auth/signout" method="post">
+          <form action={signOutAction} method="post">
             <button
               type="submit"
               role="menuitem"

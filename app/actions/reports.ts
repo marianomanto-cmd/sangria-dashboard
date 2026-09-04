@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
+import { assertCanWrite } from "@/lib/read-only";
 
 type Result = { ok: true } | { ok: false; error: string };
 type ReportKind = "project" | "manual";
@@ -41,6 +42,11 @@ export async function setProjectStatus(input: {
   projectId: string;
   status: (typeof projects.$inferSelect)["status"];
 }): Promise<Result> {
+  // Barrera de escritura: en modo solo lectura (auditoría externa o rol
+  // Viewer) las actions de este archivo cortan acá. Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (input.status === "reportado") {
     return {
       ok: false,
@@ -91,6 +97,9 @@ export async function setProjectStatus(input: {
 }
 
 export async function ensureProjectReport(projectId: string): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   try {
     await db
       .insert(projectReports)
@@ -108,6 +117,9 @@ export async function setReportDeliveryDate(input: {
   kind: ReportKind;
   deliveryDate: string; // YYYY-MM-DD
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.deliveryDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
     return { ok: false, error: "Fecha inválida (esperado YYYY-MM-DD)" };
   }
@@ -189,6 +201,9 @@ export async function markReportDelivered(input: {
   reportId: string;
   kind: ReportKind;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const now = new Date();
 
   if (input.kind === "project") {
@@ -307,6 +322,9 @@ export async function setReportPptUrl(input: {
   kind: ReportKind;
   url: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const parsed = parseUrlOrEmpty(input.url);
   if (!parsed.ok) return parsed;
   const url = parsed.url;
@@ -368,6 +386,9 @@ export async function createManualReport(input: {
   description?: string | null;
   deliveryDate: string; // YYYY-MM-DD
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const name = input.name.trim();
   if (!name) return { ok: false, error: "El nombre es obligatorio" };
   if (!input.deliveryDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
@@ -424,6 +445,9 @@ export async function createManualReport(input: {
 export async function deleteManualReport(input: {
   reportId: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(manualReports)

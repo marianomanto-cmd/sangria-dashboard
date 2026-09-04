@@ -12,6 +12,7 @@ import {
   canonicalMarketName,
   type MarketFormValue,
 } from "@/lib/market-nomenclature";
+import { assertCanWrite } from "@/lib/read-only";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -65,6 +66,11 @@ export async function createMarket(input: {
   clientSlug?: string;
   value: MarketFormValue;
 }): Promise<Result<{ id: string }>> {
+  // Barrera de escritura: la sesión de auditoría y los usuarios con rol Viewer
+  // no pueden mutar nada. Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.clientId) return { ok: false, error: "Cliente requerido" };
 
   const resolved = resolveName(input.value);
@@ -123,6 +129,9 @@ export async function updateMarket(input: {
   value?: MarketFormValue;
   enabled?: boolean;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(markets)
@@ -173,6 +182,9 @@ export async function deleteMarket(input: {
   id: string;
   clientSlug?: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(markets)

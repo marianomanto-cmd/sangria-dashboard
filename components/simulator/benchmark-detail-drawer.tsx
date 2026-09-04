@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { fetchBenchmarkDetail } from "@/app/actions/simulator";
+import { fetchBenchmarkDetail } from "@/lib/simulator-read";
 import type { BenchmarkPlacementDetail } from "@/db/queries/simulator";
 import { formatUsd } from "@/lib/format";
 import type { BenchmarkFilters, BenchmarkRow } from "@/lib/simulator-types";

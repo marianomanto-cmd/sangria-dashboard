@@ -7,6 +7,7 @@ import { CATALOG_TAG, DASHBOARD_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
+import { assertCanWrite } from "@/lib/read-only";
 import type { Language } from "@/lib/i18n";
 
 type Result<T = void> =
@@ -31,6 +32,12 @@ export async function createClient(input: {
   language: Language;
   status?: ClientStatus;
 }): Promise<Result<{ id: string; slug: string }>> {
+  // Barrera de escritura: corta antes de validar o tocar la base cuando el
+  // request es de solo lectura (auditoría externa o rol Viewer). Ver
+  // lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const name = input.name.trim();
   if (!name) return { ok: false, error: "Nombre requerido" };
 
@@ -79,6 +86,9 @@ export async function updateClient(input: {
   language?: Language;
   status?: ClientStatus;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(clients)

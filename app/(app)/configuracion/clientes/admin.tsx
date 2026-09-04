@@ -101,6 +101,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   <td className="px-5 py-2">
                     <input
                       type="text"
+                      data-audit-hint="updateClient"
                       defaultValue={c.name}
                       disabled={pending}
                       onBlur={(e) =>
@@ -116,6 +117,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   <td className="px-5 py-2">
                     <input
                       type="text"
+                      data-audit-hint="updateClient"
                       defaultValue={c.prefix ?? ""}
                       disabled={pending}
                       placeholder="—"
@@ -130,6 +132,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   </td>
                   <td className="px-5 py-2">
                     <select
+                      data-audit-hint="updateClient"
                       value={c.language}
                       disabled={pending}
                       onChange={(e) =>
@@ -146,6 +149,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   </td>
                   <td className="px-5 py-2">
                     <select
+                      data-audit-hint="updateClient"
                       value={c.status}
                       disabled={pending}
                       onChange={(e) =>
@@ -201,6 +205,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                 <div className="min-w-0 flex-1">
                   <input
                     type="text"
+                    data-audit-hint="updateClient"
                     defaultValue={c.name}
                     disabled={pending}
                     onBlur={(e) =>
@@ -238,6 +243,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   </p>
                   <input
                     type="text"
+                    data-audit-hint="updateClient"
                     defaultValue={c.prefix ?? ""}
                     disabled={pending}
                     placeholder="—"
@@ -255,6 +261,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                     Idioma
                   </p>
                   <select
+                    data-audit-hint="updateClient"
                     value={c.language}
                     disabled={pending}
                     onChange={(e) =>
@@ -274,6 +281,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                     Estado
                   </p>
                   <select
+                    data-audit-hint="updateClient"
                     value={c.status}
                     disabled={pending}
                     onChange={(e) =>
@@ -357,7 +365,7 @@ export function ClientsAdmin({ initialRows }: { initialRows: Client[] }) {
                   </option>
                 ))}
               </select>
-              <Button size="xs" onClick={onCreate}>
+              <Button size="xs" data-audit-hint="createClient" onClick={onCreate}>
                 Crear
               </Button>
               <button

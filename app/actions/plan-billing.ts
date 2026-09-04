@@ -6,6 +6,7 @@ import { invalidate } from "@/lib/cache-invalidate";
 import { BILLING_TAG, DASHBOARD_TAG, PLANS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
+import { assertCanWrite } from "@/lib/read-only";
 import {
   mediaPlanFees,
   mediaPlanPublishers,
@@ -32,6 +33,11 @@ export async function ensureBillingForMonth(input: {
   planId: string;
   month: string;
 }): Promise<Result<{ billingId: string }>> {
+  // Barrera de escritura: corta acá si el request es de solo lectura
+  // (auditoría externa o rol Viewer). Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!MONTH_RX.test(input.month))
     return { ok: false, error: "Mes inválido (formato YYYY-MM)" };
 
@@ -280,6 +286,9 @@ export async function setPublisherConsumption(input: {
   isBillable?: boolean;
   notes?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!Number.isFinite(input.amountRealUsd) || input.amountRealUsd < 0)
     return { ok: false, error: "Monto inválido" };
 
@@ -405,6 +414,9 @@ export async function setFeeImputation(input: {
   amountImputedUsd: number;
   notes?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!Number.isFinite(input.amountImputedUsd) || input.amountImputedUsd < 0)
     return { ok: false, error: "Monto inválido" };
 
@@ -541,6 +553,9 @@ export async function transitionBillingStatus(input: {
   to: "draft" | "ready" | "sent" | "paid" | "invoiced";
   actorEmail?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(planBillings)
@@ -585,6 +600,9 @@ export async function markBillingInvoiced(input: {
   invoiceNumber: string;
   dueDate?: string | null; // YYYY-MM-DD; default = today + 30d
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const invoiceNumber = input.invoiceNumber.trim();
   if (!invoiceNumber) {
     return { ok: false, error: "El número de factura es requerido" };
@@ -652,6 +670,9 @@ export async function markBillingInvoiced(input: {
 export async function clearBillingInvoiceNumber(input: {
   billingId: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(planBillings)

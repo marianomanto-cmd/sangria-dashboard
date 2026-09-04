@@ -1,5 +1,7 @@
 import { SangriaMark } from "@/components/sangria-mark";
 import { LoginButton } from "./login-button";
+import { AuditLogin } from "./audit-login";
+import { isAuditLoginEnabled } from "@/lib/audit-session";
 
 type Props = {
   searchParams: Promise<{ error?: string; next?: string }>;
@@ -46,6 +48,10 @@ export default async function LoginPage({ searchParams }: Props) {
             <span className="font-mono text-ink-2">@sangria.agency</span> ya
             tenés acceso. Si no, pedile a Mariano que te de de alta.
           </p>
+
+          <div className="border-t border-line-soft pt-3">
+            <AuditLogin next={next} enabled={isAuditLoginEnabled()} />
+          </div>
         </div>
       </div>
     </main>
