@@ -147,6 +147,7 @@ function PayButton({
   return (
     <button
       type="button"
+      data-audit-hint="setCreativeBillingPaid"
       disabled={pending}
       title={`${label} · ${invoice.invoiceNumber}`}
       onClick={() => {

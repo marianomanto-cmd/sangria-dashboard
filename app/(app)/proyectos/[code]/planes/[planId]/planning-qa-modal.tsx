@@ -367,6 +367,7 @@ export function PlanningQaModal({
                   : `Faltan ${progress.missing}`}
               </span>
               <Button
+                data-audit-hint="completePlanningQa"
                 onClick={onComplete}
                 disabled={!progress.complete || pending}
               >
@@ -399,6 +400,7 @@ function CheckBox({
   return (
     <input
       type="checkbox"
+      data-audit-hint="setPlanningQaCheck"
       data-pqa-check={dataKey}
       checked={checked}
       disabled={disabled}

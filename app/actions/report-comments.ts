@@ -14,6 +14,7 @@ import { REPORTS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
+import { assertCanWrite } from "@/lib/read-only";
 import { manualReports, projectReports, reportComments } from "@/db/schema";
 
 type Result<T = void> =
@@ -75,6 +76,11 @@ export async function addReportComment(input: {
   ref: ReportRef;
   body: string;
 }): Promise<Result> {
+  // Barrera de escritura: si el request es de solo lectura (sesión de
+  // auditoría o rol Viewer) la action corta acá. Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const body = input.body.trim();
   if (!body) return { ok: false, error: "El comentario está vacío" };
   if (body.length > MAX_BODY_LEN) {
@@ -130,6 +136,9 @@ export async function updateReportComment(input: {
   commentId: string;
   body: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const body = input.body.trim();
   if (!body) return { ok: false, error: "El comentario está vacío" };
   if (body.length > MAX_BODY_LEN) {
@@ -166,6 +175,9 @@ export async function updateReportComment(input: {
 export async function deleteReportComment(input: {
   commentId: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(reportComments)

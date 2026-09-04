@@ -16,7 +16,9 @@
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "gen:markets-sql": "tsx scripts/gen-markets-sql.ts",
     "check:markets": "tsx scripts/check-market-nomenclature.ts",
-    "db:backfill-reports": "node --env-file=.env.local scripts/backfill-reports.mjs"
+    "db:backfill-reports": "node --env-file=.env.local scripts/backfill-reports.mjs",
+    "check:audit": "tsx scripts/check-audit-session.ts",
+    "check:read-only": "tsx scripts/check-read-only.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

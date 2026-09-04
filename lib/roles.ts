@@ -58,6 +58,27 @@ export const ROLE_VALUES = Object.keys(ROLE_META) as AppUserRole[];
 // Roles que pueden aprobar planes. Ver lib/permissions.ts.
 export const APPROVER_ROLES: readonly AppUserRole[] = ["admin", "approver"];
 
+// ────────────────────────────────────────────────────────────────────────────
+// Roles que NO pueden escribir nada. `assertCanWrite()` (lib/read-only.ts) lo
+// hace cumplir en las 73 server actions que escriben.
+//
+// **Va VACÍA a propósito, y sacarla de vacía es una decisión, no un ajuste.**
+//
+// El rol por defecto de la columna es `viewer` (db/schema.ts) y `touchUser()`
+// da de alta con el default a cualquiera que entre por primera vez. O sea que
+// hoy casi todo el equipo figura como `viewer` sin que eso haya querido decir
+// nunca "solo lectura": nadie les asignó un rol, simplemente entraron. Poner
+// "viewer" acá dejaría a esa gente sin poder trabajar en el próximo deploy.
+//
+// Para activarlo hay que primero asignar roles de verdad en
+// Configuración → Usuarios y roles, confirmar que no quede nadie en `viewer`
+// por omisión, y recién ahí agregarlo a esta lista.
+//
+// Mientras tanto, la única sesión de solo lectura es la de auditoría
+// (lib/audit-session.ts), que no depende de esta lista.
+// ────────────────────────────────────────────────────────────────────────────
+export const READ_ONLY_ROLES: readonly AppUserRole[] = [];
+
 export function isValidRole(role: string): role is AppUserRole {
   return (ROLE_VALUES as string[]).includes(role);
 }

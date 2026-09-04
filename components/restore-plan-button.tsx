@@ -29,6 +29,7 @@ export function RestorePlanButton({ planId }: { planId: string }) {
   return (
     <button
       type="button"
+      data-audit-hint="restorePlan"
       onClick={onClick}
       disabled={pending}
       className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"

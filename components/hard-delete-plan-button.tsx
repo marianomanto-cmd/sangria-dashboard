@@ -75,6 +75,7 @@ export function HardDeletePlanButton({
               </button>
               <button
                 type="button"
+                data-audit-hint="hardDeletePlan"
                 onClick={onConfirm}
                 disabled={pending}
                 className="rounded-md bg-danger text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"

@@ -3,10 +3,9 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
-import {
-  fetchProjectsForPromotion,
-  promoteScenarioToPlan,
-} from "@/app/actions/simulator";
+import { promoteScenarioToPlan } from "@/app/actions/simulator";
+// La lectura va por GET, no por server action: ver lib/simulator-read.ts.
+import { fetchProjectsForPromotion } from "@/lib/simulator-read";
 import type { PromoteTargetProject } from "@/db/queries/simulator";
 
 // El componente externo es solo el gate: si está cerrado, no monta nada.
@@ -189,6 +188,7 @@ function PromoteDialogInner({
           <button
             type="button"
             onClick={submit}
+            data-audit-hint="promoteScenarioToPlan"
             disabled={pending || loadingProjects || projects.length === 0}
             className="text-xs px-3 py-2 rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50"
           >

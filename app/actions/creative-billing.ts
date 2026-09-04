@@ -6,6 +6,7 @@ import { invalidate } from "@/lib/cache-invalidate";
 import { BILLING_TAG, DASHBOARD_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
+import { assertCanWrite } from "@/lib/read-only";
 import { clients, creativeBillings } from "@/db/schema";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -30,6 +31,11 @@ export async function setCreativeBillingPaid(input: {
   // gana el usuario — ver recordAudit en lib/audit.ts.
   actorEmail?: string | null;
 }): Promise<Result> {
+  // Barrera de escritura: frena a la sesión de auditoría y a los usuarios con
+  // rol viewer antes de tocar nada. Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(creativeBillings)
@@ -107,6 +113,9 @@ export async function createCreativeBilling(input: {
   status?: "invoiced" | "paid";
   notesMd?: string | null;
 }): Promise<ResultWith<{ billingId: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const invoiceNumber = clean(input.invoiceNumber);
   if (!input.clientId) return { ok: false, error: "Falta el cliente" };
   if (!invoiceNumber) return { ok: false, error: "Falta el N° de factura" };

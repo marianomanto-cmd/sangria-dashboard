@@ -88,7 +88,7 @@ export function BillingMonthEditor({
           Crear el billing draft del mes con todos los publishers + fees del
           plan pre-cargados en cero.
         </p>
-        <Button onClick={handleCreate} disabled={pending}>
+        <Button onClick={handleCreate} disabled={pending} data-audit-hint="ensureBillingForMonth">
           {pending ? "Creando…" : `Crear draft para ${month}`}
         </Button>
       </div>
@@ -262,6 +262,7 @@ export function BillingMonthEditor({
                     <td className="px-5 py-2">
                       <input
                         type="checkbox"
+                        data-audit-hint="setPublisherConsumption"
                         checked={p.isBillable}
                         disabled={!editable}
                         onChange={(e) =>
@@ -275,7 +276,7 @@ export function BillingMonthEditor({
                     <td className="px-5 py-2 text-right font-mono text-muted text-xs">
                       {formatUsdCompact(p.consumedBeforeUsd)}
                     </td>
-                    <td className="px-5 py-2 text-right">
+                    <td className="px-5 py-2 text-right" data-audit-hint="setPublisherConsumption">
                       <NumInput
                         value={p.amountThisMonthUsd}
                         disabled={!editable}
@@ -369,7 +370,7 @@ export function BillingMonthEditor({
                     <td className="px-5 py-2 text-right font-mono text-muted text-xs">
                       {formatUsdCompact(f.accumulatedBeforeUsd)}
                     </td>
-                    <td className="px-5 py-2 text-right">
+                    <td className="px-5 py-2 text-right" data-audit-hint="setFeeImputation">
                       <NumInput
                         value={f.amountThisMonthUsd}
                         disabled={!editable}
@@ -457,6 +458,7 @@ function BillingStatusActions({
       {status === "draft" && (
         <button
           type="button"
+          data-audit-hint="transitionBillingStatus"
           onClick={() => onTransition("ready")}
           disabled={pending}
           className="rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-xs font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
@@ -468,13 +470,14 @@ function BillingStatusActions({
         <>
           <button
             type="button"
+            data-audit-hint="transitionBillingStatus"
             onClick={() => onTransition("draft")}
             disabled={pending}
             className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
           >
             Volver a borrador
           </button>
-          <Button size="sm" onClick={onReportar} disabled={pending}>
+          <Button size="sm" onClick={onReportar} disabled={pending} data-audit-hint="transitionBillingStatus">
             Reportar (PDF)
           </Button>
         </>
@@ -483,6 +486,7 @@ function BillingStatusActions({
         <>
           <button
             type="button"
+            data-audit-hint="transitionBillingStatus"
             onClick={() => onTransition("ready")}
             disabled={pending}
             className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
@@ -522,6 +526,7 @@ function BillingStatusActions({
         <>
           <button
             type="button"
+            data-audit-hint="transitionBillingStatus"
             onClick={() => onTransition("sent")}
             disabled={pending}
             className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
@@ -550,6 +555,7 @@ function BillingStatusActions({
               </button>
               <button
                 type="button"
+                data-audit-hint="clearBillingInvoiceNumber"
                 onClick={onClearInvoice}
                 disabled={pending}
                 className="text-xs text-muted hover:text-danger px-2 py-1.5 disabled:opacity-50"
@@ -560,6 +566,7 @@ function BillingStatusActions({
           )}
           <button
             type="button"
+            data-audit-hint="transitionBillingStatus"
             onClick={() => onTransition("paid")}
             disabled={pending}
             className="rounded-md bg-success text-white px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-50"
@@ -572,6 +579,7 @@ function BillingStatusActions({
         <>
           <button
             type="button"
+            data-audit-hint="transitionBillingStatus"
             onClick={() => onTransition("invoiced")}
             disabled={pending}
             className="text-xs text-muted hover:text-ink px-2 py-1.5 disabled:opacity-50"
@@ -618,6 +626,7 @@ function InvoiceInput({
   const [value, setValue] = useState(initial);
   return (
     <form
+      data-audit-hint="markBillingInvoiced"
       onSubmit={(e) => {
         e.preventDefault();
         const v = value.trim();
@@ -731,6 +740,7 @@ function TextInput({
   return (
     <input
       type="text"
+      data-audit-hint="setPublisherConsumption"
       defaultValue={value}
       disabled={disabled}
       placeholder={placeholder}

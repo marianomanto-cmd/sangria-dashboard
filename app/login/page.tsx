@@ -1,8 +1,10 @@
 import { SangriaMark } from "@/components/sangria-mark";
 import { LoginButton } from "./login-button";
+import { AuditLogin } from "./audit-login";
+import { isAuditLoginEnabled } from "@/lib/audit-session";
 
 type Props = {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{ error?: string; next?: string; audit?: string }>;
 };
 
 const ERROR_LABELS: Record<string, string> = {
@@ -46,6 +48,17 @@ export default async function LoginPage({ searchParams }: Props) {
             <span className="font-mono text-ink-2">@sangria.agency</span> ya
             tenés acceso. Si no, pedile a Mariano que te de de alta.
           </p>
+
+          <div className="border-t border-line-soft pt-3">
+            <AuditLogin
+              next={next}
+              enabled={isAuditLoginEnabled()}
+              // `/login?audit=1` abre el formulario ya desplegado: es el link
+              // que se le pasa a la auditora, para que no tenga que encontrar
+              // el desplegable abajo del botón de Google.
+              openByDefault={sp.audit === "1"}
+            />
+          </div>
         </div>
       </div>
     </main>

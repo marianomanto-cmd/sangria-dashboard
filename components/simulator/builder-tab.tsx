@@ -6,9 +6,10 @@ import {
   createScenario,
   deleteScenario,
   duplicateScenario,
-  fetchScenario,
   updateScenario,
 } from "@/app/actions/simulator";
+// La lectura va por GET, no por server action: ver lib/simulator-read.ts.
+import { fetchScenario } from "@/lib/simulator-read";
 import type {
   ScenarioSummary,
   SimulatorCatalogs,
@@ -273,6 +274,7 @@ export function BuilderTab({
                     <div className="flex gap-0.5 opacity-0 group-hover:opacity-100">
                       <button
                         type="button"
+                        data-audit-hint="duplicateScenario"
                         onClick={(e) => {
                           e.stopPropagation();
                           duplicate(s.id);
@@ -284,6 +286,7 @@ export function BuilderTab({
                       </button>
                       <button
                         type="button"
+                        data-audit-hint="deleteScenario"
                         onClick={(e) => {
                           e.stopPropagation();
                           remove(s.id);
@@ -322,6 +325,7 @@ export function BuilderTab({
           />
           <button
             type="button"
+            data-audit-hint="updateScenario"
             onClick={() => save(false)}
             disabled={pending}
             className="text-xs px-3 py-2 rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5"
@@ -332,6 +336,7 @@ export function BuilderTab({
           {editing.scenarioId && (
             <button
               type="button"
+              data-audit-hint="createScenario"
               onClick={() => save(true)}
               disabled={pending}
               className="text-xs px-3 py-2 rounded-md border border-line text-muted hover:text-ink-2 disabled:opacity-50"

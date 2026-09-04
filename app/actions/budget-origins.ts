@@ -7,6 +7,7 @@ import { CATALOG_TAG, DASHBOARD_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { budgetOrigins, projects } from "@/db/schema";
 import { recordAudit } from "@/lib/audit";
+import { assertCanWrite } from "@/lib/read-only";
 
 type Result<T = void> =
   | (T extends void ? { ok: true } : { ok: true } & T)
@@ -25,6 +26,12 @@ export async function createBudgetOrigin(input: {
   name: string;
   colorHex?: string | null;
 }): Promise<Result<{ id: string }>> {
+  // Barrera de escritura: corta antes de validar o tocar la base cuando el
+  // request es de solo lectura (auditoría externa o rol Viewer). Ver
+  // lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.clientId) return { ok: false, error: "Cliente requerido" };
   if (!input.name.trim()) return { ok: false, error: "Nombre requerido" };
 
@@ -59,6 +66,9 @@ export async function updateBudgetOrigin(input: {
   name?: string;
   colorHex?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(budgetOrigins)
@@ -94,6 +104,9 @@ export async function deleteBudgetOrigin(input: {
   id: string;
   clientSlug?: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(budgetOrigins)

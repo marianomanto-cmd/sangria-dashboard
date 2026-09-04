@@ -209,7 +209,7 @@ function PublishersSection({
           </div>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
-            <Button size="sm" onClick={onCreate} disabled={pending}>
+            <Button size="sm" data-audit-hint="createPublisher" onClick={onCreate} disabled={pending}>
               Crear
             </Button>
             <button
@@ -253,6 +253,7 @@ function PublishersSection({
                       <td className="px-5 py-2">
                         <input
                           type="text"
+                          data-audit-hint="updatePublisher"
                           defaultValue={r.publisherName}
                           disabled={pending}
                           onBlur={(e) =>
@@ -269,6 +270,7 @@ function PublishersSection({
                         <label className="inline-flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
+                            data-audit-hint="updatePublisher"
                             checked={r.enabled}
                             disabled={pending}
                             onChange={(e) =>
@@ -280,6 +282,7 @@ function PublishersSection({
                       </td>
                       <td className="px-5 py-2">
                         <select
+                          data-audit-hint="updatePublisher"
                           value={r.agencyPays ? "agency" : "client"}
                           disabled={pending}
                           onChange={(e) =>
@@ -296,6 +299,7 @@ function PublishersSection({
                       <td className="px-2 py-2">
                         <button
                           type="button"
+                          data-audit-hint="deletePublisher"
                           onClick={() => onDelete(r.publisherId, r.publisherName)}
                           disabled={pending}
                           className="text-muted hover:text-danger p-1"
@@ -318,6 +322,7 @@ function PublishersSection({
                     <div className="min-w-0 flex-1">
                       <input
                         type="text"
+                        data-audit-hint="updatePublisher"
                         defaultValue={r.publisherName}
                         disabled={pending}
                         onBlur={(e) =>
@@ -332,6 +337,7 @@ function PublishersSection({
                     </div>
                     <button
                       type="button"
+                      data-audit-hint="deletePublisher"
                       onClick={() => onDelete(r.publisherId, r.publisherName)}
                       disabled={pending}
                       className="text-muted hover:text-danger p-1 shrink-0"
@@ -348,6 +354,7 @@ function PublishersSection({
                       <label className="inline-flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
+                          data-audit-hint="updatePublisher"
                           checked={r.enabled}
                           disabled={pending}
                           onChange={(e) =>
@@ -362,6 +369,7 @@ function PublishersSection({
                         Pago
                       </p>
                       <select
+                        data-audit-hint="updatePublisher"
                         value={r.agencyPays ? "agency" : "client"}
                         disabled={pending}
                         onChange={(e) =>
@@ -525,7 +533,7 @@ function MetricsSection({
           )}
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
-            <Button size="sm" onClick={onCreate} disabled={pending}>
+            <Button size="sm" data-audit-hint="createMetric" onClick={onCreate} disabled={pending}>
               Crear
             </Button>
             <button
@@ -571,6 +579,7 @@ function MetricsSection({
                       <td className="px-5 py-2">
                         <input
                           type="text"
+                          data-audit-hint="updateMetric"
                           defaultValue={m.name}
                           disabled={pending}
                           onBlur={(e) =>
@@ -587,6 +596,7 @@ function MetricsSection({
                         {m.kind === "calculated" ? (
                           <input
                             type="text"
+                            data-audit-hint="updateMetric"
                             defaultValue={m.formula ?? ""}
                             disabled={pending}
                             onBlur={(e) =>
@@ -602,6 +612,7 @@ function MetricsSection({
                       <td className="px-5 py-2">
                         <input
                           type="checkbox"
+                          data-audit-hint="updateMetric"
                           checked={m.enabled}
                           disabled={pending}
                           onChange={(e) => onUpdate(m.id, { enabled: e.target.checked })}
@@ -610,6 +621,7 @@ function MetricsSection({
                       <td className="px-2 py-2">
                         <button
                           type="button"
+                          data-audit-hint="deleteMetric"
                           onClick={() => onDelete(m.id, m.name)}
                           disabled={pending}
                           className="text-muted hover:text-danger p-1"
@@ -632,6 +644,7 @@ function MetricsSection({
                     <div className="min-w-0 flex-1">
                       <input
                         type="text"
+                        data-audit-hint="updateMetric"
                         defaultValue={m.name}
                         disabled={pending}
                         onBlur={(e) =>
@@ -649,6 +662,7 @@ function MetricsSection({
                       <label className="inline-flex items-center gap-1.5 text-xs text-muted">
                         <input
                           type="checkbox"
+                          data-audit-hint="updateMetric"
                           checked={m.enabled}
                           disabled={pending}
                           onChange={(e) =>
@@ -659,6 +673,7 @@ function MetricsSection({
                       </label>
                       <button
                         type="button"
+                        data-audit-hint="deleteMetric"
                         onClick={() => onDelete(m.id, m.name)}
                         disabled={pending}
                         className="text-muted hover:text-danger p-1"
@@ -675,6 +690,7 @@ function MetricsSection({
                       </p>
                       <input
                         type="text"
+                        data-audit-hint="updateMetric"
                         defaultValue={m.formula ?? ""}
                         disabled={pending}
                         onBlur={(e) =>
@@ -813,7 +829,7 @@ function MarketsSection({
           />
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
-            <Button size="sm" onClick={onCreate} disabled={pending}>
+            <Button size="sm" data-audit-hint="createMarket" onClick={onCreate} disabled={pending}>
               Crear
             </Button>
             <button
@@ -842,7 +858,7 @@ function MarketsSection({
           />
           {editError && <p role="alert" className="text-xs text-danger">{editError}</p>}
           <div className="flex gap-2">
-            <Button size="sm" onClick={onSaveEdit} disabled={pending}>
+            <Button size="sm" data-audit-hint="updateMarket" onClick={onSaveEdit} disabled={pending}>
               Guardar
             </Button>
             <button
@@ -887,6 +903,7 @@ function MarketsSection({
                       <td className="px-5 py-2">
                         <input
                           type="checkbox"
+                          data-audit-hint="updateMarket"
                           checked={m.enabled}
                           disabled={pending}
                           onChange={(e) => onToggle(m.id, e.target.checked)}
@@ -908,6 +925,7 @@ function MarketsSection({
                           </button>
                           <button
                             type="button"
+                            data-audit-hint="deleteMarket"
                             onClick={() => onDelete(m.id, m.name)}
                             disabled={pending}
                             className="text-muted hover:text-danger p-1"
@@ -939,6 +957,7 @@ function MarketsSection({
                   <label className="inline-flex items-center gap-1.5 text-xs text-muted shrink-0">
                     <input
                       type="checkbox"
+                      data-audit-hint="updateMarket"
                       checked={m.enabled}
                       disabled={pending}
                       onChange={(e) => onToggle(m.id, e.target.checked)}
@@ -959,6 +978,7 @@ function MarketsSection({
                   </button>
                   <button
                     type="button"
+                    data-audit-hint="deleteMarket"
                     onClick={() => onDelete(m.id, m.name)}
                     disabled={pending}
                     className="text-muted hover:text-danger p-1 shrink-0"
@@ -1132,7 +1152,7 @@ function BudgetOriginsSection({
           </div>
           {error && <p role="alert" className="text-xs text-danger">{error}</p>}
           <div className="flex gap-2">
-            <Button size="sm" onClick={onCreate} disabled={pending}>
+            <Button size="sm" data-audit-hint="createBudgetOrigin" onClick={onCreate} disabled={pending}>
               Crear
             </Button>
             <button
@@ -1176,6 +1196,7 @@ function BudgetOriginsSection({
                   <td className="px-5 py-2">
                     <input
                       type="text"
+                      data-audit-hint="updateBudgetOrigin"
                       defaultValue={b.name}
                       disabled={pending}
                       onBlur={(e) =>
@@ -1185,7 +1206,7 @@ function BudgetOriginsSection({
                       className="w-full bg-transparent text-ink focus:outline-none focus:bg-white dark:focus:bg-paper-2 dark:bg-paper-2 focus:ring-1 focus:ring-accent rounded-sm px-1"
                     />
                   </td>
-                  <td className="px-5 py-2">
+                  <td className="px-5 py-2" data-audit-hint="updateBudgetOrigin">
                     <ColorSelect
                       value={b.colorHex}
                       onChange={(hex) => onUpdate(b.id, { colorHex: hex })}
@@ -1195,6 +1216,7 @@ function BudgetOriginsSection({
                   <td className="px-2 py-2">
                     <button
                       type="button"
+                      data-audit-hint="deleteBudgetOrigin"
                       onClick={() => onDelete(b.id, b.name)}
                       disabled={pending}
                       className="text-muted hover:text-danger p-1"

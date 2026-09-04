@@ -6,6 +6,7 @@ import { invalidate } from "@/lib/cache-invalidate";
 import { DASHBOARD_TAG, TRACKER_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
+import { assertCanWrite } from "@/lib/read-only";
 import {
   campaignActualSnapshots,
   campaignPlacementActuals,
@@ -34,6 +35,11 @@ export async function setPlacementActual(input: {
   metricKey: string;
   value: number;
 }): Promise<Result> {
+  // Barrera de escritura: corta acá si el request es de solo lectura
+  // (sesión de auditoría o rol viewer). Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!Number.isFinite(input.value) || input.value < 0)
     return { ok: false, error: "Valor inválido" };
 
@@ -145,6 +151,9 @@ export async function setPlacementActual(input: {
 export async function closeDailyLoad(input: {
   planId: string;
 }): Promise<Result<{ snapshotDate: string; rowCount: number }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   // Estructura del plan: cada placement con su contexto denormalizado.
   const rows = await db
     .select({

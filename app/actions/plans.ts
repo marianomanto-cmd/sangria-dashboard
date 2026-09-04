@@ -18,6 +18,7 @@ import {
   PLAN_STATUS_TRANSITIONS,
   type PlanStatus,
 } from "@/lib/plan-status";
+import { assertCanWrite } from "@/lib/read-only";
 import {
   getPlanningQaItems,
   getPlanningQaState,
@@ -56,6 +57,12 @@ export async function createPlan(input: {
   projectId: string;
   name: string;
 }): Promise<Result<{ planId: string }>> {
+  // Barrera de escritura: en modo solo lectura (auditoría externa o rol
+  // Viewer) la action corta acá, antes de validar o tocar la base. Ver
+  // lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.projectId) return { ok: false, error: "Falta project_id" };
   if (!input.name.trim()) return { ok: false, error: "El plan necesita un nombre" };
 
@@ -113,6 +120,9 @@ export async function createPlan(input: {
 // placements / fees / billings, que dejan de aparecer porque las queries de
 // listado filtran por deletedAt IS NULL. Se puede restaurar desde la papelera.
 export async function deletePlan(input: { planId: string }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const [before] = await db
@@ -153,6 +163,9 @@ export async function deletePlan(input: { planId: string }): Promise<Result> {
 // hay un plan VIVO con el mismo nombre, el partial unique index lo rechazaría,
 // así que pre-chequeamos y devolvemos un error legible.
 export async function restorePlan(input: { planId: string }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const [before] = await db
@@ -212,6 +225,9 @@ export async function restorePlan(input: { planId: string }): Promise<Result> {
 // físico cascadea a publishers / placements / fees / snapshots / billings
 // (FKs onDelete: cascade). Es irreversible.
 export async function hardDeletePlan(input: { planId: string }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const [before] = await db
@@ -254,6 +270,9 @@ export async function duplicatePlan(input: {
   targetProjectId: string;
   newName: string;
 }): Promise<Result<{ planId: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.newName.trim())
     return { ok: false, error: "El plan necesita un nombre" };
 
@@ -407,6 +426,9 @@ export async function updatePlanMetadata(input: {
   name?: string;
   notesMd?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const [before] = await db
@@ -446,6 +468,9 @@ export async function transitionPlanStatus(input: {
   to: PlanStatus;
   notes?: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   // Aprobar un plan está restringido a una allowlist de usuarios (aprobar
@@ -726,6 +751,9 @@ type CapturedSnapshot = {
 export async function revertPlanToApprovedSnapshot(input: {
   planId: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const [plan] = await db
@@ -1027,6 +1055,9 @@ export async function addPublisherToPlan(input: {
   publisherId: string;
   totalPlannedUsd?: number;
 }): Promise<Result<{ mppId: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [plan] = await db
     .select()
     .from(mediaPlans)
@@ -1075,6 +1106,9 @@ export async function updatePlanPublisher(input: {
   totalPlannedUsd?: number;
   agencyPaysOverride?: boolean | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(mediaPlanPublishers)
@@ -1115,6 +1149,9 @@ export async function updatePlanPublisher(input: {
 export async function duplicatePlanPublisher(
   mppId: string,
 ): Promise<Result<{ mppId: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [src] = await db
     .select()
     .from(mediaPlanPublishers)
@@ -1192,6 +1229,9 @@ export async function duplicatePlanPublisher(
 export async function removePublisherFromPlan(
   mppId: string,
 ): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(mediaPlanPublishers)
@@ -1221,6 +1261,9 @@ export async function addPlacement(input: {
   marketId?: string | null;
   amountUsd: number;
 }): Promise<Result<{ placementId: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.placementName.trim())
     return { ok: false, error: "Nombre de placement requerido" };
   if (!Number.isFinite(input.amountUsd) || input.amountUsd < 0)
@@ -1277,6 +1320,9 @@ export async function updatePlacement(input: {
   metricsJson?: Record<string, number>;
   notesMd?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(mediaPlanPlacements)
@@ -1323,6 +1369,9 @@ export async function updatePlacement(input: {
 export async function duplicatePlacement(
   placementId: string,
 ): Promise<Result<{ placementId: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [src] = await db
     .select()
     .from(mediaPlanPlacements)
@@ -1368,6 +1417,9 @@ export async function duplicatePlacement(
 }
 
 export async function removePlacement(placementId: string): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(mediaPlanPlacements)
@@ -1424,6 +1476,9 @@ export async function bulkUpdatePlacementDates(input: {
   startDate?: string;
   endDate?: string;
 }): Promise<Result<{ updated: number; total: number }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const startDate = input.startDate?.trim() || undefined;
@@ -1584,6 +1639,9 @@ export async function addFee(input: {
   ratePct?: number | null;  // solo para management (0-100)
   notes?: string | null;
 }): Promise<Result<{ feeId: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.name.trim()) return { ok: false, error: "Nombre del fee requerido" };
 
   const isManagementWithRate =
@@ -1637,6 +1695,9 @@ export async function updateFee(input: {
   ratePct?: number | null;  // solo aplica a management
   notes?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(mediaPlanFees)
@@ -1683,6 +1744,9 @@ export async function updateFee(input: {
 }
 
 export async function removeFee(feeId: string): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [before] = await db
     .select()
     .from(mediaPlanFees)

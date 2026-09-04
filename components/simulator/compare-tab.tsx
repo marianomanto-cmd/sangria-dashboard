@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import {
   fetchCompareablePlans,
   fetchScenario,
-} from "@/app/actions/simulator";
+} from "@/lib/simulator-read";
 import type {
   CompareablePlanSummary,
   ScenarioSummary,

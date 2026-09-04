@@ -11,6 +11,7 @@ import {
   planningQaKey,
   type PlanningQaItemKind,
 } from "@/lib/plan-planning-qa";
+import { assertCanWrite } from "@/lib/read-only";
 import {
   getPlanningQaItems,
   planningQaCheckedKeys,
@@ -116,6 +117,11 @@ export async function setPlanningQaCheck(input: {
   itemId: string;
   checked: boolean;
 }): Promise<Result<{ checkedCount: number; totalCount: number }>> {
+  // Barrera de escritura: la sesión de auditoría y los usuarios con rol Viewer
+  // no pueden mutar nada. Ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
   if (!input.itemId) return { ok: false, error: "Falta item_id" };
   if (!isPlanningQaItemKind(input.itemKind)) {
@@ -206,6 +212,9 @@ export async function completePlanningQa(input: {
   planId: string;
   notes?: string | null;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   if (!input.planId) return { ok: false, error: "Falta plan_id" };
 
   const loaded = await loadDraftPlan(input.planId);

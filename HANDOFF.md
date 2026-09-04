@@ -1,6 +1,81 @@
-# Handoff — jueves 03/sep/2026
+# Handoff — viernes 04/sep/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 04/sep/2026 — vista de auditoría: alguien de afuera mira toda la app y no puede tocar nada
+
+**El pedido.** Darle acceso a una auditora externa
+(`anainesmartins0611@gmail.com`) a la app **completa**, en modo solo lectura, y
+que al pasar el mouse por cualquier botón que haría un cambio aparezca un
+cuadrito explicando qué cambio haría y a qué áreas afecta.
+
+**El problema de fondo.** La app entra con Google OAuth restringido a
+`@sangria.agency`, así que una cuenta de gmail no tiene por dónde entrar.
+
+**Un pozo que casi piso.** El rol `viewer` ya existía y decía "Solo lectura",
+así que lo natural era hacerlo cumplir de paso. **No se activó, y hay que saber
+por qué**: el default de la columna es `viewer` y `touchUser()` da de alta con
+el default a cualquiera que entre por primera vez, o sea que hoy casi todo el
+equipo figura como `viewer` sin que nadie lo haya decidido. Hacerlo cumplir
+habría dejado al equipo sin poder trabajar en el próximo deploy. El gancho quedó
+puesto (`READ_ONLY_ROLES` en `lib/roles.ts`, hoy vacía) con las instrucciones
+para prenderlo el día que los roles se usen en serio.
+
+**Cómo quedó — tres barreras encadenadas, no una.**
+
+1. **El proxy deja pasar a la auditoría sólo en GET/HEAD/OPTIONS**
+   (`lib/supabase/middleware.ts`, rama `isAudit`). Verificado contra el Next
+   16.2.6 de `node_modules`: los Server Actions se despachan por **POST**
+   (`server-action-reducer.js`), mientras que la navegación y `router.refresh()`
+   van por GET (`fetch-server-response.js`). O sea que cerrar todo lo que no sea
+   GET cierra **toda** escritura, incluidas las actions que todavía no se
+   escribieron. Es la garantía estructural: no depende de acordarse de nada.
+2. **`assertCanWrite()`** (`lib/read-only.ts`) al principio de las **73** server
+   actions que escriben. Devuelve `{ ok: false, error }` con la forma que ya
+   usan las actions, así el error sale por el toast de siempre.
+   `npm run check:read-only` lo controla estáticamente y falla si alguna se
+   queda sin guard, lo tiene tarde, o si se lo pusieron a una lectura.
+3. **La UI apaga y explica.** Cada control que escribe lleva
+   `data-audit-hint="<action>"`; `components/audit-mode.tsx` monta **un solo**
+   listener en `document` con captura, corta el click antes de que React lo vea
+   y muestra el cuadrito con título, qué cambia y a qué afecta, desde el
+   registro de `lib/audit-hints.ts` (una entrada por action, 73).
+
+**El cookie va firmado.** El del portal de cliente guarda un slug en texto plano
+porque falsearlo abre un portal que ya es público; acá el premio es la app
+interna entera, así que va HMAC-SHA256 con el vencimiento **adentro** de la
+firma. El secreto sale de `AUDIT_SESSION_SECRET` y, si no está, de
+`DATABASE_URL`. Sin ninguno de los dos **falla cerrado**: no se emite ni se
+acepta ninguna sesión, y el formulario del login lo dice. Chequeo sin DB ni app:
+`npm run check:audit` (26 aserciones — firma alterada, vencimiento estirado,
+secreto cambiado, falla cerrado, y qué métodos deja pasar el proxy).
+
+**Lo que el GET-only rompía, y hubo que arreglar.** En esta app había **seis
+lecturas que viajaban por POST** porque estaban hechas como "read-actions"
+(server actions que sólo leen): las cinco del simulador y la de comentarios de
+reportes. Con la puerta cerrada a POST, a la auditora le quedaban colgados en
+"Cargando…" los tabs Benchmarks, Comparativa y Builder, y el modal de
+comentarios — o sea, justo las pantallas de análisis puro que una auditoría
+quiere recorrer. Se pasaron a GET siguiendo el precedente que ya existía en el
+repo (`app/api/plans/[planId]/version-diff/route.ts`):
+`app/api/simulator/read/route.ts` + `lib/simulator-read.ts` (mismas firmas, así
+que en los componentes el cambio es una línea de import) y
+`app/api/reports/comments/route.ts`.
+
+**Lo que NO se tocó.** No hay migración de base: el rol `viewer` ya existía en el
+enum y la auditora no lleva fila en `app_users` a propósito —su credencial es el
+cookie, no un rol, y una fila ahí invitaría a pensar que cambiarle el rol le da
+permisos que no le da—. Tampoco se le vedó ninguna ruta: ve la app completa,
+Configuración incluida.
+
+**El link que se comparte** es el de la app de siempre: `/login?audit=1` abre
+el formulario de credenciales ya desplegado, para no hacerla buscar el
+desplegable abajo del botón de Google. No hay subdominio ni ruta aparte.
+
+**Cómo se revoca.** Borrando `AUDIT_EMAIL` / `AUDIT_PASSWORD` de
+`lib/audit-session.ts` y redeployando. O rotando `AUDIT_SESSION_SECRET`, que
+además invalida las sesiones ya abiertas.
+
 
 ### Cambios de la sesión 03/sep/2026 (6) — nomenclatura única de mercados: se elige, no se escribe
 
@@ -5719,6 +5794,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Quiero...                              | Mirar...                                                  |
 |----------------------------------------|-----------------------------------------------------------|
 | Cambiar el schema                      | `db/schema.ts`                                            |
+| Tocar el acceso de auditoría / el modo solo lectura | `lib/audit-session.ts` (credenciales, firma del cookie, métodos permitidos) · `lib/audit-session.server.ts` (cookie) · `lib/read-only.ts` (`assertCanWrite`, rol `viewer`) · rama `isAudit` en `lib/supabase/middleware.ts` (GET-only: **la** garantía) · `components/audit-mode.tsx` + `lib/audit-hints.ts` (apagar y explicar) · `npm run check:audit`. **Ojo**: si agregás una server action que escribe, ponele `assertCanWrite()` y marcá su control con `data-audit-hint`. Y si hacés una "read-action" (server action que sólo lee), NO: va como route handler GET, porque las server actions viajan por POST y la auditoría las tiene cerradas. |
 | Entender/tocar el timeout de queries o el pool | `db/index.ts` — **tres fases** (`cola` / `pipeline` / `ejecucion`), decididas por `query.state` + `query.active` de postgres.js. Regla dura: `EXEC_TIMEOUT_MS` > `STATEMENT_TIMEOUT_MS`, para que las queries lentas las corte Postgres (57014, conexión reusable) y no nuestro reloj (que obliga a cerrar el socket). Test: `npm run test:db` contra un Postgres LOCAL — 16 aserciones; con el código anterior al 03/sep fallan 10. |
 | Tocar lo que ve el CLIENTE cuando el portal falla | `app/(portal)/error.tsx` (boundary bilingüe, 2 reintentos, contador en scope de módulo) y `app/(portal)/loading.tsx` (skeleton). **Ojo: `app/(app)/error.tsx` NO cubre el portal** — son segmentos distintos, y `error.js` tampoco cubre el layout de su propio segmento. Tampoco existe `app/global-error.tsx` todavía: una falla en `app/(app)/layout.tsx` (topbar, getCurrentUser) sigue sin red. |
 | Ver la estructura REAL de la base (o medir por qué se cae) | `db/estructura-actual.sql` — read-only, 8 bloques, **uno por vez** en el SQL Editor. Bloques 1-5 = estructura y volumen; 6-8 = medición **con la app caída** (salud en vivo, `pg_stat_statements`, `EXPLAIN` de la query del dashboard). El bloque 4 (FK sin índice) trae el DDL sugerido en una columna. |

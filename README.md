@@ -1341,6 +1341,72 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
 - **Setup de prod** (no automático): ver `.env.example` para los
   pasos en Supabase dashboard y Google Cloud Console.
 
+### Vista de auditoría (externa, solo lectura sobre TODA la app)
+- **Qué es**: una segunda puerta al login para alguien de afuera que tiene que
+  poder mirar la app interna completa sin poder cambiar nada. Usuario y
+  contraseña fijos, no Google — el OAuth está restringido a `@sangria.agency` y
+  una auditora externa no tiene esa cuenta.
+- **Credenciales**: constantes en `lib/audit-session.ts` (`AUDIT_EMAIL`,
+  `AUDIT_PASSWORD`), igual que `CLIENT_PORTAL_PASSWORD`. No hay alta de
+  usuarios externos en la app: el acceso se revoca borrando esas constantes y
+  redeployando.
+- **Es la MISMA URL de la app**, no un subdominio ni una ruta aparte: entra al
+  dashboard, el proxy la manda a `/login` y ahí abajo del botón de Google está
+  el desplegable "Acceso de auditoría". El link que se comparte es
+  **`/login?audit=1`**, que abre ese formulario ya desplegado.
+- **Alcance**: la app interna **entera**, Configuración incluida. No hay lista
+  de rutas vedadas — lo único que no puede es escribir.
+- **Tres barreras encadenadas** (defensa en profundidad):
+  1. **El proxy sólo la deja pasar en GET/HEAD/OPTIONS**
+     (`lib/supabase/middleware.ts`, rama `isAudit`). Los Server Actions de Next
+     se despachan por **POST** a la ruta actual sin importar el path, así que
+     cerrar todo lo que no sea GET cierra de raíz **toda** escritura, incluidas
+     las actions que todavía no se escribieron. Es el mismo razonamiento por el
+     que el portal de cliente es GET-only. Ésta es la garantía estructural: no
+     depende de acordarse de nada.
+  2. **`assertCanWrite()`** (`lib/read-only.ts`) al principio de cada una de las
+     **73** server actions que escriben. Devuelve `{ ok: false, error }` con la
+     forma que ya usan las actions, así el error sale por el toast de siempre.
+     `npm run check:read-only` falla si una action que escribe se queda sin el
+     guard, si lo tiene después de la primera consulta a la base, o si se lo
+     pusieron a una de sólo lectura.
+  3. **La UI desactiva y explica**: cada control que escribe lleva
+     `data-audit-hint="<nombreDeLaAction>"`, y en modo auditoría queda apagado
+     y muestra al pasar el mouse **qué cambio haría y a qué áreas afecta**
+     (`components/audit-mode.tsx` + registro en `lib/audit-hints.ts`).
+- **El cookie va firmado** (HMAC-SHA256, vencimiento adentro de la firma). El
+  del portal guarda un slug en texto plano porque el premio de falsearlo es un
+  portal público; acá el premio es la app interna entera, así que se verifica
+  firma y vencimiento en cada request. El secreto sale de `AUDIT_SESSION_SECRET`
+  y, si no está, de `DATABASE_URL` (server-only y secreto). Sin ninguno de los
+  dos, **falla cerrado**: no se emite ni se acepta ninguna sesión de auditoría y
+  el formulario del login lo dice.
+- **Exports**: sí puede bajar los Excel/PDF (`canAccessClientExport` en
+  `lib/client-portal.server.ts`). Son GET y en este proyecto los exports son un
+  espejo de la pantalla: si puede ver el plan, puede bajarlo. Lo que **no** pasa
+  por ahí es `canWriteAsClientPortal`, que la deja afuera a propósito.
+- **Chequeo**: `npm run check:audit` (`scripts/check-audit-session.ts`) valida
+  firma, vencimiento, token alterado, secreto cambiado, falla cerrado y qué
+  métodos deja pasar el proxy. No necesita DB ni levantar la app.
+- **Cerrar sesión**: el mismo menú del topbar, pero posteando a
+  `/api/audit/logout` en vez de `/auth/signout` (no hay sesión de Supabase que
+  cerrar). Ese endpoint está exento del GET-only, si no daría 403.
+
+### El rol Viewer: el gancho está, apagado a propósito
+- El rol `viewer` dice "Solo lectura" pero es **decorativo**: `lib/permissions.ts`
+  sólo mira el rol para aprobar planes y para administrar usuarios, así que un
+  viewer puede invocar las otras ~80 server actions igual que un admin.
+- `assertCanWrite()` ya sabe hacerlo cumplir: alcanza con agregar `"viewer"` a
+  `READ_ONLY_ROLES` (`lib/roles.ts`). **Está vacía a propósito.**
+- **Por qué no se activó**: el default de la columna es `viewer` (`db/schema.ts`)
+  y `touchUser()` da de alta con el default a cualquiera que entre por primera
+  vez. O sea que hoy casi todo el equipo figura como `viewer` sin que eso haya
+  querido decir nunca "solo lectura" — activarlo dejaría a esa gente sin poder
+  trabajar en el próximo deploy.
+- **Para activarlo**: primero asignar roles de verdad en Configuración →
+  Usuarios y roles, confirmar que no quede nadie en `viewer` por omisión, y
+  recién ahí sumarlo a la lista. La sesión de auditoría no depende de esto.
+
 ### Portal de cliente (público, read-only salvo "Marcar pagado")
 - **Qué es**: una vista para compartir con cada cliente en
   `/<slug>` (el mismo slug interno del cliente, ej. `/copa`).

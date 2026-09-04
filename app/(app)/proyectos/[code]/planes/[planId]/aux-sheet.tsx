@@ -102,7 +102,7 @@ export function AuxSheetSection({
               <code>=B5*2</code>, <code>=SUM(A5:A10)</code>.
             </p>
           </div>
-          <Button variant="secondary" size="sm" onClick={onCreate} disabled={pending}>
+          <Button variant="secondary" size="sm" onClick={onCreate} disabled={pending} data-audit-hint="createAuxSheet">
             <Plus size={14} strokeWidth={2} />
             Crear tab auxiliar
           </Button>
@@ -756,6 +756,7 @@ function AuxSheetEditor({
             defaultValue={sheet.name}
             onClick={(e) => e.stopPropagation()}
             onBlur={(e) => onRename(e.target.value)}
+            data-audit-hint="updateAuxSheet"
             className="text-sm font-semibold bg-transparent border-b border-transparent hover:border-line focus:border-accent focus:outline-none px-1 -mx-1"
             title="Nombre del tab en el Excel"
           />
@@ -912,6 +913,7 @@ function AuxSheetEditor({
                                   }
                                   commitCell(r, c, e.target.value);
                                 }}
+                                data-audit-hint="updateAuxSheet"
                                 className="w-full bg-white dark:bg-paper-2 px-2 py-1 outline-none ring-2 ring-inset ring-accent"
                               />
                             ) : (
@@ -947,6 +949,7 @@ function AuxSheetEditor({
                   onClick={undo}
                   disabled={undoStack.length === 0}
                   title="Deshacer (Ctrl/Cmd+Z)"
+                  data-audit-hint="updateAuxSheet"
                 >
                   Deshacer
                 </Button>
@@ -956,6 +959,7 @@ function AuxSheetEditor({
                   onClick={redo}
                   disabled={redoStack.length === 0}
                   title="Rehacer (Ctrl/Cmd+Shift+Z)"
+                  data-audit-hint="updateAuxSheet"
                 >
                   Rehacer
                 </Button>
@@ -965,6 +969,7 @@ function AuxSheetEditor({
                   size="xs"
                   onClick={addRow}
                   disabled={pending || rows >= AUX_SHEET_MAX_ROWS}
+                  data-audit-hint="updateAuxSheet"
                 >
                   <Plus size={12} strokeWidth={2} />
                   Fila
@@ -974,6 +979,7 @@ function AuxSheetEditor({
                   size="xs"
                   onClick={addCol}
                   disabled={pending || cols >= AUX_SHEET_MAX_COLS}
+                  data-audit-hint="updateAuxSheet"
                 >
                   <Plus size={12} strokeWidth={2} />
                   Columna
@@ -985,6 +991,7 @@ function AuxSheetEditor({
                   onClick={doMerge}
                   disabled={!canMerge}
                   title="Combinar las celdas seleccionadas (queda el valor de la celda superior izquierda)"
+                  data-audit-hint="updateAuxSheet"
                 >
                   Combinar
                 </Button>
@@ -994,6 +1001,7 @@ function AuxSheetEditor({
                   onClick={doUnmerge}
                   disabled={!canUnmerge}
                   title="Separar las celdas combinadas de la selección"
+                  data-audit-hint="updateAuxSheet"
                 >
                   Separar
                 </Button>
@@ -1001,10 +1009,10 @@ function AuxSheetEditor({
                 <Button variant="ghost" size="xs" onClick={() => void copySelection()}>
                   Copiar
                 </Button>
-                <Button variant="ghost" size="xs" onClick={() => void pasteSelection()}>
+                <Button variant="ghost" size="xs" onClick={() => void pasteSelection()} data-audit-hint="updateAuxSheet">
                   Pegar
                 </Button>
-                <Button variant="ghost" size="xs" onClick={clearSelection}>
+                <Button variant="ghost" size="xs" onClick={clearSelection} data-audit-hint="updateAuxSheet">
                   Borrar
                 </Button>
                 <span className="text-[11px] text-muted hidden md:inline">
@@ -1024,6 +1032,7 @@ function AuxSheetEditor({
                 disabled={pending}
                 className="inline-flex items-center gap-1 text-[11px] text-muted hover:text-danger disabled:opacity-50"
                 title="Eliminar el tab auxiliar (y su tab del Excel)"
+                data-audit-hint="deleteAuxSheet"
               >
                 <Trash2 size={12} strokeWidth={2} />
                 Eliminar tab
@@ -1127,6 +1136,7 @@ function AuxMenuItem({
       role="menuitem"
       onClick={onClick}
       disabled={disabled}
+      data-audit-hint="updateAuxSheet"
       className={`block w-full px-3 py-1.5 text-left hover:bg-accent-soft/50 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed ${
         danger ? "text-danger" : ""
       }`}

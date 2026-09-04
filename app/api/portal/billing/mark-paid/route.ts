@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { clients, mediaPlans, planBillings, projects } from "@/db/schema";
 import { transitionBillingStatus } from "@/app/actions/plan-billing";
 import { canWriteAsClientPortal } from "@/lib/client-portal.server";
+import { readOnlyResponse } from "@/lib/read-only";
 
 // ════════════════════════════════════════════════════════════════════════════
 // "Marcar pagado" del Billing Tracker del portal de cliente.
@@ -41,6 +42,13 @@ export async function POST(req: Request) {
   if (!(await canWriteAsClientPortal(clientSlug))) {
     return Response.json({ ok: false, error: "Sin acceso" }, { status: 403 });
   }
+
+  // Cuarta barrera: una sesión de solo lectura (auditoría externa o rol
+  // Viewer) no escribe ni siquiera por el canal del portal. El proxy ya la
+  // frena en el método, pero este endpoint es público y se valida solo, así
+  // que no se apoya en eso. Ver lib/read-only.ts.
+  const ro = await readOnlyResponse();
+  if (ro) return ro;
 
   // Ownership + estado actual en una sola query: la factura tiene que ser de un
   // plan no borrado, de un proyecto de este cliente, y el cliente no archivado.

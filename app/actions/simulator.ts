@@ -6,6 +6,7 @@ import { invalidate } from "@/lib/cache-invalidate";
 import { PLANS_TAG } from "@/lib/cache-tags";
 import { db } from "@/db";
 import { recordAudit } from "@/lib/audit";
+import { assertCanWrite } from "@/lib/read-only";
 import {
   mediaPlanPlacements,
   mediaPlanPublishers,
@@ -68,6 +69,11 @@ export async function createScenario(input: {
   name: string;
   rowsJson?: ScenarioJson;
 }): Promise<Result<{ id: string }>> {
+  // Barrera de escritura: en modo solo lectura (auditoría externa o rol
+  // Viewer) la action corta acá y no toca la base — ver lib/read-only.ts.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const name = input.name.trim();
   if (!name) return { ok: false, error: "El nombre es obligatorio" };
   const json: ScenarioJson = input.rowsJson ?? { rows: [] };
@@ -94,6 +100,9 @@ export async function updateScenario(input: {
   name?: string;
   rowsJson?: ScenarioJson;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const patch: Partial<typeof simulatorScenarios.$inferInsert> = {
     updatedAt: new Date(),
   };
@@ -124,6 +133,9 @@ export async function updateScenario(input: {
 export async function deleteScenario(input: {
   id: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const result = await db
     .delete(simulatorScenarios)
     .where(eq(simulatorScenarios.id, input.id))
@@ -190,6 +202,9 @@ export async function promoteScenarioToPlan(input: {
   projectId: string;
   planName: string;
 }): Promise<Result<{ planId: string; projectCode: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const name = input.planName.trim();
   if (!name) return { ok: false, error: "El nombre del plan es obligatorio" };
 
@@ -390,6 +405,9 @@ export async function duplicateScenario(input: {
   id: string;
   newName?: string;
 }): Promise<Result<{ id: string }>> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const [src] = await db
     .select()
     .from(simulatorScenarios)

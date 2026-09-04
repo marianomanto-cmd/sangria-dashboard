@@ -14,11 +14,12 @@ import { MessageSquare, Pencil, Trash2, X } from "lucide-react";
 import {
   addReportComment,
   deleteReportComment,
-  listReportComments,
   updateReportComment,
   type ReportComment,
   type ReportRef,
 } from "@/app/actions/report-comments";
+// La lectura va por GET, no por server action: ver lib/report-comments-read.ts.
+import { listReportComments } from "@/lib/report-comments-read";
 import { useConfirm } from "@/components/confirm-dialog";
 import {
   actorLabel,
@@ -271,6 +272,7 @@ export function ReportCommentsModal({
                       <button
                         type="button"
                         onClick={() => onDelete(c.id)}
+                        data-audit-hint="deleteReportComment"
                         disabled={pending}
                         className="text-muted hover:text-danger disabled:opacity-50"
                         title={lang === "es" ? "Eliminar" : "Delete"}
@@ -302,6 +304,7 @@ export function ReportCommentsModal({
                         <button
                           type="button"
                           onClick={onSaveEdit}
+                          data-audit-hint="updateReportComment"
                           disabled={pending || !editing.body.trim()}
                           className="rounded-md bg-ink text-white px-2.5 py-1 text-xs font-medium hover:bg-ink-2 disabled:opacity-50"
                         >
@@ -340,6 +343,7 @@ export function ReportCommentsModal({
             <button
               type="button"
               onClick={onAdd}
+              data-audit-hint="addReportComment"
               disabled={pending || !draft.trim()}
               className="rounded-md bg-ink text-white px-3 py-1.5 text-sm font-medium hover:bg-ink-2 disabled:opacity-50"
             >

@@ -205,7 +205,7 @@ export function ProjectEditPanel({
 
       <div className="flex items-center justify-between gap-3 border-t border-line-soft pt-4">
         <div className="flex items-center gap-3">
-          <Button size="lg" onClick={onSave} disabled={pending}>
+          <Button size="lg" onClick={onSave} disabled={pending} data-audit-hint="updateProject">
             {pending ? "Guardando…" : "Guardar cambios"}
           </Button>
           <button
@@ -224,6 +224,7 @@ export function ProjectEditPanel({
           type="button"
           onClick={onDelete}
           disabled={pending}
+          data-audit-hint="deleteProject"
           className="inline-flex items-center gap-1.5 rounded-md border border-danger bg-white dark:bg-paper-2 px-3 py-2 text-sm font-medium text-danger hover:bg-danger-soft transition-colors disabled:opacity-50"
         >
           <Trash2 size={14} />

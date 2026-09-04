@@ -11,6 +11,7 @@ import { isValidRole } from "@/lib/roles";
 import { recordAudit } from "@/lib/audit";
 import { getCurrentUser } from "@/lib/auth";
 import { canManageUsers } from "@/lib/permissions";
+import { assertCanWrite } from "@/lib/read-only";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -33,6 +34,11 @@ export async function setUserRole(input: {
   userId: string;
   role: string;
 }): Promise<Result> {
+  // Barrera de escritura: sesión de auditoría y rol Viewer no pasan de acá
+  // (ver lib/read-only.ts). Va antes que requireAdmin y que toda validación.
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
   if (!isValidRole(input.role)) return { ok: false, error: "Rol inválido." };
@@ -89,6 +95,9 @@ export async function setUserActive(input: {
   userId: string;
   active: boolean;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
 
@@ -137,6 +146,9 @@ export async function addUserByEmail(input: {
   name: string;
   role: string;
 }): Promise<Result> {
+  const denied = await assertCanWrite();
+  if (denied) return denied;
+
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
 

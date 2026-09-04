@@ -408,6 +408,7 @@ export function CampaignTrackerEditor({
             </button>
             <Button
               size="sm"
+              data-audit-hint="closeDailyLoad"
               onClick={handleClose}
               disabled={closing}
               title="Guarda un snapshot del estado actual en el histórico (para Reportes). No bloquea la edición."
@@ -696,6 +697,7 @@ function MetricCell({
     <input
       type="text"
       inputMode="decimal"
+      data-audit-hint="setPlacementActual"
       defaultValue={formatCellValue(value, unit)}
       placeholder="0"
       onChange={(e) =>

@@ -137,6 +137,7 @@ export function CreativeInvoiceForm({
       {open && (
         <form
           onSubmit={handleSubmit}
+          data-audit-hint="createCreativeBilling"
           className="border-t border-line-soft px-5 py-4 flex flex-col gap-4"
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

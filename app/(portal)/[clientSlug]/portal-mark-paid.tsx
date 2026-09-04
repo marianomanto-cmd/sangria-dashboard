@@ -50,6 +50,11 @@ export function PortalMarkPaidButton({
     <span className="inline-flex items-center gap-1.5 align-middle">
       <button
         type="button"
+        // El mismo botón pega a dos endpoints según el tab, así que la
+        // explicación sigue al `kind`.
+        data-audit-hint={
+          kind === "creative" ? "setCreativeBillingPaid" : "transitionBillingStatus"
+        }
         disabled={pending}
         title={title}
         aria-label={title}

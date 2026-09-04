@@ -75,6 +75,9 @@ export function NewPlanForm({
   return (
     <form
       onSubmit={handleSubmit}
+      // El mismo form dispara dos actions según la pestaña elegida, así que la
+      // explicación de la vista de auditoría sigue al modo activo.
+      data-audit-hint={mode === "duplicate" ? "duplicatePlan" : "createPlan"}
       className="rounded-lg border border-line bg-white dark:bg-paper-2 p-6 space-y-5"
     >
       {/* Selector de modo */}
