@@ -18,12 +18,16 @@ import { Button } from "@/components/button";
 export function AuditLogin({
   next,
   enabled,
+  openByDefault = false,
 }: {
   next: string | null;
   enabled: boolean;
+  // `/login?audit=1` — el link que se comparte con la auditora, para que caiga
+  // directo en el formulario y no tenga que buscar el desplegable.
+  openByDefault?: boolean;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(openByDefault);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);

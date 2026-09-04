@@ -68,6 +68,7 @@ export function UsersRolesClient({
 
       {adding && (
         <form
+          data-audit-hint="addUserByEmail"
           className="rounded-lg border border-line bg-white dark:bg-paper-2 p-4 flex flex-wrap items-end gap-3"
           onSubmit={(e) => {
             e.preventDefault();
@@ -166,6 +167,7 @@ export function UsersRolesClient({
                     </td>
                     <td className="px-4 py-3">
                       <select
+                        data-audit-hint="setUserRole"
                         value={u.role}
                         disabled={pending}
                         onChange={(e) =>
@@ -197,6 +199,7 @@ export function UsersRolesClient({
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Button
+                        data-audit-hint="setUserActive"
                         variant={u.active ? "ghost" : "secondary"}
                         size="xs"
                         disabled={pending || isMe}

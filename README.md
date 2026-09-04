@@ -1350,6 +1350,10 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
   `AUDIT_PASSWORD`), igual que `CLIENT_PORTAL_PASSWORD`. No hay alta de
   usuarios externos en la app: el acceso se revoca borrando esas constantes y
   redeployando.
+- **Es la MISMA URL de la app**, no un subdominio ni una ruta aparte: entra al
+  dashboard, el proxy la manda a `/login` y ahí abajo del botón de Google está
+  el desplegable "Acceso de auditoría". El link que se comparte es
+  **`/login?audit=1`**, que abre ese formulario ya desplegado.
 - **Alcance**: la app interna **entera**, Configuración incluida. No hay lista
   de rutas vedadas — lo único que no puede es escribir.
 - **Tres barreras encadenadas** (defensa en profundidad):

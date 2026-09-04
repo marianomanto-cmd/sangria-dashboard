@@ -355,6 +355,7 @@ export function PlanQaModal({
                               <input
                                 type="checkbox"
                                 data-qa-check={pl.id}
+                                data-audit-hint="setPlanQaCheck"
                                 checked={isChecked}
                                 disabled={saving.has(pl.id) || pending}
                                 onChange={(e) => toggle(pl.id, e.target.checked)}
@@ -508,6 +509,7 @@ export function PlanQaModal({
               <button
                 type="button"
                 onClick={onComplete}
+                data-audit-hint="completePlanQa"
                 disabled={!complete || pending}
                 title={
                   complete

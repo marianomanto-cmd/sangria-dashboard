@@ -635,6 +635,7 @@ export function ReportingCalendarClient({
               </button>
               <button
                 type="button"
+                data-audit-hint="markReportDelivered"
                 onClick={submitDelivered}
                 disabled={pendingAction}
                 className="rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:bg-success/90 disabled:opacity-50"
@@ -704,6 +705,7 @@ export function ReportingCalendarClient({
               </button>
               <button
                 type="button"
+                data-audit-hint="deleteManualReport"
                 onClick={submitDeleteManual}
                 disabled={pendingAction}
                 className="rounded-md bg-danger text-white px-3 py-1.5 text-sm font-medium hover:bg-danger/90 disabled:opacity-50"
@@ -1181,6 +1183,7 @@ function CreateManualReportForm({
 
   return (
     <form
+      data-audit-hint="createManualReport"
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
@@ -1317,6 +1320,7 @@ function LinkForm({
 
   return (
     <form
+      data-audit-hint="setReportPptUrl"
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
@@ -1350,6 +1354,7 @@ function LinkForm({
         {initialUrl && (
           <button
             type="button"
+            data-audit-hint="setReportPptUrl"
             onClick={() => onSubmit("")}
             disabled={pending}
             className="mr-auto rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm text-danger hover:bg-paper-2 disabled:opacity-50"
@@ -1404,6 +1409,7 @@ function AssignDateForm({
 
   return (
     <form
+      data-audit-hint="setReportDeliveryDate"
       className="space-y-3"
       onSubmit={(e) => {
         e.preventDefault();

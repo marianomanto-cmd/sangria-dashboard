@@ -62,6 +62,7 @@ export function NewProjectForm({
   return (
     <form
       onSubmit={handleSubmit}
+      data-audit-hint="createProject"
       className="rounded-lg border border-line bg-white dark:bg-paper-2 p-6 max-w-3xl space-y-5"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

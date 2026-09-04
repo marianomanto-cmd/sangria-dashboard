@@ -23,7 +23,7 @@ import { AUDIT_HINTS, GENERIC_AUDIT_HINT, type AuditHint } from "@/lib/audit-hin
 // ── Cómo se marca un control ────────────────────────────────────────────────
 // Con un atributo, no envolviéndolo en un componente:
 //
-//     <Button data-audit-hint="approvePlan">Aprobar</Button>
+//     <Button data-audit-hint="transitionPlanStatus">Aprobar</Button>
 //
 // El valor es el nombre de la server action que dispara. `lib/audit-hints.ts`
 // mapea ese nombre a { title, what, affects }. Se eligió un atributo y no un

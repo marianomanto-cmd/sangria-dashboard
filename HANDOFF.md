@@ -68,6 +68,10 @@ cookie, no un rol, y una fila ahí invitaría a pensar que cambiarle el rol le d
 permisos que no le da—. Tampoco se le vedó ninguna ruta: ve la app completa,
 Configuración incluida.
 
+**El link que se comparte** es el de la app de siempre: `/login?audit=1` abre
+el formulario de credenciales ya desplegado, para no hacerla buscar el
+desplegable abajo del botón de Google. No hay subdominio ni ruta aparte.
+
 **Cómo se revoca.** Borrando `AUDIT_EMAIL` / `AUDIT_PASSWORD` de
 `lib/audit-session.ts` y redeployando. O rotando `AUDIT_SESSION_SECRET`, que
 además invalida las sesiones ya abiertas.

@@ -52,6 +52,7 @@ export function ProjectStatusChanger({
         <button
           key={s}
           type="button"
+          data-audit-hint="setProjectStatus"
           disabled={pending}
           onClick={() => {
             setError(null);

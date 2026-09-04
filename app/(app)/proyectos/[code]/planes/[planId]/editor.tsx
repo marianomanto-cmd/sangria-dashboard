@@ -445,6 +445,7 @@ export function PlanEditor({
             {editable ? (
               <input
                 type="text"
+                data-audit-hint="updatePlanMetadata"
                 defaultValue={detail.plan.name}
                 onBlur={(e) =>
                   e.target.value !== detail.plan.name &&
@@ -503,6 +504,7 @@ export function PlanEditor({
               {detail.plan.currentVersion > 0 && (
                 <button
                   type="button"
+                  data-audit-hint="revertPlanToApprovedSnapshot"
                   onClick={onDiscardDraft}
                   disabled={pending}
                   className="text-sm text-muted hover:text-danger px-3 py-1.5 disabled:opacity-50"
@@ -520,6 +522,7 @@ export function PlanEditor({
             <>
               <button
                 type="button"
+                data-audit-hint="transitionPlanStatus"
                 onClick={onBackToDraft}
                 disabled={pending}
                 className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
@@ -529,6 +532,7 @@ export function PlanEditor({
               {canApprove ? (
                 <button
                   type="button"
+                  data-audit-hint="transitionPlanStatus"
                   onClick={onApprove}
                   disabled={pending}
                   className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"
@@ -552,6 +556,7 @@ export function PlanEditor({
             <>
               <button
                 type="button"
+                data-audit-hint="transitionPlanStatus"
                 onClick={onBackToDraft}
                 disabled={pending}
                 className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
@@ -581,6 +586,7 @@ export function PlanEditor({
             <>
               <button
                 type="button"
+                data-audit-hint="transitionPlanStatus"
                 onClick={onBackToDraft}
                 disabled={pending}
                 className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
@@ -589,6 +595,7 @@ export function PlanEditor({
               </button>
               <button
                 type="button"
+                data-audit-hint="reopenPlanQa"
                 onClick={onReopenQa}
                 disabled={pending}
                 className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
@@ -598,6 +605,7 @@ export function PlanEditor({
               </button>
               <button
                 type="button"
+                data-audit-hint="transitionPlanStatus"
                 onClick={onMarkLive}
                 disabled={pending}
                 className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"
@@ -612,6 +620,7 @@ export function PlanEditor({
             <>
               <button
                 type="button"
+                data-audit-hint="transitionPlanStatus"
                 onClick={onUndoLive}
                 disabled={pending}
                 className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
@@ -621,6 +630,7 @@ export function PlanEditor({
               </button>
               <button
                 type="button"
+                data-audit-hint="transitionPlanStatus"
                 onClick={onBackToDraft}
                 disabled={pending}
                 className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
@@ -629,6 +639,7 @@ export function PlanEditor({
               </button>
               <button
                 type="button"
+                data-audit-hint="transitionPlanStatus"
                 onClick={onMarkFinished}
                 disabled={pending}
                 className="inline-flex items-center gap-1.5 rounded-md border border-line bg-white dark:bg-paper-2 px-3 py-1.5 text-sm font-medium text-ink hover:bg-paper-2 disabled:opacity-50"
@@ -643,6 +654,7 @@ export function PlanEditor({
           {detail.plan.status === "finished" && (
             <button
               type="button"
+              data-audit-hint="transitionPlanStatus"
               onClick={onReopenFinished}
               disabled={pending}
               className="text-sm text-muted hover:text-ink px-3 py-1.5 disabled:opacity-50"
@@ -702,6 +714,7 @@ export function PlanEditor({
           </p>
           <button
             type="button"
+            data-audit-hint="transitionPlanStatus"
             onClick={onMarkLive}
             disabled={pending}
             className="inline-flex items-center gap-1.5 rounded-md bg-success text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50 shrink-0"
@@ -797,6 +810,7 @@ export function PlanEditor({
             Notas del plan
           </p>
           <textarea
+            data-audit-hint="updatePlanMetadata"
             defaultValue={detail.plan.notesMd ?? ""}
             disabled={!editable}
             placeholder={editable ? "Audiencia general, contexto, objetivos…" : ""}
@@ -893,6 +907,7 @@ export function PlanEditor({
               <span>Agregar fee:</span>
               <button
                 type="button"
+                data-audit-hint="addFee"
                 onClick={() => onAddFee("management")}
                 disabled={pending || detail.fees.some((f) => f.feeType === "management")}
                 className="inline-flex items-center gap-1 hover:text-ink disabled:opacity-30"
@@ -907,6 +922,7 @@ export function PlanEditor({
               </button>
               <button
                 type="button"
+                data-audit-hint="addFee"
                 onClick={() => onAddFee("setup")}
                 disabled={pending}
                 className="inline-flex items-center gap-1 hover:text-ink"
@@ -916,6 +932,7 @@ export function PlanEditor({
               </button>
               <button
                 type="button"
+                data-audit-hint="addFee"
                 onClick={() => onAddFee("reporting")}
                 disabled={pending}
                 className="inline-flex items-center gap-1 hover:text-ink"
@@ -925,6 +942,7 @@ export function PlanEditor({
               </button>
               <button
                 type="button"
+                data-audit-hint="addFee"
                 onClick={() => onAddFee("custom")}
                 disabled={pending}
                 className="inline-flex items-center gap-1 hover:text-ink"
@@ -1226,7 +1244,7 @@ function PublisherGroup({
         <span className="text-xs text-muted shrink-0">
           {pub.placements.length} placement{pub.placements.length === 1 ? "" : "s"}
         </span>
-        <span className="flex items-center gap-1.5 shrink-0 text-xs">
+        <span className="flex items-center gap-1.5 shrink-0 text-xs" data-audit-hint="updatePlanPublisher">
           <span className="text-[10px] uppercase tracking-[0.06em] text-muted">
             subtotal
           </span>
@@ -1250,6 +1268,7 @@ function PublisherGroup({
           <>
             <button
               type="button"
+              data-audit-hint="duplicatePlanPublisher"
               onClick={onDuplicatePub}
               className="text-muted hover:text-ink p-1 shrink-0"
               title="Duplicar publisher (con todos sus placements)"
@@ -1258,6 +1277,7 @@ function PublisherGroup({
             </button>
             <button
               type="button"
+              data-audit-hint="removePublisherFromPlan"
               onClick={onRemovePub}
               className="text-muted hover:text-danger p-1 -mr-1 shrink-0"
               title="Eliminar publisher"
@@ -1288,6 +1308,7 @@ function PublisherGroup({
           {editable && (
             <button
               type="button"
+              data-audit-hint="updatePlanPublisher"
               onClick={onBalance}
               className="inline-flex items-center gap-1 rounded border border-warn/40 px-1.5 py-0.5 hover:bg-warn-soft"
               title="Poner el total del publisher igual a la suma de placements"
@@ -1341,6 +1362,7 @@ function PublisherGroup({
         <div className="border-t border-line-soft px-4 py-2">
           <button
             type="button"
+            data-audit-hint="addPlacement"
             onClick={onAddPlacement}
             className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink"
           >
@@ -1423,7 +1445,7 @@ function PlacementGridRow({
         selected ? "bg-accent-soft/50" : "hover:bg-paper-2/40"
       }`}
     >
-      <td className="pl-5 pr-2 py-1">
+      <td className="pl-5 pr-2 py-1" data-audit-hint="updatePlacement">
         <AudienceHoverCard audience={placement.audience} className="w-full">
           <TextInput
             value={placement.placementName}
@@ -1435,6 +1457,7 @@ function PlacementGridRow({
       </td>
       <td className="px-2 py-1">
         <select
+          data-audit-hint="updatePlacement"
           value={placement.marketId ?? ""}
           disabled={!editable}
           onChange={(e) => update({ marketId: e.target.value || null })}
@@ -1450,6 +1473,7 @@ function PlacementGridRow({
       </td>
       <td className="px-2 py-1">
         <select
+          data-audit-hint="updatePlacement"
           value={placement.costMethod ?? ""}
           disabled={!editable}
           onChange={(e) =>
@@ -1463,7 +1487,7 @@ function PlacementGridRow({
           ))}
         </select>
       </td>
-      <td className="px-2 py-1 text-right">
+      <td className="px-2 py-1 text-right" data-audit-hint="updatePlacement">
         <NumberInput
           value={placement.amountUsd}
           onCommit={(v) =>
@@ -1480,7 +1504,7 @@ function PlacementGridRow({
           className="w-32 text-right font-mono"
         />
       </td>
-      <td className="px-2 py-1 text-right">
+      <td className="px-2 py-1 text-right" data-audit-hint="updatePlacement">
         {pair ? (
           <RateInput
             value={eff?.rate ?? null}
@@ -1502,7 +1526,7 @@ function PlacementGridRow({
           <span className="text-line">—</span>
         )}
       </td>
-      <td className="px-2 py-1 text-right">
+      <td className="px-2 py-1 text-right" data-audit-hint="updatePlacement">
         {pair ? (
           <DeliveryInput
             value={eff?.delivery ?? null}
@@ -1528,6 +1552,7 @@ function PlacementGridRow({
         <td className="px-1 py-1 text-center whitespace-nowrap">
           <button
             type="button"
+            data-audit-hint="duplicatePlacement"
             onClick={(e) => {
               e.stopPropagation();
               onDuplicate();
@@ -1539,6 +1564,7 @@ function PlacementGridRow({
           </button>
           <button
             type="button"
+            data-audit-hint="removePlacement"
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
@@ -1592,11 +1618,12 @@ function PlacementInspector({
         </p>
       </div>
 
-      <div className="px-4 py-3 space-y-3">
+      <div className="px-4 py-3 space-y-3" data-audit-hint="updatePlacement">
         <div className="grid grid-cols-2 gap-3">
           <Field label="Fecha inicio">
             <input
               type="date"
+              data-audit-hint="updatePlacement"
               defaultValue={placement.startDate ?? ""}
               disabled={!editable}
               onBlur={(e) =>
@@ -1609,6 +1636,7 @@ function PlacementInspector({
           <Field label="Fecha fin">
             <input
               type="date"
+              data-audit-hint="updatePlacement"
               defaultValue={placement.endDate ?? ""}
               disabled={!editable}
               onBlur={(e) =>
@@ -1828,13 +1856,13 @@ function PrincipalPairEditor({
         <span className="text-muted">({primaryMetricName})</span>
       </p>
       <div className="grid grid-cols-2 gap-3">
-        <div>
+        <div data-audit-hint="updatePlacement">
           <label className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted block mb-0.5">
             Tarifa ({pair.rate.toUpperCase()})
           </label>
           <RateInput value={effRate} disabled={!editable} onCommit={onChangeRate} />
         </div>
-        <div>
+        <div data-audit-hint="updatePlacement">
           <label className="text-[10px] font-medium uppercase tracking-[0.06em] text-muted block mb-0.5">
             Delivery ({primaryUnit ?? pair.delivery})
           </label>
@@ -2251,6 +2279,7 @@ function MetricsEditor({
                   <tr key={idx} className="border-b border-line-soft last:border-b-0">
                     <td className="px-2 py-1">
                       <select
+                        data-audit-hint="updatePlacement"
                         value={row.slug}
                         disabled={!editable}
                         onChange={(e) => updateRow(idx, { slug: e.target.value, rate: "", delivery: "" })}
@@ -2270,7 +2299,7 @@ function MetricsEditor({
                           ))}
                       </select>
                     </td>
-                    <td className="px-2 py-1">
+                    <td className="px-2 py-1" data-audit-hint="updatePlacement">
                       {pair ? (
                         <div
                           title={
@@ -2289,7 +2318,7 @@ function MetricsEditor({
                         <span className="block text-right text-[11px] text-line">—</span>
                       )}
                     </td>
-                    <td className="px-2 py-1">
+                    <td className="px-2 py-1" data-audit-hint="updatePlacement">
                       <DeliveryInput
                         value={effDelivery}
                         disabled={!editable}
@@ -2300,6 +2329,7 @@ function MetricsEditor({
                       <td className="w-8 text-center">
                         <button
                           type="button"
+                          data-audit-hint="updatePlacement"
                           onClick={() => removeRow(idx)}
                           className="text-muted hover:text-danger p-1"
                         >
@@ -2433,7 +2463,7 @@ function FeeRow({
       <td className="px-5 py-1.5 text-xs font-mono text-muted uppercase">
         {fee.feeType}
       </td>
-      <td className="px-5 py-1.5">
+      <td className="px-5 py-1.5" data-audit-hint="updateFee">
         <TextInput
           value={fee.name}
           onCommit={(v) => update({ name: v })}
@@ -2441,7 +2471,7 @@ function FeeRow({
           className="w-full text-ink"
         />
       </td>
-      <td className="px-5 py-1.5 text-right">
+      <td className="px-5 py-1.5 text-right" data-audit-hint="updateFee">
         {isManagement ? (
           <RatePctInput
             value={fee.ratePct}
@@ -2452,7 +2482,7 @@ function FeeRow({
           <span className="text-line text-xs font-mono">—</span>
         )}
       </td>
-      <td className="px-5 py-1.5 text-right">
+      <td className="px-5 py-1.5 text-right" data-audit-hint="updateFee">
         {fee.isAutoComputed ? (
           <span
             className="font-mono text-ink-2 tabular-nums"
@@ -2469,7 +2499,7 @@ function FeeRow({
           />
         )}
       </td>
-      <td className="px-5 py-1.5">
+      <td className="px-5 py-1.5" data-audit-hint="updateFee">
         <TextInput
           value={fee.notes ?? ""}
           onCommit={(v) => update({ notes: v || null })}
@@ -2482,6 +2512,7 @@ function FeeRow({
         <td className="px-2 py-1.5 text-center">
           <button
             type="button"
+            data-audit-hint="removeFee"
             onClick={onRemove}
             className="text-muted hover:text-danger p-1"
           >
@@ -2971,6 +3002,7 @@ function AddPublisherDropdown({
 }) {
   return (
     <select
+      data-audit-hint="addPublisherToPlan"
       defaultValue=""
       onChange={(e) => {
         if (e.target.value) {

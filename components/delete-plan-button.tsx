@@ -80,6 +80,7 @@ export function DeletePlanButton({
               <button
                 type="button"
                 onClick={onConfirm}
+                data-audit-hint="deletePlan"
                 disabled={pending}
                 className="rounded-md bg-danger text-white px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"
               >

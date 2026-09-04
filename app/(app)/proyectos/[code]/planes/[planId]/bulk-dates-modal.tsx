@@ -299,7 +299,7 @@ export function BulkDatesModal({
             <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
               Cancelar
             </Button>
-            <Button size="md" onClick={onApply} disabled={blocked || pending}>
+            <Button size="md" data-audit-hint="bulkUpdatePlacementDates" onClick={onApply} disabled={blocked || pending}>
               <CalendarRange size={14} strokeWidth={2} />
               {pending ? "Cambiando…" : "Cambiar"}
             </Button>
