@@ -325,7 +325,12 @@ export function BuilderTab({
           />
           <button
             type="button"
-            data-audit-hint="updateScenario"
+            // El botón ramifica —y hasta cambia su etiqueta a "Crear"— según
+            // haya o no un escenario abierto, así que la explicación de la
+            // vista de auditoría sigue esa misma rama.
+            data-audit-hint={
+              editing.scenarioId ? "updateScenario" : "createScenario"
+            }
             onClick={() => save(false)}
             disabled={pending}
             className="text-xs px-3 py-2 rounded-md bg-accent text-white hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5"
