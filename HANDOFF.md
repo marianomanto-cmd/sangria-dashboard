@@ -1,6 +1,102 @@
-# Handoff — viernes 04/sep/2026
+# Handoff — sábado 05/sep/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 05/sep/2026 — el dashboard es un tablero de pendientes (4 listas, 3 queries)
+
+**El síntoma.** `/dashboard` venía cayéndose a diario con el cartel "No se pudo
+leer la base" y, abajo, una query pegada. La query que mostraba **cambiaba en
+cada carga**.
+
+**El diagnóstico (logs de Vercel, `prj_OjxtC0M9dh3LcIW5y603QNgWfJwR`).** Tres
+cargas consecutivas, tres queries distintas:
+
+| hora (05/sep) | query que falló |
+| --- | --- |
+| 13:38:42 | proyectado por mes (`generate_series` sobre los placements) |
+| 13:39:02 | por cobrar (`plan_billings` impagos) |
+| 13:39:42 | proyectos ⋈ clients ⋈ planes ⋈ billings ⋈ publishers |
+
+Cuando el que falla cambia en cada intento **no hay una query rota: hay
+contención**. `getDashboardV2` había crecido de las 4 queries con las que nació
+(03/sep) a **NUEVE**, todas en un `Promise.all`, contra un pool de **3**
+conexiones (`MAX_CONNECTIONS`, `db/index.ts`). Las que no consiguen conexión
+mueren contra el reloj de fase sin haberse ejecutado nunca, y como `Promise.all`
+rechaza con el **primer** error, una sola query ahogada se llevaba puesta la
+página entera. Es exactamente el mismo modo de falla del 03/sep, esta vez
+fabricado por el fan-out de la propia vista.
+
+**La decisión del dueño del repo: rehacerla liviana.** El dashboard pasa a ser
+un tablero de pendientes y nada más — sin KPIs, sin gráfico, sin tabla de
+proyectos:
+
+1. **Billings pendientes** — meses cerrados sin facturar.
+2. **Trackings pendientes** — campañas al aire sin el cierre del día.
+3. **Planes pendientes de QA** — firmados que no pueden ir a live.
+4. **Planes pendientes de aprobar** — congelados esperando la firma.
+
+**La regla que queda escrita: el fan-out no puede superar al pool.** Son **3
+queries para 3 conexiones** — las dos listas de planes salen de UNA lectura
+(misma tabla, dos estados). Sumar una cuarta query es volver al problema.
+
+**Dos bugs de la query de tracking, arreglados de paso:**
+
+- **El período no se chequeaba.** El comentario decía "campañas vigentes hoy"
+  pero el SQL sólo miraba el status: un plan firmado que arranca el mes que
+  viene figuraba como tracking pendiente desde el día que se aprobaba, y una
+  campaña ya corrida seguía apareciendo hasta que alguien la pasaba a
+  `finished` a mano.
+- **`max(closed_at)` → `max(snapshot_date)`**, el día TRACKEADO, que es el
+  criterio del campaign tracker y de `db/queries/pendings.ts`. Además entra por
+  `idx_cas_plan_date` en vez de agregar todas las filas del plan (placement ×
+  métrica × día). Medido en el Postgres 16 local con 320k snapshots:
+
+  | | plan | buffers | tiempo |
+  | --- | --- | --- | --- |
+  | antes (`left join` + `group by`) | seq scan de las 320.006 filas | 2.997 | **242 ms** |
+  | ahora (`lateral max(snapshot_date)`) | index only scan backward | 56 | **0,7 ms** |
+
+**Otros dos arreglos en el camino de la falla:**
+
+- **`maxDuration` de la page: 30 → 45**, igual que el layout. El peor caso del
+  reintento de `db/index.ts` son **30,3s**, así que con 30 Vercel podía matar la
+  función ANTES de que lanzáramos el error — y una función muerta se congela con
+  su conexión abierta, que es la fábrica de zombies del pooler documentada el
+  02/sep.
+- **El error ahora se loguea y se muestra con su causa.** El `message` de un
+  error de drizzle es sólo `Failed query: <sql>`; el motivo real (timeout de
+  cola, 57014, error de postgres) viajaba en `cause` y se perdía — que era justo
+  lo único que hacía falta saber. `describeError` en la page encadena los
+  `message` con `↳`.
+
+**Se va también un crash aparte.** Los logs traían un `TypeError: Cannot read
+properties of undefined (reading 'slice')` en `/dashboard.rsc`: era
+`r.month.slice(5)` del gráfico real vs proyectado. El gráfico ya no existe.
+
+**Qué se perdió y dónde está.** KPIs, salud por cliente, proyectos con
+sparklines, real vs proyectado, planes en vuelo, reportes y por cobrar siguen en
+`/billing`, `/billing-tracker`, `/proyectos`, `/planes`,
+`/reportes/calendario` y `/dashboard-legacy`. El filtro por cliente lo sirve el
+**selector global del topbar**, así que los chips propios del dashboard sobraban.
+
+**Acción en prod: NO hay.** Ni migración, ni backfill, ni SQL para correr: el
+cambio es sólo código y usa índices que ya existen (`idx_cas_plan_date`,
+`uq_mps_plan_version`, `uq_mppqr_plan_version`).
+
+**Probado** contra un Postgres 16 local con un fixture de 11 planes que cubre
+los bordes (cerrado hoy, nunca cerrado, período futuro, período terminado, plan
+borrado, draft, versión vieja vs vigente, QA de planificación sin cerrar): 18
+aserciones sobre `getDashboardV2()` **real** —drizzle + postgres.js + el wrapper
+de `db/index.ts`— más el render de la vista con `renderToStaticMarkup` en es/en,
+vacía y en estado de error (el render es justo donde el dashboard venía
+crasheando y no lo ven ni `tsc` ni `next build`). `tsc`, `eslint` y
+`next build`, en verde.
+
+**Deuda que quedó a la vista, sin tocar.** `idx_mpp_plan` (el índice de
+`media_plan_publishers.media_plan_id`) existe en prod porque lo creó
+`db/fk-indexes.sql`, pero **no está declarado en `db/schema.ts`**. Hoy es
+inerte —nadie corre `db:push` contra prod— pero es drift entre el schema y la
+base, y las dos queries de pendientes dependen de ese índice.
 
 ### Cambios de la sesión 04/sep/2026 — vista de auditoría: alguien de afuera mira toda la app y no puede tocar nada
 
@@ -5070,6 +5166,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+b9785e7  Dashboard: cuatro listas de pendientes y tres queries
 d521cd9  Merge PR #276: nomenclatura única de mercados — el mercado se elige, no se escribe
 39543f5  fix(markets): lo que encontró la revisión adversarial del paso B
 a9ed1b3  refactor(markets): el paso B ya no necesita crear una función antes
@@ -5809,6 +5906,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el ORDEN de la lista de Proyectos del PORTAL | Param `?psort=` (`PortalParams` en `app/(portal)/[clientSlug]/portal-content.tsx`). El select "Ordenar" es el field `psort` de `portal-filters.tsx` (`PROJECT_SORT_OPTIONS` = labels; los values los valida `resolveProjectSort`). El orden lo aplica `sortPortalProjects` en `ProjectsSection`, **después** de filtrar y **antes** de armar `visiblePlanIds` — así el Excel de pacing sale en el mismo orden que la pantalla. Monto = suma de las campañas visibles; fecha = inicio del período (fallback al fin) y los proyectos sin fechas van SIEMPRE al final. |
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
+| Tocar el **dashboard** (`/dashboard`) | Query: `db/queries/dashboard-v2.ts` (`getDashboardV2` → las 4 listas). Vista: `components/dashboard-v2/view.tsx` + `pieces.tsx`. Page: `app/(app)/dashboard/page.tsx`. **Regla dura: el fan-out no puede superar al pool** — son 3 queries para las 3 conexiones de `MAX_CONNECTIONS` (`db/index.ts`); un dato nuevo va DENTRO de una de las tres o se deriva en JS. Las 9 queries de la versión anterior son las que tiraban la página abajo (sesión 05/sep). El dashboard viejo, con sus KPIs y gráficos, sigue en `/dashboard-legacy` (`components/dashboard/` + `db/queries/dashboard.ts` + `pendings.ts`). |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
 | Tocar el **par tarifa↔delivery** de un placement | `applyPrimaryPairChange` (métrica principal) y `MetricsEditor.onChangeRate`/`onChangeDelivery` (indicadores estimados), los dos en `editor.tsx`; `recomputeMetricsForAmount` para el rate-anchoring al cambiar el monto. **Regla dura: el delivery se guarda EXACTO (`exactDelivery`, 6 decimales) y se muestra redondeado** — ver README. Al escribir la tarifa se redondea la tarifa primero y el delivery se deriva de ella. De qué slug sale la tarifa lo decide `buildMetricRatePairs` en `lib/cost-methods.ts`: sin una calculada `amount / <slug>` en el catálogo del cliente, la tarifa NO se persiste y se re-deriva de `amount / delivery`. |
 | Que un input numérico no pise el dato al salir del campo | `RateInput` / `DeliveryInput` en `editor.tsx`. Los dos pintan con menos precisión de la que guardan, así que **no commitean si el planner no escribió** (flag en el primer `onInput`, apagado al commitear). No volver al umbral numérico: comparar el texto reparseado contra el valor guardado es justo lo que reescribía las tarifas con sólo tabular. |
