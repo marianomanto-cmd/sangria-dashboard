@@ -205,7 +205,8 @@ components/                 # UI compartida
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   project-status-selector.tsx    # filtro por estado del proyecto (pills URL-based, server) en /proyectos — planning/active/paused/closed/reportado + Todos. Colores de dot espejan status-badge.tsx. Exporta PROJECT_STATUS_VALUES para validar el searchParam
-  dashboard/                # Dashboard REDISEÑADO (3 vistas con toggle): dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Reemplaza al viejo dashboard-view/pending-board/kpi-card (BORRADOS)
+  dashboard-v2/             # /dashboard — TABLERO DE PENDIENTES (4 listas, sin KPIs ni gráficos): view.tsx (los 4 paneles + el cartel de error) · pieces.tsx (Panel, PendingRow, StatusDot, EmptyRow). Todo server component: no manda JS al browser
+  dashboard/                # /dashboard-legacy — el dashboard VIEJO de 3 vistas con toggle, fuera de la navegación: dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Se borra —junto con db/queries/dashboard.ts y pendings.ts— cuando ya nadie compare números contra él
   topbar-nav.tsx            # título de sección (Archivo), SOLO mobile (<lg) — en desktop manda la TopNav del header
   top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; mide el ancho y mete lo que no entra en un menú "Más ▾" (nunca scrollea, ResizeObserver). Reemplaza al sidebar vertical para liberar el ancho al contenido
   billing-estimate-card.tsx # cards de estimación de facturación (mes previo real vs estimado + N meses futuros). Vive en /billing-tracker?tab=estimates y en el portal. Con `projectionsById` (portal) cada fila de proyecto se DESPLIEGA in situ → billing de cada plan + facturas emitidas (histórico: número + mes + valor) + cronograma de lo que falta facturar por mes restante (getClientBillingProjections)
@@ -253,13 +254,14 @@ db/
   markets-nomenclatura.sql  # ⚙️ GENERADO (`npm run gen:markets-sql`) — PASO B: normaliza el catálogo de TODOS los clientes y fusiona los duplicados, repuntando placements, cierres y los marketId embebidos en snapshot_json / rows_json. Es un PLAN EXPLÍCITO (una fila por mercado con su destino ya resuelto), no un diccionario que resuelve la base. 3 bloques: dry-run · aplicar · verificación. Idempotente
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
   queries/
-    dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación
+    dashboard-v2.ts         # /dashboard: getDashboardV2 → las 4 listas de pendientes en 3 queries. El fan-out NO puede superar al pool (MAX_CONNECTIONS=3); ver el bloque de cabecera del archivo
+    dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación (hoy sólo /dashboard-legacy y /proyectos)
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
     historical-report.ts    # getHistoricalReport + getReportFilterOptions (generador de reportes)
     clients.ts, billing.ts, billing-tracker.ts, audit-log.ts, budget-origins.ts,
     reports.ts, campaign-tracker.ts, plan-trash.ts (planes borrados),
-    pendings.ts (tablero de pendientes del dashboard)
+    pendings.ts (tablero de pendientes de /dashboard-legacy)
     analysis.ts             # activaciones por mercado (mapa /analisis + portal): getMarketActivations + getAnalysisFilterOptions
     client-portal.ts        # portal: getPortalClient, getPortalFilterOptions, getClientSpendByPublisher
     plan-qa.ts              # getPlanQaState (QA de una versión: run + líneas controladas) + getPlanVersionHistory (versiones con su diff y su QA)
@@ -1262,9 +1264,83 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
   read-only; el despliegue es estado local, sin POST/Server Actions). Respeta los
   filtros Budget Origin / Proyecto del portal. **Sin cambios de schema.**
 
-### Pendientes del dashboard
+### Dashboard: el tablero de pendientes (`/dashboard`)
+
+El dashboard es **cuatro listas y nada más**. No tiene KPIs, ni gráfico, ni
+tabla de proyectos: es "qué falta hacer hoy". Query:
+`getDashboardV2(clientId)` en `db/queries/dashboard-v2.ts`; vista:
+`components/dashboard-v2/view.tsx`.
+
+- **Billings pendientes** — meses del span de placements de un plan FIRMADO
+  (`approved`/`qa_done`/`live`/`finished`) que ya cerraron (`mes < mes actual`)
+  y cuyo billing no está terminado: falta la fila en `plan_billings` o quedó en
+  `draft`. → `/proyectos/<code>/planes/<id>/billing`.
+- **Trackings pendientes** — planes vigentes (`approved`/`qa_done`/`live`) con
+  **hoy dentro del período** de sus placements, cuyo `max(snapshot_date)` de
+  `campaign_actual_snapshots` es anterior a hoy (o que nunca se trackearon). →
+  `/campaign-tracker/<planId>`.
+- **Planes pendientes de QA** — `status = 'approved'`: el cliente firmó y falta
+  el QA de armado. Hasta hacerlo **no pueden ir a live**. El badge cuenta los
+  días desde `media_plan_snapshots.approved_at` de la versión VIGENTE.
+- **Planes pendientes de aprobar** — `status = 'ready_to_send'`: el MM lo
+  congeló y espera la firma. Los días salen de
+  `media_plan_planning_qa_runs.completed_at` de la versión `current_version + 1`
+  (el QA de planificación es lo que habilitó el pase). Sin esa fila el badge
+  dice "sin fecha" en vez de inventar un cero.
+
+**REGLA DURA: el fan-out no puede superar al pool.** Son **3 queries** para las
+**3 conexiones** de `MAX_CONNECTIONS` (`db/index.ts`) — las dos listas de planes
+salen de UNA lectura, porque es la misma tabla con dos estados. Si hay que sumar
+un dato va DENTRO de una de las tres o se deriva en JS; agregar una cuarta query
+es volver al problema que tiró la página abajo (ver abajo).
+
+**Por qué se achicó (05/sep/2026).** La versión anterior quería ser el
+dashboard entero —KPIs, salud por cliente, proyectos con sparklines, real vs
+proyectado, planes en vuelo, reportes, por cobrar— y eran **9 queries en un
+`Promise.all` contra un pool de 3**. Se caía a diario con "No se pudo leer la
+base", y los logs de Vercel muestran el síntoma que lo delata: cada carga
+fallaba en una query **distinta** (13:38:42 la de proyectado, 13:39:02 la de por
+cobrar, 13:39:42 la de proyectos). Cuando el que falla cambia en cada intento no
+hay una query rota: hay **contención**, y como `Promise.all` rechaza con el
+primer error, una sola query ahogada se llevaba puesta la página completa.
+Todo lo que se sacó sigue vivo en su pantalla: `/billing`, `/billing-tracker`,
+`/proyectos`, `/planes`, `/reportes/calendario` y `/dashboard-legacy`. El filtro
+por cliente lo sirve el **selector global del topbar**, que está en todas.
+
+**`max(snapshot_date)`, no `max(closed_at)`.** El último cierre de tracking es
+el día TRACKEADO, que es el criterio del campaign tracker y de
+`db/queries/pendings.ts`. Además se lee con un `lateral` que aprovecha
+`idx_cas_plan_date` en vez de agregar todas las filas del plan (que son
+placement × métrica × día). Medido en un Postgres 16 local con 320k snapshots:
+**index only scan y 0,7 ms** contra **seq scan de la tabla entera y 242 ms**.
+
+**El período SÍ se chequea.** La versión anterior decía en el comentario
+"campañas vigentes hoy" pero el SQL sólo miraba el status, así que un plan
+firmado que arranca el mes que viene figuraba como tracking pendiente desde el
+día que se aprobaba, y una campaña ya corrida seguía apareciendo hasta que
+alguien la pasaba a `finished` a mano.
+
+**Sin caché, a propósito.** La lectura entera es una tanda de 3 queries, así que
+cachearla ahorra poco y agrega un modo de falla conocido: `unstable_cache` sólo
+guarda resultados exitosos, así que si el camino frío falla la caché nunca se
+llena y la página queda reintentando el camino caro para siempre.
+
+**`maxDuration = 45`, igual que el layout.** No bajarlo sin bajar también el
+presupuesto de reintentos de `db/index.ts`: el peor caso de una query ahí es
+**30,3s**. Estuvo en 30 hasta el 05/sep/2026 — o sea, por debajo del peor caso
+que el propio código se permite, y si Vercel mata la función antes de que
+lancemos el error la instancia se congela con su conexión abierta y arranca la
+espiral de zombies del pooler.
+
+**El error se muestra con su causa.** El `message` de un error de drizzle es
+sólo `Failed query: <sql>`; el motivo real (timeout de cola, 57014, error de
+postgres) viaja en `cause`, a veces anidado. `describeError` en la page encadena
+los `message` con `↳` para el log y para el cartel, así que la pantalla dice
+**por qué** falló y no sólo qué query fue.
+
+### Pendientes de `/dashboard-legacy`
 - `getDashboardPendings(clientId)` en `db/queries/pendings.ts` arma las cuatro
-  listas que consumen las 3 vistas del dashboard rediseñado
+  listas que consumen las 3 vistas del dashboard viejo
   (`components/dashboard/`), normalizadas por `groupPendings` (`shared.tsx`) →
   cada item con su **href real** al detalle + `clientSlug` (para `?client=`).
   Todo se deriva de columnas existentes (no hay flags nuevos):
@@ -1286,8 +1362,7 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
   "Ver todos →" que cambia a la vista **Operaciones**; en **Operaciones**, el
   board completo de 4 columnas. Cada fila tiene un botón que navega al **detalle
   real** (billing del plan, campaign tracker, generador/calendario de reportes,
-  /billing). (El board colapsable viejo `pending-board.tsx` se borró con el
-  rediseño.)
+  /billing).
 
 ### Audit log
 - `audit_log` graba cada CREATE/UPDATE/DELETE con `before_json` +
@@ -2070,10 +2145,16 @@ sql<string>`max(${tbl.col})::text`
 ```
 Y parsear con `new Date(str)` después.
 
-### Dashboard: caché por cliente + resiliencia
-[app/(app)/page.tsx](app/(app)/page.tsx) cachea sus 4 bloques de datos (KPIs,
+### `/dashboard-legacy`: caché por cliente + resiliencia
+OJO: esto describe el dashboard **viejo**, que hoy vive en
+[app/(app)/dashboard-legacy/page.tsx](app/(app)/dashboard-legacy/page.tsx) y
+está fuera de la navegación (`app/(app)/page.tsx` es sólo un redirect a
+`/dashboard`). El dashboard actual **no tiene caché** y son 3 queries — ver "El
+tablero de pendientes" arriba.
+
+Cachea sus 4 bloques de datos (KPIs,
 proyectos, monthly, pendientes) con **`unstable_cache`** (revalida 60s, keyed
-por `clientId`). Motivo: el dashboard es la página más pesada (~15-20 queries
+por `clientId`). Motivo: era la página más pesada (~15-20 queries
 agregadas por carga) y, sin caché, cada (re)carga / cambio de cliente armaba una
 tormenta de conexiones concurrentes que saturaba el Transaction Pooler de
 Supabase (`Postgres.js: Unknown Message`, `Failed query`, Vercel Runtime
