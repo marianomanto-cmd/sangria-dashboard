@@ -11,9 +11,12 @@ falta el SQL para llevarlos a `paid`.
 
 **No es un update, es un upsert.** Un mes cae en ese panel por dos motivos
 distintos (query 5 de `db/queries/dashboard-v2.ts`): o **no existe la fila** en
-`plan_billings`, o existe y está en `'draft'`. De los 7 meses visibles en la
-captura, 4 no tenían fila. Un `update ... set status='paid'` habría dejado la
-mitad de la lista intacta y sin ningún error que lo delate.
+`plan_billings`, o existe y está en `'draft'`. El diagnóstico contra prod
+confirmó el peor caso: **los 8 son altas, ninguno está en `'draft'`**. Un
+`update ... set status='paid'` no habría tocado una sola fila, y sin ningún
+error que lo delate — habría devuelto `UPDATE 0` y listo. La rama del UPDATE
+queda igual en el script, por si se recorre después de que alguien cargue uno
+de esos meses a mano.
 
 **Lo que hay que saber antes de correrlo — los montos quedan en cero.** La app
 no lee la plata del mes de `plan_billings.total_*` como dato cargado a mano:
@@ -23,8 +26,8 @@ no lee la plata del mes de `plan_billings.total_*` como dato cargado a mano:
 esas sublíneas, así que queda como **mes pagado de US$ 0** en /billing, en el
 Billing Tracker, en el "facturado real" del dashboard y en la estimación del
 portal del cliente. El script calcula los totales desde las sublíneas que
-existan (un `draft` con consumo ya cargado conserva su monto real), pero donde
-no hay nada cargado el cero es el cero. Si esos meses tuvieron consumo real y el
+existan (un `draft` con consumo ya cargado conservaría su monto real), pero
+como ninguno de los 8 tiene fila, **los 8 quedan en cero**. Si esos meses tuvieron consumo real y el
 número importa, hay que cargar el consumo por publisher — antes del script, o
 después desde la pantalla del billing del plan, que al guardar cada línea
 recalcula los totales sola.
@@ -45,15 +48,18 @@ puede tocar meses que efectivamente figuran como pendientes: un mes ya
 
 **Idempotente y probado.** Segunda corrida = 0 filas (el CTE ya no encuentra
 nada sin fila ni en `draft`). Probado contra el Postgres 16 local del contenedor
-con un fixture que reproduce los tres casos (sin fila, `draft` con sublíneas,
-`draft` sin sublíneas) más tres señuelos que NO se tienen que tocar: un mes ya
-`paid` con montos reales, un mes pendiente de otro proyecto y un mes pendiente
-del mismo proyecto fuera de la lista. Corrida 1: 7 filas. Corrida 2: 0.
+con un fixture que reproduce el estado real de prod (los 8 sin fila) más cuatro
+señuelos que NO se tienen que tocar: un mes ya `paid` con montos reales, un mes
+en `'draft'` con sublíneas cargadas fuera de la lista, un mes pendiente de otro
+proyecto y un mes pendiente del mismo proyecto fuera de la lista. Corrida 1: 8
+filas, los 4 señuelos intactos. Corrida 2: 0.
 
 **La octava fila.** El panel contaba 8 y en las capturas se veían 7 — una quedó
-tapada entre las dos imágenes. Por eso el script arranca con un PASO 0 de
-diagnóstico que lista el set completo: si la que falta también corresponde, se
-agrega su par a la lista del PASO 1.
+tapada entre las dos imágenes. El PASO 0 de diagnóstico la sacó a la luz:
+`stopover-2025 · COPA.m1024.StopoverPerformance.ASC · 2026-01`, el mes anterior
+al que sí se veía del mismo plan. Es la razón por la que el script arranca con
+un diagnóstico y no con el cambio: la lista de la captura estaba incompleta y
+nada en la captura lo decía.
 
 **Acciones requeridas en prod**: correr `db/billing-pendientes-a-pagado-copa.sql`
 en el SQL Editor de Supabase, en orden (PASO 0 diagnóstico → PASO 1 el cambio →

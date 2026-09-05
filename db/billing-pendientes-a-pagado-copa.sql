@@ -15,18 +15,24 @@
 --     · sin fila  → INSERT de la fila del mes, ya en 'paid'
 --     · en draft  → UPDATE del status a 'paid'
 --
--- MESES (proyecto · plan · mes), tal como los mostraba el panel:
---   chile-sale        COPA.m1223.ChileSale                      2026-08
---   boosting-cirium   COPA.m1157 BoostingCirium - CopaLove      2026-02
---   stopover-2025     COPA.m1024.StopoverPerformance.ASC        2026-02
---   boosting-cirium   COPA.m1157 BoostingCirium - CopaLove      2026-01
---   vuelo-inaugural   COPA.m1159 Vuelo Inaugural                2026-01
---   boosting-enero    COPA.m1156 Boosting Enero                 2026-01
---   demand-gen-...    COPA.m1099|DemandGen|TarifasPanama|...    2025-09
+-- MESES (proyecto · plan · mes) — los 8, confirmados por el PASO 0 corrido en
+-- prod el 05/sep/2026. Las capturas mostraban 7: `stopover-2025 2026-01` quedó
+-- tapada en el scroll del panel, entre las dos imágenes.
 --
---   Son 7. El panel contaba 8: la octava quedó tapada entre las dos capturas.
---   Por eso el PASO 0 lista el set completo — si la que falta también va,
---   se agrega su par (código de proyecto, mes) a la lista del PASO 1.
+--   proyecto          plan                                      mes       estado
+--   chile-sale        COPA.m1223.ChileSale                      2026-08   sin fila
+--   boosting-cirium   COPA.m1157 BoostingCirium - CopaLove      2026-02   sin fila
+--   stopover-2025     COPA.m1024.StopoverPerformance.ASC        2026-02   sin fila
+--   boosting-cirium   COPA.m1157 BoostingCirium - CopaLove      2026-01   sin fila
+--   boosting-enero    COPA.m1156 Boosting Enero                 2026-01   sin fila
+--   stopover-2025     COPA.m1024.StopoverPerformance.ASC        2026-01   sin fila
+--   vuelo-inaugural   COPA.m1159 Vuelo Inaugural                2026-01   sin fila
+--   demand-gen-...    COPA.m1099|DemandGen|TarifasPanama|...    2025-09   sin fila
+--
+--   ⚠️ NINGUNO está en 'draft': los 8 son altas. O sea que la rama del upsert
+--   que efectivamente corre es el INSERT, y los 8 quedan con total US$ 0 (ver
+--   abajo). La rama del UPDATE queda igual, por si el script se recorre después
+--   de que alguien cargue uno de estos meses a mano.
 --
 -- ⚠️ LO QUE HAY QUE SABER ANTES DE CORRERLO — los montos quedan en CERO.
 --   La app NO deriva la plata del mes de `plan_billings.total_*` a mano: los
@@ -36,9 +42,10 @@
 --   sublíneas, así que van a quedar como meses **pagados de US$ 0**.
 --
 --   Este script calcula los totales desde las sublíneas que existan, con lo
---   cual un mes que estaba en 'draft' con el consumo ya cargado conserva su
---   monto real; los que no tienen nada cargado quedan en 0 y se van a ver
---   así en /billing, en el Billing Tracker, en el "facturado real" del
+--   cual un mes que estuviera en 'draft' con el consumo ya cargado conservaría
+--   su monto real. **Pero el diagnóstico confirmó que ninguno de los 8 tiene
+--   fila**, así que ninguno tiene sublíneas y los 8 quedan en US$ 0 — y se van
+--   a ver así en /billing, en el Billing Tracker, en el "facturado real" del
 --   dashboard y en la estimación del portal del cliente.
 --
 --   Si esos meses tuvieron consumo real y ese número importa, hay que cargar
@@ -120,8 +127,9 @@ with target as (
       ('boosting-cirium',                              '2026-02'),
       ('stopover-2025',                                '2026-02'),
       ('boosting-cirium',                              '2026-01'),
-      ('vuelo-inaugural',                              '2026-01'),
       ('boosting-enero',                               '2026-01'),
+      ('stopover-2025',                                '2026-01'),
+      ('vuelo-inaugural',                              '2026-01'),
       ('demand-gen-tarifas-panama-clicks-spa-pa-2025', '2025-09')
     )
 ),
@@ -163,8 +171,9 @@ where (pr.code, pb.month) in (
   ('boosting-cirium',                              '2026-02'),
   ('stopover-2025',                                '2026-02'),
   ('boosting-cirium',                              '2026-01'),
-  ('vuelo-inaugural',                              '2026-01'),
   ('boosting-enero',                               '2026-01'),
+  ('stopover-2025',                                '2026-01'),
+  ('vuelo-inaugural',                              '2026-01'),
   ('demand-gen-tarifas-panama-clicks-spa-pa-2025', '2025-09')
 )
 order by pb.month desc, pr.code;
