@@ -4,7 +4,8 @@ type Props = {
   searchParams: Promise<{ client?: string; view?: string }>;
 };
 
-// La home redirige al dashboard nuevo (`/dashboard`, db/queries/dashboard-v2.ts).
+// La home redirige a Pendientes (`/pendientes`, db/queries/pendientes.ts), que
+// es la pantalla de entrada de la app.
 //
 // El dashboard viejo NO se borró: vive en `/dashboard-legacy`, fuera de la
 // navegación, por si hace falta comparar un número contra el nuevo. Se puede
@@ -15,5 +16,5 @@ type Props = {
 export default async function HomePage({ searchParams }: Props) {
   const sp = await searchParams;
   const qs = sp.client ? `?client=${encodeURIComponent(sp.client)}` : "";
-  redirect(`/dashboard${qs}`);
+  redirect(`/pendientes${qs}`);
 }

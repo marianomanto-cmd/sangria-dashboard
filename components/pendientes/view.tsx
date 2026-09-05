@@ -4,19 +4,19 @@ import {
   Panel,
   PendingRow,
   type Tone,
-} from "@/components/dashboard-v2/pieces";
+} from "@/components/pendientes/pieces";
 import type { Language } from "@/lib/i18n";
-import type { DashboardV2, PendingPlan } from "@/db/queries/dashboard-v2";
+import type { Pendientes, PendingPlan } from "@/db/queries/pendientes";
 
 // ════════════════════════════════════════════════════════════════════════════
-// Dashboard = tablero de pendientes. Cuatro listas y nada más; el porqué está
-// en db/queries/dashboard-v2.ts.
+// Pendientes (`/pendientes`). Cuatro listas y nada más; el porqué está en
+// db/queries/pendientes.ts.
 //
 // Todo server component: esta vista no manda un solo byte de JS al browser.
 // ════════════════════════════════════════════════════════════════════════════
 
 type ViewProps = {
-  data: DashboardV2;
+  data: Pendientes;
   lang: Language;
 };
 
@@ -196,7 +196,7 @@ function Board({ data, lang }: ViewProps) {
 
 // ── Raíz ────────────────────────────────────────────────────────────────────
 
-export function DashboardV2View({
+export function PendientesView({
   data,
   failed,
   lang,

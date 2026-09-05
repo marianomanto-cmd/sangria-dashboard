@@ -1,6 +1,6 @@
 import { PageShell } from "@/components/page-shell";
-import { DashboardV2View } from "@/components/dashboard-v2/view";
-import { getDashboardV2, type DashboardV2 } from "@/db/queries/dashboard-v2";
+import { PendientesView } from "@/components/pendientes/view";
+import { getPendientes, type Pendientes } from "@/db/queries/pendientes";
 import {
   resolveClientFromSearchParams,
   type ResolvedClientFilter,
@@ -12,8 +12,10 @@ type Props = {
 };
 
 // ════════════════════════════════════════════════════════════════════════════
-// Dashboard — tablero de pendientes. Ver db/queries/dashboard-v2.ts para el
-// porqué de las cuatro listas y de las tres queries.
+// PENDIENTES (`/pendientes`) — la pantalla de entrada de la app. Ver
+// db/queries/pendientes.ts para el porqué de las cuatro listas y de las tres
+// queries, y next.config.ts para el redirect de `/dashboard`, que es donde
+// vivía cuando se llamaba así.
 //
 // NO hay caché, a propósito: la lectura entera es UNA tanda de tres queries,
 // así que cachearla ahorraría poco y agrega el modo de falla que ya mordió una
@@ -31,7 +33,7 @@ type Props = {
 // caso que el propio código se permite.
 export const maxDuration = 45;
 
-const EMPTY: DashboardV2 = {
+const EMPTY: Pendientes = {
   pendingBillings: [],
   pendingTracking: [],
   plansPendingQa: [],
@@ -54,14 +56,14 @@ function describeError(e: unknown): string {
   return parts.join("\n↳ ");
 }
 
-export default async function DashboardPage({ searchParams }: Props) {
+export default async function PendientesPage({ searchParams }: Props) {
   const sp = await searchParams;
 
   let client: ResolvedClientFilter = null;
   try {
     client = await resolveClientFromSearchParams(sp);
   } catch (e) {
-    console.error("DASH[client]:", e instanceof Error ? e.message : e);
+    console.error("PEND[client]:", e instanceof Error ? e.message : e);
   }
 
   const lang: Language = client?.language ?? DEFAULT_LANGUAGE;
@@ -71,24 +73,42 @@ export default async function DashboardPage({ searchParams }: Props) {
   let data = EMPTY;
   let failed: string | null = null;
   try {
-    data = await getDashboardV2(client?.id ?? null);
+    data = await getPendientes(client?.id ?? null);
   } catch (e) {
     failed = describeError(e);
-    console.error("DASH[data]:", failed);
+    console.error("PEND[data]:", failed);
   }
 
   const es = lang === "es";
+
+  // El subtítulo cuenta lo que hay. Si la lectura falló, `data` es EMPTY y un
+  // "0 pendientes" sería mentira que además contradice al cartel de error, así
+  // que ahí se muestra la descripción a secas.
+  const total =
+    data.pendingBillings.length +
+    data.pendingTracking.length +
+    data.plansPendingQa.length +
+    data.plansPendingApproval.length;
+  const descripcion = es
+    ? "Billings sin cerrar, tracking del día, planes esperando QA y planes esperando firma."
+    : "Unbilled months, today's tracking, plans waiting for QA and plans waiting for signature.";
+  const subtitle = failed
+    ? descripcion
+    : total === 0
+      ? es
+        ? `No queda nada pendiente. ${descripcion}`
+        : `Nothing pending. ${descripcion}`
+      : es
+        ? `${total} cosa${total === 1 ? "" : "s"} para resolver. ${descripcion}`
+        : `${total} thing${total === 1 ? "" : "s"} to resolve. ${descripcion}`;
+
   return (
     <PageShell
-      eyebrow="Dashboard"
+      eyebrow="Pendientes"
       title={client ? `Pendientes · ${client.name}` : "Pendientes"}
-      subtitle={
-        es
-          ? "Lo que falta hacer hoy: billings sin cerrar, tracking del día, planes esperando QA y planes esperando firma."
-          : "What's left to do today: unbilled months, today's tracking, plans waiting for QA and plans waiting for signature."
-      }
+      subtitle={subtitle}
     >
-      <DashboardV2View data={data} failed={failed} lang={lang} />
+      <PendientesView data={data} failed={failed} lang={lang} />
     </PageShell>
   );
 }

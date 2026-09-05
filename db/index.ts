@@ -489,14 +489,15 @@ function getClient(): PgClient {
   // socket. Las que no entran se encolan en la cola LOCAL de postgres.js, que
   // no tiene timeout propio, y morían contra nuestro reloj sin haber salido.
   //
-  // La medición del 03/sep (pg_stat_statements reseteado + una carga de
-  // /dashboard) no deja lugar a dudas:
+  // La medición del 03/sep (pg_stat_statements reseteado + una carga del
+  // dashboard de entonces, hoy `/pendientes` y con 3 queries) no deja lugar a
+  // dudas:
   //
-  //   | query de /dashboard                          | calls | ms    |
+  //   | query del dashboard de entonces              | calls | ms    |
   //   |----------------------------------------------|-------|-------|
   //   | projects ⋈ clients ⋈ plans ⋈ billings ⋈ pubs |   1   | 20,48 |
   //   | facturación por mes                          |   1   |  0,98 |
-  //   | las otras dos de getDashboardV2              |   0   |   —   |
+  //   | las otras dos de la misma tanda              |   0   |   —   |
   //
   // 21 ms de trabajo real, y aun así la vista fallaba: las otras dos NUNCA
   // llegaron a Postgres. No aparecen porque no se ejecutaron. Ahí se iban los

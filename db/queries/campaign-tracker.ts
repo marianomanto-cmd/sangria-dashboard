@@ -384,7 +384,7 @@ export async function getCampaignTrackerPlan(
   // salen JUNTAS. Con `max: 1` (db/index.ts) cada `await` suelto es un
   // round-trip completo a Ohio esperando al anterior; postgres.js sólo
   // pipelinea lo que se dispara a la vez. Mismo criterio que
-  // db/queries/dashboard-v2.ts.
+  // db/queries/pendientes.ts.
   const planQuery = db
     .select({
       planId: mediaPlans.id,

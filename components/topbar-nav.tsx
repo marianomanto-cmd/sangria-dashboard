@@ -2,12 +2,13 @@
 
 import { usePathname } from "next/navigation";
 
-// Título de sección del topbar (h2, Archivo) derivado del pathname. El toggle
-// de vistas del dashboard vive dentro del propio dashboard (cambio instantáneo,
-// sin recargar), no acá.
+// Título de sección del topbar (h2, Archivo) derivado del pathname.
 
 const TITLES: Record<string, string> = {
-  "/": "Dashboard",
+  // `/` redirige a `/pendientes`; la entrada está por el instante previo.
+  "/": "Pendientes",
+  "/pendientes": "Pendientes",
+  "/dashboard-legacy": "Dashboard (viejo)",
   "/proyectos": "Proyectos",
   "/planes": "Planes de Medios",
   "/billing": "Billing",

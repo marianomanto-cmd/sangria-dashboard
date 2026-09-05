@@ -2,6 +2,54 @@
 
 Estado del repo al cierre y plan para retomar en otra sesión.
 
+### Cambios de la sesión 05/sep/2026 (2) — la pantalla se llama **Pendientes** y vive en `/pendientes`
+
+Con las cuatro listas como único contenido (ver la entrada de abajo), el nombre
+"Dashboard" ya no describía nada. Se renombró la pantalla entera, no sólo la
+etiqueta:
+
+| antes | ahora |
+| --- | --- |
+| ruta `/dashboard` | **`/pendientes`** |
+| `app/(app)/dashboard/page.tsx` | `app/(app)/pendientes/page.tsx` |
+| `components/dashboard-v2/` | `components/pendientes/` |
+| `db/queries/dashboard-v2.ts` | `db/queries/pendientes.ts` |
+| `getDashboardV2()` / type `DashboardV2` | `getPendientes()` / type `Pendientes` |
+| nav: "Dashboard" con ícono `LayoutGrid` | **"Pendientes"** con ícono `ListChecks` |
+| logs `DASH[data]:` | `PEND[data]:` |
+
+**La ruta vieja no se rompe.** `next.config.ts` redirige `/dashboard` →
+`/pendientes`. Verificado sobre el build real:
+
+```
+GET /dashboard              → 307  location: /pendientes
+GET /dashboard?client=copa  → 307  location: /pendientes?client=copa
+GET /dashboard-legacy       → 200  (el matcher es exacto, no lo agarra)
+```
+
+**`permanent: false` (307) a propósito**, no 308: un redirect permanente se le
+queda cacheado al browser y volver atrás obligaría a que cada uno limpie su
+caché. Esto no es SEO, es una app interna. El redirect de config corre **antes**
+del middleware de auth, así que un usuario deslogueado que entra por el link
+viejo termina igual en `/login`.
+
+**Ojo con los dos módulos de pendientes.** Ahora conviven
+`db/queries/pendientes.ts` (el de `/pendientes`) y `db/queries/pendings.ts` (el
+del dashboard viejo, `/dashboard-legacy`). Los dos archivos lo dicen en su
+cabecera. `pendings.ts` se borra junto con el legacy.
+
+**De paso**, el subtítulo de la página ahora cuenta lo que hay ("7 cosas para
+resolver…"), y cuando la lectura falla vuelve a la descripción a secas, para no
+decir "no queda nada pendiente" justo abajo del cartel de error.
+
+**Acción en prod: NO hay.** Sólo código. Lo único a avisarle al equipo es que
+el link del favorito ahora rebota a `/pendientes`.
+
+**Probado**: los mismos 18 asserts sobre `getPendientes()` real contra el
+Postgres 16 local y el render de la vista en es/en, vacía y en error; más los
+tres `curl` de arriba contra `next start` con el build de prod. `tsc`, `eslint`
+y `next build` en verde.
+
 ### Cambios de la sesión 05/sep/2026 — el dashboard es un tablero de pendientes (4 listas, 3 queries)
 
 **El síntoma.** `/dashboard` venía cayéndose a diario con el cartel "No se pudo
@@ -5166,6 +5214,7 @@ App **deployada y funcionando** en Vercel (auto-deploy desde `main`).
 ### Commits recientes
 
 ```
+d68cca3  Merge PR #280: el dashboard es un tablero de pendientes (4 listas, 3 queries)
 b9785e7  Dashboard: cuatro listas de pendientes y tres queries
 d521cd9  Merge PR #276: nomenclatura única de mercados — el mercado se elige, no se escribe
 39543f5  fix(markets): lo que encontró la revisión adversarial del paso B
@@ -5906,7 +5955,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el ORDEN de la lista de Proyectos del PORTAL | Param `?psort=` (`PortalParams` en `app/(portal)/[clientSlug]/portal-content.tsx`). El select "Ordenar" es el field `psort` de `portal-filters.tsx` (`PROJECT_SORT_OPTIONS` = labels; los values los valida `resolveProjectSort`). El orden lo aplica `sortPortalProjects` en `ProjectsSection`, **después** de filtrar y **antes** de armar `visiblePlanIds` — así el Excel de pacing sale en el mismo orden que la pantalla. Monto = suma de las campañas visibles; fecha = inicio del período (fallback al fin) y los proyectos sin fechas van SIEMPRE al final. |
 | Cambiar el buscador / orden de Planes  | `components/plans-table-client.tsx` (orden A-Z por nombre + filtro por nombre del plan o código del proyecto). La page `app/(app)/planes/page.tsx` ordena la query por `mediaPlans.name` y le pasa las filas ya filtradas por status/origen. |
 | Tocar el tablero de pendientes (compacto / colapsable) | `components/pending-board.tsx` — colapso del board entero desde su header (persistido en `localStorage` `sangria:pending-board-collapsed`, leído con `useSyncExternalStore`; server arranca abierto), `PREVIEW` filas inline por card antes del "+ N más", densidad compacta. La `AlertBar` de vencidos queda siempre visible. Datos: `getDashboardPendings` en `db/queries/pendings.ts`. |
-| Tocar el **dashboard** (`/dashboard`) | Query: `db/queries/dashboard-v2.ts` (`getDashboardV2` → las 4 listas). Vista: `components/dashboard-v2/view.tsx` + `pieces.tsx`. Page: `app/(app)/dashboard/page.tsx`. **Regla dura: el fan-out no puede superar al pool** — son 3 queries para las 3 conexiones de `MAX_CONNECTIONS` (`db/index.ts`); un dato nuevo va DENTRO de una de las tres o se deriva en JS. Las 9 queries de la versión anterior son las que tiraban la página abajo (sesión 05/sep). El dashboard viejo, con sus KPIs y gráficos, sigue en `/dashboard-legacy` (`components/dashboard/` + `db/queries/dashboard.ts` + `pendings.ts`). |
+| Tocar **Pendientes** (`/pendientes`, la pantalla de entrada) | Query: `db/queries/pendientes.ts` (`getPendientes` → las 4 listas) — **no confundir con `db/queries/pendings.ts`**, que es el del dashboard viejo. Vista: `components/pendientes/view.tsx` + `pieces.tsx`. Page: `app/(app)/pendientes/page.tsx`. **Regla dura: el fan-out no puede superar al pool** — son 3 queries para las 3 conexiones de `MAX_CONNECTIONS` (`db/index.ts`); un dato nuevo va DENTRO de una de las tres o se deriva en JS. Las 9 queries de la versión anterior son las que tiraban la página abajo (sesión 05/sep). Se llamaba Dashboard y vivía en `/dashboard`: esa ruta la redirige `next.config.ts`. El dashboard viejo, con sus KPIs y gráficos, sigue en `/dashboard-legacy` (`components/dashboard/` + `db/queries/dashboard.ts` + `pendings.ts`). |
 | Cambiar el editor del plan             | `app/(app)/proyectos/[code]/planes/[planId]/editor.tsx`   |
 | Tocar el **par tarifa↔delivery** de un placement | `applyPrimaryPairChange` (métrica principal) y `MetricsEditor.onChangeRate`/`onChangeDelivery` (indicadores estimados), los dos en `editor.tsx`; `recomputeMetricsForAmount` para el rate-anchoring al cambiar el monto. **Regla dura: el delivery se guarda EXACTO (`exactDelivery`, 6 decimales) y se muestra redondeado** — ver README. Al escribir la tarifa se redondea la tarifa primero y el delivery se deriva de ella. De qué slug sale la tarifa lo decide `buildMetricRatePairs` en `lib/cost-methods.ts`: sin una calculada `amount / <slug>` en el catálogo del cliente, la tarifa NO se persiste y se re-deriva de `amount / delivery`. |
 | Que un input numérico no pise el dato al salir del campo | `RateInput` / `DeliveryInput` en `editor.tsx`. Los dos pintan con menos precisión de la que guardan, así que **no commitean si el planner no escribió** (flag en el primer `onInput`, apagado al commitear). No volver al umbral numérico: comparar el texto reparseado contra el valor guardado es justo lo que reescribía las tarifas con sólo tabular. |

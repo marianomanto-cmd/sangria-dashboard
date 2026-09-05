@@ -5,7 +5,7 @@ import Link from "next/link";
 //
 // Acá vivían también Kpi, Progress, Sparkline, ClientMark y ClientFilter, que
 // alimentaban los KPIs, el gráfico y la tabla de proyectos del dashboard
-// anterior. Se fueron con ellos (ver db/queries/dashboard-v2.ts). El filtro por
+// anterior. Se fueron con ellos (ver db/queries/pendientes.ts). El filtro por
 // cliente no se perdió: lo sirve el selector global del topbar, que está en
 // todas las pantallas.
 

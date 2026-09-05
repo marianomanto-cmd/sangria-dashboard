@@ -2,10 +2,14 @@ import { sql } from "drizzle-orm";
 import { db } from "@/db";
 
 // ════════════════════════════════════════════════════════════════════════════
-// Dashboard — TABLERO DE PENDIENTES. Nada más.
+// PENDIENTES (`/pendientes`) — la pantalla de entrada de la app. Cuatro listas
+// de "qué falta hacer", y nada más.
 //
-// POR QUÉ SE ACHICÓ (05/sep/2026). La versión anterior de este archivo intentó
-// ser el dashboard entero: KPIs, salud por cliente, tabla de proyectos con
+// ⚠️ NO CONFUNDIR CON `db/queries/pendings.ts`, que es el tablero de pendientes
+// del dashboard VIEJO (`/dashboard-legacy`) y se borra junto con él.
+//
+// POR QUÉ SE ACHICÓ (05/sep/2026). Esta pantalla era el dashboard, y la versión
+// anterior de este archivo intentó ser el dashboard entero: KPIs, salud por cliente, tabla de proyectos con
 // sparklines, gráfico real vs proyectado, planes en vuelo, reportes y por
 // cobrar. Eran NUEVE queries en un solo `Promise.all` contra un pool de TRES
 // conexiones (`MAX_CONNECTIONS` en db/index.ts), y la página se caía a diario:
@@ -36,6 +40,10 @@ import { db } from "@/db";
 // Todo lo que se fue (facturación, cartera, proyectos) sigue vivo en sus
 // propias pantallas: /billing, /billing-tracker, /proyectos, /planes,
 // /reportes/calendario y /dashboard-legacy.
+//
+// EL NOMBRE. Se llamaba "Dashboard" y vivía en `/dashboard`; con las cuatro
+// listas como único contenido, el nombre mentía. La ruta vieja sigue
+// respondiendo: `next.config.ts` la redirige acá, conservando `?client=`.
 // ════════════════════════════════════════════════════════════════════════════
 
 // ── 1. Billings pendientes ──────────────────────────────────────────────────
@@ -78,16 +86,16 @@ export type PendingPlan = {
   href: string;
 };
 
-export type DashboardV2 = {
+export type Pendientes = {
   pendingBillings: PendingBilling[];
   pendingTracking: PendingTracking[];
   plansPendingQa: PendingPlan[];
   plansPendingApproval: PendingPlan[];
 };
 
-export async function getDashboardV2(
+export async function getPendientes(
   clientId: string | null = null,
-): Promise<DashboardV2> {
+): Promise<Pendientes> {
   // Filtro global de cliente (`?client=slug`), como fragmento reusable.
   const clientSql = clientId ? sql`and pr.client_id = ${clientId}` : sql``;
 

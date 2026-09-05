@@ -133,7 +133,9 @@ app/
     loading.tsx             # skeleton de página durante la navegación del router (usa PageSkeleton)
     error.tsx               # error boundary recuperable — REINTENTA solo una vez a los 2s antes de mostrar el error (la causa dominante es un timeout transitorio del pooler)
     not-found.tsx           # 404 con EmptyState
-    page.tsx                # Dashboard (3 vistas: ?view=cuentas|operaciones|ejecutivo; default cuentas)
+    page.tsx                # home: redirect a /pendientes (conserva ?client=)
+    pendientes/page.tsx     # /pendientes — la pantalla de entrada. Se llamaba Dashboard y vivía en /dashboard; next.config.ts redirige la ruta vieja
+    dashboard-legacy/       # el dashboard VIEJO (3 vistas: ?view=cuentas|operaciones|ejecutivo), fuera de la navegación
     clientes/               # /clientes y /clientes/[slug]
     proyectos/              # /proyectos, /proyectos/[code]/*, /proyectos/nuevo
       [code]/planes/[planId]/
@@ -205,7 +207,7 @@ components/                 # UI compartida
   plans-table-client.tsx    # /planes: buscador, sort por columna, density toggle, vista list/by-project, columna media+consumido (PR #79)
   projects-table-expandable.tsx  # tabla de proyectos con drill-down; prop `searchable` → buscador + A-Z (tab Proyectos)
   project-status-selector.tsx    # filtro por estado del proyecto (pills URL-based, server) en /proyectos — planning/active/paused/closed/reportado + Todos. Colores de dot espejan status-badge.tsx. Exporta PROJECT_STATUS_VALUES para validar el searchParam
-  dashboard-v2/             # /dashboard — TABLERO DE PENDIENTES (4 listas, sin KPIs ni gráficos): view.tsx (los 4 paneles + el cartel de error) · pieces.tsx (Panel, PendingRow, StatusDot, EmptyRow). Todo server component: no manda JS al browser
+  pendientes/               # /pendientes — las 4 listas de pendientes (sin KPIs ni gráficos): view.tsx (los 4 paneles + el cartel de error) · pieces.tsx (Panel, PendingRow, StatusDot, EmptyRow). Todo server component: no manda JS al browser
   dashboard/                # /dashboard-legacy — el dashboard VIEJO de 3 vistas con toggle, fuera de la navegación: dashboard-view.tsx (switch por ?view= + SectionBoundary) · view-cuentas/operaciones/ejecutivo.tsx · shared.tsx (groupPendings→href real, deriveClients, MiniBars, PendingRow). Se borra —junto con db/queries/dashboard.ts y pendings.ts— cuando ya nadie compare números contra él
   topbar-nav.tsx            # título de sección (Archivo), SOLO mobile (<lg) — en desktop manda la TopNav del header
   top-nav.tsx               # navegación principal en el HEADER (≥lg): tira horizontal ícono+label desde lib/nav.ts; mide el ancho y mete lo que no entra en un menú "Más ▾" (nunca scrollea, ResizeObserver). Reemplaza al sidebar vertical para liberar el ancho al contenido
@@ -254,7 +256,7 @@ db/
   markets-nomenclatura.sql  # ⚙️ GENERADO (`npm run gen:markets-sql`) — PASO B: normaliza el catálogo de TODOS los clientes y fusiona los duplicados, repuntando placements, cierres y los marketId embebidos en snapshot_json / rows_json. Es un PLAN EXPLÍCITO (una fila por mercado con su destino ya resuelto), no un diccionario que resuelve la base. 3 bloques: dry-run · aplicar · verificación. Idempotente
   fees-management-rate-check.sql # control READ-ONLY: management fees con tarifa distinta de la de base (13%) — el botón precargaba 15% hasta 2f5f189; muestra la diferencia contra lo que daría a 13%
   queries/
-    dashboard-v2.ts         # /dashboard: getDashboardV2 → las 4 listas de pendientes en 3 queries. El fan-out NO puede superar al pool (MAX_CONNECTIONS=3); ver el bloque de cabecera del archivo
+    pendientes.ts           # /pendientes: getPendientes → las 4 listas en 3 queries. El fan-out NO puede superar al pool (MAX_CONNECTIONS=3); ver el bloque de cabecera del archivo. OJO: NO es `pendings.ts`, que es el del dashboard viejo
     dashboard.ts            # KPIs, proyectos+planes, monthly chart, estimación (hoy sólo /dashboard-legacy y /proyectos)
     project-detail.ts       # detalle de proyecto + plan
     client-detail.ts        # detalle de cliente con timeline
@@ -1264,12 +1266,19 @@ misma para todos los clientes, y el nombre **no se escribe: se elige**.
   read-only; el despliegue es estado local, sin POST/Server Actions). Respeta los
   filtros Budget Origin / Proyecto del portal. **Sin cambios de schema.**
 
-### Dashboard: el tablero de pendientes (`/dashboard`)
+### Pendientes (`/pendientes`) — la pantalla de entrada
 
-El dashboard es **cuatro listas y nada más**. No tiene KPIs, ni gráfico, ni
-tabla de proyectos: es "qué falta hacer hoy". Query:
-`getDashboardV2(clientId)` en `db/queries/dashboard-v2.ts`; vista:
-`components/dashboard-v2/view.tsx`.
+Son **cuatro listas y nada más**. No tiene KPIs, ni gráfico, ni tabla de
+proyectos: es "qué falta hacer hoy". Query: `getPendientes(clientId)` en
+`db/queries/pendientes.ts`; vista: `components/pendientes/view.tsx`; page:
+`app/(app)/pendientes/page.tsx`.
+
+**El nombre y la ruta.** Se llamaba **Dashboard** y vivía en `/dashboard` hasta
+el 05/sep/2026; con las cuatro listas como único contenido el nombre mentía.
+`/dashboard` sigue respondiendo: `next.config.ts` la redirige a `/pendientes`
+con un **307** (no 308, para que se pueda volver atrás sin pelear con la caché
+del browser) y Next arrastra el querystring, así que `?client=` no se pierde.
+El matcher es exacto, así que `/dashboard-legacy` no queda atrapado.
 
 - **Billings pendientes** — meses del span de placements de un plan FIRMADO
   (`approved`/`qa_done`/`live`/`finished`) que ya cerraron (`mes < mes actual`)
@@ -1770,7 +1779,7 @@ los `message` con `↳` para el log y para el cartel, así que la pantalla dice
 - El picker arriba a la derecha (`components/topbar-client-picker.tsx`) setea
   `?client=<slug>` en la URL. El slug se preserva al navegar entre vistas
   globales — el sidebar reescribe sus Links automáticamente.
-- Páginas que aplican el filtro a sus queries: Dashboard, `/proyectos`,
+- Páginas que aplican el filtro a sus queries: Pendientes, `/proyectos`,
   `/planes`, `/billing`. El Budget Origin selector también se restringe a los
   origins del cliente activo.
 - Vistas detalle (`/proyectos/[code]`, `/clientes/[slug]`,
@@ -2149,8 +2158,8 @@ Y parsear con `new Date(str)` después.
 OJO: esto describe el dashboard **viejo**, que hoy vive en
 [app/(app)/dashboard-legacy/page.tsx](app/(app)/dashboard-legacy/page.tsx) y
 está fuera de la navegación (`app/(app)/page.tsx` es sólo un redirect a
-`/dashboard`). El dashboard actual **no tiene caché** y son 3 queries — ver "El
-tablero de pendientes" arriba.
+`/pendientes`). La pantalla de entrada de hoy **no tiene caché** y son 3
+queries — ver "Pendientes" arriba.
 
 Cachea sus 4 bloques de datos (KPIs,
 proyectos, monthly, pendientes) con **`unstable_cache`** (revalida 60s, keyed
@@ -2181,7 +2190,7 @@ en frío que puebla el cache.
   socket. Las que no entran se encolan en la cola **local** de postgres.js, que
   no tiene timeout propio, y morían contra el reloj del cliente sin haber
   salido. Medido el 03/sep con `pg_stat_statements` reseteado y una carga de
-  `/dashboard`: **21 ms** de trabajo real (20,48 + 0,98) y aun así la vista
+  el dashboard de entonces: **21 ms** de trabajo real (20,48 + 0,98) y aun así la vista
   fallaba, porque **dos de las cuatro queries nunca llegaron a Postgres** — no
   figuraban en `pg_stat_statements`. Los 8 segundos se iban en la fila.
   Reproducido en `npm run test:db`: con `max: 1` morían 5 de 5 queries en

@@ -3,7 +3,7 @@
 // ambas vistas no se desincronicen.
 
 import {
-  LayoutGrid,
+  ListChecks,
   Briefcase,
   FileText,
   FileCheck,
@@ -27,9 +27,11 @@ export type NavEntry = {
 };
 
 export const PRIMARY_NAV: NavEntry[] = [
-  // El dashboard es `/dashboard` (db/queries/dashboard-v2.ts). La home `/`
-  // redirige acá. El viejo quedó en `/dashboard-legacy`, fuera de la nav.
-  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  // La pantalla de entrada es `/pendientes` (db/queries/pendientes.ts) y la
+  // home `/` redirige acá. Se llamaba "Dashboard" y vivía en `/dashboard`, que
+  // sigue respondiendo por el redirect de next.config.ts. El dashboard viejo
+  // —KPIs, gráficos, cartera— quedó en `/dashboard-legacy`, fuera de la nav.
+  { href: "/pendientes", label: "Pendientes", icon: ListChecks },
   { href: "/proyectos", label: "Proyectos", icon: Briefcase },
   { href: "/planes", label: "Planes de Medios", icon: FileText },
   { href: "/billing", label: "Billing", icon: FileCheck },
