@@ -1,6 +1,65 @@
-# Handoff — viernes 04/sep/2026
+# Handoff — sábado 05/sep/2026
 
 Estado del repo al cierre y plan para retomar en otra sesión.
+
+### Cambios de la sesión 05/sep/2026 — los 8 meses de Copa que ya estaban cobrados pero el dashboard mostraba como pendientes
+
+**El pedido.** El panel "Billing pendiente" del dashboard listaba 8 meses
+cerrados de Copa con el badge "sin facturar". El dueño confirmó que esos meses
+**ya están facturados y cobrados**: nunca se cargaron en la app, nada más. Hacía
+falta el SQL para llevarlos a `paid`.
+
+**No es un update, es un upsert.** Un mes cae en ese panel por dos motivos
+distintos (query 5 de `db/queries/dashboard-v2.ts`): o **no existe la fila** en
+`plan_billings`, o existe y está en `'draft'`. De los 7 meses visibles en la
+captura, 4 no tenían fila. Un `update ... set status='paid'` habría dejado la
+mitad de la lista intacta y sin ningún error que lo delate.
+
+**Lo que hay que saber antes de correrlo — los montos quedan en cero.** La app
+no lee la plata del mes de `plan_billings.total_*` como dato cargado a mano:
+`recalcBillingTotals()` (`app/actions/plan-billing.ts`) los deriva de
+`plan_billing_publishers` (consumo por publisher, filtrando `is_billable`) y
+`plan_billing_fees` (fees imputados). Un mes que ni siquiera tenía fila no tiene
+esas sublíneas, así que queda como **mes pagado de US$ 0** en /billing, en el
+Billing Tracker, en el "facturado real" del dashboard y en la estimación del
+portal del cliente. El script calcula los totales desde las sublíneas que
+existan (un `draft` con consumo ya cargado conserva su monto real), pero donde
+no hay nada cargado el cero es el cero. Si esos meses tuvieron consumo real y el
+número importa, hay que cargar el consumo por publisher — antes del script, o
+después desde la pantalla del billing del plan, que al guardar cada línea
+recalcula los totales sola.
+
+**Otras consecuencias, a propósito**: `invoice_number` y `sent_at` quedan NULL
+(la columna es nullable y nada se rompe, pero esos meses no muestran número de
+factura); `paid_at` queda en `now()`, que es lo que hace el botón "Marcar
+pagado"; y **no se escribe `audit_log`**, porque el SQL directo saltea
+`recordAudit()` — en el historial del billing no va a figurar quién lo marcó
+pagado.
+
+**El scope va por par (código de proyecto, mes)**, no por nombre de plan: los
+nombres son largos y salían de una captura, y el índice único parcial
+`uq_media_plan_project_name` ya garantiza un solo plan vivo por nombre dentro
+del proyecto. Además el CTE reusa **la misma condición del panel**, así que sólo
+puede tocar meses que efectivamente figuran como pendientes: un mes ya
+`invoiced` o `paid` con montos reales no entra ni por error.
+
+**Idempotente y probado.** Segunda corrida = 0 filas (el CTE ya no encuentra
+nada sin fila ni en `draft`). Probado contra el Postgres 16 local del contenedor
+con un fixture que reproduce los tres casos (sin fila, `draft` con sublíneas,
+`draft` sin sublíneas) más tres señuelos que NO se tienen que tocar: un mes ya
+`paid` con montos reales, un mes pendiente de otro proyecto y un mes pendiente
+del mismo proyecto fuera de la lista. Corrida 1: 7 filas. Corrida 2: 0.
+
+**La octava fila.** El panel contaba 8 y en las capturas se veían 7 — una quedó
+tapada entre las dos imágenes. Por eso el script arranca con un PASO 0 de
+diagnóstico que lista el set completo: si la que falta también corresponde, se
+agrega su par a la lista del PASO 1.
+
+**Acciones requeridas en prod**: correr `db/billing-pendientes-a-pagado-copa.sql`
+en el SQL Editor de Supabase, en orden (PASO 0 diagnóstico → PASO 1 el cambio →
+PASO 2 verificación). **No hay cambio de código**: el schema no se toca y la app
+no necesita deploy. La verificación tiene que devolver una fila por mes de la
+lista, todas con `status = 'paid'` y `paid_at` de hoy.
 
 ### Cambios de la sesión 04/sep/2026 — vista de auditoría: alguien de afuera mira toda la app y no puede tocar nada
 
@@ -5836,6 +5895,7 @@ useEffect. Pasó en `proyectos/nuevo/form.tsx` y se arregló moviendo a
 | Cambiar el prorrateo del budget split por mercado | `prorateByMonth` + `buildBudgetSplit` en `lib/budget-split.ts` (días-overlap inclusive) — lo usan el Tab 2 del Excel (`export.xlsx/route.ts`) y el preview del editor (`BudgetSplitPreview` en `editor.tsx`). |
 | Tocar algo que borre/recree fees de un plan | **Regla dura: lo facturado ya está facturado.** `plan_billing_fees.media_plan_fee_id` es `no action` (no cascade) — ver `db/schema.ts`. `revertPlanToApprovedSnapshot` reconcilia los fees en vez de borrarlos y `removeFee` bloquea el borrado si hay imputaciones > 0 (`app/actions/plans.ts`). Si agregás un camino nuevo que toque `media_plan_fees`, no uses delete+insert: rompe el histórico de billing. Migración de la FK: `db/billing-fees-no-cascade.sql`. |
 | Tocar el lifecycle de un billing | `app/actions/plan-billing.ts` — `transitionBillingStatus` (validaciones + revert; param opcional `actorEmail` **sólo** para auditar al portal), `markBillingInvoiced` (sent → invoiced + cargar/editar número de factura, con pre-check de unicidad) y `clearBillingInvoiceNumber` (quita el número y revierte invoiced → sent). Labels: `components/billing-status-badge.tsx`. UI de los botones: `BillingStatusActions` en `app/(app)/proyectos/[code]/planes/[planId]/billing/editor.tsx`. **Ojo**: el portal también dispara `invoiced → paid` (ver la fila de abajo) — cualquier cambio de reglas tiene que contemplar ese camino. |
+| Marcar meses como facturados/pagados a mano (o entender el panel "Billing pendiente") | `db/billing-pendientes-a-pagado-copa.sql` es el precedente: PASO 0 diagnóstico → PASO 1 upsert → PASO 2 verificación. El panel sale de la **query 5** de `db/queries/dashboard-v2.ts` y un mes cae ahí por **dos** motivos distintos: no existe la fila en `plan_billings`, o existe en `'draft'`. Por eso va `insert ... on conflict on constraint uq_pb_plan_month do update` y **no** un update a secas — un update deja afuera, sin error, todos los meses que nunca se cargaron. **Ojo con los montos**: `total_net_usd`/`total_fee_usd`/`total_usd` los deriva `recalcBillingTotals()` de `plan_billing_publishers` + `plan_billing_fees`, así que un mes sin sublíneas queda **pagado en US$ 0** en /billing, Billing Tracker, dashboard y portal. Y el SQL directo saltea `recordAudit()`: no queda rastro en el historial. |
 | Tocar el botón "Marcar pagado" del portal (o agregar OTRA escritura al portal) | UI: `app/(portal)/[clientSlug]/portal-mark-paid.tsx` (client, al lado del badge en `BillingSection` **y** en `CreativeSection` de `portal-content.tsx`, desktop + mobile). El prop `kind` (`billing` | `creative`) elige el endpoint. Backend: `app/api/portal/billing/mark-paid/route.ts` (`plan_billings`) y `app/api/portal/creative/mark-paid/route.ts` (`creative_billings`), los dos públicos en el proxy vía `/api/portal/*` y autovalidantes. Barrera: `canWriteAsClientPortal` en `lib/client-portal.server.ts` + ownership de la factura + **sólo** `invoiced → paid`. Auditoría: `actorEmail` (`portal-<slug>@sangria.portal`) como fallback en `recordAudit` (`lib/audit.ts`). **Regla**: una escritura nueva del portal va SIEMPRE por un route handler en `/api/portal/*` con su propio chequeo de ownership — nunca abriendo POST en `/<slug>` (rompería el gate de los Server Actions internos). Y la sección que la muestra NO se cachea (ver `db/queries/cached.ts`). |
 | Cambiar el formato del PDF que se manda a finanzas | `app/api/billings/[id]/report.pdf/route.ts`. Geometría de columnas hardcodeada en el objeto `COL` (`{x, w}` relativo a `MARGIN`) + paleta/tamaños en las constantes de arriba del archivo; cada fila es `Media Placement` (publishers con `agencyPays && isBillable` y consumo > 0 — los que paga el cliente directo se excluyen) o `Services` (fees con imputación > 0). **Estilo (pedido explícito)**: header gris claro **sin bordó**, una sola tipografía (Helvetica) y mismo size en todas las celdas del cuerpo, y la Description hace wrap (fila de alto dinámico) en vez de truncarse — si tocás anchos, no vuelvas a truncar ni a meter Courier. |
 | Tocar la lógica del Reporting Calendar | `app/actions/reports.ts` (actions: setProjectStatus / setReportDeliveryDate / markReportDelivered), `db/queries/reports.ts` (queries), `app/(app)/reportes/calendario/page.tsx` (page). |
